@@ -5,8 +5,4 @@ log.write("bflib", log.INFO, "cpath = " .. package.cpath)
 log.write("bflib", log.INFO, "loading rust library")
 local bflib = require("bflib")
 
-DCS.setUserCallbacks({
-      onPlayerTryConnect = bflib.onPlayerTryConnect,
-      onPlayerTrySendChat = bflib.onPlayerTrySendChat,
-      onPlayerTryChangeSlot = bflib.onPlayerTryChangeSlot
-})
+world.addEventHandler(bflib)

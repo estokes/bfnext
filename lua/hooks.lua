@@ -2,7 +2,7 @@
 package.cpath = package.cpath .. ";" .. lfs.writedir() .. "\\Scripts\?.dll"
 log.write("bflib", log.INFO, "cpath = " .. package.cpath)
 
-log.write("bflib", lig.INFO, "loading rust library")
+log.write("bflib", log.INFO, "loading rust library")
 local bflib = require("bflib")
 
 DCS.setUserCallbacks({

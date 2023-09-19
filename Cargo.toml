@@ -1,0 +1,16 @@
+[package]
+name = "bflib"
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+codegen-units = 1
+debug = false
+lto = true
+
+[lib]
+name = "bflib"
+crate-type = ["cdylib"]
+
+[dependencies]
+mlua = { version = "0.9.1", features = ["lua51", "module"] }

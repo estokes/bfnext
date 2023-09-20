@@ -17,19 +17,19 @@ fn print_value(key: bool, val: bool, lvl: usize, v: &Value) {
         | Value::Function(_)
         | Value::Thread(_)
         | Value::Error(_) => {
-	    if key {
-		indent(lvl);
-	    }
-	    if key || val {
-		print!("{:?}", v)
-	    } else {
-		println!("{:?}", v)
-	    }
+            if key {
+                indent(lvl);
+            }
+            if key || val {
+                print!("{:?}", v)
+            } else {
+                println!("{:?}", v)
+            }
         }
         Value::Table(tbl) => {
-	    if !val {
-		indent(lvl);
-	    }
+            if !val {
+                indent(lvl);
+            }
             println!("{}", "{");
             for pair in tbl.clone().pairs::<Value, Value>() {
                 let (k, v) = pair.unwrap();
@@ -38,12 +38,12 @@ fn print_value(key: bool, val: bool, lvl: usize, v: &Value) {
                 print_value(false, true, lvl + 4, &v);
                 println!(", ")
             }
-	    indent(lvl);
-	    if val {
-		print!("{}", "}")
-	    } else {
-		println!("{}", "}")
-	    }
+            indent(lvl);
+            if val {
+                print!("{}", "}")
+            } else {
+                println!("{}", "}")
+            }
         }
     }
 }

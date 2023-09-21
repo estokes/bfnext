@@ -2,17 +2,21 @@ use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::{Deref, DerefMut};
 
+fn cvt_err(to: &'static str) -> LuaError {
+    LuaError::FromLuaConversionError {
+        from: "value",
+        to,
+        message: None,
+    }
+}
+
 fn as_tbl_ref<'a: 'lua, 'lua>(
     to: &'static str,
     value: &'a Value<'lua>,
 ) -> LuaResult<&'a mlua::Table<'lua>> {
     value
         .as_table()
-        .ok_or_else(|| LuaError::FromLuaConversionError {
-            from: "value",
-            to,
-            message: None,
-        })
+        .ok_or_else(|| cvt_err(to))
 }
 
 fn as_tbl<'lua>(
@@ -39,11 +43,7 @@ fn as_tbl<'lua>(
                 }
             }
         },
-        _ => Err(LuaError::FromLuaConversionError {
-            from: "value",
-            to,
-            message: None,
-        }),
+        _ => Err(cvt_err(to)),
     }
 }
 
@@ -154,11 +154,7 @@ pub struct Time(f32);
 impl<'lua> FromLua<'lua> for Time {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         Ok(Self(value.as_f32().ok_or_else(|| {
-            LuaError::FromLuaConversionError {
-                from: "value",
-                to: "Time",
-                message: None,
-            }
+            cvt_err("Time")
         })?))
     }
 }
@@ -172,12 +168,11 @@ pub enum ObjectCategory {
     Base,
     Scenery,
     Cargo,
-    Unknown(u32),
 }
 
 pub trait ObjectExt {
     fn destroy(&self) -> LuaResult<()>;
-    fn get_object_category(&self) -> LuaResult<ObjectCategory>;
+    fn get_category(&self) -> LuaResult<ObjectCategory>;
     fn get_name(&self) -> LuaResult<String>;
     fn get_point(&self) -> LuaResult<Vec3>;
     fn get_position(&self) -> LuaResult<Position3>;
@@ -205,7 +200,7 @@ impl<'lua> ObjectExt for Object<'lua> {
         self.0.call_method("destroy", ())
     }
 
-    fn get_object_category(&self) -> LuaResult<ObjectCategory> {
+    fn get_category(&self) -> LuaResult<ObjectCategory> {
         Ok(match self.0.call_method("getCategory", ())? {
             0 => ObjectCategory::Void,
             1 => ObjectCategory::Unit,
@@ -214,7 +209,7 @@ impl<'lua> ObjectExt for Object<'lua> {
             4 => ObjectCategory::Base,
             5 => ObjectCategory::Scenery,
             6 => ObjectCategory::Cargo,
-            u => ObjectCategory::Unknown(u),
+            _ => return Err(cvt_err("ObjectCategory")),
         })
     }
 
@@ -307,19 +302,14 @@ pub enum GroupCategory {
     Helicopter,
     Ship,
     Train,
-    Unknown(u32),
 }
 
-impl<'lua> FromLua<'lua> for GroupCategory {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        value
-            .as_integer()
-            .ok_or_else(|| LuaError::FromLuaConversionError {
-                from: "Value",
-                to: "GroupCategory",
-                message: None,
-            })?
-    }
+#[derive(Debug, Clone, Serialize)]
+pub enum Coalition {
+    Neutral,
+    Red,
+    Blue,
+    Contested
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -351,6 +341,27 @@ impl<'lua> Group<'lua> {
 
     pub fn activate(&self) -> LuaResult<()> {
         self.t.call_method("activate", ())
+    }
+
+    pub fn get_category(&self) -> LuaResult<GroupCategory> {
+        Ok(match self.t.call_method("getCategory", ())? {
+            0 => GroupCategory::Airplane,
+            1 => GroupCategory::Ground,
+            2 => GroupCategory::Helicopter,
+            3 => GroupCategory::Ship,
+            4 => GroupCategory::Train,
+            _ => return Err(cvt_err("GroupCategory"))
+        })
+    }
+
+    pub fn get_coalition(&self) -> LuaResult<Coalition> {
+        Ok(match self.t.call_method("getCoalition", ())? {
+            0 => Coalition::Neutral,
+            1 => Coalition::Red,
+            2 => Coalition::Blue,
+            3 => Coalition::Contested,
+            _ => return Err(cvt_err("Coalition"))
+        })
     }
 }
 

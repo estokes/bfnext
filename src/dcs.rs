@@ -13,7 +13,7 @@ fn as_tbl<'a: 'lua, 'lua>(to: &'static str, value: &'a Value<'lua>) -> LuaResult
         })
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Pack, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Pack, Serialize, Deserialize)]
 #[repr(transparent)]
 pub struct String(compact_str::CompactString);
 
@@ -60,12 +60,12 @@ impl<'lua> FromLua<'lua> for Time {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Pack, Serialize, Deserialize)]
-pub struct ObjectId(u32);
+pub struct ObjectId(String);
 
 impl<'lua> FromLua<'lua> for ObjectId {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("ObjectId", &value)?;
-        Ok(Self(tbl.raw_get("id_")?))
+        Ok(Self(tbl.call_method("getName", ())?))
     }
 }
 

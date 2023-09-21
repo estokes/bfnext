@@ -61,10 +61,11 @@ fn on_player_try_change_slot(_: &Lua, (id, side, slot): (i64, i64, String)) -> L
     Ok(true)
 }
 
-fn on_event(_: &Lua, (_, ev): (Value, Value)) -> LuaResult<()> {
+fn on_event(lua: &Lua, (_, ev): (Value, Value)) -> LuaResult<()> {
     print!("onEvent: ");
     serde_json::to_writer_pretty(&mut io::stdout(), &to_json(&ev)).unwrap();
     println!();
+    println!("onEventTranslated: {:#?}", dcs::Event::from_lua(ev, lua));
     Ok(())
 }
 

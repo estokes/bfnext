@@ -1,49 +1,32 @@
+mod dcs;
 use mlua::{prelude::*, Value};
+use std::io;
 
-fn print_value(key: bool, val: bool, lvl: usize, v: &Value) {
-    fn indent(lvl: usize) {
-        for _ in 0..lvl {
-            print!(" ");
-        }
-    }
+fn to_json(v: &Value) -> serde_json::Value {
+    use serde_json::{Value as JVal, json, Map};
     match v {
-        Value::Nil
-        | Value::Boolean(_)
-        | Value::LightUserData(_)
-        | Value::Integer(_)
-        | Value::Number(_)
-        | Value::UserData(_)
-        | Value::String(_)
-        | Value::Function(_)
-        | Value::Thread(_)
-        | Value::Error(_) => {
-            if key {
-                indent(lvl);
-            }
-            if key || val {
-                print!("{:?}", v)
-            } else {
-                println!("{:?}", v)
-            }
-        }
+        Value::Nil => JVal::Null,
+        Value::Boolean(b) => json!(b),
+        Value::LightUserData(_) => json!("<LightUserData>"),
+        Value::Integer(i) => json!(*i),
+        Value::Number(i) => json!(*i),
+        Value::UserData(_) => json!("<UserData>"),
+        Value::String(s) => json!(s),
+        Value::Function(_) => json!("<Function>"),
+        Value::Thread(_) => json!("<Thread>"),
+        Value::Error(e) => json!(format!("{e}")), 
         Value::Table(tbl) => {
-            if !val {
-                indent(lvl);
-            }
-            println!("{}", "{");
+            let mut map = Map::new();
             for pair in tbl.clone().pairs::<Value, Value>() {
                 let (k, v) = pair.unwrap();
-                print_value(true, false, lvl + 4, &k);
-                print!(" = ");
-                print_value(false, true, lvl + 4, &v);
-                println!(", ")
+                let k = match to_json(&k) {
+                    JVal::String(s) => s,
+                    v => v.to_string()
+                };
+                let v = to_json(&v);
+                map.insert(k, v);
             }
-            indent(lvl);
-            if val {
-                print!("{}", "}")
-            } else {
-                println!("{}", "}")
-            }
+            JVal::Object(map)
         }
     }
 }
@@ -78,9 +61,10 @@ fn on_player_try_change_slot(_: &Lua, (id, side, slot): (i64, i64, String)) -> L
     Ok(true)
 }
 
-fn on_event(_: &Lua, (_, ev): (Value, Value)) -> LuaResult<()> {
+fn on_event(lua: &Lua, (_, ev): (Value, Value)) -> LuaResult<()> {
     print!("onEvent: ");
-    print_value(false, false, 0, &ev);
+    serde_json::to_writer_pretty(&mut io::stdout(), &to_json(&ev)).unwrap();
+    println!();
     Ok(())
 }
 

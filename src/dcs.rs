@@ -195,7 +195,7 @@ impl<'lua> FromLua<'lua> for AtPlace {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
             place: tbl.raw_get("place")?,
-            subplace: tbl.raw_get("subplace")?,
+            subplace: tbl.raw_get("subPlace")?,
         })
     }
 }

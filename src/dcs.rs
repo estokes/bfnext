@@ -17,7 +17,7 @@ fn as_tbl_ref<'a: 'lua, 'lua>(
     value.as_table().ok_or_else(|| cvt_err(to))
 }
 
-fn check_member(mut tbl: mlua::Table, class: &str) -> bool {
+fn check_implements(mut tbl: mlua::Table, class: &str) -> bool {
     loop {
         match tbl.raw_get::<_, String>("className_") {
             Err(_) => break false,
@@ -40,17 +40,24 @@ fn as_tbl<'lua>(
     match value {
         Value::Table(tbl) => match objtyp {
             None => Ok(tbl),
-            Some(typ) => {
-                if check_member(tbl.clone(), typ) {
-                    Ok(tbl)
-                } else {
-                    Err(LuaError::FromLuaConversionError {
-                        from: "table",
-                        to: typ,
-                        message: Some(format!("object or super expected to have type {}", typ)),
-                    })
+            Some(typ) => match tbl.get_metatable() {
+                None => Err(LuaError::FromLuaConversionError {
+                    from: "table",
+                    to: typ,
+                    message: Some(format!("table is not an object")),
+                }),
+                Some(meta) => {
+                    if check_implements(meta, typ) {
+                        Ok(tbl)
+                    } else {
+                        Err(LuaError::FromLuaConversionError {
+                            from: "table",
+                            to: typ,
+                            message: Some(format!("object or super expected to have type {}", typ)),
+                        })
+                    }
                 }
-            }
+            },
         },
         _ => Err(cvt_err(to)),
     }
@@ -181,12 +188,15 @@ pub enum ObjectCategory {
 pub struct Object<'lua> {
     t: mlua::Table<'lua>,
     #[serde(skip)]
-    lua: &'lua Lua
+    lua: &'lua Lua,
 }
 
 impl<'lua> FromLua<'lua> for Object<'lua> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self { t: as_tbl("Object", Some("Object"), value)?, lua })
+        Ok(Self {
+            t: as_tbl("Object", Some("Object"), value)?,
+            lua,
+        })
     }
 }
 
@@ -526,8 +536,8 @@ impl<'lua> Weapon<'lua> {
     pub fn get_target(&self) -> LuaResult<Option<Object<'lua>>> {
         match self.t.call_method("getTarget", ())? {
             Value::Nil => Ok(None),
-            v => Ok(Some(Object::from_lua(v, self.lua)?))
-        } 
+            v => Ok(Some(Object::from_lua(v, self.lua)?)),
+        }
     }
 }
 
@@ -563,6 +573,24 @@ impl<'lua> FromLua<'lua> for Shot<'lua> {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
             weapon: tbl.raw_get("weapon")?,
+            weapon_name: tbl.raw_get("weapon_name")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ShootingEnd<'lua> {
+    pub time: Time,
+    pub initiator: Unit<'lua>,
+    pub weapon_name: String,
+}
+
+impl<'lua> FromLua<'lua> for ShootingEnd<'lua> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("Shot", None, value)?;
+        Ok(Self {
+            time: tbl.raw_get("time")?,
+            initiator: tbl.raw_get("initiator")?,
             weapon_name: tbl.raw_get("weapon_name")?,
         })
     }
@@ -651,7 +679,7 @@ pub enum Event<'lua> {
     PlayerLeaveUnit,
     PlayerComment,
     ShootingStart(WeaponUse<'lua>),
-    ShootingEnd(Shot<'lua>),
+    ShootingEnd(ShootingEnd<'lua>),
     MarkAdded,
     MarkChange,
     MarkRemoved,
@@ -737,7 +765,7 @@ impl<'lua> FromLua<'lua> for Event<'lua> {
             49 => Event::UnitTaskTimeout,
             50 => Event::UnitTaskStage,
             51 => Event::Max,
-            _ => return Err(cvt_err("Event"))
+            _ => return Err(cvt_err("Event")),
         };
         Ok(ev)
     }

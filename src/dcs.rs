@@ -737,7 +737,7 @@ impl<'lua> FromLua<'lua> for Event<'lua> {
             21 => Event::PlayerLeaveUnit,
             22 => Event::PlayerComment,
             23 => Event::ShootingStart(WeaponUse::from_lua(value, lua)?),
-            24 => Event::ShootingEnd(Shot::from_lua(value, lua)?),
+            24 => Event::ShootingEnd(ShootingEnd::from_lua(value, lua)?),
             25 => Event::MarkAdded,
             26 => Event::MarkChange,
             27 => Event::MarkRemoved,

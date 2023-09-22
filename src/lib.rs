@@ -80,7 +80,7 @@ fn on_event(lua: &Lua, (_, ev): (Value, Value)) -> LuaResult<()> {
         print!("onEvent: ");
         serde_json::to_writer_pretty(&mut io::stdout(), &to_json(&mut ctx, None, &ev)).unwrap();
         println!();
-        println!("onEventTranslated: {:#?}", dcs::Event::from_lua(ev, lua));
+        println!("onEventTranslated: {:#?}", dcs::event::Event::from_lua(ev, lua));
     });
     Ok(())
 }

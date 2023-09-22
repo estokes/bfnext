@@ -7,6 +7,8 @@ pub mod group;
 pub mod unit;
 pub mod weapon;
 pub mod event;
+pub mod world;
+pub mod airbase;
 
 fn cvt_err(to: &'static str) -> LuaError {
     LuaError::FromLuaConversionError {
@@ -154,6 +156,12 @@ impl Deref for String {
 impl DerefMut for String {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl<'lua> IntoLua<'lua> for String {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        Ok(Value::String(lua.create_string(self.0)?))
     }
 }
 

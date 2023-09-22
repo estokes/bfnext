@@ -11,12 +11,48 @@ pub enum GroupCategory {
     Train,
 }
 
+impl<'lua> FromLua<'lua> for GroupCategory {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        Ok(match u32::from_lua(value, lua)? {
+            0 => GroupCategory::Airplane,
+            1 => GroupCategory::Ground,
+            2 => GroupCategory::Helicopter,
+            3 => GroupCategory::Ship,
+            4 => GroupCategory::Train,
+            _ => return Err(cvt_err("GroupCategory")),
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub enum Coalition {
     Neutral,
     Red,
     Blue,
     Contested,
+}
+
+impl<'lua> IntoLua<'lua> for Coalition {
+    fn into_lua(self, _: &'lua Lua) -> LuaResult<Value<'lua>> {
+        Ok(match self {
+            Self::Neutral => Value::Integer(0),
+            Self::Red => Value::Integer(1),
+            Self::Blue => Value::Integer(2),
+            Self::Contested => Value::Integer(3),
+        })
+    }
+}
+
+impl<'lua> FromLua<'lua> for Coalition {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        Ok(match u32::from_lua(value, lua)? {
+            0 => Self::Neutral,
+            1 => Self::Red,
+            2 => Self::Blue,
+            3 => Self::Contested,
+            _ => return Err(cvt_err("Coalition")),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,24 +87,11 @@ impl<'lua> Group<'lua> {
     }
 
     pub fn get_category(&self) -> LuaResult<GroupCategory> {
-        Ok(match self.t.call_method("getCategory", ())? {
-            0 => GroupCategory::Airplane,
-            1 => GroupCategory::Ground,
-            2 => GroupCategory::Helicopter,
-            3 => GroupCategory::Ship,
-            4 => GroupCategory::Train,
-            _ => return Err(cvt_err("GroupCategory")),
-        })
+        self.t.call_method("getCategory", ())
     }
 
     pub fn get_coalition(&self) -> LuaResult<Coalition> {
-        Ok(match self.t.call_method("getCoalition", ())? {
-            0 => Coalition::Neutral,
-            1 => Coalition::Red,
-            2 => Coalition::Blue,
-            3 => Coalition::Contested,
-            _ => return Err(cvt_err("Coalition")),
-        })
+        self.t.call_method("getCoalition", ())
     }
 
     pub fn get_name(&self) -> LuaResult<String> {

@@ -14,9 +14,22 @@ fn as_tbl_ref<'a: 'lua, 'lua>(
     to: &'static str,
     value: &'a Value<'lua>,
 ) -> LuaResult<&'a mlua::Table<'lua>> {
-    value
-        .as_table()
-        .ok_or_else(|| cvt_err(to))
+    value.as_table().ok_or_else(|| cvt_err(to))
+}
+
+fn check_member(mut tbl: mlua::Table, class: &str) -> bool {
+    loop {
+        match tbl.raw_get::<_, String>("className_") {
+            Err(_) => break false,
+            Ok(s) if s.as_str() == class => break true,
+            Ok(_) => match tbl.raw_get::<_, mlua::Table>("parentClass_") {
+                Err(_) => break false,
+                Ok(t) => {
+                    tbl = t;
+                }
+            },
+        }
+    }
 }
 
 fn as_tbl<'lua>(
@@ -28,17 +41,13 @@ fn as_tbl<'lua>(
         Value::Table(tbl) => match objtyp {
             None => Ok(tbl),
             Some(typ) => {
-                let actual_typ: String = tbl.raw_get("className_")?;
-                if actual_typ.as_str() == typ {
+                if check_member(tbl.clone(), typ) {
                     Ok(tbl)
                 } else {
                     Err(LuaError::FromLuaConversionError {
                         from: "table",
                         to: typ,
-                        message: Some(format!(
-                            "object expected to have type {}, actually type {}",
-                            typ, &*actual_typ
-                        )),
+                        message: Some(format!("object or super expected to have type {}", typ)),
                     })
                 }
             }
@@ -54,7 +63,7 @@ pub struct Vec2 {
 }
 
 impl<'lua> FromLua<'lua> for Vec2 {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Vec2", None, value)?;
         Ok(Self {
             x: tbl.raw_get("x")?,
@@ -71,7 +80,7 @@ pub struct Vec3 {
 }
 
 impl<'lua> FromLua<'lua> for Vec3 {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Vec3", None, value)?;
         Ok(Self {
             x: tbl.raw_get("x")?,
@@ -90,7 +99,7 @@ pub struct Position3 {
 }
 
 impl<'lua> FromLua<'lua> for Position3 {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Position3", None, value)?;
         Ok(Self {
             p: tbl.raw_get("p")?,
@@ -108,7 +117,7 @@ pub struct Box3 {
 }
 
 impl<'lua> FromLua<'lua> for Box3 {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Box3", None, value)?;
         Ok(Self {
             min: tbl.raw_get("min")?,
@@ -153,9 +162,7 @@ pub struct Time(f32);
 
 impl<'lua> FromLua<'lua> for Time {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self(value.as_f32().ok_or_else(|| {
-            cvt_err("Time")
-        })?))
+        Ok(Self(value.as_f32().ok_or_else(|| cvt_err("Time"))?))
     }
 }
 
@@ -170,38 +177,32 @@ pub enum ObjectCategory {
     Cargo,
 }
 
-pub trait ObjectExt {
-    fn destroy(&self) -> LuaResult<()>;
-    fn get_category(&self) -> LuaResult<ObjectCategory>;
-    fn get_name(&self) -> LuaResult<String>;
-    fn get_point(&self) -> LuaResult<Vec3>;
-    fn get_position(&self) -> LuaResult<Position3>;
-    fn get_velocity(&self) -> LuaResult<Vec3>;
-    fn in_air(&self) -> LuaResult<bool>;
+#[derive(Debug, Clone, Serialize)]
+pub struct Object<'lua> {
+    t: mlua::Table<'lua>,
+    #[serde(skip)]
+    lua: &'lua Lua
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Object<'lua>(mlua::Table<'lua>);
 
 impl<'lua> FromLua<'lua> for Object<'lua> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self(as_tbl("Object", Some("Object"), value)?))
+        Ok(Self { t: as_tbl("Object", Some("Object"), value)?, lua })
     }
 }
 
 impl<'lua> IntoLua<'lua> for Object<'lua> {
-    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
-        Ok(Value::Table(self.0))
+    fn into_lua(self, _: &'lua Lua) -> LuaResult<Value<'lua>> {
+        Ok(Value::Table(self.t))
     }
 }
 
-impl<'lua> ObjectExt for Object<'lua> {
-    fn destroy(&self) -> LuaResult<()> {
-        self.0.call_method("destroy", ())
+impl<'lua> Object<'lua> {
+    pub fn destroy(&self) -> LuaResult<()> {
+        self.t.call_method("destroy", ())
     }
 
-    fn get_category(&self) -> LuaResult<ObjectCategory> {
-        Ok(match self.0.call_method("getCategory", ())? {
+    pub fn get_category(&self) -> LuaResult<ObjectCategory> {
+        Ok(match self.t.call_method("getCategory", ())? {
             0 => ObjectCategory::Void,
             1 => ObjectCategory::Unit,
             2 => ObjectCategory::Weapon,
@@ -213,24 +214,36 @@ impl<'lua> ObjectExt for Object<'lua> {
         })
     }
 
-    fn get_name(&self) -> LuaResult<String> {
-        self.0.call_method("getName", ())
+    pub fn get_desc(&self) -> LuaResult<mlua::Table<'lua>> {
+        self.t.call_method("getDesc", ())
     }
 
-    fn get_point(&self) -> LuaResult<Vec3> {
-        self.0.call_method("getPoint", ())
+    pub fn get_name(&self) -> LuaResult<String> {
+        self.t.call_method("getName", ())
     }
 
-    fn get_position(&self) -> LuaResult<Position3> {
-        self.0.call_method("getPosition", ())
+    pub fn get_point(&self) -> LuaResult<Vec3> {
+        self.t.call_method("getPoint", ())
     }
 
-    fn get_velocity(&self) -> LuaResult<Vec3> {
-        self.0.call_method("getPosition", ())
+    pub fn get_position(&self) -> LuaResult<Position3> {
+        self.t.call_method("getPosition", ())
     }
 
-    fn in_air(&self) -> LuaResult<bool> {
-        self.0.call_method("inAir", ())
+    pub fn get_velocity(&self) -> LuaResult<Vec3> {
+        self.t.call_method("getPosition", ())
+    }
+
+    pub fn in_air(&self) -> LuaResult<bool> {
+        self.t.call_method("inAir", ())
+    }
+
+    pub fn as_unit(&self) -> LuaResult<Unit> {
+        Unit::from_lua(Value::Table(self.t.clone()), self.lua)
+    }
+
+    pub fn as_weapon(&self) -> LuaResult<Weapon> {
+        Weapon::from_lua(Value::Table(self.t.clone()), self.lua)
     }
 }
 
@@ -253,14 +266,14 @@ impl<'lua> IntoLua<'lua> for AltitudeKind {
 pub struct Controller<'lua> {
     t: mlua::Table<'lua>,
     #[serde(skip)]
-    lua: &'lua Lua,
+    _lua: &'lua Lua,
 }
 
 impl<'lua> FromLua<'lua> for Controller<'lua> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
         Ok(Self {
             t: as_tbl("Controller", Some("Controller"), value)?,
-            lua,
+            _lua: lua,
         })
     }
 }
@@ -309,7 +322,7 @@ pub enum Coalition {
     Neutral,
     Red,
     Blue,
-    Contested
+    Contested,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -350,7 +363,7 @@ impl<'lua> Group<'lua> {
             2 => GroupCategory::Helicopter,
             3 => GroupCategory::Ship,
             4 => GroupCategory::Train,
-            _ => return Err(cvt_err("GroupCategory"))
+            _ => return Err(cvt_err("GroupCategory")),
         })
     }
 
@@ -360,8 +373,43 @@ impl<'lua> Group<'lua> {
             1 => Coalition::Red,
             2 => Coalition::Blue,
             3 => Coalition::Contested,
-            _ => return Err(cvt_err("Coalition"))
+            _ => return Err(cvt_err("Coalition")),
         })
+    }
+
+    pub fn get_name(&self) -> LuaResult<String> {
+        self.t.call_method("getName", ())
+    }
+
+    pub fn get_id(&self) -> LuaResult<u32> {
+        self.t.call_method("getID", ())
+    }
+
+    pub fn get_size(&self) -> LuaResult<u32> {
+        self.t.call_method("getSize", ())
+    }
+
+    pub fn get_initial_size(&self) -> LuaResult<u32> {
+        self.t.call_method("getInitialSize", ())
+    }
+
+    pub fn get_unit(&self, index: usize) -> LuaResult<Unit> {
+        Unit::from_lua(self.t.call_method("getUnit", index)?, self.lua)
+    }
+
+    pub fn get_units(&self) -> LuaResult<impl Iterator<Item = LuaResult<Unit>>> {
+        Ok(as_tbl("Units", None, self.t.call_method("getUnits", ())?)?.sequence_values())
+    }
+
+    pub fn get_controller(&self) -> LuaResult<Controller> {
+        Ok(Controller::from_lua(
+            self.t.call_method("getController", ())?,
+            self.lua,
+        )?)
+    }
+
+    pub fn enable_emission(&self, on: bool) -> LuaResult<()> {
+        self.t.call_method("enableEmission", on)
     }
 }
 
@@ -397,6 +445,10 @@ impl<'lua> Unit<'lua> {
         Self::from_lua(unit.call_method("getByName", name)?, lua)
     }
 
+    pub fn as_object(&self) -> LuaResult<Object<'lua>> {
+        Object::from_lua(Value::Table(self.t.clone()), self.lua)
+    }
+
     pub fn is_active(&self) -> LuaResult<bool> {
         self.t.call_method("isActive", ())
     }
@@ -420,6 +472,63 @@ impl<'lua> Unit<'lua> {
     pub fn get_controller(&self) -> LuaResult<Controller<'lua>> {
         Controller::from_lua(self.t.call_method("getController", ())?, self.lua)
     }
+
+    pub fn get_group(&self) -> LuaResult<Group<'lua>> {
+        Group::from_lua(self.t.call_method("getGroup", ())?, self.lua)
+    }
+
+    pub fn get_callsign(&self) -> LuaResult<String> {
+        self.t.call_method("getCallsign", ())
+    }
+
+    pub fn get_life(&self) -> LuaResult<i32> {
+        self.t.call_method("getLife", ())
+    }
+
+    pub fn get_life0(&self) -> LuaResult<i32> {
+        self.t.call_method("getLife0", ())
+    }
+
+    pub fn get_fuel(&self) -> LuaResult<f32> {
+        self.t.call_method("getFuel", ())
+    }
+
+    pub fn enable_emission(&self, on: bool) -> LuaResult<()> {
+        self.t.call_method("enableEmission", on)
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Weapon<'lua> {
+    t: mlua::Table<'lua>,
+    #[serde(skip)]
+    lua: &'lua Lua,
+}
+
+impl<'lua> FromLua<'lua> for Weapon<'lua> {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        Ok(Self {
+            t: as_tbl("Weapon", Some("Weapon"), value)?,
+            lua,
+        })
+    }
+}
+
+impl<'lua> Weapon<'lua> {
+    pub fn as_object(&self) -> LuaResult<Object<'lua>> {
+        Object::from_lua(Value::Table(self.t.clone()), self.lua)
+    }
+
+    pub fn get_launcher(&self) -> LuaResult<Unit<'lua>> {
+        Unit::from_lua(self.t.call_method("getLauncher", ())?, self.lua)
+    }
+
+    pub fn get_target(&self) -> LuaResult<Option<Object<'lua>>> {
+        match self.t.call_method("getTarget", ())? {
+            Value::Nil => Ok(None),
+            v => Ok(Some(Object::from_lua(v, self.lua)?))
+        } 
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -440,16 +549,16 @@ pub enum BirthPlace {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct Shot {
+pub struct Shot<'lua> {
     pub time: Time,
-    pub initiator: ObjectId,
-    pub weapon: ObjectId,
+    pub initiator: Unit<'lua>,
+    pub weapon: Weapon<'lua>,
     pub weapon_name: String,
 }
 
-impl<'lua> FromLua<'lua> for Shot {
+impl<'lua> FromLua<'lua> for Shot<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("Shot", &value)?;
+        let tbl = as_tbl("Shot", None, value)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -460,16 +569,16 @@ impl<'lua> FromLua<'lua> for Shot {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct WeaponUse {
+pub struct WeaponUse<'lua> {
     pub time: Time,
-    pub initiator: ObjectId,
-    pub target: ObjectId,
+    pub initiator: Unit<'lua>,
+    pub target: Object<'lua>,
     pub weapon_name: String,
 }
 
-impl<'lua> FromLua<'lua> for WeaponUse {
+impl<'lua> FromLua<'lua> for WeaponUse<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("WeaponUse", &value)?;
+        let tbl = as_tbl("WeaponUse", None, value)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -480,14 +589,14 @@ impl<'lua> FromLua<'lua> for WeaponUse {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct UnitEvent {
+pub struct UnitEvent<'lua> {
     pub time: Time,
-    pub initiator: ObjectId,
+    pub initiator: Object<'lua>,
 }
 
-impl<'lua> FromLua<'lua> for UnitEvent {
+impl<'lua> FromLua<'lua> for UnitEvent<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("UnitEvent", &value)?;
+        let tbl = as_tbl("UnitEvent", None, value)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -496,16 +605,16 @@ impl<'lua> FromLua<'lua> for UnitEvent {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct AtPlace {
+pub struct AtPlace<'lua> {
     pub time: Time,
-    pub initiator: ObjectId,
-    pub place: ObjectId,
+    pub initiator: Object<'lua>,
+    pub place: Object<'lua>,
     pub subplace: u32,
 }
 
-impl<'lua> FromLua<'lua> for AtPlace {
+impl<'lua> FromLua<'lua> for AtPlace<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("AtPlace", &value)?;
+        let tbl = as_tbl("AtPlace", None, value)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -517,38 +626,38 @@ impl<'lua> FromLua<'lua> for AtPlace {
 
 /// This is a dcs event
 #[derive(Debug, Clone, Serialize)]
-pub enum Event {
+pub enum Event<'lua> {
     Invalid,
-    Shot(Shot),
-    Hit(WeaponUse),
-    Takeoff(AtPlace),
-    Land(AtPlace),
+    Shot(Shot<'lua>),
+    Hit(WeaponUse<'lua>),
+    Takeoff(AtPlace<'lua>),
+    Land(AtPlace<'lua>),
     Crash,
     Ejection,
     Refueling,
-    Dead(UnitEvent),
+    Dead(UnitEvent<'lua>),
     PilotDead,
     BaseCaptured,
     MissionStart,
     MissionEnd,
     TookControl,
     RefuelingStop,
-    Birth(AtPlace),
+    Birth(AtPlace<'lua>),
     HumanFailure,
     DetailedFailure,
-    EngineStartup(AtPlace),
-    EngineShutdown(AtPlace),
-    PlayerEnterUnit(UnitEvent),
+    EngineStartup(AtPlace<'lua>),
+    EngineShutdown(AtPlace<'lua>),
+    PlayerEnterUnit(UnitEvent<'lua>),
     PlayerLeaveUnit,
     PlayerComment,
-    ShootingStart(WeaponUse),
-    ShootingEnd(Shot),
+    ShootingStart(WeaponUse<'lua>),
+    ShootingEnd(Shot<'lua>),
     MarkAdded,
     MarkChange,
     MarkRemoved,
-    Kill(WeaponUse),
-    Score(UnitEvent),
-    UnitLost(UnitEvent),
+    Kill(WeaponUse<'lua>),
+    Score(UnitEvent<'lua>),
+    UnitLost(UnitEvent<'lua>),
     LandingAfterEjection,
     ParatrooperLanding,
     DiscardChairAfterEjection,
@@ -570,14 +679,12 @@ pub enum Event {
     UnitTaskTimeout,
     UnitTaskStage,
     Max,
-    Unknown(u32),
 }
 
-impl<'lua> FromLua<'lua> for Event {
+impl<'lua> FromLua<'lua> for Event<'lua> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("Event", &value)?;
-        let id: u32 = tbl.raw_get("id")?;
-        let ev = match id {
+        let tbl = as_tbl_ref("Event", &value)?;
+        let ev = match tbl.raw_get("id")? {
             0 => Event::Invalid,
             1 => Event::Shot(Shot::from_lua(value, lua)?),
             2 => Event::Hit(WeaponUse::from_lua(value, lua)?),
@@ -630,7 +737,7 @@ impl<'lua> FromLua<'lua> for Event {
             49 => Event::UnitTaskTimeout,
             50 => Event::UnitTaskStage,
             51 => Event::Max,
-            u => Event::Unknown(u),
+            _ => return Err(cvt_err("Event"))
         };
         Ok(ev)
     }

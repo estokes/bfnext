@@ -1,4 +1,4 @@
-mod dcs;
+pub mod dcs;
 use mlua::{prelude::*, Value};
 use std::{io, collections::{HashMap, hash_map::Entry}, cell::RefCell};
 use fxhash::FxHashMap;

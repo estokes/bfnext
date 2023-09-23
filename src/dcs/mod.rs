@@ -9,6 +9,9 @@ pub mod weapon;
 pub mod event;
 pub mod world;
 pub mod airbase;
+pub mod warehouse;
+pub mod coalition;
+pub mod country;
 
 fn cvt_err(to: &'static str) -> LuaError {
     LuaError::FromLuaConversionError {

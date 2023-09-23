@@ -1,14 +1,21 @@
-use super::{as_tbl, controller::Controller, cvt_err, unit::Unit, String};
+use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
+#[repr(u8)]
 pub enum GroupCategory {
-    Airplane,
-    Ground,
-    Helicopter,
-    Ship,
-    Train,
+    Airplane = 0,
+    Ground = 1,
+    Helicopter = 2,
+    Ship = 3,
+    Train = 4,
+}
+
+impl<'lua> IntoLua<'lua> for GroupCategory {
+    fn into_lua(self, _: &'lua Lua) -> LuaResult<Value<'lua>> {
+        Ok(Value::Integer(self as i64))
+    }
 }
 
 impl<'lua> FromLua<'lua> for GroupCategory {
@@ -25,33 +32,17 @@ impl<'lua> FromLua<'lua> for GroupCategory {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub enum Coalition {
-    Neutral,
-    Red,
-    Blue,
+pub enum Owner {
     Contested,
+    Side(Side),
 }
 
-impl<'lua> IntoLua<'lua> for Coalition {
-    fn into_lua(self, _: &'lua Lua) -> LuaResult<Value<'lua>> {
-        Ok(match self {
-            Self::Neutral => Value::Integer(0),
-            Self::Red => Value::Integer(1),
-            Self::Blue => Value::Integer(2),
-            Self::Contested => Value::Integer(3),
-        })
-    }
-}
-
-impl<'lua> FromLua<'lua> for Coalition {
+impl<'lua> FromLua<'lua> for Owner {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(match u32::from_lua(value, lua)? {
-            0 => Self::Neutral,
-            1 => Self::Red,
-            2 => Self::Blue,
-            3 => Self::Contested,
-            _ => return Err(cvt_err("Coalition")),
-        })
+        match u32::from_lua(value.clone(), lua)? {
+            3 => Ok(Self::Contested),
+            _ => Ok(Owner::Side(Side::from_lua(value, lua)?)),
+        }
     }
 }
 
@@ -68,6 +59,12 @@ impl<'lua> FromLua<'lua> for Group<'lua> {
             t: as_tbl("Group", Some("Group"), value)?,
             lua,
         })
+    }
+}
+
+impl<'lua> IntoLua<'lua> for Group<'lua> {
+    fn into_lua(self, _: &'lua Lua) -> LuaResult<Value<'lua>> {
+        Ok(Value::Table(self.t.clone()))
     }
 }
 
@@ -90,7 +87,7 @@ impl<'lua> Group<'lua> {
         self.t.call_method("getCategory", ())
     }
 
-    pub fn get_coalition(&self) -> LuaResult<Coalition> {
+    pub fn get_coalition(&self) -> LuaResult<Owner> {
         self.t.call_method("getCoalition", ())
     }
 

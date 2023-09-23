@@ -1,6 +1,6 @@
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use super::{as_tbl, String, object::Object};
+use super::{as_tbl, String, object::Object, Vec3, coalition::Side, warehouse::Warehouse};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Airbase<'lua> {
@@ -39,5 +39,37 @@ impl<'lua> Airbase<'lua> {
 
     pub fn get_parking(&self, available: bool) -> LuaResult<mlua::Table<'lua>> {
         self.t.call_method("getParking", available)
+    }
+
+    pub fn get_runways(&self) -> LuaResult<mlua::Table<'lua>> {
+        self.t.call_method("getRunways", ())
+    }
+
+    pub fn get_tech_object_pos(&self, obj: String) -> LuaResult<Vec3> {
+        self.t.call_method("getTechObjectPos", obj)
+    }
+
+    pub fn get_radio_silent_mode(&self) -> LuaResult<bool> {
+        self.t.call_method("getRadioSilentMode", ())
+    }
+
+    pub fn set_radio_silent_mode(&self, on: bool) -> LuaResult<()> {
+        self.t.call_method("setRadioSilentMode", on)
+    }
+
+    pub fn auto_capture(&self, on: bool) -> LuaResult<()> {
+        self.t.call_method("autoCapture", on)
+    }
+
+    pub fn auto_capture_is_on(&self) -> LuaResult<bool> {
+        self.t.call_method("autoCaptureIsOn", ())
+    }
+
+    pub fn set_coalition(&self, coa: Side) -> LuaResult<()> {
+        self.t.call_method("setCoalition", coa)
+    }
+
+    pub fn get_warehouse(&self) -> LuaResult<Warehouse> {
+        Warehouse::from_lua(self.t.call_method("getWarehouse", ())?, self.lua)
     }
 }

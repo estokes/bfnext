@@ -333,10 +333,10 @@ impl<'lua> FromLua<'lua> for DetectedTarget<'lua> {
     fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("DetectedTarget", None, value)?;
         Ok(Self {
-            object: tbl.get("object")?,
-            is_visible: tbl.get("visible")?,
-            type_known: tbl.get("type")?,
-            distance_known: tbl.get("distance")?,
+            object: tbl.raw_get("object")?,
+            is_visible: tbl.raw_get("visible")?,
+            type_known: tbl.raw_get("type")?,
+            distance_known: tbl.raw_get("distance")?,
         })
     }
 }

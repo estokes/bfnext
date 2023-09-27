@@ -75,7 +75,35 @@ macro_rules! simple_enum {
                 Ok(Value::Integer(self as i64))
             }
         }
-    }
+    };
+}
+
+#[macro_export]
+macro_rules! bitflags_enum {
+    ($name:ident, $repr:ident, [$($case:ident => $num:literal),+]) => {
+        #[bitflags]
+        #[derive(Debug, Clone, Copy, Serialize)]
+        #[allow(non_camel_case_types)]
+        #[repr($repr)]
+        pub enum $name {
+            $($case = $num),+
+        }
+    
+        impl<'lua> FromLua<'lua> for $name {
+            fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+                Ok(match $repr::from_lua(value, lua)? {
+                    $($num => Self::$case),+,
+                    _ => return Err(cvt_err(stringify!($name)))
+                })
+            }
+        }
+    
+        impl<'lua> IntoLua<'lua> for $name {
+            fn into_lua(self, _lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+                Ok(Value::Integer(self as i64))
+            }
+        }
+    };
 }
 
 #[macro_export]

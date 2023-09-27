@@ -1,6 +1,7 @@
-use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, String};
-use crate::{simple_enum, string_enum, wrapped_table};
-use mlua::{prelude::*, Value};
+use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, String, Vec3};
+use crate::{bitflags_enum, simple_enum, string_enum, wrapped_table};
+use enumflags2::{bitflags, BitFlags};
+use mlua::{prelude::*, Value, Variadic};
 use serde_derive::Serialize;
 use std::ops::Deref;
 
@@ -148,6 +149,198 @@ impl<'lua> AirOption<'lua> {
     }
 }
 
+simple_enum!(AlarmState, u8, [
+    Auto => 0,
+    Green => 1,
+    Red => 2
+]);
+
+simple_enum!(GroundRoe, u8, [
+    OpenFire => 2,
+    ReturnFire => 3,
+    WeaponHold => 4
+]);
+
+#[derive(Debug, Clone, Serialize)]
+pub enum GroundOption {
+    AcEngagementRangeRestriction(u8),
+    AlarmState(AlarmState),
+    DisperseOnAttack(u32),
+    EngageAirWeapons(bool),
+    Formation(VehicleFormation),
+    Roe(GroundRoe),
+}
+
+impl<'lua> IntoLua<'lua> for GroundOption {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        match self {
+            Self::AcEngagementRangeRestriction(v) => v.into_lua(lua),
+            Self::AlarmState(v) => v.into_lua(lua),
+            Self::DisperseOnAttack(v) => v.into_lua(lua),
+            Self::EngageAirWeapons(v) => v.into_lua(lua),
+            Self::Formation(v) => v.into_lua(lua),
+            Self::Roe(v) => v.into_lua(lua),
+        }
+    }
+}
+
+impl GroundOption {
+    fn tag(&self) -> u8 {
+        match self {
+            Self::AcEngagementRangeRestriction(_) => 24,
+            Self::AlarmState(_) => 9,
+            Self::DisperseOnAttack(_) => 8,
+            Self::EngageAirWeapons(_) => 20,
+            Self::Formation(_) => 5,
+            Self::Roe(_) => 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum NavalOption {
+    Roe(GroundRoe),
+}
+
+impl<'lua> IntoLua<'lua> for NavalOption {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        match self {
+            Self::Roe(v) => v.into_lua(lua),
+        }
+    }
+}
+
+impl NavalOption {
+    fn tag(&self) -> u8 {
+        match self {
+            Self::Roe(_) => 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum AiOption<'lua> {
+    Air(AirOption<'lua>),
+    Ground(GroundOption),
+    Naval(NavalOption),
+}
+
+impl<'lua> IntoLua<'lua> for AiOption<'lua> {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        match self {
+            Self::Air(v) => v.into_lua(lua),
+            Self::Ground(v) => v.into_lua(lua),
+            Self::Naval(v) => v.into_lua(lua),
+        }
+    }
+}
+
+impl<'lua> AiOption<'lua> {
+    fn tag(&self) -> u8 {
+        match self {
+            Self::Air(v) => v.tag(),
+            Self::Ground(v) => v.tag(),
+            Self::Naval(v) => v.tag(),
+        }
+    }
+}
+
+bitflags_enum!(Detection, u8, [
+    Dlink => 32,
+    Irst => 8,
+    Optic => 2,
+    Radar => 4,
+    Rwr => 16,
+    Visual => 1
+]);
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DetectedTargetInfo {
+    pub is_detected: bool,
+    pub is_visible: bool,
+    pub last_time_seen: f64,
+    pub type_known: bool,
+    pub distance_known: bool,
+    pub last_position: Vec3,
+    pub last_velocity: Vec3,
+}
+
+impl<'lua> FromLuaMulti<'lua> for DetectedTargetInfo {
+    fn from_lua_multi(mut values: LuaMultiValue<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let is_detected = FromLua::from_lua(
+            values
+                .pop_front()
+                .ok_or_else(|| cvt_err("DetectedTargetInfo:is_detected"))?,
+            lua,
+        )?;
+        let is_visible = FromLua::from_lua(
+            values
+                .pop_front()
+                .ok_or_else(|| cvt_err("DetectedTargetInfo:is_visible"))?,
+            lua,
+        )?;
+        let last_time_seen = FromLua::from_lua(
+            values
+                .pop_front()
+                .ok_or_else(|| cvt_err("DetectedTargetInfo:last_time_seen"))?,
+            lua,
+        )?;
+        let type_known = FromLua::from_lua(
+            values
+                .pop_front()
+                .ok_or_else(|| cvt_err("DetectedTargetInfo:type_known"))?,
+            lua,
+        )?;
+        let distance_known = FromLua::from_lua(
+            values
+                .pop_front()
+                .ok_or_else(|| cvt_err("DetectedTargetInfo:distance_known"))?,
+            lua,
+        )?;
+        let last_position = FromLua::from_lua(
+            values
+                .pop_front()
+                .ok_or_else(|| cvt_err("DetectedTargetInfo:last_position"))?,
+            lua,
+        )?;
+        let last_velocity = FromLua::from_lua(
+            values
+                .pop_front()
+                .ok_or_else(|| cvt_err("DetectedTargetInfo:last_velocity"))?,
+            lua,
+        )?;
+        Ok(Self {
+            is_detected,
+            is_visible,
+            last_time_seen,
+            type_known,
+            distance_known,
+            last_position,
+            last_velocity,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DetectedTarget<'lua> {
+    pub object: Object<'lua>,
+    pub is_visible: bool,
+    pub type_known: bool,
+    pub distance_known: bool,
+}
+
+impl<'lua> FromLua<'lua> for DetectedTarget<'lua> {
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("DetectedTarget", None, value)?;
+        Ok(Self {
+            object: tbl.get("object")?,
+            is_visible: tbl.get("visible")?,
+            type_known: tbl.get("type")?,
+            distance_known: tbl.get("distance")?,
+        })
+    }
+}
+
 string_enum!(AltitudeKind, u8, [
     Radio => "Radio",
     Baro => "Baro"
@@ -183,8 +376,8 @@ impl<'lua> Controller<'lua> {
         self.t.call_method("setCommand", command)
     }
 
-    pub fn set_option(&self, option: AirOption<'lua>) -> LuaResult<()> {
-        self.t.call_method("setOption", (option.tag(),))
+    pub fn set_option(&self, option: AiOption<'lua>) -> LuaResult<()> {
+        self.t.call_method("setOption", (option.tag(), option))
     }
 
     pub fn set_on_off(&self, on: bool) -> LuaResult<()> {
@@ -208,6 +401,35 @@ impl<'lua> Controller<'lua> {
     }
 
     pub fn know_target(&self, object: Object, typ: bool, distance: bool) -> LuaResult<()> {
-        self.t.call_function("knowTarget", (object, typ, distance))
+        self.t.call_method("knowTarget", (object, typ, distance))
+    }
+
+    pub fn is_target_detected(
+        &self,
+        object: Object,
+        methods: BitFlags<Detection>,
+    ) -> LuaResult<DetectedTargetInfo> {
+        let mut args = Variadic::new();
+        args.push(object.into_lua(self.lua)?);
+        for method in methods {
+            args.push(method.into_lua(self.lua)?);
+        }
+        self.t.call_method("isTargetDetected", args)
+    }
+
+    pub fn get_detected_targets(
+        &self,
+        methods: BitFlags<Detection>,
+    ) -> LuaResult<impl Iterator<Item = LuaResult<DetectedTarget<'lua>>>> {
+        let mut args = Variadic::new();
+        for method in methods {
+            args.push(method.into_lua(self.lua)?);
+        }
+        Ok(as_tbl(
+            "DetectedTargetsIter",
+            None,
+            self.t.call_method("getDetectedTargets", args)?,
+        )?
+        .sequence_values())
     }
 }

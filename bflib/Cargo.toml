@@ -1,15 +1,13 @@
-[profile.release]
-codegen-units = 1
-opt-level = 3
-lto = true
-debug = false
+[package]
+name = "bflib"
+version = "0.1.0"
+edition = "2021"
 
-[profile.dev]
-opt-level = "s"
-lto = "thin"
-debug = 1
+[lib]
+name = "bflib"
+crate-type = ["cdylib"]
 
-[workspace.dependencies]
+[dependencies]
 mlua = { version = "0.9.1", features = ["lua51", "module", "serialize"] }
 serde = "1"
 serde_json = "1"
@@ -21,11 +19,3 @@ compact_str = "0.7"
 bytes = "1"
 fxhash = "0.2"
 enumflags2 = "0.7.8"
-
-[workspace]
-resolver = "2"
-members = [
-	"dcso3",
-	"bflib",
-	"bfdb",
-]

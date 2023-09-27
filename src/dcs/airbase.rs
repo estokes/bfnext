@@ -1,22 +1,12 @@
+use super::{as_tbl, coalition::Side, object::Object, warehouse::Warehouse, String, Vec3};
+use crate::wrapped_table;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use super::{as_tbl, String, object::Object, Vec3, coalition::Side, warehouse::Warehouse};
+use std::ops::Deref;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Airbase<'lua> {
-    t: mlua::Table<'lua>,
-    #[serde(skip)]
-    lua: &'lua Lua
-}
+wrapped_table!(Runway, None);
 
-impl<'lua> FromLua<'lua> for Airbase<'lua> {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self {
-            t: as_tbl("Airbase", Some("Airbase"), value)?,
-            lua
-        })
-    }
-}
+wrapped_table!(Airbase, Some("Airbase"));
 
 impl<'lua> Airbase<'lua> {
     pub fn get_by_name(&self, name: String) -> LuaResult<Self> {
@@ -41,8 +31,8 @@ impl<'lua> Airbase<'lua> {
         self.t.call_method("getParking", available)
     }
 
-    pub fn get_runways(&self) -> LuaResult<mlua::Table<'lua>> {
-        self.t.call_method("getRunways", ())
+    pub fn get_runways(&self) -> LuaResult<impl Iterator<Item = LuaResult<Runway<'lua>>>> {
+        Ok(as_tbl("Runways", None, self.t.call_method("getRunways", ())?)?.sequence_values())
     }
 
     pub fn get_tech_object_pos(&self, obj: String) -> LuaResult<Vec3> {

@@ -1,6 +1,7 @@
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::{Deref, DerefMut};
+pub mod attribute;
 pub mod object;
 pub mod controller;
 pub mod group;
@@ -12,6 +13,109 @@ pub mod airbase;
 pub mod warehouse;
 pub mod coalition;
 pub mod country;
+pub mod static_object;
+
+#[macro_export]
+macro_rules! wrapped_table {
+    ($name:ident, $class:expr) => {
+        #[derive(Debug, Clone, Serialize)]
+        pub struct $name<'lua> {
+            t: mlua::Table<'lua>,
+            #[allow(dead_code)]
+            #[serde(skip)]
+            lua: &'lua Lua
+        }
+
+        impl<'lua> Deref for $name<'lua> {
+            type Target = mlua::Table<'lua>;
+
+            fn deref(&self) -> &Self::Target {
+                &self.t
+            }
+        }
+
+        impl<'lua> FromLua<'lua> for $name<'lua> {
+            fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+                Ok(Self {
+                    t: as_tbl(stringify!($name), $class, value)?,
+                    lua
+                })
+            }
+        }
+
+        impl<'lua> IntoLua<'lua> for $name<'lua> {
+            fn into_lua(self, _lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+                Ok(Value::Table(self.t))
+            }
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! simple_enum {
+    ($name:ident, $repr:ident, [$($case:ident => $num:literal),+]) => {
+        #[derive(Debug, Clone, Copy, Serialize)]
+        #[allow(non_camel_case_types)]
+        #[repr($repr)]
+        pub enum $name {
+            $($case = $num),+
+        }
+    
+        impl<'lua> FromLua<'lua> for $name {
+            fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+                Ok(match $repr::from_lua(value, lua)? {
+                    $($num => Self::$case),+,
+                    _ => return Err(cvt_err(stringify!($name)))
+                })
+            }
+        }
+    
+        impl<'lua> IntoLua<'lua> for $name {
+            fn into_lua(self, _lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+                Ok(Value::Integer(self as i64))
+            }
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! string_enum {
+    ($name:ident, $repr:ident, [$($case:ident => $str:literal),+]) => {
+        string_enum!($name, $repr, [$($case => $str),+], []);
+    };
+    ($name:ident, 
+     $repr:ident, 
+     [$($case:ident => $str:literal),+], 
+     [$($altcase:ident => $altstr:literal),*]) => {
+        #[derive(Debug, Clone, Serialize)]
+        #[allow(non_camel_case_types)]
+        #[repr($repr)]
+        pub enum $name {
+            $($case),+,
+            Custom(String)
+        }
+    
+        impl<'lua> FromLua<'lua> for $name {
+            fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+                let s = String::from_lua(value, lua)?;
+                Ok(match s.as_str() {
+                    $($str => Self::$case,)+
+                    $($altstr => Self::$altcase,)*
+                    _ => Self::Custom(s)
+                })
+            }
+        }
+    
+        impl<'lua> IntoLua<'lua> for $name {
+            fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+                Ok(Value::String(match self {
+                    $(Self::$case => lua.create_string($str)?),+,
+                    Self::Custom(s) => lua.create_string(s.as_str())?
+                }))
+            }
+        }
+    };
+}
 
 fn cvt_err(to: &'static str) -> LuaError {
     LuaError::FromLuaConversionError {

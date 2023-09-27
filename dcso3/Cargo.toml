@@ -2,16 +2,21 @@
 name = "dcso3"
 version = "0.0.1"
 edition = "2021"
+authors = ["Eric Stokes <eestokes@pm.me>"]
+license = "MIT"
+description = "Minimal Rust binding to the DCS lua api"
+homepage = "https://github.com/estokes/bfnext"
+repository = "https://github.com/estokes/bfnext"
+documentation = "https://docs.rs/dcso3"
+readme = "README.md"
+keywords = ["network", "networking", "distributed", "kerberos"]
+categories = ["network-programming"]
 
 [dependencies]
 mlua = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_derive = { workspace = true }
-netidx = { workspace = true }
-netidx-core = { workspace = true }
-netidx-derive = { workspace = true }
 compact_str = { workspace = true }
-bytes = { workspace = true }
 fxhash = { workspace = true }
 enumflags2 = { workspace = true }

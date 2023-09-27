@@ -1,6 +1,8 @@
+use compact_str::CompactString;
+use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use std::ops::{Deref, DerefMut};
+use std::{ops::{Deref, DerefMut}, collections::hash_map::Entry};
 
 use self::coalition::Side;
 pub mod airbase;
@@ -280,7 +282,13 @@ impl<'lua> FromLua<'lua> for Box3 {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[repr(transparent)]
-pub struct String(compact_str::CompactString);
+pub struct String(CompactString);
+
+impl std::fmt::Display for String {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl Deref for String {
     type Target = compact_str::CompactString;
@@ -304,7 +312,7 @@ impl<'lua> IntoLua<'lua> for String {
 
 impl<'lua> FromLua<'lua> for String {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        use compact_str::{format_compact, CompactString};
+        use compact_str::format_compact;
         match value {
             Value::String(s) => Ok(Self(CompactString::from(s.to_str()?))),
             Value::Boolean(b) => Ok(Self(format_compact!("{b}"))),
@@ -312,6 +320,24 @@ impl<'lua> FromLua<'lua> for String {
             Value::Number(n) => Ok(Self(format_compact!("{n}"))),
             v => Ok(Self(CompactString::from(v.to_string()?))),
         }
+    }
+}
+
+impl From<&str> for String {
+    fn from(value: &str) -> Self {
+        Self(CompactString::from(value))
+    }
+}
+
+impl From<std::string::String> for String {
+    fn from(value: std::string::String) -> Self {
+        Self(CompactString::from(value))
+    }
+}
+
+impl From<CompactString> for String {
+    fn from(value: CompactString) -> Self {
+        Self(value)
     }
 }
 
@@ -349,15 +375,15 @@ impl<'lua> UserHooks<'lua> {
         }
     }
 
-    pub fn register(self) -> LuaResult<()> {
+    pub fn register(&mut self) -> LuaResult<()> {
         let tbl = self.lua.create_table()?;
-        if let Some(f) = self.on_player_try_connect {
+        if let Some(f) = self.on_player_try_connect.take() {
             tbl.set("onPlayerTryConnect", f)?;
         }
-        if let Some(f) = self.on_player_try_send_chat {
+        if let Some(f) = self.on_player_try_send_chat.take() {
             tbl.set("onPlayerTrySendChat", f)?;
         }
-        if let Some(f) = self.on_player_try_change_slot {
+        if let Some(f) = self.on_player_try_change_slot.take() {
             tbl.set("onPlayerTryChangeSlot", f)?;
         }
         let dcs = as_tbl("DCS", None, self.lua.globals().raw_get("DCS")?)?;
@@ -398,5 +424,41 @@ impl<'lua> UserHooks<'lua> {
                 .create_function(move |lua, (id, side, slot)| f(lua, id, side, slot))?,
         );
         Ok(self)
+    }
+}
+
+pub fn value_to_json(ctx: &mut FxHashMap<usize, String>, key: Option<&str>, v: &Value) -> serde_json::Value {
+    use serde_json::{json, Map, Value as JVal};
+    match v {
+        Value::Nil => JVal::Null,
+        Value::Boolean(b) => json!(b),
+        Value::LightUserData(_) => json!("<LightUserData>"),
+        Value::Integer(i) => json!(*i),
+        Value::Number(i) => json!(*i),
+        Value::UserData(_) => json!("<UserData>"),
+        Value::String(s) => json!(s),
+        Value::Function(_) => json!("<Function>"),
+        Value::Thread(_) => json!("<Thread>"),
+        Value::Error(e) => json!(format!("{e}")),
+        Value::Table(tbl) => {
+            let address = tbl.to_pointer() as usize;
+            match ctx.entry(address) {
+                Entry::Occupied(e) => json!(format!("<Table(0x{:x} {})>", address, e.get())),
+                Entry::Vacant(e) => {
+                    e.insert(String::from(key.unwrap_or("Root")));
+                    let mut map = Map::new();
+                    for pair in tbl.clone().pairs::<Value, Value>() {
+                        let (k, v) = pair.unwrap();
+                        let k = match value_to_json(ctx, None, &k) {
+                            JVal::String(s) => s,
+                            v => v.to_string(),
+                        };
+                        let v = value_to_json(ctx, Some(k.as_str()), &v);
+                        map.insert(k, v);
+                    }
+                    JVal::Object(map)
+                }
+            }
+        }
     }
 }

@@ -1,8 +1,12 @@
 use super::{as_tbl, event::Event, unit::Unit, String};
+use crate::wrapped_table;
 use compact_str::format_compact;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::{
+    ops::Deref,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 #[derive(Debug, Serialize)]
 pub struct HandlerId(u32);
@@ -18,21 +22,7 @@ impl HandlerId {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct World<'lua> {
-    t: mlua::Table<'lua>,
-    #[serde(skip)]
-    lua: &'lua Lua,
-}
-
-impl<'lua> FromLua<'lua> for World<'lua> {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self {
-            t: as_tbl("World", None, value)?,
-            lua,
-        })
-    }
-}
+wrapped_table!(World, None);
 
 impl<'lua> World<'lua> {
     pub fn get(lua: &'lua Lua) -> LuaResult<Self> {

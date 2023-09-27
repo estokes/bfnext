@@ -1,22 +1,10 @@
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
+use crate::wrapped_table;
 use super::{as_tbl, object::Object, unit::Unit};
+use std::ops::Deref;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Weapon<'lua> {
-    t: mlua::Table<'lua>,
-    #[serde(skip)]
-    lua: &'lua Lua,
-}
-
-impl<'lua> FromLua<'lua> for Weapon<'lua> {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self {
-            t: as_tbl("Weapon", Some("Weapon"), value)?,
-            lua,
-        })
-    }
-}
+wrapped_table!(Weapon, Some("Weapon"));
 
 impl<'lua> Weapon<'lua> {
     pub fn as_object(&self) -> LuaResult<Object<'lua>> {

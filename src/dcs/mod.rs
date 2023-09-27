@@ -1,19 +1,21 @@
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::{Deref, DerefMut};
-pub mod attribute;
-pub mod object;
-pub mod controller;
-pub mod group;
-pub mod unit;
-pub mod weapon;
-pub mod event;
-pub mod world;
+
+use self::coalition::Side;
 pub mod airbase;
-pub mod warehouse;
+pub mod attribute;
 pub mod coalition;
+pub mod controller;
 pub mod country;
+pub mod event;
+pub mod group;
+pub mod object;
 pub mod static_object;
+pub mod unit;
+pub mod warehouse;
+pub mod weapon;
+pub mod world;
 
 #[macro_export]
 macro_rules! wrapped_table {
@@ -23,7 +25,7 @@ macro_rules! wrapped_table {
             t: mlua::Table<'lua>,
             #[allow(dead_code)]
             #[serde(skip)]
-            lua: &'lua Lua
+            lua: &'lua Lua,
         }
 
         impl<'lua> Deref for $name<'lua> {
@@ -38,7 +40,7 @@ macro_rules! wrapped_table {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
                 Ok(Self {
                     t: as_tbl(stringify!($name), $class, value)?,
-                    lua
+                    lua,
                 })
             }
         }
@@ -48,7 +50,7 @@ macro_rules! wrapped_table {
                 Ok(Value::Table(self.t))
             }
         }
-    }
+    };
 }
 
 #[macro_export]
@@ -60,7 +62,7 @@ macro_rules! simple_enum {
         pub enum $name {
             $($case = $num),+
         }
-    
+
         impl<'lua> FromLua<'lua> for $name {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
                 Ok(match $repr::from_lua(value, lua)? {
@@ -69,7 +71,7 @@ macro_rules! simple_enum {
                 })
             }
         }
-    
+
         impl<'lua> IntoLua<'lua> for $name {
             fn into_lua(self, _lua: &'lua Lua) -> LuaResult<Value<'lua>> {
                 Ok(Value::Integer(self as i64))
@@ -88,7 +90,7 @@ macro_rules! bitflags_enum {
         pub enum $name {
             $($case = $num),+
         }
-    
+
         impl<'lua> FromLua<'lua> for $name {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
                 Ok(match $repr::from_lua(value, lua)? {
@@ -97,7 +99,7 @@ macro_rules! bitflags_enum {
                 })
             }
         }
-    
+
         impl<'lua> IntoLua<'lua> for $name {
             fn into_lua(self, _lua: &'lua Lua) -> LuaResult<Value<'lua>> {
                 Ok(Value::Integer(self as i64))
@@ -111,9 +113,9 @@ macro_rules! string_enum {
     ($name:ident, $repr:ident, [$($case:ident => $str:literal),+]) => {
         string_enum!($name, $repr, [$($case => $str),+], []);
     };
-    ($name:ident, 
-     $repr:ident, 
-     [$($case:ident => $str:literal),+], 
+    ($name:ident,
+     $repr:ident,
+     [$($case:ident => $str:literal),+],
      [$($altcase:ident => $altstr:literal),*]) => {
         #[derive(Debug, Clone, Serialize)]
         #[allow(non_camel_case_types)]
@@ -122,7 +124,7 @@ macro_rules! string_enum {
             $($case),+,
             Custom(String)
         }
-    
+
         impl<'lua> FromLua<'lua> for $name {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
                 let s = String::from_lua(value, lua)?;
@@ -133,7 +135,7 @@ macro_rules! string_enum {
                 })
             }
         }
-    
+
         impl<'lua> IntoLua<'lua> for $name {
             fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
                 Ok(Value::String(match self {
@@ -328,4 +330,73 @@ pub enum VolumeType {
     Box,
     Sphere,
     Pyramid,
+}
+
+pub struct UserHooks<'lua> {
+    on_player_try_connect: Option<mlua::Function<'lua>>,
+    on_player_try_send_chat: Option<mlua::Function<'lua>>,
+    on_player_try_change_slot: Option<mlua::Function<'lua>>,
+    lua: &'lua Lua,
+}
+
+impl<'lua> UserHooks<'lua> {
+    pub fn new(lua: &'lua Lua) -> Self {
+        Self {
+            on_player_try_change_slot: None,
+            on_player_try_connect: None,
+            on_player_try_send_chat: None,
+            lua,
+        }
+    }
+
+    pub fn register(self) -> LuaResult<()> {
+        let tbl = self.lua.create_table()?;
+        if let Some(f) = self.on_player_try_connect {
+            tbl.set("onPlayerTryConnect", f)?;
+        }
+        if let Some(f) = self.on_player_try_send_chat {
+            tbl.set("onPlayerTrySendChat", f)?;
+        }
+        if let Some(f) = self.on_player_try_change_slot {
+            tbl.set("onPlayerTryChangeSlot", f)?;
+        }
+        let dcs = as_tbl("DCS", None, self.lua.globals().raw_get("DCS")?)?;
+        dcs.call_method("setUserCallbacks", tbl)
+    }
+
+    /// f(addr, name, ucid, id)
+    pub fn on_player_try_connect<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, Value, Value, Value, u32) -> LuaResult<bool> + 'static,
+    {
+        self.on_player_try_connect = Some(
+            self.lua
+                .create_function(move |lua, (addr, name, ucid, id)| f(lua, addr, name, ucid, id))?,
+        );
+        Ok(self)
+    }
+
+    /// f(id, message, all)
+    pub fn on_player_try_send_chat<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, u32, String, bool) -> LuaResult<String> + 'static,
+    {
+        self.on_player_try_send_chat = Some(
+            self.lua
+                .create_function(move |lua, (id, msg, all)| f(lua, id, msg, all))?,
+        );
+        Ok(self)
+    }
+
+    /// f(id, message, all)
+    pub fn on_player_try_change_slot<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, u32, Side, String) -> LuaResult<bool> + 'static,
+    {
+        self.on_player_try_change_slot = Some(
+            self.lua
+                .create_function(move |lua, (id, side, slot)| f(lua, id, side, slot))?,
+        );
+        Ok(self)
+    }
 }

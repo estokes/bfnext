@@ -1,35 +1,16 @@
+use crate::{simple_enum, wrapped_table};
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
+use std::ops::Deref;
 
-#[derive(Debug, Clone, Serialize)]
-#[repr(u8)]
-pub enum GroupCategory {
-    Airplane = 0,
-    Ground = 1,
-    Helicopter = 2,
-    Ship = 3,
-    Train = 4,
-}
-
-impl<'lua> IntoLua<'lua> for GroupCategory {
-    fn into_lua(self, _: &'lua Lua) -> LuaResult<Value<'lua>> {
-        Ok(Value::Integer(self as i64))
-    }
-}
-
-impl<'lua> FromLua<'lua> for GroupCategory {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(match u32::from_lua(value, lua)? {
-            0 => GroupCategory::Airplane,
-            1 => GroupCategory::Ground,
-            2 => GroupCategory::Helicopter,
-            3 => GroupCategory::Ship,
-            4 => GroupCategory::Train,
-            _ => return Err(cvt_err("GroupCategory")),
-        })
-    }
-}
+simple_enum!(GroupCategory, u8, [
+    Airplane => 0,
+    Ground => 1,
+    Helicopter => 2,
+    Ship => 3,
+    Train => 4
+]);
 
 #[derive(Debug, Clone, Serialize)]
 pub enum Owner {
@@ -46,27 +27,7 @@ impl<'lua> FromLua<'lua> for Owner {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Group<'lua> {
-    t: mlua::Table<'lua>,
-    #[serde(skip)]
-    lua: &'lua Lua,
-}
-
-impl<'lua> FromLua<'lua> for Group<'lua> {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self {
-            t: as_tbl("Group", Some("Group"), value)?,
-            lua,
-        })
-    }
-}
-
-impl<'lua> IntoLua<'lua> for Group<'lua> {
-    fn into_lua(self, _: &'lua Lua) -> LuaResult<Value<'lua>> {
-        Ok(Value::Table(self.t.clone()))
-    }
-}
+wrapped_table!(Group, Some("Group"));
 
 impl<'lua> Group<'lua> {
     pub fn get_by_name(lua: &'lua Lua, name: &str) -> LuaResult<Group<'lua>> {

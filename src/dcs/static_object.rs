@@ -1,41 +1,31 @@
-use std::ops::Deref;
-use super::{
-    airbase::Airbase,
-    as_tbl,
-    country::Country,
-    cvt_err,
-    group::{Group, GroupCategory},
-    unit::Unit,
-};
+use super::{as_tbl, coalition::Side, country::Country, object::Object};
+use crate::wrapped_table;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
+use std::ops::Deref;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct StaticObject<'lua> {
-    t: mlua::Table<'lua>,
-    #[serde(skip)]
-    lua: &'lua Lua
-}
+wrapped_table!(StaticObject, Some("StaticObject"));
 
-impl<'lua> Deref for StaticObject<'lua> {
-    type Target = mlua::Table<'lua>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.t
+impl<'lua> StaticObject<'lua> {
+    pub fn get_by_name(lua: &'lua Lua, name: &str) -> LuaResult<Self> {
+        let globals = lua.globals();
+        let unit = as_tbl(
+            "StaticObject",
+            Some("StaticObject"),
+            globals.raw_get("StaticObject")?,
+        )?;
+        Self::from_lua(unit.call_method("getByName", name)?, lua)
     }
-}
 
-impl<'lua> FromLua<'lua> for StaticObject<'lua> {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self {
-            t: as_tbl("StaticObject", None, value)?,
-            lua
-        })
+    pub fn get_coalition(&self) -> LuaResult<Side> {
+        self.t.call_method("getCoalition", ())
     }
-}
 
-impl<'lua> IntoLua<'lua> for StaticObject<'lua> {
-    fn into_lua(self, _lua: &'lua Lua) -> LuaResult<Value<'lua>> {
-        Ok(Value::Table(self.t))
+    pub fn get_country(&self) -> LuaResult<Country> {
+        self.t.call_method("getCountry", ())
+    }
+
+    pub fn as_object(&self) -> LuaResult<Object<'lua>> {
+        Object::from_lua(Value::Table(self.t.clone()), self.lua)
     }
 }

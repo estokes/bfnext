@@ -1,31 +1,18 @@
+use super::{as_tbl, controller::Controller, cvt_err, group::Group, object::Object, String};
+use crate::{simple_enum, wrapped_table};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use super::{as_tbl, String, controller::Controller, group::Group, object::Object};
+use std::ops::Deref;
 
-#[derive(Debug, Clone, Serialize)]
-pub enum UnitCategory {
-    Airplane,
-    Helicopter,
-    GroundUnit,
-    Ship,
-    Structure,
-}
+simple_enum!(UnitCategory, u8, [
+    Airplane => 0,
+    GroundUnit => 2,
+    Helicopter => 1,
+    Ship => 3,
+    Structure => 4
+]);
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Unit<'lua> {
-    t: mlua::Table<'lua>,
-    #[serde(skip)]
-    lua: &'lua Lua,
-}
-
-impl<'lua> FromLua<'lua> for Unit<'lua> {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self {
-            t: as_tbl("Unit", Some("Unit"), value)?,
-            lua,
-        })
-    }
-}
+wrapped_table!(Unit, Some("Unit"));
 
 impl<'lua> Unit<'lua> {
     pub fn get_by_name(lua: &'lua Lua, name: &str) -> LuaResult<Unit<'lua>> {
@@ -84,5 +71,9 @@ impl<'lua> Unit<'lua> {
 
     pub fn enable_emission(&self, on: bool) -> LuaResult<()> {
         self.t.call_method("enableEmission", on)
+    }
+
+    pub fn get_category(&self) -> LuaResult<UnitCategory> {
+        self.t.call_method("getCategory", ())
     }
 }

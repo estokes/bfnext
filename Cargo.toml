@@ -17,7 +17,7 @@ serde_derive = "1"
 netidx = "0.25"
 netidx-core = "0.25"
 netidx-derive = "0.22"
-compact_str = "0.7"
+compact_str = { version = "0.7", features = ["serde"] }
 bytes = "1"
 fxhash = "0.2"
 enumflags2 = "0.7.8"

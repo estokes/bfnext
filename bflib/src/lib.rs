@@ -1,11 +1,11 @@
 use dcso3::{coalition::Side, event::Event, world::World, String, UserHooks};
-use mlua::{prelude::*, Value};
+use mlua::prelude::*;
 
 fn on_player_try_connect(
     _: &Lua,
-    addr: Value,
-    name: Value,
-    ucid: Value,
+    addr: String,
+    name: String,
+    ucid: String,
     id: u32,
 ) -> LuaResult<bool> {
     println!(

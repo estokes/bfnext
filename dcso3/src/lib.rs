@@ -2,7 +2,10 @@ use compact_str::CompactString;
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use std::{ops::{Deref, DerefMut}, collections::hash_map::Entry};
+use std::{
+    collections::hash_map::Entry,
+    ops::{Deref, DerefMut},
+};
 
 use self::coalition::Side;
 pub mod airbase;
@@ -359,6 +362,19 @@ pub enum VolumeType {
 }
 
 pub struct UserHooks<'lua> {
+    on_mission_load_begin: Option<mlua::Function<'lua>>,
+    on_mission_load_progress: Option<mlua::Function<'lua>>,
+    on_mission_load_end: Option<mlua::Function<'lua>>,
+    on_simulation_start: Option<mlua::Function<'lua>>,
+    on_simulation_stop: Option<mlua::Function<'lua>>,
+    on_simulation_frame: Option<mlua::Function<'lua>>,
+    on_simulation_pause: Option<mlua::Function<'lua>>,
+    on_simulation_resume: Option<mlua::Function<'lua>>,
+    on_player_connect: Option<mlua::Function<'lua>>,
+    on_player_disconnect: Option<mlua::Function<'lua>>,
+    on_player_start: Option<mlua::Function<'lua>>,
+    on_player_stop: Option<mlua::Function<'lua>>,
+    on_player_change_slot: Option<mlua::Function<'lua>>,
     on_player_try_connect: Option<mlua::Function<'lua>>,
     on_player_try_send_chat: Option<mlua::Function<'lua>>,
     on_player_try_change_slot: Option<mlua::Function<'lua>>,
@@ -368,6 +384,19 @@ pub struct UserHooks<'lua> {
 impl<'lua> UserHooks<'lua> {
     pub fn new(lua: &'lua Lua) -> Self {
         Self {
+            on_mission_load_begin: None,
+            on_mission_load_progress: None,
+            on_mission_load_end: None,
+            on_simulation_start: None,
+            on_simulation_stop: None,
+            on_simulation_frame: None,
+            on_simulation_pause: None,
+            on_simulation_resume: None,
+            on_player_connect: None,
+            on_player_disconnect: None,
+            on_player_start: None,
+            on_player_stop: None,
+            on_player_change_slot: None,
             on_player_try_change_slot: None,
             on_player_try_connect: None,
             on_player_try_send_chat: None,
@@ -376,28 +405,194 @@ impl<'lua> UserHooks<'lua> {
     }
 
     pub fn register(&mut self) -> LuaResult<()> {
+        let Self {
+            on_mission_load_begin,
+            on_mission_load_progress,
+            on_mission_load_end,
+            on_simulation_start,
+            on_simulation_stop,
+            on_simulation_frame,
+            on_simulation_pause,
+            on_simulation_resume,
+            on_player_connect,
+            on_player_disconnect,
+            on_player_start,
+            on_player_stop,
+            on_player_change_slot,
+            on_player_try_connect,
+            on_player_try_send_chat,
+            on_player_try_change_slot,
+            lua: _,
+        } = self;
         let tbl = self.lua.create_table()?;
-        if let Some(f) = self.on_player_try_connect.take() {
+        if let Some(f) = on_mission_load_begin.take() {
+            tbl.set("onMissionLoadBegin", f)?;
+        }
+        if let Some(f) = on_mission_load_progress.take() {
+            tbl.set("onMissionLoadProgress", f)?;
+        }
+        if let Some(f) = on_mission_load_end.take() {
+            tbl.set("onMissionLoadEnd", f)?;
+        }
+        if let Some(f) = on_simulation_start.take() {
+            tbl.set("onSimulationStart", f)?;
+        }
+        if let Some(f) = on_simulation_stop.take() {
+            tbl.set("onSimulationStop", f)?;
+        }
+        if let Some(f) = on_simulation_frame.take() {
+            tbl.set("onSimulationFrame", f)?;
+        }
+        if let Some(f) = on_simulation_pause.take() {
+            tbl.set("onSimulationPause", f)?;
+        }
+        if let Some(f) = on_simulation_resume.take() {
+            tbl.set("onSimulationResume", f)?;
+        }
+        if let Some(f) = on_player_connect.take() {
+            tbl.set("onPlayerConnect", f)?;
+        }
+        if let Some(f) = on_player_disconnect.take() {
+            tbl.set("onPlayerDisconnect", f)?;
+        }
+        if let Some(f) = on_player_start.take() {
+            tbl.set("onPlayerStart", f)?;
+        }
+        if let Some(f) = on_player_stop.take() {
+            tbl.set("onPlayerStop", f)?;
+        }
+        if let Some(f) = on_player_change_slot.take() {
+            tbl.set("onPlayerChangeSlot", f)?;
+        }
+        if let Some(f) = on_player_try_connect.take() {
             tbl.set("onPlayerTryConnect", f)?;
         }
-        if let Some(f) = self.on_player_try_send_chat.take() {
+        if let Some(f) = on_player_try_send_chat.take() {
             tbl.set("onPlayerTrySendChat", f)?;
         }
-        if let Some(f) = self.on_player_try_change_slot.take() {
+        if let Some(f) = on_player_try_change_slot.take() {
             tbl.set("onPlayerTryChangeSlot", f)?;
         }
         let dcs = as_tbl("DCS", None, self.lua.globals().raw_get("DCS")?)?;
         dcs.call_method("setUserCallbacks", tbl)
     }
 
-    /// f(addr, name, ucid, id)
+    pub fn on_mission_load_begin<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua) -> LuaResult<()> + 'static,
+    {
+        self.on_mission_load_begin = Some(self.lua.create_function(move |lua, ()| f(lua))?);
+        Ok(self)
+    }
+
+    /// f(progress, message)
+    pub fn on_mission_load_progress<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, String, String) -> LuaResult<()> + 'static,
+    {
+        self.on_mission_load_progress = Some(
+            self.lua
+                .create_function(move |lua, (progress, message)| f(lua, progress, message))?,
+        );
+        Ok(self)
+    }
+
+    pub fn on_mission_load_end<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua) -> LuaResult<()> + 'static,
+    {
+        self.on_mission_load_end = Some(self.lua.create_function(move |lua, ()| f(lua))?);
+        Ok(self)
+    }
+
+    pub fn on_simulation_start<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua) -> LuaResult<()> + 'static,
+    {
+        self.on_simulation_start = Some(self.lua.create_function(move |lua, ()| f(lua))?);
+        Ok(self)
+    }
+
+    pub fn on_simulation_stop<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua) -> LuaResult<()> + 'static,
+    {
+        self.on_simulation_stop = Some(self.lua.create_function(move |lua, ()| f(lua))?);
+        Ok(self)
+    }
+
+    pub fn on_simulation_frame<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua) -> LuaResult<()> + 'static,
+    {
+        self.on_simulation_frame = Some(self.lua.create_function(move |lua, ()| f(lua))?);
+        Ok(self)
+    }
+
+    pub fn on_simulation_pause<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua) -> LuaResult<()> + 'static,
+    {
+        self.on_simulation_pause = Some(self.lua.create_function(move |lua, ()| f(lua))?);
+        Ok(self)
+    }
+
+    pub fn on_simulation_resume<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua) -> LuaResult<()> + 'static,
+    {
+        self.on_simulation_resume = Some(self.lua.create_function(move |lua, ()| f(lua))?);
+        Ok(self)
+    }
+
+    pub fn on_player_connect<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+    {
+        self.on_player_connect = Some(self.lua.create_function(move |lua, id| f(lua, id))?);
+        Ok(self)
+    }
+
+    pub fn on_player_disconnect<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+    {
+        self.on_player_disconnect = Some(self.lua.create_function(move |lua, id| f(lua, id))?);
+        Ok(self)
+    }
+
+    pub fn on_player_start<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+    {
+        self.on_player_start = Some(self.lua.create_function(move |lua, id| f(lua, id))?);
+        Ok(self)
+    }
+
+    pub fn on_player_stop<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+    {
+        self.on_player_stop = Some(self.lua.create_function(move |lua, id| f(lua, id))?);
+        Ok(self)
+    }
+
+    pub fn on_player_change_slot<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    where
+        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+    {
+        self.on_player_change_slot = Some(self.lua.create_function(move |lua, id| f(lua, id))?);
+        Ok(self)
+    }
+
+    /// f(addr, ucid, name, id)
     pub fn on_player_try_connect<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, Value, Value, Value, u32) -> LuaResult<bool> + 'static,
+        F: Fn(&Lua, String, String, String, u32) -> LuaResult<bool> + 'static,
     {
         self.on_player_try_connect = Some(
             self.lua
-                .create_function(move |lua, (addr, name, ucid, id)| f(lua, addr, name, ucid, id))?,
+                .create_function(move |lua, (addr, ucid, name, id)| f(lua, addr, ucid, name, id))?,
         );
         Ok(self)
     }
@@ -427,7 +622,11 @@ impl<'lua> UserHooks<'lua> {
     }
 }
 
-pub fn value_to_json(ctx: &mut FxHashMap<usize, String>, key: Option<&str>, v: &Value) -> serde_json::Value {
+pub fn value_to_json(
+    ctx: &mut FxHashMap<usize, String>,
+    key: Option<&str>,
+    v: &Value,
+) -> serde_json::Value {
     use serde_json::{json, Map, Value as JVal};
     match v {
         Value::Nil => JVal::Null,

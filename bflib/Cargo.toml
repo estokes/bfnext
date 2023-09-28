@@ -8,7 +8,7 @@ name = "bflib"
 crate-type = ["cdylib"]
 
 [dependencies]
-dcso3 = { version = "0.0.1", path = "../dcso3" }
+dcso3 = { version = "0.0", path = "../dcso3" }
 mlua = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

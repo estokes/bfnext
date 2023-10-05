@@ -1,5 +1,5 @@
 use crate::{
-    as_tbl, coalition::Side, cvt_err, wrapped_table, Path, PathElt, Sequence, String, Vec2,
+    as_tbl, coalition::Side, cvt_err, wrapped_table, DcsTableExt, Path, Sequence, String, Vec2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -209,13 +209,46 @@ impl<'lua> Coalition<'lua> {
     }
 
     fn index(&self, base: Path) -> LuaResult<CoalitionIndex> {
-        unimplemented!()
+        let base = base.append(["country"]);
+        let mut idx = CoalitionIndex::default();
+        for (i, country) in self.countries()?.into_iter().enumerate() {
+            let country = country?;
+            let base = base.append([i]);
+            macro_rules! index_group {
+                ($name:literal, $tbl:ident) => {
+                    for (i, group) in country.$tbl()?.into_iter().enumerate() {
+                        let group = group?;
+                        let base = base.append([$name, "group"]).append([i]);
+                        match idx.$tbl.entry(group.name()?) {
+                            Entry::Occupied(_) => return Err(cvt_err($name)),
+                            Entry::Vacant(e) => {
+                                e.insert(base.clone());
+                            }
+                        }
+                        match idx.all.entry(group.name()?) {
+                            Entry::Occupied(_) => return Err(cvt_err($name)),
+                            Entry::Vacant(e) => {
+                                e.insert(base);
+                            }
+                        }
+                    }
+                };
+            }
+            index_group!("plane", planes);
+            index_group!("helicopter", helicopters);
+            index_group!("ship", ships);
+            index_group!("vehicle", vehicles);
+            index_group!("static", statics);
+        }
+        Ok(idx)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct CoalitionIndex {
+    all: FxHashMap<String, Path>,
     planes: FxHashMap<String, Path>,
+    helicopters: FxHashMap<String, Path>,
     ships: FxHashMap<String, Path>,
     vehicles: FxHashMap<String, Path>,
     statics: FxHashMap<String, Path>,
@@ -225,6 +258,16 @@ pub struct CoalitionIndex {
 pub struct MizIndex {
     by_side: FxHashMap<Side, CoalitionIndex>,
     triggers: FxHashMap<String, Path>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum GroupKind {
+    Any,
+    Plane,
+    Helicopter,
+    Ship,
+    Vehicle,
+    Static,
 }
 
 wrapped_table!(Miz, None);
@@ -246,6 +289,27 @@ impl<'lua> Miz<'lua> {
 
     pub fn weather(&self) -> LuaResult<Weather<'lua>> {
         self.t.raw_get("weather")
+    }
+
+    pub fn get_group(
+        &self,
+        idx: &MizIndex,
+        kind: GroupKind,
+        side: &Side,
+        name: &str,
+    ) -> LuaResult<Option<Group>> {
+        idx.by_side
+            .get(side)
+            .and_then(|cidx| match kind {
+                GroupKind::Any => cidx.all.get(name),
+                GroupKind::Plane => cidx.planes.get(name),
+                GroupKind::Helicopter => cidx.helicopters.get(name),
+                GroupKind::Vehicle => cidx.vehicles.get(name),
+                GroupKind::Ship => cidx.ships.get(name),
+                GroupKind::Static => cidx.statics.get(name),
+            })
+            .map(|path| self.raw_get_path(path))
+            .transpose()
     }
 
     pub fn index(&self) -> LuaResult<MizIndex> {

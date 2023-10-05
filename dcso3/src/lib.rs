@@ -5,7 +5,7 @@ use serde_derive::Serialize;
 use std::{
     collections::hash_map::Entry,
     marker::PhantomData,
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut}, borrow::Borrow,
 };
 
 use self::coalition::Side;
@@ -480,6 +480,18 @@ impl Deref for String {
 impl DerefMut for String {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl AsRef<str> for String {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
+impl Borrow<str> for String {
+    fn borrow(&self) -> &str {
+        self.0.borrow()
     }
 }
 

@@ -1,7 +1,10 @@
-use crate::{as_tbl, coalition::Side, cvt_err, wrapped_table, Sequence, String, Vec2};
+use crate::{
+    as_tbl, coalition::Side, cvt_err, wrapped_table, Path, PathElt, Sequence, String, Vec2,
+};
+use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use std::ops::Deref;
+use std::{collections::hash_map::Entry, ops::Deref};
 
 wrapped_table!(Weather, None);
 
@@ -9,7 +12,7 @@ pub struct Quad {
     pub p0: Vec2,
     pub p1: Vec2,
     pub p2: Vec2,
-    pub p3: Vec2
+    pub p3: Vec2,
 }
 
 impl<'lua> FromLua<'lua> for Quad {
@@ -19,14 +22,14 @@ impl<'lua> FromLua<'lua> for Quad {
             p0: verts.raw_get(1)?,
             p1: verts.raw_get(2)?,
             p2: verts.raw_get(3)?,
-            p3: verts.raw_get(4)?
+            p3: verts.raw_get(4)?,
         })
     }
 }
 
 pub enum TriggerZoneTyp {
     Circle { radius: f64 },
-    Quad(Quad)
+    Quad(Quad),
 }
 
 #[derive(Clone, Copy, PartialEq, Serialize)]
@@ -34,7 +37,7 @@ pub struct Color {
     r: f32,
     g: f32,
     b: f32,
-    a: f32
+    a: f32,
 }
 
 impl<'lua> FromLua<'lua> for Color {
@@ -44,7 +47,7 @@ impl<'lua> FromLua<'lua> for Color {
             r: tbl.raw_get(1)?,
             g: tbl.raw_get(2)?,
             b: tbl.raw_get(3)?,
-            a: tbl.raw_get(4)?
+            a: tbl.raw_get(4)?,
         })
     }
 }
@@ -76,9 +79,11 @@ impl<'lua> TriggerZone<'lua> {
 
     pub fn typ(&self) -> LuaResult<TriggerZoneTyp> {
         Ok(match self.raw_get("type")? {
-            0 => TriggerZoneTyp::Circle { radius: self.raw_get("radius")? },
+            0 => TriggerZoneTyp::Circle {
+                radius: self.raw_get("radius")?,
+            },
             2 => TriggerZoneTyp::Quad(self.raw_get("vertices")?),
-            _ => return Err(cvt_err("TriggerZoneTyp"))
+            _ => return Err(cvt_err("TriggerZoneTyp")),
         })
     }
 
@@ -202,6 +207,24 @@ impl<'lua> Coalition<'lua> {
     pub fn countries(&self) -> LuaResult<Sequence<Country>> {
         self.t.raw_get("country")
     }
+
+    fn index(&self, base: Path) -> LuaResult<CoalitionIndex> {
+        unimplemented!()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct CoalitionIndex {
+    planes: FxHashMap<String, Path>,
+    ships: FxHashMap<String, Path>,
+    vehicles: FxHashMap<String, Path>,
+    statics: FxHashMap<String, Path>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct MizIndex {
+    by_side: FxHashMap<Side, CoalitionIndex>,
+    triggers: FxHashMap<String, Path>,
 }
 
 wrapped_table!(Miz, None);
@@ -212,11 +235,8 @@ impl<'lua> Miz<'lua> {
     }
 
     pub fn coalition(&self, side: Side) -> LuaResult<Coalition<'lua>> {
-        match side {
-            Side::Blue => self.t.raw_get("blue"),
-            Side::Red => self.t.raw_get("red"),
-            Side::Neutral => self.t.raw_get("neutral"),
-        }
+        let coa: mlua::Table = self.raw_get("coalition")?;
+        coa.raw_get(side.to_str())
     }
 
     pub fn triggers(&self) -> LuaResult<Sequence<TriggerZone>> {
@@ -226,5 +246,30 @@ impl<'lua> Miz<'lua> {
 
     pub fn weather(&self) -> LuaResult<Weather<'lua>> {
         self.t.raw_get("weather")
+    }
+
+    pub fn index(&self) -> LuaResult<MizIndex> {
+        let base = Path::default().append(["env", "mission"]);
+        let mut idx = MizIndex::default();
+        {
+            let base = base.append(["triggers", "zones"]);
+            for (i, tz) in self.triggers()?.into_iter().enumerate() {
+                let tz = tz?;
+                let base = base.append([i + 1]);
+                match idx.triggers.entry(tz.name()?) {
+                    Entry::Vacant(e) => {
+                        e.insert(base);
+                    }
+                    Entry::Occupied(_) => return Err(cvt_err("duplicate trigger zone")),
+                }
+            }
+        }
+        for side in [Side::Blue, Side::Red, Side::Neutral] {
+            let base = base.append(["coalition", side.to_str()]);
+            idx.by_side
+                .entry(side)
+                .or_insert(self.coalition(side)?.index(base)?);
+        }
+        Ok(idx)
     }
 }

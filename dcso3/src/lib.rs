@@ -4,7 +4,8 @@ use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::{
     collections::hash_map::Entry,
-    ops::{Deref, DerefMut}, marker::PhantomData,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
 };
 
 use self::coalition::Side;
@@ -13,6 +14,7 @@ pub mod attribute;
 pub mod coalition;
 pub mod controller;
 pub mod country;
+pub mod env;
 pub mod event;
 pub mod group;
 pub mod object;
@@ -21,7 +23,6 @@ pub mod unit;
 pub mod warehouse;
 pub mod weapon;
 pub mod world;
-pub mod env;
 
 #[macro_export]
 macro_rules! wrapped_table {
@@ -62,7 +63,7 @@ macro_rules! wrapped_table {
 #[macro_export]
 macro_rules! simple_enum {
     ($name:ident, $repr:ident, [$($case:ident => $num:literal),+]) => {
-        #[derive(Debug, Clone, Copy, Serialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
         #[allow(non_camel_case_types)]
         #[repr($repr)]
         pub enum $name {
@@ -90,7 +91,7 @@ macro_rules! simple_enum {
 macro_rules! bitflags_enum {
     ($name:ident, $repr:ident, [$($case:ident => $num:literal),+]) => {
         #[bitflags]
-        #[derive(Debug, Clone, Copy, Serialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
         #[allow(non_camel_case_types)]
         #[repr($repr)]
         pub enum $name {
@@ -123,7 +124,7 @@ macro_rules! string_enum {
      $repr:ident,
      [$($case:ident => $str:literal),+],
      [$($altcase:ident => $altstr:literal),*]) => {
-        #[derive(Debug, Clone, Serialize)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
         #[allow(non_camel_case_types)]
         #[repr($repr)]
         pub enum $name {
@@ -220,11 +221,65 @@ pub enum PathElt {
     String(String),
 }
 
+impl From<&str> for PathElt {
+    fn from(value: &str) -> Self {
+        PathElt::String(String::from(value))
+    }
+}
+
+impl From<String> for PathElt {
+    fn from(value: String) -> Self {
+        PathElt::String(value)
+    }
+}
+
+impl From<std::string::String> for PathElt {
+    fn from(value: std::string::String) -> Self {
+        PathElt::String(String::from(value))
+    }
+}
+
+impl From<usize> for PathElt {
+    fn from(value: usize) -> Self {
+        PathElt::Integer(value as i64)
+    }
+}
+
+impl From<u64> for PathElt {
+    fn from(value: u64) -> Self {
+        PathElt::Integer(value as i64)
+    }
+}
+
+impl From<u32> for PathElt {
+    fn from(value: u32) -> Self {
+        PathElt::Integer(value as i64)
+    }
+}
+
+impl From<i64> for PathElt {
+    fn from(value: i64) -> Self {
+        PathElt::Integer(value)
+    }
+}
+
+impl From<i32> for PathElt {
+    fn from(value: i32) -> Self {
+        PathElt::Integer(value as i64)
+    }
+}
+
+impl From<u8> for PathElt {
+    fn from(value: u8) -> Self {
+        PathElt::Integer(value as i64)
+    }
+}
+
 impl<'lua> IntoLua<'lua> for &PathElt {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
         Ok(match self {
             PathElt::Integer(i) => Value::Integer(*i),
-            PathElt::String(s) => Value::String(lua.create_string(s.as_bytes())?)
+            PathElt::String(s) => Value::String(lua.create_string(s.as_bytes())?),
         })
     }
 }
@@ -234,37 +289,103 @@ impl<'lua> FromLua<'lua> for PathElt {
         Ok(match value {
             Value::Integer(n) => PathElt::Integer(n),
             Value::String(_) => PathElt::String(String::from_lua(value, lua)?),
-            _ => return Err(cvt_err("String"))
+            _ => return Err(cvt_err("String")),
         })
     }
 }
 
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct Path(Vec<PathElt>);
+
+impl Deref for Path {
+    type Target = [PathElt];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0[..]
+    }
+}
+
+impl<'a> IntoIterator for &'a Path {
+    type IntoIter = std::slice::Iter<'a, PathElt>;
+    type Item = &'a PathElt;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl Path {
+    pub fn push<T: Into<PathElt>>(&mut self, t: T) {
+        self.0.push(t.into())
+    }
+
+    pub fn pop(&mut self) -> Option<PathElt> {
+        self.0.pop()
+    }
+
+    pub fn append<T: Into<PathElt>, I: IntoIterator<Item = T>>(&self, elts: I) -> Self {
+        let mut new_t = self.clone();
+        for elt in elts {
+            new_t.push(elt)
+        }
+        new_t
+    }
+
+    pub fn get(&self, i: usize) -> Option<&PathElt> {
+        self.0.get(i)
+    }
+}
+
 pub trait DcsTableExt<'lua> {
-    fn raw_get_path<T>(&self, path: &[PathElt]) -> LuaResult<T> where T: FromLua<'lua>;
-    fn get_path<T>(&self, path: &[PathElt]) -> LuaResult<T> where T: FromLua<'lua>;
+    fn raw_get_path<T>(&self, path: &Path) -> LuaResult<T>
+    where
+        T: FromLua<'lua>;
+    fn get_path<T>(&self, path: &Path) -> LuaResult<T>
+    where
+        T: FromLua<'lua>;
+}
+
+fn table_raw_get_path<'lua, T>(tbl: &mlua::Table<'lua>, path: &[PathElt]) -> LuaResult<T>
+where
+    T: FromLua<'lua>,
+{
+    match path {
+        [] => Err(cvt_err("path")),
+        [elt] => tbl.raw_get(elt),
+        [elt, path @ ..] => {
+            let tbl: mlua::Table = tbl.raw_get(elt)?;
+            table_raw_get_path(&tbl, path)
+        }
+    }
+}
+
+fn table_get_path<'lua, T>(tbl: &mlua::Table<'lua>, path: &[PathElt]) -> LuaResult<T>
+where
+    T: FromLua<'lua>,
+{
+    match path {
+        [] => Err(cvt_err("path")),
+        [elt] => tbl.get(elt),
+        [elt, path @ ..] => {
+            let tbl: mlua::Table = tbl.get(elt)?;
+            table_get_path(&tbl, path)
+        }
+    }
 }
 
 impl<'lua> DcsTableExt<'lua> for mlua::Table<'lua> {
-    fn raw_get_path<T>(&self, path: &[PathElt]) -> LuaResult<T> where T: FromLua<'lua> {
-        match path {
-            [] => Err(cvt_err("path")),
-            [elt] => self.raw_get(elt),
-            [elt, path @ ..] => {
-                let tbl: mlua::Table = self.raw_get(elt)?;
-                tbl.raw_get_path(path)
-            }
-        }
+    fn raw_get_path<T>(&self, path: &Path) -> LuaResult<T>
+    where
+        T: FromLua<'lua>,
+    {
+        table_raw_get_path(self, &**path)
     }
 
-    fn get_path<T>(&self, path: &[PathElt]) -> LuaResult<T> where T: FromLua<'lua> {
-        match path {
-            [] => Err(cvt_err("path")),
-            [elt] => self.get(elt),
-            [elt, path @ ..] => {
-                let tbl: mlua::Table = self.get(elt)?;
-                tbl.get_path(path)
-            }
-        }
+    fn get_path<T>(&self, path: &Path) -> LuaResult<T>
+    where
+        T: FromLua<'lua>,
+    {
+        table_get_path(self, &**path)
     }
 }
 
@@ -421,14 +542,18 @@ pub struct Sequence<'lua, T> {
     t: mlua::Table<'lua>,
     #[serde(skip)]
     _lua: &'lua Lua,
-    ph: PhantomData<T>
+    ph: PhantomData<T>,
 }
 
 impl<'lua, T: FromLua<'lua> + 'lua> FromLua<'lua> for Sequence<'lua, T> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
         match value {
-            Value::Table(t) => Ok(Self {t, _lua: lua, ph: PhantomData}),
-            _ => Err(cvt_err("Sequence"))
+            Value::Table(t) => Ok(Self {
+                t,
+                _lua: lua,
+                ph: PhantomData,
+            }),
+            _ => Err(cvt_err("Sequence")),
         }
     }
 }

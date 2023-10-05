@@ -10,9 +10,33 @@ use super::{
 use crate::{simple_enum, wrapped_table, Sequence};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use std::ops::Deref;
+use std::{ops::Deref, str::FromStr};
 
 simple_enum!(Side, u8, [Neutral => 0, Red => 1, Blue => 2]);
+
+impl FromStr for Side {
+    type Err = LuaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "blue" => Side::Blue,
+            "red" => Side::Red,
+            "neutrals" => Side::Neutral,
+            _ => return Err(cvt_err("side_str"))
+        })
+    }
+}
+
+impl Side {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            Side::Blue => "blue",
+            Side::Red => "red",
+            Side::Neutral => "neutrals"
+        }
+    }
+}
+
 simple_enum!(Service, u8, [Atc => 0, Awacs => 1, Fac => 3, Tanker => 2]);
 wrapped_table!(Coalition, None);
 

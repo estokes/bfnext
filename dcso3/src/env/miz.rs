@@ -207,6 +207,10 @@ impl<'lua> Coalition<'lua> {
 wrapped_table!(Miz, None);
 
 impl<'lua> Miz<'lua> {
+    pub fn singleton(lua: &'lua Lua) -> LuaResult<Self> {
+        as_tbl("Env", None, lua.globals().get("env")?)?.get("mission")
+    }
+
     pub fn coalition(&self, side: Side) -> LuaResult<Coalition<'lua>> {
         match side {
             Side::Blue => self.t.raw_get("blue"),

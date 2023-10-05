@@ -18,9 +18,8 @@ wrapped_table!(Coalition, None);
 
 impl<'lua> Coalition<'lua> {
     pub fn singleton(lua: &'lua Lua) -> LuaResult<Self> {
-        let globals = lua.globals();
         Ok(Self {
-            t: as_tbl("coalition", None, globals.raw_get("coalition")?)?,
+            t: lua.globals().raw_get("coalition")?,
             lua,
         })
     }

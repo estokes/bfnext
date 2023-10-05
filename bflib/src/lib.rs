@@ -1,5 +1,21 @@
-use dcso3::{coalition::Side, event::Event, world::World, String, UserHooks};
+use dcso3::{coalition::{Side, Coalition}, event::Event, world::World, String, UserHooks, group::Group, Vec2, country::Country, env};
 use mlua::prelude::*;
+
+enum SpawnLoc {
+    AtPos(Vec2),
+    AtTrigger(String),
+}
+
+/* 
+fn spawn(lua: &Lua, side: Side, location: SpawnLoc, name: &str) -> LuaResult<Group> {
+    let coalition = Coalition::singleton(lua)?;
+    let miz = env::miz::Miz::singleton(lua)?;
+    let mizcoa = miz.coalition(side)?;
+    for country in mizcoa.countries() {
+        
+    }
+}
+*/
 
 fn on_player_try_connect(
     _: &Lua,

@@ -215,6 +215,60 @@ fn as_tbl<'lua>(
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum PathElt {
+    Integer(i64),
+    String(String),
+}
+
+impl<'lua> IntoLua<'lua> for &PathElt {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        Ok(match self {
+            PathElt::Integer(i) => Value::Integer(*i),
+            PathElt::String(s) => Value::String(lua.create_string(s.as_bytes())?)
+        })
+    }
+}
+
+impl<'lua> FromLua<'lua> for PathElt {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        Ok(match value {
+            Value::Integer(n) => PathElt::Integer(n),
+            Value::String(_) => PathElt::String(String::from_lua(value, lua)?),
+            _ => return Err(cvt_err("String"))
+        })
+    }
+}
+
+pub trait DcsTableExt<'lua> {
+    fn raw_get_path<T>(&self, path: &[PathElt]) -> LuaResult<T> where T: FromLua<'lua>;
+    fn get_path<T>(&self, path: &[PathElt]) -> LuaResult<T> where T: FromLua<'lua>;
+}
+
+impl<'lua> DcsTableExt<'lua> for mlua::Table<'lua> {
+    fn raw_get_path<T>(&self, path: &[PathElt]) -> LuaResult<T> where T: FromLua<'lua> {
+        match path {
+            [] => Err(cvt_err("path")),
+            [elt] => self.raw_get(elt),
+            [elt, path @ ..] => {
+                let tbl: mlua::Table = self.raw_get(elt)?;
+                tbl.raw_get_path(path)
+            }
+        }
+    }
+
+    fn get_path<T>(&self, path: &[PathElt]) -> LuaResult<T> where T: FromLua<'lua> {
+        match path {
+            [] => Err(cvt_err("path")),
+            [elt] => self.get(elt),
+            [elt, path @ ..] => {
+                let tbl: mlua::Table = self.get(elt)?;
+                tbl.get_path(path)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Vec2 {
     x: f64,
     y: f64,

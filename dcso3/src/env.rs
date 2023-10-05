@@ -1,5 +1,5 @@
-use crate::{simple_enum, wrapped_table, Vec2, Sequence, country::Country};
-use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
+use crate::{wrapped_table, Vec2, Sequence, country::Country};
+use super::{as_tbl, coalition::Side, String};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -10,27 +10,27 @@ wrapped_table!(MizTriggerZone, None);
 
 wrapped_table!(MizNavPoint, None);
 
-wrapped_table!(MizStaticGroup, None);
+wrapped_table!(MizTask, None);
 
-wrapped_table!(MizGroundGroup, None);
+wrapped_table!(MizPoint, None);
 
-wrapped_table!(MizSeaGroup, None);
+wrapped_table!(MizRoute, None);
 
-wrapped_table!(MizAirTask, None);
-
-wrapped_table!(MizAirPoint, None);
-
-wrapped_table!(MizAirRoute, None);
-
-impl<'lua> MizAirRoute<'lua> {
-    pub fn points(&self) -> LuaResult<Sequence<MizAirPoint>> {
+impl<'lua> MizRoute<'lua> {
+    pub fn points(&self) -> LuaResult<Sequence<MizPoint>> {
         self.raw_get("points")
     }
 }
 
-wrapped_table!(MizAirGroup, None);
+wrapped_table!(MizUnit, None);
 
-impl<'lua> MizAirGroup<'lua> {
+wrapped_table!(MizGroup, None);
+
+impl<'lua> MizGroup<'lua> {
+    pub fn name(&self) -> LuaResult<String> {
+        self.raw_get("name")
+    }
+
     pub fn frequency(&self) -> LuaResult<f64> {
         self.raw_get("frequency")
     }
@@ -39,20 +39,32 @@ impl<'lua> MizAirGroup<'lua> {
         self.raw_get("modulation")
     }
 
-    pub fn late_activation(&self) -> LuaResult<bool> {
-        self.raw_get("lateActivation")
+    pub fn late_activation(&self) -> bool {
+        self.raw_get("lateActivation").unwrap_or(false)
     }
 
     pub fn group_id(&self) -> LuaResult<i64> {
         self.raw_get("groupId")
     }
 
-    pub fn tasks(&self) -> LuaResult<Sequence<MizAirTask>> {
+    pub fn tasks(&self) -> LuaResult<Sequence<MizTask>> {
         self.raw_get("tasks")
     }
 
-    pub fn route(&self) -> LuaResult<MizAirRoute> {
+    pub fn route(&self) -> LuaResult<MizRoute> {
         self.raw_get("route")
+    }
+
+    pub fn hidden(&self) -> bool {
+        self.raw_get("hidden").unwrap_or(false)
+    }
+
+    pub fn units(&self) -> LuaResult<Sequence<MizUnit>> {
+        self.raw_get("units")
+    }
+
+    pub fn uncontrollable(&self) -> bool {
+        self.raw_get("uncontrollable").unwrap_or(true)
     }
 }
 
@@ -67,27 +79,27 @@ impl<'lua> MizCountry<'lua> {
         self.raw_get("name")
     }
 
-    pub fn planes(&self) -> LuaResult<Sequence<MizAirGroup>> {
+    pub fn planes(&self) -> LuaResult<Sequence<MizGroup>> {
         let g: mlua::Table = self.raw_get("plane")?;
         g.raw_get("group")
     }
 
-    pub fn helicopters(&self) -> LuaResult<Sequence<MizAirGroup>> {
+    pub fn helicopters(&self) -> LuaResult<Sequence<MizGroup>> {
         let g: mlua::Table = self.raw_get("helicopter")?;
         g.raw_get("group")
     }
 
-    pub fn ships(&self) -> LuaResult<Sequence<MizSeaGroup>> {
+    pub fn ships(&self) -> LuaResult<Sequence<MizGroup>> {
         let g: mlua::Table = self.raw_get("ship")?;
         g.raw_get("group")
     }
 
-    pub fn vehicles(&self) -> LuaResult<Sequence<MizGroundGroup>> {
+    pub fn vehicles(&self) -> LuaResult<Sequence<MizGroup>> {
         let g: mlua::Table = self.raw_get("vehicle")?;
         g.raw_get("group")
     }
 
-    pub fn statics(&self) -> LuaResult<Sequence<MizStaticGroup>> {
+    pub fn statics(&self) -> LuaResult<Sequence<MizGroup>> {
         let g: mlua::Table = self.raw_get("static")?;
         g.raw_get("group")
     }

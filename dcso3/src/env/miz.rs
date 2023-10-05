@@ -217,43 +217,58 @@ impl<'lua> Coalition<'lua> {
             let cid = country.id()?;
             let base = base.append([i]);
             macro_rules! index_group {
-                ($name:literal, $tbl:ident) => {
+                ($name:literal, $cat:expr, $tbl:ident) => {
                     for (i, group) in country.$tbl()?.into_iter().enumerate() {
                         let group = group?;
                         let base = base.append([$name, "group"]).append([i]);
                         match idx.$tbl.entry(group.name()?) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
                             Entry::Vacant(e) => {
-                                e.insert((cid, base.clone()));
+                                e.insert(IndexedGroup {
+                                    country: cid,
+                                    category: $cat,
+                                    path: base.clone(),
+                                });
                             }
                         }
                         match idx.all.entry(group.name()?) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
                             Entry::Vacant(e) => {
-                                e.insert((cid, base));
+                                e.insert(IndexedGroup {
+                                    country: cid,
+                                    category: $cat,
+                                    path: base,
+                                });
                             }
                         }
                     }
                 };
             }
-            index_group!("plane", planes);
-            index_group!("helicopter", helicopters);
-            index_group!("ship", ships);
-            index_group!("vehicle", vehicles);
-            index_group!("static", statics);
+            index_group!("plane", GroupKind::Plane, planes);
+            index_group!("helicopter", GroupKind::Helicopter, helicopters);
+            index_group!("ship", GroupKind::Ship, ships);
+            index_group!("vehicle", GroupKind::Vehicle, vehicles);
+            index_group!("static", GroupKind::Static, statics);
         }
         Ok(idx)
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct IndexedGroup {
+    country: country::Country,
+    category: GroupKind,
+    path: Path,
+}
+
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct CoalitionIndex {
-    all: FxHashMap<String, (country::Country, Path)>,
-    planes: FxHashMap<String, (country::Country, Path)>,
-    helicopters: FxHashMap<String, (country::Country, Path)>,
-    ships: FxHashMap<String, (country::Country, Path)>,
-    vehicles: FxHashMap<String, (country::Country, Path)>,
-    statics: FxHashMap<String, (country::Country, Path)>,
+    all: FxHashMap<String, IndexedGroup>,
+    planes: FxHashMap<String, IndexedGroup>,
+    helicopters: FxHashMap<String, IndexedGroup>,
+    ships: FxHashMap<String, IndexedGroup>,
+    vehicles: FxHashMap<String, IndexedGroup>,
+    statics: FxHashMap<String, IndexedGroup>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -262,7 +277,7 @@ pub struct MizIndex {
     triggers: FxHashMap<String, Path>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub enum GroupKind {
     Any,
     Plane,
@@ -270,6 +285,13 @@ pub enum GroupKind {
     Ship,
     Vehicle,
     Static,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GroupInfo<'lua> {
+    country: country::Country,
+    category: GroupKind,
+    group: Group<'lua>,
 }
 
 wrapped_table!(Miz, None);
@@ -299,7 +321,7 @@ impl<'lua> Miz<'lua> {
         kind: GroupKind,
         side: &Side,
         name: &str,
-    ) -> LuaResult<Option<(country::Country, Group)>> {
+    ) -> LuaResult<Option<GroupInfo>> {
         idx.by_side
             .get(side)
             .and_then(|cidx| match kind {
@@ -310,7 +332,13 @@ impl<'lua> Miz<'lua> {
                 GroupKind::Ship => cidx.ships.get(name),
                 GroupKind::Static => cidx.statics.get(name),
             })
-            .map(|(cid, path)| self.raw_get_path(path).map(|group| (*cid, group)))
+            .map(|ifo| {
+                self.raw_get_path(&ifo.path).map(|group| GroupInfo {
+                    country: ifo.country,
+                    category: ifo.category,
+                    group,
+                })
+            })
             .transpose()
     }
 

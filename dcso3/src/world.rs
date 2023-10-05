@@ -1,5 +1,5 @@
 use super::{as_tbl, event::Event, unit::Unit, String};
-use crate::wrapped_table;
+use crate::{airbase::Airbase, wrapped_table, Sequence};
 use compact_str::format_compact;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -56,9 +56,11 @@ impl<'lua> World<'lua> {
         Ok(())
     }
 
-    pub fn get_player(&self) -> LuaResult<impl Iterator<Item = LuaResult<Unit>>> {
-        Ok(as_tbl("Players", None, self.t.call_method("getPlayer", ())?)?.sequence_values())
+    pub fn get_player(&self) -> LuaResult<Sequence<Unit>> {
+        self.t.call_method("getPlayer", ())
     }
 
-    // pub fn get_airbases(&self) -> LuaReslt<>
+    pub fn get_airbases(&self) -> LuaResult<Sequence<Airbase>> {
+        self.t.call_method("getAirbases", ())
+    }
 }

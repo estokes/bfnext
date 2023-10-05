@@ -1,4 +1,4 @@
-use crate::{simple_enum, wrapped_table};
+use crate::{simple_enum, wrapped_table, Sequence};
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -72,8 +72,8 @@ impl<'lua> Group<'lua> {
         Unit::from_lua(self.t.call_method("getUnit", index)?, self.lua)
     }
 
-    pub fn get_units(&self) -> LuaResult<impl Iterator<Item = LuaResult<Unit>>> {
-        Ok(as_tbl("Units", None, self.t.call_method("getUnits", ())?)?.sequence_values())
+    pub fn get_units(&self) -> LuaResult<Sequence<Unit>> {
+        self.t.call_method("getUnits", ())
     }
 
     pub fn get_controller(&self) -> LuaResult<Controller> {

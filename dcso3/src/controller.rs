@@ -1,5 +1,5 @@
 use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, String, Vec3};
-use crate::{bitflags_enum, simple_enum, string_enum, wrapped_table};
+use crate::{bitflags_enum, simple_enum, string_enum, wrapped_table, Sequence};
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
 use serde_derive::Serialize;
@@ -420,16 +420,11 @@ impl<'lua> Controller<'lua> {
     pub fn get_detected_targets(
         &self,
         methods: BitFlags<Detection>,
-    ) -> LuaResult<impl Iterator<Item = LuaResult<DetectedTarget<'lua>>>> {
+    ) -> LuaResult<Sequence<DetectedTarget>> {
         let mut args = Variadic::new();
         for method in methods {
             args.push(method.into_lua(self.lua)?);
         }
-        Ok(as_tbl(
-            "DetectedTargetsIter",
-            None,
-            self.t.call_method("getDetectedTargets", args)?,
-        )?
-        .sequence_values())
+        self.t.call_method("getDetectedTargets", args)
     }
 }

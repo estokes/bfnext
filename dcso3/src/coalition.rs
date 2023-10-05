@@ -7,7 +7,7 @@ use super::{
     static_object::StaticObject,
     unit::Unit,
 };
-use crate::{wrapped_table, simple_enum};
+use crate::{simple_enum, wrapped_table, Sequence};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -38,51 +38,24 @@ impl<'lua> Coalition<'lua> {
         self.t.call_method("addStaticObject", (country, data))
     }
 
-    pub fn get_groups(&self, side: Side) -> LuaResult<impl Iterator<Item = LuaResult<Group>>> {
-        Ok(as_tbl("GroupIter", None, self.t.call_method("getGroups", side)?)?.sequence_values())
+    pub fn get_groups(&self, side: Side) -> LuaResult<Sequence<Group>> {
+        self.t.call_method("getGroups", side)
     }
 
-    pub fn get_static_objects(
-        &self,
-        side: Side,
-    ) -> LuaResult<impl Iterator<Item = LuaResult<StaticObject>>> {
-        Ok(as_tbl(
-            "StaticIter",
-            None,
-            self.t.call_method("getStaticObjects", side)?,
-        )?
-        .sequence_values())
+    pub fn get_static_objects(&self, side: Side) -> LuaResult<Sequence<StaticObject>> {
+        self.t.call_method("getStaticObjects", side)
     }
 
-    pub fn get_airbases(&self, side: Side) -> LuaResult<impl Iterator<Item = LuaResult<Airbase>>> {
-        Ok(as_tbl(
-            "AirbaseIter",
-            None,
-            self.t.call_method("getAirbases", side)?,
-        )?
-        .sequence_values())
+    pub fn get_airbases(&self, side: Side) -> LuaResult<Sequence<Airbase>> {
+        self.t.call_method("getAirbases", side)
     }
 
-    pub fn get_players(&self, side: Side) -> LuaResult<impl Iterator<Item = LuaResult<Unit>>> {
-        Ok(as_tbl(
-            "PlayerUnitsIter",
-            None,
-            self.t.call_method("getPlayers", side)?,
-        )?
-        .sequence_values())
+    pub fn get_players(&self, side: Side) -> LuaResult<Sequence<Unit>> {
+        self.t.call_method("getPlayers", side)
     }
 
-    pub fn get_service_providers(
-        &self,
-        side: Side,
-        service: Service,
-    ) -> LuaResult<impl Iterator<Item = LuaResult<Unit>>> {
-        Ok(as_tbl(
-            "ServiceProviderIter",
-            None,
-            self.t.call_method("getServiceProviders", (side, service))?,
-        )?
-        .sequence_values())
+    pub fn get_service_providers(&self, side: Side, service: Service) -> LuaResult<Sequence<Unit>> {
+        self.t.call_method("getServiceProviders", (side, service))
     }
 
     pub fn get_country_coalition(&self, country: Country) -> LuaResult<Side> {

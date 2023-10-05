@@ -4,7 +4,7 @@ use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::{
     collections::hash_map::Entry,
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut}, marker::PhantomData,
 };
 
 use self::coalition::Side;
@@ -21,6 +21,7 @@ pub mod unit;
 pub mod warehouse;
 pub mod weapon;
 pub mod world;
+pub mod env;
 
 #[macro_export]
 macro_rules! wrapped_table {
@@ -359,6 +360,60 @@ pub enum VolumeType {
     Box,
     Sphere,
     Pyramid,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Sequence<'lua, T> {
+    t: mlua::Table<'lua>,
+    #[serde(skip)]
+    _lua: &'lua Lua,
+    ph: PhantomData<T>
+}
+
+impl<'lua, T: FromLua<'lua> + 'lua> FromLua<'lua> for Sequence<'lua, T> {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        match value {
+            Value::Table(t) => Ok(Self {t, _lua: lua, ph: PhantomData}),
+            _ => Err(cvt_err("Sequence"))
+        }
+    }
+}
+
+impl<'lua, T: IntoLua<'lua> + 'lua> IntoLua<'lua> for Sequence<'lua, T> {
+    fn into_lua(self, _lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        Ok(Value::Table(self.t))
+    }
+}
+
+impl<'lua, T: FromLua<'lua> + 'lua> IntoIterator for Sequence<'lua, T> {
+    type IntoIter = mlua::TableSequence<'lua, T>;
+    type Item = LuaResult<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.t.sequence_values()
+    }
+}
+
+impl<'lua, T: FromLua<'lua> + 'lua> Sequence<'lua, T> {
+    pub fn get(&self, i: i64) -> LuaResult<T> {
+        self.t.raw_get(i)
+    }
+}
+
+impl<'lua, T: IntoLua<'lua> + 'lua> Sequence<'lua, T> {
+    pub fn set(&self, i: i64, t: T) -> LuaResult<()> {
+        self.t.raw_set(i, t)
+    }
+}
+
+impl<'lua, T: 'lua> Sequence<'lua, T> {
+    pub fn len(&self) -> usize {
+        self.t.raw_len()
+    }
+
+    pub fn into_inner(self) -> mlua::Table<'lua> {
+        self.t
+    }
 }
 
 pub struct UserHooks<'lua> {

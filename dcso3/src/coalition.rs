@@ -2,7 +2,7 @@ use super::{
     airbase::Airbase,
     as_tbl,
     country::Country,
-    cvt_err,
+    cvt_err, env,
     group::{Group, GroupCategory},
     static_object::StaticObject,
     unit::Unit,
@@ -22,7 +22,7 @@ impl FromStr for Side {
             "blue" => Side::Blue,
             "red" => Side::Red,
             "neutrals" => Side::Neutral,
-            _ => return Err(cvt_err("side_str"))
+            _ => return Err(cvt_err("side_str")),
         })
     }
 }
@@ -32,7 +32,7 @@ impl Side {
         match self {
             Side::Blue => "blue",
             Side::Red => "red",
-            Side::Neutral => "neutrals"
+            Side::Neutral => "neutrals",
         }
     }
 }
@@ -52,12 +52,12 @@ impl<'lua> Coalition<'lua> {
         &self,
         country: Country,
         category: GroupCategory,
-        data: Group,
+        data: env::miz::Group,
     ) -> LuaResult<()> {
         self.t.call_method("addGroup", (country, category, data))
     }
 
-    pub fn add_static_object(&self, country: Country, data: StaticObject) -> LuaResult<()> {
+    pub fn add_static_object(&self, country: Country, data: env::miz::Group) -> LuaResult<()> {
         self.t.call_method("addStaticObject", (country, data))
     }
 

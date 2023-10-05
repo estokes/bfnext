@@ -1,5 +1,6 @@
 use crate::{
-    as_tbl, coalition::Side, cvt_err, wrapped_table, DcsTableExt, Path, Sequence, String, Vec2,
+    as_tbl, coalition::Side, country, cvt_err, wrapped_table, DcsTableExt, Path, Sequence, String,
+    Vec2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -155,7 +156,7 @@ impl<'lua> Group<'lua> {
 wrapped_table!(Country, None);
 
 impl<'lua> Country<'lua> {
-    pub fn id(&self) -> LuaResult<Country> {
+    pub fn id(&self) -> LuaResult<country::Country> {
         self.raw_get("id")
     }
 
@@ -213,6 +214,7 @@ impl<'lua> Coalition<'lua> {
         let mut idx = CoalitionIndex::default();
         for (i, country) in self.countries()?.into_iter().enumerate() {
             let country = country?;
+            let cid = country.id()?;
             let base = base.append([i]);
             macro_rules! index_group {
                 ($name:literal, $tbl:ident) => {
@@ -222,13 +224,13 @@ impl<'lua> Coalition<'lua> {
                         match idx.$tbl.entry(group.name()?) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
                             Entry::Vacant(e) => {
-                                e.insert(base.clone());
+                                e.insert((cid, base.clone()));
                             }
                         }
                         match idx.all.entry(group.name()?) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
                             Entry::Vacant(e) => {
-                                e.insert(base);
+                                e.insert((cid, base));
                             }
                         }
                     }
@@ -246,12 +248,12 @@ impl<'lua> Coalition<'lua> {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct CoalitionIndex {
-    all: FxHashMap<String, Path>,
-    planes: FxHashMap<String, Path>,
-    helicopters: FxHashMap<String, Path>,
-    ships: FxHashMap<String, Path>,
-    vehicles: FxHashMap<String, Path>,
-    statics: FxHashMap<String, Path>,
+    all: FxHashMap<String, (country::Country, Path)>,
+    planes: FxHashMap<String, (country::Country, Path)>,
+    helicopters: FxHashMap<String, (country::Country, Path)>,
+    ships: FxHashMap<String, (country::Country, Path)>,
+    vehicles: FxHashMap<String, (country::Country, Path)>,
+    statics: FxHashMap<String, (country::Country, Path)>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -297,7 +299,7 @@ impl<'lua> Miz<'lua> {
         kind: GroupKind,
         side: &Side,
         name: &str,
-    ) -> LuaResult<Option<Group>> {
+    ) -> LuaResult<Option<(country::Country, Group)>> {
         idx.by_side
             .get(side)
             .and_then(|cidx| match kind {
@@ -308,6 +310,13 @@ impl<'lua> Miz<'lua> {
                 GroupKind::Ship => cidx.ships.get(name),
                 GroupKind::Static => cidx.statics.get(name),
             })
+            .map(|(cid, path)| self.raw_get_path(path).map(|group| (*cid, group)))
+            .transpose()
+    }
+
+    pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> LuaResult<Option<TriggerZone>> {
+        idx.triggers
+            .get(name)
             .map(|path| self.raw_get_path(path))
             .transpose()
     }

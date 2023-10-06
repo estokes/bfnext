@@ -9,32 +9,15 @@ use dcso3::{
     String, UserHooks, Vec2,
 };
 use mlua::prelude::*;
-use std::{cell::RefCell, ops::Deref, rc::Rc};
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 
 #[derive(Default)]
-struct ContextInner {
+struct Context {
     idx: env::miz::MizIndex,
 }
 
-#[derive(Clone, Default)]
-struct Context(Rc<RefCell<ContextInner>>);
-
-impl Deref for Context {
-    type Target = RefCell<ContextInner>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Context {
-    fn get(lua: &Lua) -> LuaResult<Self> {
-        Ok(lua
-            .app_data_ref::<Self>()
-            .ok_or_else(|| err("missing context"))?
-            .clone())
-    }
-}
+static CONTEXT: Lazy<Mutex<Context>> = Lazy::new(|| Mutex::new(Context::default()));
 
 enum SpawnLoc {
     AtPos(Vec2),
@@ -43,7 +26,7 @@ enum SpawnLoc {
 
 fn spawn<'lua>(
     lua: &'lua Lua,
-    ctx: &ContextInner,
+    ctx: &Context,
     side: Side,
     kind: GroupKind,
     location: &SpawnLoc,
@@ -108,15 +91,14 @@ fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
 }
 
 fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
-    let ctx = Context::get(lua)?;
     let miz = env::miz::Miz::singleton(lua)?;
-    ctx.borrow_mut().idx = miz.index()?;
+    CONTEXT.lock().idx = miz.index()?;
     Ok(())
 }
 
 fn on_simulation_start(lua: &Lua) -> LuaResult<()> {
-    let ctx = Context::get(lua)?;
-    let ctx = ctx.borrow();
+    let ctx = &*CONTEXT;
+    let ctx = ctx.lock();
     spawn(
         lua,
         &*ctx,
@@ -129,23 +111,22 @@ fn on_simulation_start(lua: &Lua) -> LuaResult<()> {
 }
 
 fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
-    if let None = lua.app_data_ref::<Context>() {
-        lua.set_app_data(Context::default());
-    }
+   println!("setting user hooks");
     UserHooks::new(lua)
         .on_simulation_start(on_simulation_start)?
         .on_mission_load_end(on_mission_load_end)?
         .on_player_try_change_slot(on_player_try_change_slot)?
         .on_player_try_connect(on_player_try_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
-        .register()
+        .register()?;
+    println!("set user hooks");
+    Ok(())
 }
 
 fn init_miz(lua: &Lua, _: ()) -> LuaResult<()> {
-    if let None = lua.app_data_ref::<Context>() {
-        lua.set_app_data(Context::default());
-    }
+    println!("adding event handler");
     World::get(lua)?.add_event_handler(on_event)?;
+    println!("added event handler");
     Ok(())
 }
 

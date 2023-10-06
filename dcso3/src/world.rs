@@ -1,6 +1,7 @@
 use super::{as_tbl, event::Event, unit::Unit, String};
-use crate::{airbase::Airbase, wrapped_table, Sequence};
+use crate::{airbase::Airbase, value_to_json, wrapped_table, Sequence};
 use compact_str::format_compact;
+use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::{
@@ -26,7 +27,7 @@ wrapped_table!(World, None);
 
 impl<'lua> World<'lua> {
     pub fn get(lua: &'lua Lua) -> LuaResult<Self> {
-        lua.globals().raw_get("World")
+        lua.globals().raw_get("world")
     }
 
     pub fn add_event_handler<F>(&self, f: F) -> LuaResult<HandlerId>

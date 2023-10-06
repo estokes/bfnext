@@ -5,10 +5,12 @@ use dcso3::{
     err,
     event::Event,
     group::{Group, GroupCategory},
+    value_to_json,
     world::World,
     String, UserHooks, Vec2,
 };
-use mlua::prelude::*;
+use fxhash::FxHashMap;
+use mlua::{prelude::*, Value};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
@@ -86,17 +88,21 @@ fn on_player_try_change_slot(_: &Lua, id: u32, side: Side, slot: String) -> LuaR
 }
 
 fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
-    println!("onEventTranslated: {:#?}", ev);
+    println!("onEventTranslated: {:?}", ev);
     Ok(())
 }
 
 fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
+    println!("on_mission_load_end");
     let miz = env::miz::Miz::singleton(lua)?;
+    println!("indexing mission");
     CONTEXT.lock().idx = miz.index()?;
+    println!("indexed mission");
     Ok(())
 }
 
 fn on_simulation_start(lua: &Lua) -> LuaResult<()> {
+    println!("on_simulation_start");
     let ctx = &*CONTEXT;
     let ctx = ctx.lock();
     spawn(
@@ -111,7 +117,7 @@ fn on_simulation_start(lua: &Lua) -> LuaResult<()> {
 }
 
 fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
-   println!("setting user hooks");
+    println!("setting user hooks");
     UserHooks::new(lua)
         .on_simulation_start(on_simulation_start)?
         .on_mission_load_end(on_mission_load_end)?
@@ -125,7 +131,7 @@ fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
 
 fn init_miz(lua: &Lua, _: ()) -> LuaResult<()> {
     println!("adding event handler");
-    World::get(lua)?.add_event_handler(on_event)?;
+    //    World::get(lua)?.add_event_handler(on_event)?;
     println!("added event handler");
     Ok(())
 }

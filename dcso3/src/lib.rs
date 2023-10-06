@@ -611,6 +611,7 @@ impl<'lua, T: 'lua> Sequence<'lua, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct UserHooks<'lua> {
     on_mission_load_begin: Option<mlua::Function<'lua>>,
     on_mission_load_progress: Option<mlua::Function<'lua>>,
@@ -723,8 +724,8 @@ impl<'lua> UserHooks<'lua> {
         if let Some(f) = on_player_try_change_slot.take() {
             tbl.set("onPlayerTryChangeSlot", f)?;
         }
-        let dcs = as_tbl("DCS", None, self.lua.globals().raw_get("DCS")?)?;
-        dcs.call_method("setUserCallbacks", tbl)
+        let dcs: mlua::Table = self.lua.globals().get("DCS")?;
+        dcs.call_function("setUserCallbacks", tbl)
     }
 
     pub fn on_mission_load_begin<F>(&mut self, f: F) -> LuaResult<&mut Self>
@@ -842,7 +843,7 @@ impl<'lua> UserHooks<'lua> {
     {
         self.on_player_try_connect = Some(
             self.lua
-                .create_function(move |lua, (addr, ucid, name, id)| f(lua, addr, ucid, name, id))?,
+                .create_function(move |lua, (addr, ucid, name, id)| dbg!(f(lua, addr, ucid, name, id)))?,
         );
         Ok(self)
     }
@@ -866,9 +867,9 @@ impl<'lua> UserHooks<'lua> {
     {
         self.on_player_try_change_slot = Some(
             self.lua
-                .create_function(move |lua, (id, side, slot)| f(lua, id, side, slot))?,
+                .create_function(move |lua, (id, side, slot)| dbg!(f(lua, id, side, slot)))?,
         );
-        Ok(self)
+        Ok(dbg!(self))
     }
 }
 

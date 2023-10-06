@@ -574,6 +574,11 @@ impl<'lua, T: FromLua<'lua> + 'lua> FromLua<'lua> for Sequence<'lua, T> {
                 _lua: lua,
                 ph: PhantomData,
             }),
+            Value::Nil => Ok(Self {
+                t: lua.create_table()?,
+                _lua: lua,
+                ph: PhantomData
+            }),
             _ => Err(cvt_err("Sequence")),
         }
     }
@@ -607,6 +612,14 @@ impl<'lua, T: IntoLua<'lua> + 'lua> Sequence<'lua, T> {
 }
 
 impl<'lua, T: 'lua> Sequence<'lua, T> {
+    pub fn empty(lua: &'lua Lua) -> LuaResult<Self> {
+        Ok(Self {
+            t: lua.create_table()?,
+            _lua: lua,
+            ph: PhantomData
+        })
+    }
+
     pub fn len(&self) -> usize {
         self.t.raw_len()
     }

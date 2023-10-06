@@ -181,28 +181,28 @@ impl<'lua> Country<'lua> {
     }
 
     pub fn planes(&self) -> LuaResult<Sequence<Group>> {
-        let g: mlua::Table = self.raw_get("plane")?;
-        g.raw_get("group")
+        let g: Option<mlua::Table> = self.raw_get("plane")?;
+        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
     pub fn helicopters(&self) -> LuaResult<Sequence<Group>> {
-        let g: mlua::Table = self.raw_get("helicopter")?;
-        g.raw_get("group")
+        let g: Option<mlua::Table> = self.raw_get("helicopter")?;
+        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
     pub fn ships(&self) -> LuaResult<Sequence<Group>> {
-        let g: mlua::Table = self.raw_get("ship")?;
-        g.raw_get("group")
+        let g: Option<mlua::Table> = self.raw_get("ship")?;
+        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
     pub fn vehicles(&self) -> LuaResult<Sequence<Group>> {
-        let g: mlua::Table = self.raw_get("vehicle")?;
-        g.raw_get("group")
+        let g: Option<mlua::Table> = self.raw_get("vehicle")?;
+        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
     pub fn statics(&self) -> LuaResult<Sequence<Group>> {
-        let g: mlua::Table = self.raw_get("static")?;
-        g.raw_get("group")
+        let g: Option<mlua::Table> = self.raw_get("static")?;
+        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
     }
 }
 
@@ -228,14 +228,14 @@ impl<'lua> Coalition<'lua> {
     fn index(&self, base: Path) -> LuaResult<CoalitionIndex> {
         let base = base.append(["country"]);
         let mut idx = CoalitionIndex::default();
-        for (i, country) in self.countries()?.into_iter().enumerate() {
-            let country = country?;
+        for (i, country) in dbg!(self.countries())?.into_iter().enumerate() {
+            let country = dbg!(country)?;
             let cid = country.id()?;
             let base = base.append([i]);
             macro_rules! index_group {
                 ($name:literal, $cat:expr, $tbl:ident) => {
-                    for (i, group) in country.$tbl()?.into_iter().enumerate() {
-                        let group = group?;
+                    for (i, group) in dbg!(country.$tbl())?.into_iter().enumerate() {
+                        let group = dbg!(group)?;
                         let base = base.append([$name, "group"]).append([i]);
                         match idx.$tbl.entry(group.name()?) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
@@ -329,8 +329,8 @@ impl<'lua> Miz<'lua> {
     }
 
     pub fn triggers(&self) -> LuaResult<Sequence<TriggerZone>> {
-        let triggers: mlua::Table = self.t.raw_get("triggers")?;
-        triggers.raw_get("zones")
+        let triggers: mlua::Table = dbg!(self.t.raw_get("triggers"))?;
+        dbg!(triggers.raw_get("zones"))
     }
 
     pub fn weather(&self) -> LuaResult<Weather<'lua>> {
@@ -376,10 +376,11 @@ impl<'lua> Miz<'lua> {
         let mut idx = MizIndex::default();
         {
             let base = base.append(["triggers", "zones"]);
+            println!("indexing triggers");
             for (i, tz) in self.triggers()?.into_iter().enumerate() {
-                let tz = tz?;
+                let tz = dbg!(tz)?;
                 let base = base.append([i + 1]);
-                match idx.triggers.entry(tz.name()?) {
+                match idx.triggers.entry(dbg!(tz.name())?) {
                     Entry::Vacant(e) => {
                         e.insert(base);
                     }
@@ -391,7 +392,7 @@ impl<'lua> Miz<'lua> {
             let base = base.append(["coalition", side.to_str()]);
             idx.by_side
                 .entry(side)
-                .or_insert(self.coalition(side)?.index(base)?);
+                .or_insert(dbg!(self.coalition(side))?.index(base)?);
         }
         Ok(idx)
     }

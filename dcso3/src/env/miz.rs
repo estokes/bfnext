@@ -116,6 +116,22 @@ impl<'lua> Group<'lua> {
         self.raw_get("name")
     }
 
+    pub fn set_name(&self, name: String) -> LuaResult<()> {
+        self.raw_set("name", name)
+    }
+
+    pub fn pos(&self) -> LuaResult<Vec2> {
+        Ok(Vec2 {
+            x: self.t.raw_get("x")?,
+            y: self.t.raw_get("y")?
+        })
+    }
+
+    pub fn set_pos(&self, pos: Vec2) -> LuaResult<()> {
+        self.t.raw_set("x", pos.x)?;
+        self.t.raw_set("y", pos.y)
+    }
+
     pub fn frequency(&self) -> LuaResult<f64> {
         self.raw_get("frequency")
     }
@@ -289,9 +305,9 @@ pub enum GroupKind {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GroupInfo<'lua> {
-    country: country::Country,
-    category: GroupKind,
-    group: Group<'lua>,
+    pub country: country::Country,
+    pub category: GroupKind,
+    pub group: Group<'lua>,
 }
 
 wrapped_table!(Miz, None);
@@ -319,11 +335,11 @@ impl<'lua> Miz<'lua> {
         &self,
         idx: &MizIndex,
         kind: GroupKind,
-        side: &Side,
+        side: Side,
         name: &str,
     ) -> LuaResult<Option<GroupInfo>> {
         idx.by_side
-            .get(side)
+            .get(&side)
             .and_then(|cidx| match kind {
                 GroupKind::Any => cidx.all.get(name),
                 GroupKind::Plane => cidx.planes.get(name),

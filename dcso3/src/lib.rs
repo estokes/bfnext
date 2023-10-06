@@ -154,12 +154,16 @@ macro_rules! string_enum {
     };
 }
 
-fn cvt_err(to: &'static str) -> LuaError {
+pub fn cvt_err(to: &'static str) -> LuaError {
     LuaError::FromLuaConversionError {
         from: "value",
         to,
         message: None,
     }
+}
+
+pub fn err(msg: &str) -> LuaError {
+    LuaError::runtime(msg)
 }
 
 fn as_tbl_ref<'a: 'lua, 'lua>(
@@ -389,7 +393,7 @@ impl<'lua> DcsTableExt<'lua> for mlua::Table<'lua> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Vec2 {
     x: f64,
     y: f64,
@@ -405,7 +409,7 @@ impl<'lua> FromLua<'lua> for Vec2 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Vec3 {
     pub x: f64,
     pub y: f64,
@@ -423,7 +427,7 @@ impl<'lua> FromLua<'lua> for Vec3 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Position3 {
     p: Vec3,
     x: Vec3,
@@ -443,7 +447,7 @@ impl<'lua> FromLua<'lua> for Position3 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Box3 {
     pub min: Vec3,
     pub max: Vec3,

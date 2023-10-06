@@ -1,4 +1,4 @@
-use crate::{simple_enum, wrapped_table, Sequence};
+use crate::{simple_enum, wrapped_table, Sequence, env::miz::GroupKind};
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -11,6 +11,18 @@ simple_enum!(GroupCategory, u8, [
     Ship => 3,
     Train => 4
 ]);
+
+impl GroupCategory {
+    pub fn from_kind(k: GroupKind) -> Option<Self> {
+        match k {
+            GroupKind::Any | GroupKind::Static => None,
+            GroupKind::Plane => Some(Self::Airplane),
+            GroupKind::Helicopter => Some(Self::Helicopter),
+            GroupKind::Vehicle => Some(Self::Ground),
+            GroupKind::Ship => Some(Self::Ship),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub enum Owner {

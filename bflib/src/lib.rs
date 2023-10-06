@@ -114,8 +114,18 @@ fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
-fn on_simulation_start(_lua: &Lua) -> LuaResult<()> {
-    Ok(())
+fn on_simulation_start(lua: &Lua) -> LuaResult<()> {
+    let ctx = Context::get(lua)?;
+    let ctx = ctx.borrow();
+    spawn(
+        lua,
+        &*ctx,
+        Side::Blue,
+        GroupKind::Vehicle,
+        &SpawnLoc::AtTrigger("TEST_TZ".into()),
+        "TMPL_TEST_GROUP",
+        "TEST_GROUP".into(),
+    )
 }
 
 fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {

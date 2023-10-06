@@ -372,7 +372,7 @@ impl<'lua> Miz<'lua> {
     }
 
     pub fn index(&self) -> LuaResult<MizIndex> {
-        let base = Path::default().append(["env", "mission"]);
+        let base = Path::default();
         let mut idx = MizIndex::default();
         {
             let base = base.append(["triggers", "zones"]);

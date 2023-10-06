@@ -35,25 +35,25 @@ fn spawn<'lua>(
     miz_name: &str,
     group_name: String,
 ) -> LuaResult<()> {
-    let coalition = Coalition::singleton(lua)?;
-    let miz = env::miz::Miz::singleton(lua)?;
-    let ifo = miz
-        .get_group(&ctx.idx, kind, side, miz_name)?
+    let coalition = dbg!(Coalition::singleton(lua))?;
+    let miz = dbg!(env::miz::Miz::singleton(lua))?;
+    let ifo = dbg!(miz
+        .get_group(&ctx.idx, kind, side, miz_name))?
         .ok_or_else(|| err("no such group"))?;
     let loc = match location {
         SpawnLoc::AtPos(pos) => *pos,
         SpawnLoc::AtTrigger(name) => {
-            let tz = miz
-                .get_trigger_zone(&ctx.idx, name.as_str())?
+            let tz = dbg!(miz
+                .get_trigger_zone(&ctx.idx, name.as_str()))?
                 .ok_or_else(|| err("no such trigger zone"))?;
             tz.pos()?
         }
     };
-    ifo.group.set_name(group_name.clone())?;
-    ifo.group.set_pos(loc)?;
+    dbg!(ifo.group.set_name(group_name.clone()))?;
+    dbg!(ifo.group.set_pos(loc))?;
     match GroupCategory::from_kind(ifo.category) {
-        None => coalition.add_static_object(ifo.country, ifo.group),
-        Some(category) => coalition.add_group(ifo.country, category, ifo.group),
+        None => dbg!(coalition.add_static_object(ifo.country, ifo.group)),
+        Some(category) => dbg!(coalition.add_group(ifo.country, category, ifo.group)),
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::{
-    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, DcsTableExt, Path,
-    Sequence, String, Vec2,
+    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, DcsTableExt, DeepClone,
+    Path, Sequence, String, Vec2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -182,27 +182,32 @@ impl<'lua> Country<'lua> {
 
     pub fn planes(&self) -> LuaResult<Sequence<Group>> {
         let g: Option<mlua::Table> = self.raw_get("plane")?;
-        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
+        g.map(|g| g.raw_get("group"))
+            .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
     pub fn helicopters(&self) -> LuaResult<Sequence<Group>> {
         let g: Option<mlua::Table> = self.raw_get("helicopter")?;
-        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
+        g.map(|g| g.raw_get("group"))
+            .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
     pub fn ships(&self) -> LuaResult<Sequence<Group>> {
         let g: Option<mlua::Table> = self.raw_get("ship")?;
-        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
+        g.map(|g| g.raw_get("group"))
+            .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
     pub fn vehicles(&self) -> LuaResult<Sequence<Group>> {
         let g: Option<mlua::Table> = self.raw_get("vehicle")?;
-        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
+        g.map(|g| g.raw_get("group"))
+            .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
     pub fn statics(&self) -> LuaResult<Sequence<Group>> {
         let g: Option<mlua::Table> = self.raw_get("static")?;
-        g.map(|g| g.raw_get("group")).unwrap_or_else(|| Sequence::empty(self.lua))
+        g.map(|g| g.raw_get("group"))
+            .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 }
 
@@ -356,10 +361,12 @@ impl<'lua> Miz<'lua> {
             })
             .map(|ifo| {
                 dbg!(ifo);
-                self.raw_get_path(&ifo.path).map(|group| GroupInfo {
-                    country: ifo.country,
-                    category: ifo.category,
-                    group,
+                self.raw_get_path(&ifo.path).and_then(|group: Group| {
+                    Ok(GroupInfo {
+                        country: ifo.country,
+                        category: ifo.category,
+                        group: group.deep_clone(self.lua)?,
+                    })
                 })
             })
             .transpose()
@@ -368,7 +375,10 @@ impl<'lua> Miz<'lua> {
     pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> LuaResult<Option<TriggerZone>> {
         idx.triggers
             .get(name)
-            .map(|path| self.raw_get_path(path))
+            .map(|path| {
+                self.raw_get_path(path)
+                    .and_then(|tz: TriggerZone| tz.deep_clone(self.lua))
+            })
             .transpose()
     }
 

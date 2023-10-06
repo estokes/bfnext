@@ -24,6 +24,7 @@ pub mod unit;
 pub mod warehouse;
 pub mod weapon;
 pub mod world;
+pub mod timer;
 
 #[macro_export]
 macro_rules! wrapped_table {
@@ -217,6 +218,40 @@ fn as_tbl<'lua>(
             },
         },
         _ => Err(cvt_err(to)),
+    }
+}
+
+pub trait DeepClone<'lua>: IntoLua<'lua> + FromLua<'lua> + Clone {
+    fn deep_clone(&self, lua: &'lua Lua) -> LuaResult<Self>;
+}
+
+impl<'lua, T> DeepClone<'lua> for T
+where
+    T: IntoLua<'lua> + FromLua<'lua> + Clone,
+{
+    fn deep_clone(&self, lua: &'lua Lua) -> LuaResult<Self> {
+        let v = match self.clone().into_lua(lua)? {
+            Value::Boolean(b) => Value::Boolean(b),
+            Value::Error(e) => Value::Error(e),
+            Value::Function(f) => Value::Function(f),
+            Value::Integer(i) => Value::Integer(i),
+            Value::LightUserData(d) => Value::LightUserData(d),
+            Value::Nil => Value::Nil,
+            Value::Number(n) => Value::Number(n),
+            Value::String(s) => Value::String(lua.create_string(s)?),
+            Value::Table(t) => {
+                let new = lua.create_table()?;
+                new.set_metatable(t.get_metatable());
+                for r in t.pairs::<Value, Value>() {
+                    let (k, v) = r?;
+                    new.set(k.deep_clone(lua)?, v.deep_clone(lua)?)?
+                }
+                Value::Table(new)
+            }
+            Value::Thread(t) => Value::Thread(t),
+            Value::UserData(d) => Value::UserData(d),
+        };
+        T::from_lua(v, lua)
     }
 }
 
@@ -577,7 +612,7 @@ impl<'lua, T: FromLua<'lua> + 'lua> FromLua<'lua> for Sequence<'lua, T> {
             Value::Nil => Ok(Self {
                 t: lua.create_table()?,
                 _lua: lua,
-                ph: PhantomData
+                ph: PhantomData,
             }),
             _ => Err(cvt_err("Sequence")),
         }
@@ -616,7 +651,7 @@ impl<'lua, T: 'lua> Sequence<'lua, T> {
         Ok(Self {
             t: lua.create_table()?,
             _lua: lua,
-            ph: PhantomData
+            ph: PhantomData,
         })
     }
 

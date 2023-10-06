@@ -32,13 +32,12 @@ fn spawn<'lua>(
     side: Side,
     kind: GroupKind,
     location: &SpawnLoc,
-    miz_name: &str,
-    group_name: String,
+    name: &str,
 ) -> LuaResult<()> {
     let coalition = dbg!(Coalition::singleton(lua))?;
     let miz = dbg!(env::miz::Miz::singleton(lua))?;
     let ifo = dbg!(miz
-        .get_group(&ctx.idx, kind, side, miz_name))?
+        .get_group(&ctx.idx, kind, side, name))?
         .ok_or_else(|| err("no such group"))?;
     let loc = match location {
         SpawnLoc::AtPos(pos) => *pos,
@@ -49,7 +48,7 @@ fn spawn<'lua>(
             tz.pos()?
         }
     };
-    dbg!(ifo.group.set_name(group_name.clone()))?;
+    //dbg!(ifo.group.set_name(group_name.clone()))?;
     dbg!(ifo.group.set_pos(loc))?;
     match GroupCategory::from_kind(ifo.category) {
         None => dbg!(coalition.add_static_object(ifo.country, ifo.group)),
@@ -136,7 +135,6 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
         GroupKind::Vehicle,
         &SpawnLoc::AtTrigger("TEST_TZ".into()),
         "TMPL_TEST_GROUP",
-        "TEST_GROUP".into(),
     )
 }
 

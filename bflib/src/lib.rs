@@ -7,7 +7,7 @@ use dcso3::{
     group::{Group, GroupCategory},
     value_to_json,
     world::World,
-    String, UserHooks, Vec2,
+    String, UserHooks, Vec2, wrap_unit,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -106,7 +106,7 @@ fn on_simulation_start(lua: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
-fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
+fn init_hooks_(lua: &Lua) -> LuaResult<()> {
     println!("setting user hooks");
     UserHooks::new(lua)
         .on_simulation_start(on_simulation_start)?
@@ -119,7 +119,11 @@ fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
     Ok(())
 }
 
-fn init_miz(lua: &Lua, _: ()) -> LuaResult<()> {
+fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
+    wrap_unit("init_hooks", init_hooks_(lua))
+}
+
+fn init_miz_(lua: &Lua) -> LuaResult<()> {
     println!("adding event handler");
     World::get(lua)?.add_event_handler(on_event)?;
     println!("spawning");
@@ -134,6 +138,10 @@ fn init_miz(lua: &Lua, _: ()) -> LuaResult<()> {
         "TMPL_TEST_GROUP",
         "TEST_GROUP".into(),
     )
+}
+
+fn init_miz(lua: &Lua, _: ()) -> LuaResult<()> {
+    wrap_unit("init_miz", init_miz_(lua))
 }
 
 #[mlua::lua_module]

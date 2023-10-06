@@ -637,7 +637,7 @@ pub struct UserHooks<'lua> {
     lua: &'lua Lua,
 }
 
-fn wrap_unit(name: &str, res: LuaResult<()>) -> LuaResult<()> {
+pub fn wrap_unit(name: &str, res: LuaResult<()>) -> LuaResult<()> {
     match res {
         Ok(()) => Ok(()),
         Err(e) => {

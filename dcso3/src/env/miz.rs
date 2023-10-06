@@ -231,12 +231,12 @@ impl<'lua> Coalition<'lua> {
         for (i, country) in dbg!(self.countries())?.into_iter().enumerate() {
             let country = dbg!(country)?;
             let cid = country.id()?;
-            let base = base.append([i]);
+            let base = base.append([i + 1]);
             macro_rules! index_group {
                 ($name:literal, $cat:expr, $tbl:ident) => {
                     for (i, group) in dbg!(country.$tbl())?.into_iter().enumerate() {
                         let group = dbg!(group)?;
-                        let base = base.append([$name, "group"]).append([i]);
+                        let base = base.append([$name, "group"]).append([i + 1]);
                         match idx.$tbl.entry(group.name()?) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
                             Entry::Vacant(e) => {
@@ -355,6 +355,7 @@ impl<'lua> Miz<'lua> {
                 GroupKind::Static => cidx.statics.get(name),
             })
             .map(|ifo| {
+                dbg!(ifo);
                 self.raw_get_path(&ifo.path).map(|group| GroupInfo {
                     country: ifo.country,
                     category: ifo.category,

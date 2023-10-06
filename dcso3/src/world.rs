@@ -41,7 +41,7 @@ impl<'lua> World<'lua> {
             self.lua
                 .create_function(move |lua, (_, ev): (Value, Event)| f(lua, ev))?,
         )?;
-        self.t.call_method("addEventHandler", tbl.clone())?;
+        self.t.call_function("addEventHandler", tbl.clone())?;
         globals.raw_set(id.key(), tbl)?;
         Ok(id)
     }
@@ -51,7 +51,7 @@ impl<'lua> World<'lua> {
         let key = id.key();
         let handler = globals.raw_get(key.clone())?;
         let handler = as_tbl("EventHandler", None, handler)?;
-        self.t.call_method("removeEventHandler", handler)?;
+        self.t.call_function("removeEventHandler", handler)?;
         globals.raw_remove(key)?;
         Ok(())
     }

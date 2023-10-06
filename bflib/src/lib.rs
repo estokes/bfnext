@@ -94,7 +94,7 @@ fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
 
 fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
     println!("on_mission_load_end");
-    let miz = env::miz::Miz::singleton(lua)?;
+    let miz = dbg!(env::miz::Miz::singleton(lua))?;
     println!("indexing mission");
     CONTEXT.lock().idx = miz.index()?;
     println!("indexed mission");
@@ -103,17 +103,7 @@ fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
 
 fn on_simulation_start(lua: &Lua) -> LuaResult<()> {
     println!("on_simulation_start");
-    let ctx = &*CONTEXT;
-    let ctx = ctx.lock();
-    spawn(
-        lua,
-        &*ctx,
-        Side::Blue,
-        GroupKind::Vehicle,
-        &SpawnLoc::AtTrigger("TEST_TZ".into()),
-        "TMPL_TEST_GROUP",
-        "TEST_GROUP".into(),
-    )
+    Ok(())
 }
 
 fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
@@ -131,9 +121,19 @@ fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
 
 fn init_miz(lua: &Lua, _: ()) -> LuaResult<()> {
     println!("adding event handler");
-    //    World::get(lua)?.add_event_handler(on_event)?;
-    println!("added event handler");
-    Ok(())
+    World::get(lua)?.add_event_handler(on_event)?;
+    println!("spawning");
+    let ctx = &*CONTEXT;
+    let ctx = ctx.lock();
+    spawn(
+        lua,
+        &*ctx,
+        Side::Blue,
+        GroupKind::Vehicle,
+        &SpawnLoc::AtTrigger("TEST_TZ".into()),
+        "TMPL_TEST_GROUP",
+        "TEST_GROUP".into(),
+    )
 }
 
 #[mlua::lua_module]

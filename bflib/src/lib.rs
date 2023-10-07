@@ -1,3 +1,5 @@
+use std::{thread, time::Duration};
+
 use dcso3::{
     coalition::{Coalition, Side},
     country::Country,
@@ -5,9 +7,10 @@ use dcso3::{
     err,
     event::Event,
     group::{Group, GroupCategory},
+    timer::Timer,
     value_to_json,
     world::World,
-    String, UserHooks, Vec2, wrap_unit,
+    wrap_unit, String, UserHooks, Vec2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -36,14 +39,12 @@ fn spawn<'lua>(
 ) -> LuaResult<()> {
     let coalition = dbg!(Coalition::singleton(lua))?;
     let miz = dbg!(env::miz::Miz::singleton(lua))?;
-    let ifo = dbg!(miz
-        .get_group(&ctx.idx, kind, side, name))?
-        .ok_or_else(|| err("no such group"))?;
+    let ifo =
+        dbg!(miz.get_group(&ctx.idx, kind, side, name))?.ok_or_else(|| err("no such group"))?;
     let loc = match location {
         SpawnLoc::AtPos(pos) => *pos,
         SpawnLoc::AtTrigger(name) => {
-            let tz = dbg!(miz
-                .get_trigger_zone(&ctx.idx, name.as_str()))?
+            let tz = dbg!(miz.get_trigger_zone(&ctx.idx, name.as_str()))?
                 .ok_or_else(|| err("no such trigger zone"))?;
             tz.pos()?
         }
@@ -100,7 +101,7 @@ fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
-fn on_simulation_start(lua: &Lua) -> LuaResult<()> {
+fn on_simulation_start(_lua: &Lua) -> LuaResult<()> {
     println!("on_simulation_start");
     Ok(())
 }
@@ -121,21 +122,47 @@ fn init_hooks_(lua: &Lua) -> LuaResult<()> {
 fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
     wrap_unit("init_hooks", init_hooks_(lua))
 }
+/*
+    println!("scheduling spawn");
+    let timer = Timer::singleton(lua)?;
+    timer.schedule_function(timer.get_time()? + 60., Value::Nil, move |lua, _, _time| {
+        println!("spawning");
+        let ctx = &*CONTEXT;
+        let ctx = ctx.lock();
+        spawn(
+            lua,
+            &*ctx,
+            Side::Blue,
+            GroupKind::Vehicle,
+            &SpawnLoc::AtTrigger("TEST_TZ".into()),
+            "TMPL_TEST_GROUP",
+        )?;
+        Ok(None)
+    })?;
+*/
+
+/*
+    dbg!(timer.schedule_function(timer.get_time()? + 60., Value::Nil, move |_lua, _, time| {
+        println!("scheduled function {}", time);
+        Ok(Some(time + 60.))
+    }))?;
+*/
 
 fn init_miz_(lua: &Lua) -> LuaResult<()> {
     println!("adding event handler");
     World::get(lua)?.add_event_handler(on_event)?;
-    println!("spawning");
-    let ctx = &*CONTEXT;
-    let ctx = ctx.lock();
-    spawn(
-        lua,
-        &*ctx,
-        Side::Blue,
-        GroupKind::Vehicle,
-        &SpawnLoc::AtTrigger("TEST_TZ".into()),
-        "TMPL_TEST_GROUP",
-    )
+    println!("scheduling print");
+    let timer = dbg!(Timer::singleton(lua))?;
+    dbg!(timer.get_time());
+    dbg!(timer.get_abs_time());
+    dbg!(timer.get_time0());
+    dbg!(
+        timer.schedule_function(timer.get_time()? + 10., Value::Nil, move |_lua, _, time| {
+            println!("scheduled function {}", time);
+            Ok(Some(time + 10.))
+        })
+    )?;
+    Ok(())
 }
 
 fn init_miz(lua: &Lua, _: ()) -> LuaResult<()> {

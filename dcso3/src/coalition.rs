@@ -54,34 +54,34 @@ impl<'lua> Coalition<'lua> {
         category: GroupCategory,
         data: env::miz::Group,
     ) -> LuaResult<()> {
-        self.t.call_method("addGroup", (country, category, data))
+        self.t.call_function("addGroup", (country, category, data))
     }
 
     pub fn add_static_object(&self, country: Country, data: env::miz::Group) -> LuaResult<()> {
-        self.t.call_method("addStaticObject", (country, data))
+        self.t.call_function("addStaticObject", (country, data))
     }
 
     pub fn get_groups(&self, side: Side) -> LuaResult<Sequence<Group>> {
-        self.t.call_method("getGroups", side)
+        self.t.call_function("getGroups", side)
     }
 
     pub fn get_static_objects(&self, side: Side) -> LuaResult<Sequence<StaticObject>> {
-        self.t.call_method("getStaticObjects", side)
+        self.t.call_function("getStaticObjects", side)
     }
 
     pub fn get_airbases(&self, side: Side) -> LuaResult<Sequence<Airbase>> {
-        self.t.call_method("getAirbases", side)
+        self.t.call_function("getAirbases", side)
     }
 
     pub fn get_players(&self, side: Side) -> LuaResult<Sequence<Unit>> {
-        self.t.call_method("getPlayers", side)
+        self.t.call_function("getPlayers", side)
     }
 
     pub fn get_service_providers(&self, side: Side, service: Service) -> LuaResult<Sequence<Unit>> {
-        self.t.call_method("getServiceProviders", (side, service))
+        self.t.call_function("getServiceProviders", (side, service))
     }
 
     pub fn get_country_coalition(&self, country: Country) -> LuaResult<Side> {
-        self.t.call_method("getCountrySide", country)
+        self.t.call_function("getCountrySide", country)
     }
 }

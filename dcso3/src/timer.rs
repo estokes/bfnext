@@ -29,15 +29,15 @@ impl<'lua> Timer<'lua> {
     }
 
     pub fn get_time(&self) -> LuaResult<f64> {
-        self.t.call_method("getTime", ())
+        self.t.call_function("getTime", ())
     }
 
     pub fn get_abs_time(&self) -> LuaResult<u32> {
-        self.t.call_method("getAbsTime", ())
+        self.t.call_function("getAbsTime", ())
     }
 
     pub fn get_time0(&self) -> LuaResult<u32> {
-        self.t.call_method("getTime0", ())
+        self.t.call_function("getTime0", ())
     }
 
     pub fn schedule_function<T, F>(&self, when: f64, arg: T, f: F) -> LuaResult<FunId>
@@ -54,14 +54,14 @@ impl<'lua> Timer<'lua> {
                     Ok(None)
                 }
             })?;
-        self.t.call_method("scheduleFunction", (f, arg, when))
+        self.t.call_function("scheduleFunction", (f, arg, when))
     }
 
     pub fn remove_function(&self, id: FunId) -> LuaResult<()> {
-        self.t.call_method("removeFunction", id)
+        self.t.call_function("removeFunction", id)
     }
 
     pub fn set_function_fime(&self, id: FunId, when: f64) -> LuaResult<()> {
-        self.t.call_method("removeFunction", (id, when))
+        self.t.call_function("removeFunction", (id, when))
     }
 }

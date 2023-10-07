@@ -1,6 +1,6 @@
 use crate::{
-    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, DcsTableExt,
-    Path, Sequence, String, Vec2,
+    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, DcsTableExt, Path,
+    Sequence, String, LuaVec2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -10,10 +10,10 @@ use std::{collections::hash_map::Entry, ops::Deref};
 wrapped_table!(Weather, None);
 
 pub struct Quad {
-    pub p0: Vec2,
-    pub p1: Vec2,
-    pub p2: Vec2,
-    pub p3: Vec2,
+    pub p0: LuaVec2,
+    pub p1: LuaVec2,
+    pub p2: LuaVec2,
+    pub p3: LuaVec2,
 }
 
 impl<'lua> FromLua<'lua> for Quad {
@@ -71,11 +71,11 @@ impl<'lua> TriggerZone<'lua> {
         self.raw_get("name")
     }
 
-    pub fn pos(&self) -> LuaResult<Vec2> {
-        Ok(Vec2 {
-            x: self.raw_get("x")?,
-            y: self.raw_get("y")?,
-        })
+    pub fn pos(&self) -> LuaResult<na::base::Vector2<f64>> {
+        Ok(na::base::Vector2::new(
+            self.raw_get("x")?,
+            self.raw_get("y")?,
+        ))
     }
 
     pub fn typ(&self) -> LuaResult<TriggerZoneTyp> {
@@ -118,14 +118,14 @@ impl<'lua> Unit<'lua> {
         self.raw_set("name", name)
     }
 
-    pub fn pos(&self) -> LuaResult<Vec2> {
-        Ok(Vec2 {
-            x: self.raw_get("x")?,
-            y: self.raw_get("y")?
-        })
+    pub fn pos(&self) -> LuaResult<na::base::Vector2<f64>> {
+        Ok(na::base::Vector2::new(
+            self.raw_get("x")?,
+            self.raw_get("y")?,
+        ))
     }
 
-    pub fn set_pos(&self, pos: Vec2) -> LuaResult<()> {
+    pub fn set_pos(&self, pos: na::base::Vector2<f64>) -> LuaResult<()> {
         self.raw_set("x", pos.x)?;
         self.raw_set("y", pos.y)
     }
@@ -142,14 +142,14 @@ impl<'lua> Group<'lua> {
         self.raw_set("name", name)
     }
 
-    pub fn pos(&self) -> LuaResult<Vec2> {
-        Ok(Vec2 {
-            x: self.t.raw_get("x")?,
-            y: self.t.raw_get("y")?,
-        })
+    pub fn pos(&self) -> LuaResult<na::base::Vector2<f64>> {
+        Ok(na::base::Vector2::new(
+            self.t.raw_get("x")?,
+            self.t.raw_get("y")?,
+        ))
     }
 
-    pub fn set_pos(&self, pos: Vec2) -> LuaResult<()> {
+    pub fn set_pos(&self, pos: na::base::Vector2<f64>) -> LuaResult<()> {
         self.t.raw_set("x", pos.x)?;
         self.t.raw_set("y", pos.y)
     }
@@ -236,7 +236,7 @@ impl<'lua> Country<'lua> {
 wrapped_table!(Coalition, None);
 
 impl<'lua> Coalition<'lua> {
-    pub fn bullseye(&self) -> LuaResult<Vec2> {
+    pub fn bullseye(&self) -> LuaResult<LuaVec2> {
         self.t.raw_get("bullseye")
     }
 

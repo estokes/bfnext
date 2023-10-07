@@ -1,4 +1,4 @@
-use super::{as_tbl, cvt_err, unit::Unit, weapon::Weapon, Position3, String, Vec3};
+use super::{as_tbl, cvt_err, unit::Unit, weapon::Weapon, Position3, String, LuaVec3};
 use crate::{simple_enum, wrapped_table};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -33,7 +33,7 @@ impl<'lua> Object<'lua> {
         self.t.call_method("getName", ())
     }
 
-    pub fn get_point(&self) -> LuaResult<Vec3> {
+    pub fn get_point(&self) -> LuaResult<LuaVec3> {
         self.t.call_method("getPoint", ())
     }
 
@@ -41,7 +41,7 @@ impl<'lua> Object<'lua> {
         self.t.call_method("getPosition", ())
     }
 
-    pub fn get_velocity(&self) -> LuaResult<Vec3> {
+    pub fn get_velocity(&self) -> LuaResult<LuaVec3> {
         self.t.call_method("getPosition", ())
     }
 

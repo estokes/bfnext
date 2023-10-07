@@ -1,4 +1,4 @@
-use super::{as_tbl, coalition::Side, object::Object, warehouse::Warehouse, String, Vec3};
+use super::{as_tbl, coalition::Side, object::Object, warehouse::Warehouse, String, LuaVec3};
 use crate::wrapped_table;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -35,7 +35,7 @@ impl<'lua> Airbase<'lua> {
         Ok(as_tbl("Runways", None, self.t.call_method("getRunways", ())?)?.sequence_values())
     }
 
-    pub fn get_tech_object_pos(&self, obj: String) -> LuaResult<Vec3> {
+    pub fn get_tech_object_pos(&self, obj: String) -> LuaResult<LuaVec3> {
         self.t.call_method("getTechObjectPos", obj)
     }
 

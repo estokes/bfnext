@@ -1,3 +1,4 @@
+extern crate nalgebra as na;
 use compact_str::CompactString;
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -433,46 +434,52 @@ impl<'lua> DcsTableExt<'lua> for mlua::Table<'lua> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct Vec2 {
-    x: f64,
-    y: f64,
-}
+pub type Vector2 = na::base::Vector2<f64>;
 
-impl<'lua> FromLua<'lua> for Vec2 {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("Vec2", None, value)?;
-        Ok(Self {
-            x: tbl.raw_get("x")?,
-            y: tbl.raw_get("y")?,
-        })
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct LuaVec2(pub Vector2);
+
+impl<'lua> IntoLua<'lua> for LuaVec2 {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let tbl = lua.create_table()?;
+        tbl.set("x", self.0.x)?;
+        tbl.set("y", self.0.y)?;
+        Ok(Value::Table(tbl))
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct Vec3 {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
+impl<'lua> FromLua<'lua> for LuaVec2 {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("Vec2", None, value)?;
+        Ok(Self(Vector2::new(
+            tbl.raw_get("x")?,
+            tbl.raw_get("y")?,
+        )))
+    }
 }
 
-impl<'lua> FromLua<'lua> for Vec3 {
+pub type Vector3 = na::base::Vector3<f64>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct LuaVec3(pub na::base::Vector3<f64>);
+
+impl<'lua> FromLua<'lua> for LuaVec3 {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Vec3", None, value)?;
-        Ok(Self {
-            x: tbl.raw_get("x")?,
-            y: tbl.raw_get("y")?,
-            z: tbl.raw_get("z")?,
-        })
+        Ok(Self(Vector3::new(
+            tbl.raw_get("x")?,
+            tbl.raw_get("y")?,
+            tbl.raw_get("z")?,
+        )))
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Position3 {
-    p: Vec3,
-    x: Vec3,
-    y: Vec3,
-    z: Vec3,
+    p: LuaVec3,
+    x: LuaVec3,
+    y: LuaVec3,
+    z: LuaVec3,
 }
 
 impl<'lua> FromLua<'lua> for Position3 {
@@ -489,8 +496,8 @@ impl<'lua> FromLua<'lua> for Position3 {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Box3 {
-    pub min: Vec3,
-    pub max: Vec3,
+    pub min: LuaVec3,
+    pub max: LuaVec3,
 }
 
 impl<'lua> FromLua<'lua> for Box3 {

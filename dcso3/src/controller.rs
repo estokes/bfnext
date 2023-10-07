@@ -1,4 +1,4 @@
-use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, String, Vec3};
+use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, LuaVec3, String};
 use crate::{bitflags_enum, simple_enum, string_enum, wrapped_table, Sequence};
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
@@ -261,8 +261,8 @@ pub struct DetectedTargetInfo {
     pub last_time_seen: f64,
     pub type_known: bool,
     pub distance_known: bool,
-    pub last_position: Vec3,
-    pub last_velocity: Vec3,
+    pub last_position: LuaVec3,
+    pub last_velocity: LuaVec3,
 }
 
 impl<'lua> FromLuaMulti<'lua> for DetectedTargetInfo {

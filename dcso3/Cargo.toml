@@ -20,3 +20,4 @@ serde_derive = { workspace = true }
 compact_str = { workspace = true }
 fxhash = { workspace = true }
 enumflags2 = { workspace = true }
+nalgebra = { workspace = true }

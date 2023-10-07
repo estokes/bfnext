@@ -1,5 +1,4 @@
-use std::{sync::atomic::AtomicUsize, thread, time::Duration};
-
+extern crate nalgebra as na;
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
@@ -11,12 +10,13 @@ use dcso3::{
     timer::Timer,
     value_to_json,
     world::World,
-    wrap_unit, DeepClone, String, UserHooks, Vec2,
+    wrap_unit, DeepClone, String, UserHooks, Vector2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use std::{sync::atomic::AtomicUsize, thread, time::Duration};
 
 #[derive(Default)]
 struct Context {
@@ -35,19 +35,21 @@ impl Context {
     fn instance_template(
         &mut self,
         name: &str,
-        pos: Vec2,
+        pos: na::base::Vector2<f64>,
         group: &env::miz::Group,
     ) -> LuaResult<usize> {
         let id = self.new_instance_id();
         let group_name = String::from(format_compact!("{}{}", name, id));
         group.set("lateActivation", false)?;
         group.raw_remove("groupId")?;
+        let orig_group_pos = group.pos()?;
         group.set_pos(pos)?;
         group.set_name(group_name.clone())?;
         for (i, unit) in group.units()?.into_iter().enumerate() {
             let unit = unit?;
             unit.raw_remove("unitId")?;
-            unit.set_pos(pos)?;
+            let unit_pos_offset = orig_group_pos - unit.pos()?;
+            unit.set_pos(pos + unit_pos_offset)?;
             unit.set_name(String::from(format_compact!("{}{}{}", name, id, i)))?
         }
         self.instances.insert(id, group_name);
@@ -58,8 +60,8 @@ impl Context {
 static CONTEXT: Lazy<Mutex<Context>> = Lazy::new(|| Mutex::new(Context::default()));
 
 enum SpawnLoc {
-    AtPos(Vec2),
-    AtTrigger(String),
+    AtPos(Vector2),
+    AtTrigger { name: String, offset: Vector2 },
 }
 
 fn spawn_template<'lua>(
@@ -76,10 +78,10 @@ fn spawn_template<'lua>(
         dbg!(miz.get_group(&ctx.idx, kind, side, name))?.ok_or_else(|| err("no such group"))?;
     let loc = match location {
         SpawnLoc::AtPos(pos) => *pos,
-        SpawnLoc::AtTrigger(name) => {
+        SpawnLoc::AtTrigger { name, offset } => {
             let tz = dbg!(miz.get_trigger_zone(&ctx.idx, name.as_str()))?
                 .ok_or_else(|| err("no such trigger zone"))?;
-            tz.pos()?
+            tz.pos()? + offset
         }
     };
     ctx.instance_template(name, loc, &ifo.group)?;
@@ -172,7 +174,21 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
         &mut *ctx,
         Side::Blue,
         GroupKind::Vehicle,
-        &SpawnLoc::AtTrigger("TEST_TZ".into()),
+        &SpawnLoc::AtTrigger {
+            name: "TEST_TZ".into(),
+            offset: Vector2::new(10., 10.),
+        },
+        "TMPL_TEST_GROUP",
+    )?;
+    spawn_template(
+        lua,
+        &mut *ctx,
+        Side::Blue,
+        GroupKind::Vehicle,
+        &SpawnLoc::AtTrigger {
+            name: "TEST_TZ".into(),
+            offset: Vector2::new(-10., -10.),
+        },
         "TMPL_TEST_GROUP",
     )?;
     println!("spawned");

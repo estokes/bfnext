@@ -39,7 +39,22 @@ impl<'lua> World<'lua> {
         tbl.set(
             "onEvent",
             self.lua
-                .create_function(move |lua, (_, ev): (Value, Event)| f(lua, ev))?,
+                .create_function(move |lua, (_, ev): (Value, Value)| {
+                    dbg!(&ev);
+                    match Event::from_lua(ev, lua) {
+                        Err(e) => {
+                            println!("error translating event: {:?}", e);
+                            Ok(())
+                        }
+                        Ok(ev) => match f(lua, ev) {
+                            Ok(()) => Ok(()),
+                            Err(e) => {
+                                println!("error in event handler: {:?}", e);
+                                Ok(())
+                            }
+                        },
+                    }
+                })?,
         )?;
         self.t.call_function("addEventHandler", tbl.clone())?;
         globals.raw_set(id.key(), tbl)?;
@@ -57,10 +72,10 @@ impl<'lua> World<'lua> {
     }
 
     pub fn get_player(&self) -> LuaResult<Sequence<Unit>> {
-        self.t.call_method("getPlayer", ())
+        self.t.call_function("getPlayer", ())
     }
 
     pub fn get_airbases(&self) -> LuaResult<Sequence<Airbase>> {
-        self.t.call_method("getAirbases", ())
+        self.t.call_function("getAirbases", ())
     }
 }

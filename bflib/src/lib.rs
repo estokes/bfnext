@@ -149,7 +149,7 @@ fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
 
 fn init_miz_(lua: &Lua) -> LuaResult<()> {
     println!("adding event handler");
-    //World::get(lua)?.add_event_handler(on_event)?;
+    World::get(lua)?.add_event_handler(on_event)?;
     println!("scheduling print");
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 10., Value::Nil, move |_lua, _, time| {

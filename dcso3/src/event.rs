@@ -87,6 +87,27 @@ impl<'lua> FromLua<'lua> for UnitEvent<'lua> {
     }
 }
 
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Birth<'lua> {
+    pub time: Time,
+    pub initiator: Object<'lua>,
+    pub place: Option<Object<'lua>>,
+    pub subplace: Option<u32>,
+}
+
+impl<'lua> FromLua<'lua> for Birth<'lua> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("AtPlace", None, value)?;
+        Ok(Self {
+            time: tbl.raw_get("time")?,
+            initiator: tbl.raw_get("initiator")?,
+            place: tbl.raw_get("place")?,
+            subplace: tbl.raw_get("subPlace")?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AtPlace<'lua> {
     pub time: Time,
@@ -125,7 +146,7 @@ pub enum Event<'lua> {
     MissionEnd,
     TookControl,
     RefuelingStop,
-    Birth(AtPlace<'lua>),
+    Birth(Birth<'lua>),
     HumanFailure,
     DetailedFailure,
     EngineStartup(AtPlace<'lua>),
@@ -183,7 +204,7 @@ impl<'lua> FromLua<'lua> for Event<'lua> {
             12 => Event::MissionEnd,
             13 => Event::TookControl,
             14 => Event::RefuelingStop,
-            15 => Event::Birth(AtPlace::from_lua(value, lua)?),
+            15 => Event::Birth(Birth::from_lua(value, lua)?),
             16 => Event::HumanFailure,
             17 => Event::DetailedFailure,
             18 => Event::EngineStartup(AtPlace::from_lua(value, lua)?),

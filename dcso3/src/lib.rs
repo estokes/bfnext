@@ -20,11 +20,11 @@ pub mod event;
 pub mod group;
 pub mod object;
 pub mod static_object;
+pub mod timer;
 pub mod unit;
 pub mod warehouse;
 pub mod weapon;
 pub mod world;
-pub mod timer;
 
 #[macro_export]
 macro_rules! wrapped_table {
@@ -985,7 +985,7 @@ impl<'lua> UserHooks<'lua> {
             Some(self.lua.create_function(move |lua, (id, side, slot)| {
                 wrap_bool("on_player_try_change_slot", f(lua, id, side, slot))
             })?);
-        Ok(dbg!(self))
+        Ok(self)
     }
 }
 

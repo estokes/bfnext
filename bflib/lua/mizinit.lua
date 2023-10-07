@@ -1,3 +1,107 @@
 package.cpath = package.cpath .. ";" .. lfs.writedir() .. "\\Scripts\\?.dll"
 local bflib = require("bflib")
 bflib.initMiz()
+
+-- local group = {
+--     ["groupId"] = 3,
+--     ["hidden"] = false,
+--     ["lateActivation"] = false,
+--     ["name"] = "TMPL_TEST_GROUP1",
+--     ["route"] = {
+--     ["points"] = {
+--         [1] = {
+--         ["ETA"] = 0,
+--         ["ETA_locked"] = true,
+--         ["action"] = "Off Road",
+--         ["alt"] = 10,
+--         ["alt_type"] = "BARO",
+--         ["formation_template"] = "",
+--         ["speed"] = 0,
+--         ["speed_locked"] = true,
+--         ["task"] = {
+--             ["id"] = "ComboTask",
+--             ["params"] = {
+--             ["tasks"] = {
+--                 [1] = {
+--                 ["auto"] = true,
+--                 ["enabled"] = true,
+--                 ["id"] = "WrappedAction",
+--                 ["number"] = 1,
+--                 ["params"] = {
+--                     ["action"] = {
+--                     ["id"] = "EPLRS",
+--                     ["params"] = {
+--                         ["groupId"] = 1,
+--                         ["value"] = true,
+--                     },
+--                     },
+--                 },
+--                 },
+--             },
+--             },
+--         },
+--         ["type"] = "Turning Point",
+--         ["x"] = -356443.03552541,
+--         ["y"] = 617931.47133805,
+--         },
+--     },
+--     ["routeRelativeTOT"] = false,
+--     ["spans"] = {
+--         [1] = {
+--         [1] = {
+--             ["x"] = -356444.74132467,
+--             ["y"] = 617925.40963281,
+--         },
+--         [2] = {
+--             ["x"] = -356444.74132467,
+--             ["y"] = 617925.40963281,
+--         },
+--         },
+--     },
+--     },
+--     ["start_time"] = 0,
+--     ["task"] = "Ground Nothing",
+--     ["taskSelected"] = true,
+--     ["tasks"] = {},
+--     ["uncontrollable"] = false,
+--     ["units"] = {
+--     [1] = {
+--         ["coldAtStart"] = false,
+--         ["heading"] = 0,
+--         ["name"] = "TMPL_TEST_GROUP10",
+--         ["playerCanDrive"] = true,
+--         ["skill"] = "Average",
+--         ["type"] = "M-1 Abrams",
+--         ["unitId"] = 9,
+--         ["x"] = -356443.03552541,
+--         ["y"] = 617931.47133805,
+--     },
+--     [2] = {
+--         ["coldAtStart"] = false,
+--         ["heading"] = 0,
+--         ["name"] = "TMPL_TEST_GROUP11",
+--         ["playerCanDrive"] = true,
+--         ["skill"] = "Average",
+--         ["type"] = "M-2 Bradley",
+--         ["unitId"] = 10,
+--         ["x"] = -356442.61920352,
+--         ["y"] = 617907.87506357,
+--     },
+--     [3] = {
+--         ["coldAtStart"] = false,
+--         ["heading"] = 0,
+--         ["name"] = "TMPL_TEST_GROUP12",
+--         ["playerCanDrive"] = true,
+--         ["skill"] = "Average",
+--         ["type"] = "M-2 Bradley",
+--         ["unitId"] = 8,
+--         ["x"] = -356441.74604803,
+--         ["y"] = 617952.10297611,
+--     },
+--     },
+--     ["visible"] = false,
+--     ["x"] = -356443.03552541,
+--     ["y"] = 617931.47133805,
+-- }
+
+-- coalition.addGroup(2, 1, group)

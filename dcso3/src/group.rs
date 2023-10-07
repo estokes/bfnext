@@ -6,8 +6,8 @@ use std::ops::Deref;
 
 simple_enum!(GroupCategory, u8, [
     Airplane => 0,
-    Ground => 1,
-    Helicopter => 2,
+    Helicopter => 1,
+    Ground => 2,
     Ship => 3,
     Train => 4
 ]);

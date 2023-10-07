@@ -1,5 +1,5 @@
 use crate::{
-    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, DcsTableExt, DeepClone,
+    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, DcsTableExt,
     Path, Sequence, String, Vec2,
 };
 use fxhash::FxHashMap;
@@ -108,6 +108,16 @@ impl<'lua> Route<'lua> {
 }
 
 wrapped_table!(Unit, None);
+
+impl<'lua> Unit<'lua> {
+    pub fn name(&self) -> LuaResult<String> {
+        self.raw_get("name")
+    }
+
+    pub fn set_name(&self, name: String) -> LuaResult<()> {
+        self.raw_set("name", name)
+    }
+}
 
 wrapped_table!(Group, None);
 
@@ -361,12 +371,10 @@ impl<'lua> Miz<'lua> {
             })
             .map(|ifo| {
                 dbg!(ifo);
-                self.raw_get_path(&ifo.path).and_then(|group: Group| {
-                    Ok(GroupInfo {
-                        country: ifo.country,
-                        category: ifo.category,
-                        group: group.deep_clone(self.lua)?,
-                    })
+                self.raw_get_path(&ifo.path).map(|group| GroupInfo {
+                    country: ifo.country,
+                    category: ifo.category,
+                    group,
                 })
             })
             .transpose()
@@ -375,10 +383,7 @@ impl<'lua> Miz<'lua> {
     pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> LuaResult<Option<TriggerZone>> {
         idx.triggers
             .get(name)
-            .map(|path| {
-                self.raw_get_path(path)
-                    .and_then(|tz: TriggerZone| tz.deep_clone(self.lua))
-            })
+            .map(|path| self.raw_get_path(path))
             .transpose()
     }
 

@@ -40,7 +40,6 @@ impl<'lua> World<'lua> {
             "onEvent",
             self.lua
                 .create_function(move |lua, (_, ev): (Value, Value)| {
-                    dbg!(&ev);
                     match Event::from_lua(ev, lua) {
                         Err(e) => {
                             println!("error translating event: {:?}", e);

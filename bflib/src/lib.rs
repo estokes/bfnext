@@ -11,7 +11,7 @@ use dcso3::{
     timer::Timer,
     value_to_json,
     world::World,
-    wrap_unit, String, UserHooks, Vec2, DeepClone,
+    wrap_unit, DeepClone, String, UserHooks, Vec2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -32,13 +32,22 @@ impl Context {
         iid
     }
 
-    fn instance_template(&mut self, name: &str, group: &env::miz::Group) -> LuaResult<usize> {
+    fn instance_template(
+        &mut self,
+        name: &str,
+        pos: Vec2,
+        group: &env::miz::Group,
+    ) -> LuaResult<usize> {
         let id = self.new_instance_id();
         let group_name = String::from(format_compact!("{}{}", name, id));
         group.set("lateActivation", false)?;
+        group.raw_remove("groupId")?;
+        group.set_pos(pos)?;
         group.set_name(group_name.clone())?;
         for (i, unit) in group.units()?.into_iter().enumerate() {
             let unit = unit?;
+            unit.raw_remove("unitId")?;
+            unit.set_pos(pos)?;
             unit.set_name(String::from(format_compact!("{}{}{}", name, id, i)))?
         }
         self.instances.insert(id, group_name);
@@ -65,7 +74,6 @@ fn spawn_template<'lua>(
     let miz = dbg!(env::miz::Miz::singleton(lua))?;
     let ifo =
         dbg!(miz.get_group(&ctx.idx, kind, side, name))?.ok_or_else(|| err("no such group"))?;
-    ctx.instance_template(name, &ifo.group)?;
     let loc = match location {
         SpawnLoc::AtPos(pos) => *pos,
         SpawnLoc::AtTrigger(name) => {
@@ -74,7 +82,7 @@ fn spawn_template<'lua>(
             tz.pos()?
         }
     };
-    ifo.group.set_pos(loc)?;
+    ctx.instance_template(name, loc, &ifo.group)?;
     match GroupCategory::from_kind(ifo.category) {
         None => dbg!(coalition.add_static_object(ifo.country, ifo.group)),
         Some(category) => dbg!(coalition.add_group(ifo.country, category, ifo.group)),

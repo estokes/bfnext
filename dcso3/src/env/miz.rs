@@ -117,6 +117,18 @@ impl<'lua> Unit<'lua> {
     pub fn set_name(&self, name: String) -> LuaResult<()> {
         self.raw_set("name", name)
     }
+
+    pub fn pos(&self) -> LuaResult<Vec2> {
+        Ok(Vec2 {
+            x: self.raw_get("x")?,
+            y: self.raw_get("y")?
+        })
+    }
+
+    pub fn set_pos(&self, pos: Vec2) -> LuaResult<()> {
+        self.raw_set("x", pos.x)?;
+        self.raw_set("y", pos.y)
+    }
 }
 
 wrapped_table!(Group, None);
@@ -243,14 +255,14 @@ impl<'lua> Coalition<'lua> {
     fn index(&self, base: Path) -> LuaResult<CoalitionIndex> {
         let base = base.append(["country"]);
         let mut idx = CoalitionIndex::default();
-        for (i, country) in dbg!(self.countries())?.into_iter().enumerate() {
-            let country = dbg!(country)?;
+        for (i, country) in self.countries()?.into_iter().enumerate() {
+            let country = country?;
             let cid = country.id()?;
             let base = base.append([i + 1]);
             macro_rules! index_group {
                 ($name:literal, $cat:expr, $tbl:ident) => {
-                    for (i, group) in dbg!(country.$tbl())?.into_iter().enumerate() {
-                        let group = dbg!(group)?;
+                    for (i, group) in country.$tbl()?.into_iter().enumerate() {
+                        let group = group?;
                         let base = base.append([$name, "group"]).append([i + 1]);
                         match idx.$tbl.entry(group.name()?) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
@@ -344,8 +356,8 @@ impl<'lua> Miz<'lua> {
     }
 
     pub fn triggers(&self) -> LuaResult<Sequence<TriggerZone>> {
-        let triggers: mlua::Table = dbg!(self.t.raw_get("triggers"))?;
-        dbg!(triggers.raw_get("zones"))
+        let triggers: mlua::Table = self.t.raw_get("triggers")?;
+        triggers.raw_get("zones")
     }
 
     pub fn weather(&self) -> LuaResult<Weather<'lua>> {
@@ -370,7 +382,6 @@ impl<'lua> Miz<'lua> {
                 GroupKind::Static => cidx.statics.get(name),
             })
             .map(|ifo| {
-                dbg!(ifo);
                 self.raw_get_path(&ifo.path).map(|group| GroupInfo {
                     country: ifo.country,
                     category: ifo.category,
@@ -394,9 +405,9 @@ impl<'lua> Miz<'lua> {
             let base = base.append(["triggers", "zones"]);
             println!("indexing triggers");
             for (i, tz) in self.triggers()?.into_iter().enumerate() {
-                let tz = dbg!(tz)?;
+                let tz = tz?;
                 let base = base.append([i + 1]);
-                match idx.triggers.entry(dbg!(tz.name())?) {
+                match idx.triggers.entry(tz.name()?) {
                     Entry::Vacant(e) => {
                         e.insert(base);
                     }
@@ -408,7 +419,7 @@ impl<'lua> Miz<'lua> {
             let base = base.append(["coalition", side.to_str()]);
             idx.by_side
                 .entry(side)
-                .or_insert(dbg!(self.coalition(side))?.index(base)?);
+                .or_insert(self.coalition(side)?.index(base)?);
         }
         Ok(idx)
     }

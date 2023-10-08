@@ -1,4 +1,5 @@
 extern crate nalgebra as na;
+use netidx_core::atomic_id;
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
@@ -17,6 +18,13 @@ use mlua::{prelude::*, Value};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use std::{sync::atomic::AtomicUsize, thread, time::Duration};
+use serde_derive::{Serialize, Deserialize};
+
+atomic_id!(InstanceId);
+
+struct SpawnedUnit {
+    name: String,
+}
 
 #[derive(Default)]
 struct Context {

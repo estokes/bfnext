@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 use compact_str::CompactString;
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::{
     borrow::Borrow,
     collections::hash_map::Entry,
@@ -451,10 +451,7 @@ impl<'lua> IntoLua<'lua> for LuaVec2 {
 impl<'lua> FromLua<'lua> for LuaVec2 {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Vec2", None, value)?;
-        Ok(Self(Vector2::new(
-            tbl.raw_get("x")?,
-            tbl.raw_get("y")?,
-        )))
+        Ok(Self(Vector2::new(tbl.raw_get("x")?, tbl.raw_get("y")?)))
     }
 }
 
@@ -510,8 +507,7 @@ impl<'lua> FromLua<'lua> for Box3 {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
-#[repr(transparent)]
+#[derive(Debug, Clone, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct String(CompactString);
 
 impl std::fmt::Display for String {

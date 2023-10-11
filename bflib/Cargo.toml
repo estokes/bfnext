@@ -23,4 +23,4 @@ enumflags2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
 nalgebra = { workspace = true }
-sled = { workspace = true }
+immutable-chunkmap = { workspace = true }

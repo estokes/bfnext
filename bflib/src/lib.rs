@@ -1,52 +1,40 @@
+mod db;
 extern crate nalgebra as na;
-use netidx_core::atomic_id;
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
-    country::Country,
     env::{self, miz::GroupKind},
     err,
     event::Event,
-    group::{Group, GroupCategory},
+    group::GroupCategory,
     timer::Timer,
-    value_to_json,
     world::World,
-    wrap_unit, DeepClone, String, UserHooks, Vector2,
+    wrap_unit, String, UserHooks, Vector2,
 };
 use fxhash::FxHashMap;
+use immutable_chunkmap::map::MapM as Map;
 use mlua::{prelude::*, Value};
+use netidx_core::atomic_id;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use std::{sync::atomic::AtomicUsize, thread, time::Duration};
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
+use db::{Db, UnitId, SpawnedGroup, SpawnedUnit, GroupId};
 
-atomic_id!(InstanceId);
-
-struct SpawnedUnit {
-    name: String,
-}
-
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct Context {
-    instance_id: usize,
     idx: env::miz::MizIndex,
-    instances: FxHashMap<usize, String>,
+    db: Db,
+    units_by_obj_id: FxHashMap<i64, UnitId>,
 }
 
 impl Context {
-    fn new_instance_id(&mut self) -> usize {
-        let iid = self.instance_id;
-        self.instance_id += 1;
-        iid
-    }
-
     fn instance_template(
         &mut self,
         name: &str,
         pos: na::base::Vector2<f64>,
         group: &env::miz::Group,
     ) -> LuaResult<usize> {
-        let id = self.new_instance_id();
+        let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}{}", name, id));
         group.set("lateActivation", false)?;
         group.raw_remove("groupId")?;

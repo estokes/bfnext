@@ -66,7 +66,7 @@ macro_rules! wrapped_table {
 #[macro_export]
 macro_rules! simple_enum {
     ($name:ident, $repr:ident, [$($case:ident => $num:literal),+]) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
         #[allow(non_camel_case_types)]
         #[repr($repr)]
         pub enum $name {
@@ -94,7 +94,7 @@ macro_rules! simple_enum {
 macro_rules! bitflags_enum {
     ($name:ident, $repr:ident, [$($case:ident => $num:literal),+]) => {
         #[bitflags]
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
         #[allow(non_camel_case_types)]
         #[repr($repr)]
         pub enum $name {

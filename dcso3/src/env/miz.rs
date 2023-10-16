@@ -4,7 +4,7 @@ use crate::{
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::{collections::hash_map::Entry, ops::Deref};
 
 wrapped_table!(Weather, None);
@@ -320,7 +320,7 @@ pub struct MizIndex {
     triggers: FxHashMap<String, Path>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum GroupKind {
     Any,
     Plane,

@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{simple_enum, wrapped_table, Sequence};
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::{ops::Deref, str::FromStr};
 
 simple_enum!(Side, u8, [Neutral => 0, Red => 1, Blue => 2]);

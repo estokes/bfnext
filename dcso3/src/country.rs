@@ -1,6 +1,6 @@
 use crate::{cvt_err, simple_enum};
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 
 simple_enum!(Country, u8, [
     ABKHAZIA => 18,

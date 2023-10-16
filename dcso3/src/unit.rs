@@ -1,7 +1,7 @@
 use super::{as_tbl, controller::Controller, cvt_err, group::Group, object::Object, String};
 use crate::{simple_enum, wrapped_table};
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
 
 simple_enum!(UnitCategory, u8, [

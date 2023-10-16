@@ -1,7 +1,7 @@
 use crate::{simple_enum, wrapped_table, Sequence, env::miz::GroupKind};
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
 
 simple_enum!(GroupCategory, u8, [

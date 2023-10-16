@@ -87,7 +87,6 @@ impl<'lua> FromLua<'lua> for UnitEvent<'lua> {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize)]
 pub struct Birth<'lua> {
     pub time: Time,

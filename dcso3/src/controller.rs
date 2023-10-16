@@ -2,7 +2,7 @@ use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, LuaVec3, Str
 use crate::{bitflags_enum, simple_enum, string_enum, wrapped_table, Sequence};
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
 
 wrapped_table!(Task, None);

@@ -1,6 +1,7 @@
 mod db;
 extern crate nalgebra as na;
 use compact_str::format_compact;
+use db::{Db, GroupId, SpawnedGroup, SpawnedUnit, UnitId};
 use dcso3::{
     coalition::{Coalition, Side},
     env::{self, miz::GroupKind},
@@ -12,13 +13,9 @@ use dcso3::{
     wrap_unit, String, UserHooks, Vector2,
 };
 use fxhash::FxHashMap;
-use immutable_chunkmap::map::MapM as Map;
 use mlua::{prelude::*, Value};
-use netidx_core::atomic_id;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use serde_derive::{Deserialize, Serialize};
-use db::{Db, UnitId, SpawnedGroup, SpawnedUnit, GroupId};
 
 #[derive(Debug, Default)]
 struct Context {
@@ -28,29 +25,6 @@ struct Context {
 }
 
 impl Context {
-    fn instance_template(
-        &mut self,
-        name: &str,
-        pos: na::base::Vector2<f64>,
-        group: &env::miz::Group,
-    ) -> LuaResult<usize> {
-        let gid = GroupId::new();
-        let group_name = String::from(format_compact!("{}{}", name, id));
-        group.set("lateActivation", false)?;
-        group.raw_remove("groupId")?;
-        let orig_group_pos = group.pos()?;
-        group.set_pos(pos)?;
-        group.set_name(group_name.clone())?;
-        for (i, unit) in group.units()?.into_iter().enumerate() {
-            let unit = unit?;
-            unit.raw_remove("unitId")?;
-            let unit_pos_offset = orig_group_pos - unit.pos()?;
-            unit.set_pos(pos + unit_pos_offset)?;
-            unit.set_name(String::from(format_compact!("{}{}{}", name, id, i)))?
-        }
-        self.instances.insert(id, group_name);
-        Ok(id)
-    }
 }
 
 static CONTEXT: Lazy<Mutex<Context>> = Lazy::new(|| Mutex::new(Context::default()));

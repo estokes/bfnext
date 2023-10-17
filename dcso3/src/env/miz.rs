@@ -398,6 +398,10 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
+    pub fn sortie(&self) -> LuaResult<String> {
+        self.raw_get("sortie")
+    }
+
     pub fn index(&self) -> LuaResult<MizIndex> {
         let base = Path::default();
         let mut idx = MizIndex::default();

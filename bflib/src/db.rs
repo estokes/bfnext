@@ -54,14 +54,14 @@ pub enum SpawnLoc {
     AtTrigger { name: String, offset: Vector2 },
 }
 
-struct SpawnCtx<'lua> {
+pub struct SpawnCtx<'lua> {
     coalition: Coalition<'lua>,
     miz: Miz<'lua>,
     lua: &'lua Lua,
 }
 
 impl<'lua> SpawnCtx<'lua> {
-    fn new(lua: &'lua Lua) -> LuaResult<Self> {
+    pub fn new(lua: &'lua Lua) -> LuaResult<Self> {
         Ok(Self {
             coalition: Coalition::singleton(lua)?,
             miz: Miz::singleton(lua)?,
@@ -105,6 +105,8 @@ impl<'lua> SpawnCtx<'lua> {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Db {
+    #[serde(skip)]
+    dirty: bool,
     groups_by_id: Map<GroupId, SpawnedGroup>,
     groups_by_name: Map<String, GroupId>,
     groups_by_unit_id: Map<UnitId, GroupId>,
@@ -113,7 +115,11 @@ pub struct Db {
 }
 
 impl Db {
-    fn respawn_group<'lua>(
+    pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
+        self.groups_by_id.into_iter()
+    }
+
+    pub fn respawn_group<'lua>(
         &self,
         idx: &MizIndex,
         spctx: &SpawnCtx,
@@ -166,6 +172,7 @@ impl Db {
         location: &SpawnLoc,
         template_name: &str,
     ) -> LuaResult<GroupId> {
+        let mut t = self.clone();
         let spctx = SpawnCtx::new(lua)?;
         let template_name = String::from(template_name);
         let template = spctx.get_template(idx, kind, side, template_name.as_str())?;
@@ -207,12 +214,14 @@ impl Db {
                 born: false,
             };
             spawned.units.insert_cow(uid, spawned_unit);
-            self.groups_by_unit_id.insert_cow(uid, gid);
-            self.groups_by_unit_name.insert_cow(unit_name, gid);
+            t.groups_by_unit_id.insert_cow(uid, gid);
+            t.groups_by_unit_name.insert_cow(unit_name, gid);
         }
-        self.groups_by_id.insert_cow(gid, spawned);
-        self.groups_by_name.insert_cow(group_name, gid);
+        t.groups_by_id.insert_cow(gid, spawned);
+        t.groups_by_name.insert_cow(group_name, gid);
         spctx.spawn(template)?;
+        *self = t;
+        self.dirty = true;
         Ok(gid)
     }
 }

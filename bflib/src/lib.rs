@@ -4,7 +4,7 @@ use compact_str::format_compact;
 use db::{Db, GroupId, SpawnLoc, SpawnedGroup, SpawnedUnit, UnitId};
 use dcso3::{
     coalition::{Coalition, Side},
-    env::{self, miz::GroupKind},
+    env::{self, miz::{GroupKind, Miz}},
     err,
     event::Event,
     group::GroupCategory,
@@ -16,12 +16,35 @@ use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use std::{path::Path, fs::File};
 
 #[derive(Debug, Default)]
 struct Context {
     idx: env::miz::MizIndex,
     db: Db,
     units_by_obj_id: FxHashMap<i64, UnitId>,
+}
+
+impl Context {
+    fn spawn_template_as_new(
+        &mut self,
+        lua: &Lua,
+        side: Side,
+        kind: GroupKind,
+        location: &SpawnLoc,
+        template_name: &str,
+    ) -> LuaResult<GroupId> {
+        self.db
+            .spawn_template_as_new(lua, &self.idx, side, kind, location, template_name)
+    }
+
+    fn respawn_groups(&mut self, lua: &Lua) -> LuaResult<()> {
+        let spctx = db::SpawnCtx::new(lua)?;
+        for (_, group) in self.db.groups() {
+            self.db.respawn_group(&self.idx, &spctx, group)?
+        }
+        Ok(())
+    }
 }
 
 static CONTEXT: Lazy<Mutex<Context>> = Lazy::new(|| Mutex::new(Context::default()));
@@ -92,23 +115,10 @@ fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
     wrap_unit("init_hooks", init_hooks_(lua))
 }
 
-fn init_miz_(lua: &Lua) -> LuaResult<()> {
-    println!("adding event handler");
-    World::get(lua)?.add_event_handler(on_event)?;
-    println!("scheduling print");
-    let timer = Timer::singleton(lua)?;
-    timer.schedule_function(timer.get_time()? + 10., Value::Nil, move |_lua, _, time| {
-        println!("scheduled function {}", time);
-        Ok(Some(time + 10.))
-    })?;
-    println!("spawning");
-    let ctx = &*CONTEXT;
-    let mut ctx = ctx.lock();
-    let idx = &ctx.idx;
-    let db = &mut ctx.db;
-    db.spawn_template_as_new(
+fn spawn_new(lua: &Lua) -> LuaResult<()> {
+    let mut ctx = CONTEXT.lock();
+    ctx.spawn_template_as_new(
         lua,
-        idx,
         Side::Blue,
         GroupKind::Vehicle,
         &SpawnLoc::AtTrigger {
@@ -117,9 +127,8 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
         },
         "TMPL_TEST_GROUP",
     )?;
-    db.spawn_template_as_new(
+    ctx.spawn_template_as_new(
         lua,
-        idx,
         Side::Blue,
         GroupKind::Vehicle,
         &SpawnLoc::AtTrigger {
@@ -128,6 +137,22 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
         },
         "TMPL_TEST_GROUP",
     )?;
+    Ok(())
+}
+
+fn init_miz_(lua: &Lua) -> LuaResult<()> {
+    println!("adding event handler");
+    World::get(lua)?.add_event_handler(on_event)?;
+    let sortie = Miz::singleton(lua)?.sortie()?;
+    let filename = match sortie.as_str() {
+        "" => return Err(err("missing sortie in miz file")),
+        s => s
+    };
+    if Path::from(filename).exists() {
+        let db = serde_json::from_reader(File::open(filename))
+    }
+    println!("spawning");
+    spawn_new(lua)?;
     println!("spawned");
     Ok(())
 }

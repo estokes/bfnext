@@ -26,6 +26,7 @@ pub mod unit;
 pub mod warehouse;
 pub mod weapon;
 pub mod world;
+pub mod lfs;
 
 #[macro_export]
 macro_rules! wrapped_table {

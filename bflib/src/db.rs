@@ -36,7 +36,6 @@ pub struct SpawnedUnit {
     template_name: String,
     pos: Vector2,
     dead: bool,
-    born: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,7 +210,6 @@ impl Db {
                 template_name,
                 pos,
                 dead: false,
-                born: false,
             };
             spawned.units.insert_cow(uid, spawned_unit);
             t.groups_by_unit_id.insert_cow(uid, gid);

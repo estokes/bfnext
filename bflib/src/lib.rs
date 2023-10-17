@@ -1,22 +1,24 @@
 mod db;
 extern crate nalgebra as na;
 use compact_str::format_compact;
-use db::{Db, GroupId, SpawnLoc, SpawnedGroup, SpawnedUnit, UnitId};
+use db::{Db, GroupId, SpawnLoc, UnitId};
 use dcso3::{
-    coalition::{Coalition, Side},
-    env::{self, miz::{GroupKind, Miz}},
+    coalition::Side,
+    env::{
+        self,
+        miz::{GroupKind, Miz},
+    },
     err,
     event::Event,
-    group::GroupCategory,
-    timer::Timer,
+    lfs::Lfs,
     world::World,
     wrap_unit, String, UserHooks, Vector2,
 };
 use fxhash::FxHashMap;
-use mlua::{prelude::*, Value};
+use mlua::prelude::*;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use std::{path::Path, fs::File};
+use std::{fs::File, path::PathBuf};
 
 #[derive(Debug, Default)]
 struct Context {
@@ -144,15 +146,26 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     println!("adding event handler");
     World::get(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
-    let filename = match sortie.as_str() {
+    let path = match sortie.as_str() {
         "" => return Err(err("missing sortie in miz file")),
-        s => s
+        s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
-    if Path::from(filename).exists() {
-        let db = serde_json::from_reader(File::open(filename))
-    }
     println!("spawning");
-    spawn_new(lua)?;
+    if !path.exists() {
+        spawn_new(lua)?
+    } else {
+        let file = File::open(&path).map_err(|e| {
+            println!("failed to open save file {:?}, {:?}", path, e);
+            err("io error")
+        })?;
+        let db = serde_json::from_reader(file).map_err(|e| {
+            println!("failed to decode save file {:?}, {:?}", path, e);
+            err("decode error")
+        })?;
+        let mut ctx = CONTEXT.lock();
+        ctx.db = db;
+        ctx.respawn_groups(lua)?
+    }
     println!("spawned");
     Ok(())
 }

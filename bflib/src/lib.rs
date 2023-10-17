@@ -1,4 +1,4 @@
-mod db;
+pub mod db;
 extern crate nalgebra as na;
 use compact_str::format_compact;
 use db::{Db, GroupId, SpawnLoc, UnitId};
@@ -11,6 +11,7 @@ use dcso3::{
     err,
     event::Event,
     lfs::Lfs,
+    timer::Timer,
     world::World,
     wrap_unit, String, UserHooks, Vector2,
 };
@@ -18,16 +19,46 @@ use fxhash::FxHashMap;
 use mlua::prelude::*;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use std::{fs::File, path::PathBuf};
+use std::{fs::File, path::PathBuf, sync::mpsc, thread};
+
+enum BgTask {
+    MizInit,
+    SaveState(PathBuf, Db),
+}
+
+fn background_loop(rx: mpsc::Receiver<BgTask>) {
+    while let Ok(msg) = rx.recv() {
+        match msg {
+            BgTask::MizInit => (),
+            BgTask::SaveState(path, db) => match db.save(&path) {
+                Ok(()) => (),
+                Err(e) => println!("failed to save state to {:?}, {:?}", path, e),
+            },
+        }
+    }
+}
 
 #[derive(Debug, Default)]
 struct Context {
     idx: env::miz::MizIndex,
     db: Db,
+    to_background: Option<mpsc::Sender<BgTask>>,
     units_by_obj_id: FxHashMap<i64, UnitId>,
 }
 
 impl Context {
+    fn do_background_task(&mut self, task: BgTask) {
+        if self.to_background.is_none() {
+            let (tx, rx) = mpsc::channel();
+            self.to_background = Some(tx);
+            thread::spawn(move || background_loop(rx));
+        }
+        match self.to_background.as_ref().unwrap().send(task) {
+            Ok(()) => (),
+            Err(_) => println!("background loop died"),
+        }
+    }
+
     fn spawn_template_as_new(
         &mut self,
         lua: &Lua,
@@ -83,6 +114,29 @@ fn on_player_try_change_slot(_: &Lua, id: u32, side: Side, slot: String) -> LuaR
 
 fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
     println!("onEventTranslated: {:?}", ev);
+    match ev {
+        Event::Birth(b) => {
+            if let Ok(unit) = b.initiator.as_unit() {
+                let name = unit.as_object()?.get_name()?;
+                let mut ctx = CONTEXT.lock();
+                if let Some(su) = ctx.db.get_unit_by_name(name.as_str()) {
+                    let uid = su.id;
+                    let oid: i64 = unit.get_object_id()?;
+                    ctx.units_by_obj_id.insert(oid, uid);
+                }
+            }
+        }
+        Event::Dead(e) => {
+            if let Ok(unit) = e.initiator.as_unit() {
+                let id = unit.get_object_id()?;
+                let mut ctx = CONTEXT.lock();
+                if let Some(uid) = ctx.units_by_obj_id.remove(&id) {
+                    ctx.db.unit_dead(uid, true);
+                }
+            }
+        }
+        _ => (),
+    }
     Ok(())
 }
 
@@ -90,7 +144,9 @@ fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
     println!("on_mission_load_end");
     let miz = dbg!(env::miz::Miz::singleton(lua))?;
     println!("indexing mission");
-    CONTEXT.lock().idx = miz.index()?;
+    let mut ctx = CONTEXT.lock();
+    ctx.idx = miz.index()?;
+    ctx.do_background_task(BgTask::MizInit);
     println!("indexed mission");
     Ok(())
 }
@@ -125,19 +181,19 @@ fn spawn_new(lua: &Lua) -> LuaResult<()> {
         GroupKind::Vehicle,
         &SpawnLoc::AtTrigger {
             name: "TEST_TZ".into(),
-            offset: Vector2::new(10., 10.),
+            offset: Vector2::new(100., 100.),
         },
-        "TMPL_TEST_GROUP",
+        "BLUE_TEST_GROUP",
     )?;
     ctx.spawn_template_as_new(
         lua,
-        Side::Blue,
+        Side::Red,
         GroupKind::Vehicle,
         &SpawnLoc::AtTrigger {
             name: "TEST_TZ".into(),
-            offset: Vector2::new(-10., -10.),
+            offset: Vector2::new(-100., -100.),
         },
-        "TMPL_TEST_GROUP",
+        "RED_TEST_GROUP",
     )?;
     Ok(())
 }
@@ -150,9 +206,20 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
         "" => return Err(err("missing sortie in miz file")),
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
+    let timer = Timer::singleton(lua)?;
+    timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
+        let path = path.clone();
+        move |_lua, _, now| {
+            let mut ctx = CONTEXT.lock();
+            if let Some(snap) = ctx.db.maybe_snapshot() {
+                ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
+            }
+            Ok(Some(now + 10.))
+        }
+    })?;
     println!("spawning");
     if !path.exists() {
-        spawn_new(lua)?
+        spawn_new(lua)?;
     } else {
         let file = File::open(&path).map_err(|e| {
             println!("failed to open save file {:?}, {:?}", path, e);

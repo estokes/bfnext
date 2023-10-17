@@ -25,6 +25,7 @@ once_cell = "1"
 parking_lot = "0.12"
 nalgebra = { version = "0.32", features = ["serde-serialize"] }
 immutable-chunkmap = { version = "2", features = ["serde"] }
+anyhow = "1"
 
 [workspace]
 resolver = "2"

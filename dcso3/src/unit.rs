@@ -41,7 +41,7 @@ impl<'lua> Unit<'lua> {
         self.t.call_method("getNumber", ())
     }
 
-    pub fn get_object_id(&self) -> LuaResult<u32> {
+    pub fn get_object_id(&self) -> LuaResult<i64> {
         self.t.call_method("getObjectID", ())
     }
 

@@ -7,7 +7,7 @@ use std::{
     borrow::Borrow,
     collections::hash_map::Entry,
     marker::PhantomData,
-    ops::{Deref, DerefMut, Index},
+    ops::{Deref, DerefMut},
 };
 
 use self::coalition::Side;

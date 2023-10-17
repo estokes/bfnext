@@ -12,7 +12,11 @@ use immutable_chunkmap::{map::MapM as Map, set::SetM as Set};
 use mlua::prelude::*;
 use netidx_core::atomic_id;
 use serde_derive::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    fs::{self, File},
+    path::{Path, PathBuf},
+};
 
 atomic_id!(GroupId);
 
@@ -22,7 +26,19 @@ impl Display for GroupId {
     }
 }
 
+impl Default for GroupId {
+    fn default() -> Self {
+        GroupId(0)
+    }
+}
+
 atomic_id!(UnitId);
+
+impl Default for UnitId {
+    fn default() -> Self {
+        UnitId(0)
+    }
+}
 
 impl Display for UnitId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -32,19 +48,22 @@ impl Display for UnitId {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SpawnedUnit {
-    name: String,
-    template_name: String,
-    pos: Vector2,
-    dead: bool,
+    pub name: String,
+    pub id: UnitId,
+    pub group: GroupId,
+    pub template_name: String,
+    pub pos: Vector2,
+    pub dead: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpawnedGroup {
-    name: String,
-    template_name: String,
-    side: Side,
-    kind: GroupKind,
-    units: Map<UnitId, SpawnedUnit>,
+    pub id: GroupId,
+    pub name: String,
+    pub template_name: String,
+    pub side: Side,
+    pub kind: GroupKind,
+    pub units: Set<UnitId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,15 +126,66 @@ pub struct Db {
     #[serde(skip)]
     dirty: bool,
     groups_by_id: Map<GroupId, SpawnedGroup>,
+    units_by_id: Map<UnitId, SpawnedUnit>,
     groups_by_name: Map<String, GroupId>,
-    groups_by_unit_id: Map<UnitId, GroupId>,
-    groups_by_unit_name: Map<String, GroupId>,
+    units_by_name: Map<String, UnitId>,
     groups_by_side: Map<Side, Set<GroupId>>,
 }
 
 impl Db {
+    pub fn save(&self, path: &Path) -> anyhow::Result<()> {
+        let mut tmp = PathBuf::from(path);
+        tmp.set_extension("tmp");
+        let file = File::options()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&tmp)?;
+        serde_json::to_writer(file, self)?;
+        fs::rename(tmp, path)?;
+        Ok(())
+    }
+
+    pub fn maybe_snapshot(&mut self) -> Option<Self> {
+        if self.dirty {
+            self.dirty = false;
+            Some(self.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn unit_dead(&mut self, id: UnitId, dead: bool) {
+        self.units_by_id.update_cow(id, (), |id, (), unit| {
+            unit.map(|(_, unit)| {
+                let unit = SpawnedUnit {
+                    dead,
+                    ..unit.clone()
+                };
+                (id, unit)
+            })
+        });
+        self.dirty = true;
+    }
+
     pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
         self.groups_by_id.into_iter()
+    }
+
+    pub fn get_group(&self, id: &GroupId) -> Option<&SpawnedGroup> {
+        self.groups_by_id.get(id)
+    }
+
+    pub fn get_group_by_name(&self, name: &str) -> Option<&SpawnedGroup> {
+        self.groups_by_name.get(name).and_then(|gid| self.groups_by_id.get(gid))
+    }
+
+    pub fn get_unit(&self, id: &UnitId) -> Option<&SpawnedUnit> {
+        self.units_by_id.get(id)
+    }
+
+    pub fn get_unit_by_name(&self, name: &str) -> Option<&SpawnedUnit> {
+        self.units_by_name.get(name).and_then(|uid| self.get_unit(uid))
     }
 
     pub fn respawn_group<'lua>(
@@ -131,12 +201,14 @@ impl Db {
         let by_tname: FxHashMap<&str, &SpawnedUnit> = group
             .units
             .into_iter()
-            .filter_map(|(_, u)| {
-                if u.dead {
-                    None
-                } else {
-                    Some((u.template_name.as_str(), u))
-                }
+            .filter_map(|uid| {
+                self.units_by_id.get(uid).and_then(|u| {
+                    if u.dead {
+                        None
+                    } else {
+                        Some((u.template_name.as_str(), u))
+                    }
+                })
             })
             .collect();
         let alive = {
@@ -189,11 +261,12 @@ impl Db {
         template.group.set_pos(pos)?;
         template.group.set_name(group_name.clone())?;
         let mut spawned = SpawnedGroup {
+            id: gid,
             name: group_name.clone(),
             template_name: template_name.clone(),
             side,
             kind,
-            units: Map::new(),
+            units: Set::new(),
         };
         for unit in template.group.units()? {
             let uid = UnitId::new();
@@ -206,14 +279,16 @@ impl Db {
             unit.set_pos(pos)?;
             unit.set_name(unit_name.clone())?;
             let spawned_unit = SpawnedUnit {
+                id: uid,
+                group: gid,
                 name: unit_name.clone(),
                 template_name,
                 pos,
                 dead: false,
             };
-            spawned.units.insert_cow(uid, spawned_unit);
-            t.groups_by_unit_id.insert_cow(uid, gid);
-            t.groups_by_unit_name.insert_cow(unit_name, gid);
+            spawned.units.insert_cow(uid);
+            t.units_by_id.insert_cow(uid, spawned_unit);
+            t.units_by_name.insert_cow(unit_name, uid);
         }
         t.groups_by_id.insert_cow(gid, spawned);
         t.groups_by_name.insert_cow(group_name, gid);

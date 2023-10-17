@@ -2,23 +2,17 @@ extern crate nalgebra as na;
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
-    country::Country,
-    env::{
-        self,
-        miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
-    },
+    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
     err,
     group::GroupCategory,
     DeepClone, String, Vector2,
 };
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use immutable_chunkmap::{map::MapM as Map, set::SetM as Set};
 use mlua::prelude::*;
 use netidx_core::atomic_id;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::Display;
-
-use crate::SpawnLoc;
 
 atomic_id!(GroupId);
 
@@ -52,6 +46,12 @@ pub struct SpawnedGroup {
     side: Side,
     kind: GroupKind,
     units: Map<UnitId, SpawnedUnit>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SpawnLoc {
+    AtPos(Vector2),
+    AtTrigger { name: String, offset: Vector2 },
 }
 
 struct SpawnCtx<'lua> {
@@ -91,7 +91,7 @@ impl<'lua> SpawnCtx<'lua> {
             .ok_or_else(|| err("no such trigger zone"))?)
     }
 
-    fn spawn(&self, template: &GroupInfo) -> LuaResult<()> {
+    fn spawn(&self, template: GroupInfo) -> LuaResult<()> {
         match GroupCategory::from_kind(template.category) {
             None => self
                 .coalition
@@ -115,7 +115,6 @@ pub struct Db {
 impl Db {
     fn respawn_group<'lua>(
         &self,
-        lua: &'lua Lua,
         idx: &MizIndex,
         spctx: &SpawnCtx,
         group: &SpawnedGroup,
@@ -135,21 +134,24 @@ impl Db {
                 }
             })
             .collect();
-        let units = template.group.units()?;
-        let mut i = 1;
-        while i as usize <= units.len() {
-            let unit = units.get(i)?;
-            match by_tname.get(unit.name()?.as_str()) {
-                None => units.remove(i)?,
-                Some(su) => {
-                    unit.set_pos(su.pos)?;
-                    i += 1;
+        let alive = {
+            let units = template.group.units()?;
+            let mut i = 1;
+            while i as usize <= units.len() {
+                let unit = units.get(i)?;
+                match by_tname.get(unit.name()?.as_str()) {
+                    None => units.remove(i)?,
+                    Some(su) => {
+                        template.group.set_pos(su.pos)?;
+                        unit.set_pos(su.pos)?;
+                        i += 1;
+                    }
                 }
             }
-        }
-        if units.len() > 0 {
-            template.group.set_pos(units.get(1)?.pos()?)?;
-            spctx.spawn(&template)
+            units.len() > 0
+        };
+        if alive {
+            spctx.spawn(template)
         } else {
             Ok(())
         }
@@ -198,7 +200,7 @@ impl Db {
             unit.set_pos(pos)?;
             unit.set_name(unit_name.clone())?;
             let spawned_unit = SpawnedUnit {
-                name: unit_name,
+                name: unit_name.clone(),
                 template_name,
                 pos,
                 dead: false,
@@ -210,7 +212,7 @@ impl Db {
         }
         self.groups_by_id.insert_cow(gid, spawned);
         self.groups_by_name.insert_cow(group_name, gid);
-        spctx.spawn(&template)?;
+        spctx.spawn(template)?;
         Ok(gid)
     }
 }

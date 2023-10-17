@@ -1,7 +1,7 @@
 mod db;
 extern crate nalgebra as na;
 use compact_str::format_compact;
-use db::{Db, GroupId, SpawnedGroup, SpawnedUnit, UnitId};
+use db::{Db, GroupId, SpawnLoc, SpawnedGroup, SpawnedUnit, UnitId};
 use dcso3::{
     coalition::{Coalition, Side},
     env::{self, miz::GroupKind},
@@ -24,42 +24,7 @@ struct Context {
     units_by_obj_id: FxHashMap<i64, UnitId>,
 }
 
-impl Context {
-}
-
 static CONTEXT: Lazy<Mutex<Context>> = Lazy::new(|| Mutex::new(Context::default()));
-
-enum SpawnLoc {
-    AtPos(Vector2),
-    AtTrigger { name: String, offset: Vector2 },
-}
-
-fn spawn_template<'lua>(
-    lua: &'lua Lua,
-    ctx: &mut Context,
-    side: Side,
-    kind: GroupKind,
-    location: &SpawnLoc,
-    name: &str,
-) -> LuaResult<()> {
-    let coalition = dbg!(Coalition::singleton(lua))?;
-    let miz = dbg!(env::miz::Miz::singleton(lua))?;
-    let ifo =
-        dbg!(miz.get_group(&ctx.idx, kind, side, name))?.ok_or_else(|| err("no such group"))?;
-    let loc = match location {
-        SpawnLoc::AtPos(pos) => *pos,
-        SpawnLoc::AtTrigger { name, offset } => {
-            let tz = dbg!(miz.get_trigger_zone(&ctx.idx, name.as_str()))?
-                .ok_or_else(|| err("no such trigger zone"))?;
-            tz.pos()? + offset
-        }
-    };
-    ctx.instance_template(name, loc, &ifo.group)?;
-    match GroupCategory::from_kind(ifo.category) {
-        None => dbg!(coalition.add_static_object(ifo.country, ifo.group)),
-        Some(category) => dbg!(coalition.add_group(ifo.country, category, ifo.group)),
-    }
-}
 
 fn on_player_try_connect(
     _: &Lua,
@@ -139,9 +104,11 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     println!("spawning");
     let ctx = &*CONTEXT;
     let mut ctx = ctx.lock();
-    spawn_template(
+    let idx = &ctx.idx;
+    let db = &mut ctx.db;
+    db.spawn_template_as_new(
         lua,
-        &mut *ctx,
+        idx,
         Side::Blue,
         GroupKind::Vehicle,
         &SpawnLoc::AtTrigger {
@@ -150,9 +117,9 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
         },
         "TMPL_TEST_GROUP",
     )?;
-    spawn_template(
+    db.spawn_template_as_new(
         lua,
-        &mut *ctx,
+        idx,
         Side::Blue,
         GroupKind::Vehicle,
         &SpawnLoc::AtTrigger {

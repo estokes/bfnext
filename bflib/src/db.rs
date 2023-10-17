@@ -2,14 +2,16 @@ extern crate nalgebra as na;
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
+    country::Country,
     env::{
         self,
-        miz::{GroupKind, MizIndex},
+        miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
     },
     err,
     group::GroupCategory,
-    String, Vector2, country::Country, DeepClone,
+    DeepClone, String, Vector2,
 };
+use fxhash::{FxHashMap, FxHashSet};
 use immutable_chunkmap::{map::MapM as Map, set::SetM as Set};
 use mlua::prelude::*;
 use netidx_core::atomic_id;
@@ -37,17 +39,68 @@ impl Display for UnitId {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SpawnedUnit {
     name: String,
+    template_name: String,
     pos: Vector2,
     dead: bool,
+    born: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpawnedGroup {
     name: String,
     template_name: String,
-    country: Country,
+    side: Side,
     kind: GroupKind,
     units: Map<UnitId, SpawnedUnit>,
+}
+
+struct SpawnCtx<'lua> {
+    coalition: Coalition<'lua>,
+    miz: Miz<'lua>,
+    lua: &'lua Lua,
+}
+
+impl<'lua> SpawnCtx<'lua> {
+    fn new(lua: &'lua Lua) -> LuaResult<Self> {
+        Ok(Self {
+            coalition: Coalition::singleton(lua)?,
+            miz: Miz::singleton(lua)?,
+            lua,
+        })
+    }
+
+    fn get_template(
+        &self,
+        idx: &MizIndex,
+        kind: GroupKind,
+        side: Side,
+        template_name: &str,
+    ) -> LuaResult<GroupInfo> {
+        let mut template = self
+            .miz
+            .get_group(idx, kind, side, template_name)?
+            .ok_or_else(|| err("no such template"))?;
+        template.group = template.group.deep_clone(self.lua)?;
+        Ok(template)
+    }
+
+    fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> LuaResult<TriggerZone> {
+        Ok(self
+            .miz
+            .get_trigger_zone(idx, name)?
+            .ok_or_else(|| err("no such trigger zone"))?)
+    }
+
+    fn spawn(&self, template: &GroupInfo) -> LuaResult<()> {
+        match GroupCategory::from_kind(template.category) {
+            None => self
+                .coalition
+                .add_static_object(template.country, template.group),
+            Some(category) => self
+                .coalition
+                .add_group(template.country, category, template.group),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -60,8 +113,46 @@ pub struct Db {
 }
 
 impl Db {
-    fn respawn_group<'lua>(&self, lua: &'lua Lua, group: GroupId) -> LuaResult<()> {
-
+    fn respawn_group<'lua>(
+        &self,
+        lua: &'lua Lua,
+        idx: &MizIndex,
+        spctx: &SpawnCtx,
+        group: &SpawnedGroup,
+    ) -> LuaResult<()> {
+        let template =
+            spctx.get_template(idx, group.kind, group.side, group.template_name.as_str())?;
+        template.group.set("lateActivation", false)?;
+        template.group.set_name(group.name.clone())?;
+        let by_tname: FxHashMap<&str, &SpawnedUnit> = group
+            .units
+            .into_iter()
+            .filter_map(|(_, u)| {
+                if u.dead {
+                    None
+                } else {
+                    Some((u.template_name.as_str(), u))
+                }
+            })
+            .collect();
+        let units = template.group.units()?;
+        let mut i = 1;
+        while i as usize <= units.len() {
+            let unit = units.get(i)?;
+            match by_tname.get(unit.name()?.as_str()) {
+                None => units.remove(i)?,
+                Some(su) => {
+                    unit.set_pos(su.pos)?;
+                    i += 1;
+                }
+            }
+        }
+        if units.len() > 0 {
+            template.group.set_pos(units.get(1)?.pos()?)?;
+            spctx.spawn(&template)
+        } else {
+            Ok(())
+        }
     }
 
     pub fn spawn_template_as_new<'lua>(
@@ -73,20 +164,13 @@ impl Db {
         location: &SpawnLoc,
         template_name: &str,
     ) -> LuaResult<GroupId> {
+        let spctx = SpawnCtx::new(lua)?;
         let template_name = String::from(template_name);
-        let coalition = Coalition::singleton(lua)?;
-        let miz = env::miz::Miz::singleton(lua)?;
-        let mut template = miz
-            .get_group(idx, kind, side, template_name.as_str())?
-            .ok_or_else(|| err("no such template"))?;
-        template.group = template.group.deep_clone(lua)?;
+        let template = spctx.get_template(idx, kind, side, template_name.as_str())?;
         let pos = match location {
             SpawnLoc::AtPos(pos) => *pos,
             SpawnLoc::AtTrigger { name, offset } => {
-                let tz = miz
-                    .get_trigger_zone(&idx, name.as_str())?
-                    .ok_or_else(|| err("no such trigger zone"))?;
-                tz.pos()? + offset
+                spctx.get_trigger_zone(idx, name.as_str())?.pos()? + offset
             }
         };
         let gid = GroupId::new();
@@ -99,13 +183,14 @@ impl Db {
         let mut spawned = SpawnedGroup {
             name: group_name.clone(),
             template_name: template_name.clone(),
-            country: template.country,
+            side,
             kind,
             units: Map::new(),
         };
-        for (i, unit) in template.group.units()?.into_iter().enumerate() {
+        for unit in template.group.units()? {
             let uid = UnitId::new();
             let unit = unit?;
+            let template_name = unit.name()?;
             let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
             let unit_pos_offset = orig_group_pos - unit.pos()?;
             let pos = pos + unit_pos_offset;
@@ -114,8 +199,10 @@ impl Db {
             unit.set_name(unit_name.clone())?;
             let spawned_unit = SpawnedUnit {
                 name: unit_name,
+                template_name,
                 pos,
                 dead: false,
+                born: false,
             };
             spawned.units.insert_cow(uid, spawned_unit);
             self.groups_by_unit_id.insert_cow(uid, gid);
@@ -123,10 +210,7 @@ impl Db {
         }
         self.groups_by_id.insert_cow(gid, spawned);
         self.groups_by_name.insert_cow(group_name, gid);
-        match GroupCategory::from_kind(template.category) {
-            None => coalition.add_static_object(template.country, template.group)?,
-            Some(category) => coalition.add_group(template.country, category, template.group)?,
-        }
+        spctx.spawn(&template)?;
         Ok(gid)
     }
 }

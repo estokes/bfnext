@@ -7,7 +7,7 @@ use std::{
     borrow::Borrow,
     collections::hash_map::Entry,
     marker::PhantomData,
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, Index},
 };
 
 use self::coalition::Side;
@@ -664,6 +664,10 @@ impl<'lua, T: 'lua> Sequence<'lua, T> {
 
     pub fn into_inner(self) -> mlua::Table<'lua> {
         self.t
+    }
+
+    pub fn remove(&self, i: i64) -> LuaResult<()> {
+        self.t.raw_remove(i)
     }
 }
 

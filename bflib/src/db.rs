@@ -87,7 +87,7 @@ impl<'lua> SpawnCtx<'lua> {
         })
     }
 
-    fn get_template(
+    pub fn get_template(
         &self,
         idx: &MizIndex,
         kind: GroupKind,
@@ -102,14 +102,14 @@ impl<'lua> SpawnCtx<'lua> {
         Ok(template)
     }
 
-    fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> LuaResult<TriggerZone> {
+    pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> LuaResult<TriggerZone> {
         Ok(self
             .miz
             .get_trigger_zone(idx, name)?
             .ok_or_else(|| err("no such trigger zone"))?)
     }
 
-    fn spawn(&self, template: GroupInfo) -> LuaResult<()> {
+    pub fn spawn(&self, template: GroupInfo) -> LuaResult<()> {
         match GroupCategory::from_kind(template.category) {
             None => self
                 .coalition

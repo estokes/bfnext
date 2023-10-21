@@ -17,8 +17,6 @@ use dcso3::{
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
 use std::{fs::File, path::PathBuf, sync::mpsc, thread};
 
 enum BgTask {
@@ -46,7 +44,30 @@ struct Context {
     units_by_obj_id: FxHashMap<i64, UnitId>,
 }
 
+static mut CONTEXT: Option<Context> = None;
+
 impl Context {
+    // this must be used cautiously. Reasons why it's not totally nuts,
+    // - the dcs scripting api is single threaded
+    // - the event handlers can be triggerred by api calls, making refcells and mutexes error prone
+    // - as long as an event handler doesn't step on state in an api call it's ok, since concurrency never happens
+    //   that isn't so hard to guarantee
+    fn get_mut() -> &'static mut Context {
+        unsafe {
+            match &mut CONTEXT {
+                Some(ctx) => ctx,
+                None => {
+                    CONTEXT = Some(Context::default());
+                    CONTEXT.as_mut().unwrap()
+                }
+            }
+        }
+    }
+
+    fn get() -> &'static Context {
+        Context::get_mut()
+    }
+
     fn do_background_task(&mut self, task: BgTask) {
         if self.to_background.is_none() {
             let (tx, rx) = mpsc::channel();
@@ -80,8 +101,6 @@ impl Context {
     }
 }
 
-static CONTEXT: Lazy<Mutex<Context>> = Lazy::new(|| Mutex::new(Context::default()));
-
 fn on_player_try_connect(
     _: &Lua,
     addr: String,
@@ -114,11 +133,11 @@ fn on_player_try_change_slot(_: &Lua, id: u32, side: Side, slot: String) -> LuaR
 
 fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
     println!("onEventTranslated: {:?}", ev);
+    let ctx = Context::get_mut();
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
                 let name = unit.as_object()?.get_name()?;
-                let mut ctx = CONTEXT.lock();
                 if let Some(su) = ctx.db.get_unit_by_name(name.as_str()) {
                     let uid = su.id;
                     let oid: i64 = unit.get_object_id()?;
@@ -129,7 +148,6 @@ fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
         Event::Dead(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.get_object_id()?;
-                let mut ctx = CONTEXT.lock();
                 if let Some(uid) = ctx.units_by_obj_id.remove(&id) {
                     ctx.db.unit_dead(uid, true);
                 }
@@ -144,7 +162,7 @@ fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
     println!("on_mission_load_end");
     let miz = dbg!(env::miz::Miz::singleton(lua))?;
     println!("indexing mission");
-    let mut ctx = CONTEXT.lock();
+    let ctx = Context::get_mut();
     ctx.idx = miz.index()?;
     ctx.do_background_task(BgTask::MizInit);
     println!("indexed mission");
@@ -174,7 +192,7 @@ fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
 }
 
 fn spawn_new(lua: &Lua) -> LuaResult<()> {
-    let mut ctx = CONTEXT.lock();
+    let ctx = Context::get_mut();
     ctx.spawn_template_as_new(
         lua,
         Side::Blue,
@@ -199,6 +217,7 @@ fn spawn_new(lua: &Lua) -> LuaResult<()> {
 }
 
 fn init_miz_(lua: &Lua) -> LuaResult<()> {
+    let ctx = Context::get_mut();
     println!("adding event handler");
     World::get(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
@@ -210,7 +229,7 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
         let path = path.clone();
         move |_lua, _, now| {
-            let mut ctx = CONTEXT.lock();
+            let ctx = Context::get_mut();
             if let Some(snap) = ctx.db.maybe_snapshot() {
                 ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
             }
@@ -229,7 +248,6 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
             println!("failed to decode save file {:?}, {:?}", path, e);
             err("decode error")
         })?;
-        let mut ctx = CONTEXT.lock();
         ctx.db = db;
         ctx.respawn_groups(lua)?
     }

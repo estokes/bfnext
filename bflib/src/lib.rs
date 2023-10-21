@@ -7,6 +7,7 @@ use dcso3::{
     env::{
         self,
         miz::{GroupKind, Miz},
+        Env,
     },
     err,
     event::Event,
@@ -19,6 +20,7 @@ use fxhash::FxHashMap;
 use mlua::prelude::*;
 use std::{fs::File, path::PathBuf, sync::mpsc, thread};
 
+#[derive(Debug)]
 enum BgTask {
     MizInit,
     SaveState(PathBuf, Db),
@@ -54,9 +56,10 @@ impl Context {
     //   that isn't so hard to guarantee
     fn get_mut() -> &'static mut Context {
         unsafe {
-            match &mut CONTEXT {
+            match CONTEXT.as_mut() {
                 Some(ctx) => ctx,
                 None => {
+                    println!("init ctx");
                     CONTEXT = Some(Context::default());
                     CONTEXT.as_mut().unwrap()
                 }
@@ -160,7 +163,7 @@ fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
 
 fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
     println!("on_mission_load_end");
-    let miz = dbg!(env::miz::Miz::singleton(lua))?;
+    let miz = env::miz::Miz::singleton(lua)?;
     println!("indexing mission");
     let ctx = Context::get_mut();
     ctx.idx = miz.index()?;
@@ -191,8 +194,7 @@ fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
     wrap_unit("init_hooks", init_hooks_(lua))
 }
 
-fn spawn_new(lua: &Lua) -> LuaResult<()> {
-    let ctx = Context::get_mut();
+fn spawn_new(lua: &Lua, ctx: &mut Context) -> LuaResult<()> {
     ctx.spawn_template_as_new(
         lua,
         Side::Blue,
@@ -221,7 +223,7 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     println!("adding event handler");
     World::get(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
-    let path = match sortie.as_str() {
+    let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
         "" => return Err(err("missing sortie in miz file")),
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
@@ -238,7 +240,7 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     })?;
     println!("spawning");
     if !path.exists() {
-        spawn_new(lua)?;
+        spawn_new(lua, ctx)?;
     } else {
         let file = File::open(&path).map_err(|e| {
             println!("failed to open save file {:?}, {:?}", path, e);

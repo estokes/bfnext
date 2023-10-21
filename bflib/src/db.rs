@@ -243,7 +243,6 @@ impl Db {
         location: &SpawnLoc,
         template_name: &str,
     ) -> LuaResult<GroupId> {
-        let mut t = self.clone();
         let spctx = SpawnCtx::new(lua)?;
         let template_name = String::from(template_name);
         let template = spctx.get_template(idx, kind, side, template_name.as_str())?;
@@ -287,14 +286,13 @@ impl Db {
                 dead: false,
             };
             spawned.units.insert_cow(uid);
-            t.units_by_id.insert_cow(uid, spawned_unit);
-            t.units_by_name.insert_cow(unit_name, uid);
+            self.units_by_id.insert_cow(uid, spawned_unit);
+            self.units_by_name.insert_cow(unit_name, uid);
         }
-        t.groups_by_id.insert_cow(gid, spawned);
-        t.groups_by_name.insert_cow(group_name, gid);
-        spctx.spawn(template)?;
-        *self = t;
+        self.groups_by_id.insert_cow(gid, spawned);
+        self.groups_by_name.insert_cow(group_name, gid);
         self.dirty = true;
+        spctx.spawn(template)?;
         Ok(gid)
     }
 }

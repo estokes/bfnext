@@ -10,15 +10,28 @@ use dcso3::{
 use fxhash::FxHashMap;
 use immutable_chunkmap::{map::MapM as Map, set::SetM as Set};
 use mlua::prelude::*;
-use netidx_core::atomic_id;
 use serde_derive::{Deserialize, Serialize};
 use std::{
     fmt::Display,
     fs::{self, File},
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}, sync::atomic::{AtomicU64, Ordering},
 };
 
-atomic_id!(GroupId);
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+)]
+pub struct GroupId(u64);
+
+static MAX_GROUP_ID: AtomicU64 = AtomicU64::new(0);
 
 impl Display for GroupId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -32,7 +45,34 @@ impl Default for GroupId {
     }
 }
 
-atomic_id!(UnitId);
+impl GroupId {
+    pub fn new() -> Self {
+        Self(MAX_GROUP_ID.fetch_add(1, Ordering::Relaxed))
+    }
+
+    fn update_max(id: Self) {
+        // not strictly thread safe, but it doesn't matter in this context
+        if id.0 >= MAX_GROUP_ID.load(Ordering::Relaxed) {
+            MAX_GROUP_ID.store(id.0 + 1, Ordering::Relaxed)
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+)]
+pub struct UnitId(u64);
+
+static MAX_UNIT_ID: AtomicU64 = AtomicU64::new(0);
 
 impl Default for UnitId {
     fn default() -> Self {
@@ -43,6 +83,19 @@ impl Default for UnitId {
 impl Display for UnitId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl UnitId {
+    pub fn new() -> Self {
+        Self(MAX_UNIT_ID.fetch_add(1, Ordering::Relaxed))
+    }
+
+    fn update_max(id: Self) {
+        // not strictly thread safe, but it doesn't matter in this context
+        if id.0 >= MAX_UNIT_ID.load(Ordering::Relaxed) {
+            MAX_UNIT_ID.store(id.0 + 1, Ordering::Relaxed)
+        }
     }
 }
 
@@ -133,6 +186,24 @@ pub struct Db {
 }
 
 impl Db {
+    pub fn load(path: &Path) -> LuaResult<Self> {
+        let file = File::open(&path).map_err(|e| {
+            println!("failed to open save file {:?}, {:?}", path, e);
+            err("io error")
+        })?;
+        let db: Self = serde_json::from_reader(file).map_err(|e| {
+            println!("failed to decode save file {:?}, {:?}", path, e);
+            err("decode error")
+        })?;
+        for (id, _) in &db.groups_by_id {
+            GroupId::update_max(*id)
+        }
+        for (id, _) in &db.units_by_id {
+            UnitId::update_max(*id)
+        }
+        Ok(db)
+    }
+
     pub fn save(&self, path: &Path) -> anyhow::Result<()> {
         let mut tmp = PathBuf::from(path);
         tmp.set_extension("tmp");

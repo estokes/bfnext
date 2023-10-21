@@ -18,7 +18,7 @@ use dcso3::{
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
-use std::{fs::File, path::PathBuf, sync::mpsc, thread};
+use std::{path::PathBuf, sync::mpsc, thread};
 
 #[derive(Debug)]
 enum BgTask {
@@ -242,15 +242,7 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     if !path.exists() {
         spawn_new(lua, ctx)?;
     } else {
-        let file = File::open(&path).map_err(|e| {
-            println!("failed to open save file {:?}, {:?}", path, e);
-            err("io error")
-        })?;
-        let db = serde_json::from_reader(file).map_err(|e| {
-            println!("failed to decode save file {:?}, {:?}", path, e);
-            err("decode error")
-        })?;
-        ctx.db = db;
+        ctx.db = Db::load(&path)?;
         ctx.respawn_groups(lua)?
     }
     println!("spawned");

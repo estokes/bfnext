@@ -54,20 +54,18 @@ impl Context {
     // - the event handlers can be triggerred by api calls, making refcells and mutexes error prone
     // - as long as an event handler doesn't step on state in an api call it's ok, since concurrency never happens
     //   that isn't so hard to guarantee
-    fn get_mut() -> &'static mut Context {
-        unsafe {
-            match CONTEXT.as_mut() {
-                Some(ctx) => ctx,
-                None => {
-                    println!("init ctx");
-                    CONTEXT = Some(Context::default());
-                    CONTEXT.as_mut().unwrap()
-                }
+    unsafe fn get_mut() -> &'static mut Context {
+        match CONTEXT.as_mut() {
+            Some(ctx) => ctx,
+            None => {
+                println!("init ctx");
+                CONTEXT = Some(Context::default());
+                CONTEXT.as_mut().unwrap()
             }
         }
     }
 
-    fn get() -> &'static Context {
+    unsafe fn get() -> &'static Context {
         Context::get_mut()
     }
 
@@ -136,7 +134,7 @@ fn on_player_try_change_slot(_: &Lua, id: u32, side: Side, slot: String) -> LuaR
 
 fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
     println!("onEventTranslated: {:?}", ev);
-    let ctx = Context::get_mut();
+    let ctx = unsafe { Context::get_mut() };
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
@@ -165,7 +163,7 @@ fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
     println!("on_mission_load_end");
     let miz = env::miz::Miz::singleton(lua)?;
     println!("indexing mission");
-    let ctx = Context::get_mut();
+    let ctx = unsafe { Context::get_mut() };
     ctx.idx = miz.index()?;
     ctx.do_background_task(BgTask::MizInit);
     println!("indexed mission");
@@ -219,7 +217,7 @@ fn spawn_new(lua: &Lua, ctx: &mut Context) -> LuaResult<()> {
 }
 
 fn init_miz_(lua: &Lua) -> LuaResult<()> {
-    let ctx = Context::get_mut();
+    let ctx = unsafe { Context::get_mut() };
     println!("adding event handler");
     World::get(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
@@ -231,7 +229,7 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
         let path = path.clone();
         move |_lua, _, now| {
-            let ctx = Context::get_mut();
+            let ctx = unsafe { Context::get_mut() };
             if let Some(snap) = ctx.db.maybe_snapshot() {
                 ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
             }

@@ -2,6 +2,7 @@ extern crate nalgebra as na;
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
+    cvt_err,
     env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
     err,
     group::GroupCategory,
@@ -9,95 +10,55 @@ use dcso3::{
 };
 use fxhash::FxHashMap;
 use immutable_chunkmap::{map::MapM as Map, set::SetM as Set};
-use mlua::prelude::*;
+use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     fmt::Display,
     fs::{self, File},
-    path::{Path, PathBuf}, sync::atomic::{AtomicU64, Ordering},
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::atomic::{AtomicU64, Ordering},
 };
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-)]
-pub struct GroupId(u64);
+macro_rules! atomic_id {
+    ($name:ident) => {
+        paste::paste! {
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+            pub struct $name(u64);
 
-static MAX_GROUP_ID: AtomicU64 = AtomicU64::new(0);
+            static [<MAX_ $name:upper _ID>]: AtomicU64 = AtomicU64::new(0);
 
-impl Display for GroupId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+            impl Display for $name {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "{}", self.0)
+                }
+            }
 
-impl Default for GroupId {
-    fn default() -> Self {
-        GroupId(0)
-    }
-}
+            impl Default for $name {
+                fn default() -> Self {
+                    Self(0)
+                }
+            }
 
-impl GroupId {
-    pub fn new() -> Self {
-        Self(MAX_GROUP_ID.fetch_add(1, Ordering::Relaxed))
-    }
+            impl $name {
+                pub fn new() -> Self {
+                    Self([<MAX_ $name:upper _ID>].fetch_add(1, Ordering::Relaxed))
+                }
 
-    fn update_max(id: Self) {
-        // not strictly thread safe, but it doesn't matter in this context
-        if id.0 >= MAX_GROUP_ID.load(Ordering::Relaxed) {
-            MAX_GROUP_ID.store(id.0 + 1, Ordering::Relaxed)
+                fn update_max(id: Self) {
+                    // not strictly thread safe, but it doesn't matter in this context
+                    if id.0 >= [<MAX_ $name:upper _ID>].load(Ordering::Relaxed) {
+                        [<MAX_ $name:upper _ID>].store(id.0 + 1, Ordering::Relaxed)
+                    }
+                }
+            }
         }
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-)]
-pub struct UnitId(u64);
-
-static MAX_UNIT_ID: AtomicU64 = AtomicU64::new(0);
-
-impl Default for UnitId {
-    fn default() -> Self {
-        UnitId(0)
-    }
-}
-
-impl Display for UnitId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl UnitId {
-    pub fn new() -> Self {
-        Self(MAX_UNIT_ID.fetch_add(1, Ordering::Relaxed))
-    }
-
-    fn update_max(id: Self) {
-        // not strictly thread safe, but it doesn't matter in this context
-        if id.0 >= MAX_UNIT_ID.load(Ordering::Relaxed) {
-            MAX_UNIT_ID.store(id.0 + 1, Ordering::Relaxed)
-        }
-    }
-}
+atomic_id!(GroupId);
+atomic_id!(UnitId);
+atomic_id!(ObjectiveId);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SpawnedUnit {
@@ -174,6 +135,62 @@ impl<'lua> SpawnCtx<'lua> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ObjectiveKind {
+    Airbase,
+    Fob,
+    Farp,
+    Fuelbase,
+    Samsite,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ObjGroup {
+    objective: String,
+    template: String,
+    zone: String,
+}
+
+impl FromStr for ObjGroup {
+    type Err = LuaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.split_once(":") {
+            None => Err(err("expected a :")),
+            Some((obj, templ)) => {
+                if obj.contains(":") || templ.contains(":") {
+                    Err(err("illegal : in obj or templ"))
+                } else {
+                    Ok(Self {
+                        objective: String::from(obj),
+                        template: String::from(templ),
+                        zone: String::from(s),
+                    })
+                }
+            }
+        }
+    }
+}
+
+impl<'lua> FromLua<'lua> for ObjGroup {
+    fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
+        match value {
+            Value::String(s) => s.to_str()?.parse(),
+            _ => Err(cvt_err("ObjGroup")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Objective {
+    name: String,
+    owner: Side,
+    kind: ObjectiveKind,
+    slots: Set<String>,
+    groups: Set<GroupId>,
+    template: Map<Side, Set<ObjGroup>>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Db {
     #[serde(skip)]
@@ -183,6 +200,8 @@ pub struct Db {
     groups_by_name: Map<String, GroupId>,
     units_by_name: Map<String, UnitId>,
     groups_by_side: Map<Side, Set<GroupId>>,
+    objectives: Map<String, Objective>,
+    objectives_by_slot: Map<String, String>,
 }
 
 impl Db {
@@ -248,7 +267,9 @@ impl Db {
     }
 
     pub fn get_group_by_name(&self, name: &str) -> Option<&SpawnedGroup> {
-        self.groups_by_name.get(name).and_then(|gid| self.groups_by_id.get(gid))
+        self.groups_by_name
+            .get(name)
+            .and_then(|gid| self.groups_by_id.get(gid))
     }
 
     pub fn get_unit(&self, id: &UnitId) -> Option<&SpawnedUnit> {
@@ -256,7 +277,9 @@ impl Db {
     }
 
     pub fn get_unit_by_name(&self, name: &str) -> Option<&SpawnedUnit> {
-        self.units_by_name.get(name).and_then(|uid| self.get_unit(uid))
+        self.units_by_name
+            .get(name)
+            .and_then(|uid| self.get_unit(uid))
     }
 
     pub fn respawn_group<'lua>(
@@ -362,6 +385,10 @@ impl Db {
         }
         self.groups_by_id.insert_cow(gid, spawned);
         self.groups_by_name.insert_cow(group_name, gid);
+        self.groups_by_side.update_cow(side, gid, |side, gid, cur| {
+            let s = cur.map(|(_, s)| s).unwrap_or(&Set::new()).insert(gid).0;
+            Some((side, s))
+        });
         self.dirty = true;
         spctx.spawn(template)?;
         Ok(gid)

@@ -25,3 +25,4 @@ parking_lot = { workspace = true }
 nalgebra = { workspace = true }
 immutable-chunkmap = { workspace = true }
 anyhow = { workspace = true }
+paste = { workspace = true }

@@ -145,29 +145,15 @@ pub enum ObjectiveKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ObjGroup {
-    objective: String,
-    template: String,
-    zone: String,
-}
+pub struct ObjGroup(String);
 
 impl FromStr for ObjGroup {
     type Err = LuaError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.split_once(":") {
-            None => Err(err("expected a :")),
-            Some((obj, templ)) => {
-                if obj.contains(":") || templ.contains(":") {
-                    Err(err("illegal : in obj or templ"))
-                } else {
-                    Ok(Self {
-                        objective: String::from(obj),
-                        template: String::from(templ),
-                        zone: String::from(s),
-                    })
-                }
-            }
+        match s.split_once("#") {
+            None => Err(err("expected a #")),
+            Some((_, _)) => Ok(Self(String::from(s)))
         }
     }
 }
@@ -181,14 +167,19 @@ impl<'lua> FromLua<'lua> for ObjGroup {
     }
 }
 
+impl ObjGroup {
+    fn template(&self) -> &str {
+        self.0.split_once("#").unwrap().0
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     name: String,
     owner: Side,
     kind: ObjectiveKind,
     slots: Set<String>,
-    groups: Set<GroupId>,
-    template: Map<Side, Set<ObjGroup>>,
+    groups: Map<Side, Map<ObjGroup, Option<GroupId>>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -385,10 +376,7 @@ impl Db {
         }
         self.groups_by_id.insert_cow(gid, spawned);
         self.groups_by_name.insert_cow(group_name, gid);
-        self.groups_by_side.update_cow(side, gid, |side, gid, cur| {
-            let s = cur.map(|(_, s)| s).unwrap_or(&Set::new()).insert(gid).0;
-            Some((side, s))
-        });
+        self.groups_by_side.get_or_default_cow(side).insert_cow(gid);
         self.dirty = true;
         spctx.spawn(template)?;
         Ok(gid)

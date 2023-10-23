@@ -25,7 +25,7 @@ impl HandlerId {
 wrapped_table!(World, None);
 
 impl<'lua> World<'lua> {
-    pub fn get(lua: &'lua Lua) -> LuaResult<Self> {
+    pub fn singleton(lua: &'lua Lua) -> LuaResult<Self> {
         lua.globals().raw_get("world")
     }
 

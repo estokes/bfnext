@@ -3,7 +3,7 @@ use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
     cvt_err,
-    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
+    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     err,
     group::GroupCategory,
     DeepClone, String, Vector2,
@@ -139,7 +139,6 @@ impl<'lua> SpawnCtx<'lua> {
 pub enum ObjectiveKind {
     Airbase,
     Fob,
-    Farp,
     Fuelbase,
     Samsite,
 }
@@ -175,11 +174,16 @@ impl ObjGroup {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
+    id: ObjectiveId,
+    trigger_name: String,
     name: String,
+    pos: Vector2,
+    radius: f64,
     owner: Side,
     kind: ObjectiveKind,
     slots: Set<String>,
-    groups: Map<Side, Map<ObjGroup, Option<GroupId>>>,
+    groups: Map<Side, Map<ObjGroup, GroupId>>,
+    logistics: Set<ObjGroup>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -191,8 +195,10 @@ pub struct Db {
     groups_by_name: Map<String, GroupId>,
     units_by_name: Map<String, UnitId>,
     groups_by_side: Map<Side, Set<GroupId>>,
-    objectives: Map<String, Objective>,
-    objectives_by_slot: Map<String, String>,
+    objectives: Map<ObjectiveId, Objective>,
+    objectives_by_slot: Map<String, ObjectiveId>,
+    objectives_by_name: Map<String, ObjectiveId>,
+    objectives_by_group: Map<GroupId, ObjectiveId>,
 }
 
 impl Db {
@@ -210,6 +216,9 @@ impl Db {
         }
         for (id, _) in &db.units_by_id {
             UnitId::update_max(*id)
+        }
+        for (id, _) in &db.objectives {
+            ObjectiveId::update_max(*id)
         }
         Ok(db)
     }
@@ -236,16 +245,131 @@ impl Db {
         }
     }
 
+    /// objectives are just trigger zones named according to type codes
+    /// the first caracter is the type of the zone
+    /// O - Objective
+    /// G - Group within an objective
+    /// T - Generic trigger zone, ignored by the engine
+    /// 
+    /// Then a 2 character type code
+    /// - AB: Airbase
+    /// - FO: Fob
+    /// - SA: Sam site
+    /// - FB: Fuel base
+    /// 
+    /// Then a 1 character code for the default owner 
+    /// followed by the display name
+    /// - R: Red
+    /// - B: Blue
+    /// - N: Neutral
+    /// 
+    /// So e.g. Tblisi would be OABBTBLISI -> Objective, Airbase, Default to Blue, named Tblisi
+    fn init_objective(&mut self, zone: TriggerZone, name: &str) -> LuaResult<()> {
+        fn side_and_name(s: &str) -> LuaResult<(Side, String)> {
+            if let Some(name) = s.strip_prefix("R") {
+                Ok((Side::Red, String::from(name)))
+            } else if let Some(name) = s.strip_prefix("B") {
+                Ok((Side::Blue, String::from(name)))
+            } else if let Some(name) = s.strip_prefix("N") {
+                Ok((Side::Neutral, String::from(name)))
+            } else {
+                Err(err("invalid default coalition, expected B, R, or N"))
+            }
+        }
+        let (kind, owner, name) = if let Some(name) = name.strip_prefix("AB") {
+            let (side, name) = side_and_name(name)?;
+            (ObjectiveKind::Airbase, side, name)
+        } else if let Some(name) = name.strip_prefix("FO") {
+            let (side, name) = side_and_name(name)?;
+            (ObjectiveKind::Fob, side, name)
+        } else if let Some(name) = name.strip_prefix("FB") {
+            let (side, name) = side_and_name(name)?;
+            (ObjectiveKind::Fuelbase, side, name)
+        } else if let Some(name) = name.strip_prefix("SA") {
+            let (side, name) = side_and_name(name)?;
+            (ObjectiveKind::Samsite, side, name)
+        } else {
+            return Err(err("invalid objective type"))
+        };
+        let id = ObjectiveId::new();
+        let radius = match zone.typ()? {
+            TriggerZoneTyp::Quad(_) => return Err(err("invalid zone volume type")),
+            TriggerZoneTyp::Circle { radius } => radius,
+        };
+        let pos = zone.pos()?;
+        let obj = Objective {
+            id,
+            trigger_name: zone.name()?,
+            pos,
+            radius,
+            name: name.clone(),
+            kind,
+            owner,
+            slots: Set::new(),
+            groups: Map::new(),
+            logistics: Set::new()
+        };
+        self.objectives.insert_cow(id, obj);
+        self.objectives_by_name.insert_cow(name, id);
+        Ok(())
+    }
+
+    /// Objective groups are trigger zones with the first character set to G. They are then a template 
+    /// name, followed by # and a number. They are associated with an objective by proximity.
+    /// e.g. GRED_IR_SHORAD#001 would be the 1st instantiation of the template RED_IR_SHORAD, which must
+    /// correspond to a group in the miz file.
+    fn init_objective_group(&mut self, lua: &Lua, idx: &MizIndex, miz: &Miz, zone: TriggerZone, name: &str) -> LuaResult<()> {
+        let name = name.parse::<ObjGroup>()?;
+        let pos = zone.pos()?;
+        let (obj, side) = {
+            let mut iter = self.objectives.into_iter();
+            loop {
+                match iter.next() {
+                    None => return Err(err("group isn't associated with an objective")),
+                    Some((id, obj)) => {
+                        // this is inefficent; look into an orthographic database
+                        if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
+                            break (*id, obj.owner)
+                        }
+                    }
+                }
+            }
+        };
+        let group = match miz.get_group(idx, GroupKind::Any, side, name.template())? {
+            Some(group) => group,
+            None => return Err(err("missing template for group"))
+        };
+        unimplemented!()
+    }
+
+    pub fn init_objectives(&mut self, lua: &Lua, idx: &MizIndex, miz: &Miz) -> LuaResult<()> {
+        // first init all the objectives
+        for zone in miz.triggers()? {
+            let zone = zone?;
+            let name = zone.name()?;
+            if let Some(name) = name.strip_prefix("O") {
+                self.init_objective(zone, name)?
+            } 
+        }
+        // now associate groups with objectives
+        for zone in miz.triggers()? {
+            let zone = zone?;
+            let name = zone.name()?;
+            if let Some(name) = name.strip_prefix("G") {
+                self.init_objective_group(lua, idx, miz, zone, name)?
+            } else if name.starts_with("T") || name.starts_with("O") {
+                () // ignored
+            } else {
+                return Err(err("invalid trigger zone type code, expected O, G, or T"))
+            }
+        }
+        unimplemented!()
+    }
+
     pub fn unit_dead(&mut self, id: UnitId, dead: bool) {
-        self.units_by_id.update_cow(id, (), |id, (), unit| {
-            unit.map(|(_, unit)| {
-                let unit = SpawnedUnit {
-                    dead,
-                    ..unit.clone()
-                };
-                (id, unit)
-            })
-        });
+        if let Some(unit) = self.units_by_id.get_mut_cow(&id) {
+            unit.dead = dead;
+        }
         self.dirty = true;
     }
 

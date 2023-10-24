@@ -152,7 +152,7 @@ impl FromStr for ObjGroup {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.split_once("#") {
             None => Err(err("expected a #")),
-            Some((_, _)) => Ok(Self(String::from(s)))
+            Some((_, _)) => Ok(Self(String::from(s))),
         }
     }
 }
@@ -250,19 +250,19 @@ impl Db {
     /// O - Objective
     /// G - Group within an objective
     /// T - Generic trigger zone, ignored by the engine
-    /// 
+    ///
     /// Then a 2 character type code
     /// - AB: Airbase
     /// - FO: Fob
     /// - SA: Sam site
     /// - FB: Fuel base
-    /// 
-    /// Then a 1 character code for the default owner 
+    ///
+    /// Then a 1 character code for the default owner
     /// followed by the display name
     /// - R: Red
     /// - B: Blue
     /// - N: Neutral
-    /// 
+    ///
     /// So e.g. Tblisi would be OABBTBLISI -> Objective, Airbase, Default to Blue, named Tblisi
     fn init_objective(&mut self, zone: TriggerZone, name: &str) -> LuaResult<()> {
         fn side_and_name(s: &str) -> LuaResult<(Side, String)> {
@@ -289,9 +289,16 @@ impl Db {
             let (side, name) = side_and_name(name)?;
             (ObjectiveKind::Samsite, side, name)
         } else {
-            return Err(err("invalid objective type"))
+            return Err(err("invalid objective type"));
         };
-        let id = ObjectiveId::new();
+        let (id, owner) = match self
+            .objectives_by_name
+            .get(&name)
+            .and_then(|id| self.objectives.get(id))
+        {
+            None => (ObjectiveId::new(), owner),
+            Some(obj) => (obj.id, obj.owner),
+        };
         let radius = match zone.typ()? {
             TriggerZoneTyp::Quad(_) => return Err(err("invalid zone volume type")),
             TriggerZoneTyp::Circle { radius } => radius,
@@ -307,18 +314,25 @@ impl Db {
             owner,
             slots: Set::new(),
             groups: Map::new(),
-            logistics: Set::new()
+            logistics: Set::new(),
         };
         self.objectives.insert_cow(id, obj);
         self.objectives_by_name.insert_cow(name, id);
         Ok(())
     }
 
-    /// Objective groups are trigger zones with the first character set to G. They are then a template 
+    /// Objective groups are trigger zones with the first character set to G. They are then a template
     /// name, followed by # and a number. They are associated with an objective by proximity.
     /// e.g. GRED_IR_SHORAD#001 would be the 1st instantiation of the template RED_IR_SHORAD, which must
     /// correspond to a group in the miz file.
-    fn init_objective_group(&mut self, lua: &Lua, idx: &MizIndex, miz: &Miz, zone: TriggerZone, name: &str) -> LuaResult<()> {
+    fn init_objective_group(
+        &mut self,
+        lua: &Lua,
+        idx: &MizIndex,
+        miz: &Miz,
+        zone: TriggerZone,
+        name: &str,
+    ) -> LuaResult<()> {
         let name = name.parse::<ObjGroup>()?;
         let pos = zone.pos()?;
         let (obj, side) = {
@@ -329,7 +343,7 @@ impl Db {
                     Some((id, obj)) => {
                         // this is inefficent; look into an orthographic database
                         if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
-                            break (*id, obj.owner)
+                            break (*id, obj.owner);
                         }
                     }
                 }
@@ -337,7 +351,7 @@ impl Db {
         };
         let group = match miz.get_group(idx, GroupKind::Any, side, name.template())? {
             Some(group) => group,
-            None => return Err(err("missing template for group"))
+            None => return Err(err("missing template for group")),
         };
         unimplemented!()
     }
@@ -349,7 +363,7 @@ impl Db {
             let name = zone.name()?;
             if let Some(name) = name.strip_prefix("O") {
                 self.init_objective(zone, name)?
-            } 
+            }
         }
         // now associate groups with objectives
         for zone in miz.triggers()? {
@@ -360,7 +374,7 @@ impl Db {
             } else if name.starts_with("T") || name.starts_with("O") {
                 () // ignored
             } else {
-                return Err(err("invalid trigger zone type code, expected O, G, or T"))
+                return Err(err("invalid trigger zone type code, expected O, G, or T"));
             }
         }
         unimplemented!()

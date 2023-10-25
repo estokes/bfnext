@@ -175,6 +175,7 @@ impl ObjGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     id: ObjectiveId,
+    spawned: bool,
     trigger_name: String,
     name: String,
     pos: Vector2,
@@ -291,14 +292,7 @@ impl Db {
         } else {
             return Err(err("invalid objective type"));
         };
-        let (id, owner) = match self
-            .objectives_by_name
-            .get(&name)
-            .and_then(|id| self.objectives.get(id))
-        {
-            None => (ObjectiveId::new(), owner),
-            Some(obj) => (obj.id, obj.owner),
-        };
+        let id = ObjectiveId::new();
         let radius = match zone.typ()? {
             TriggerZoneTyp::Quad(_) => return Err(err("invalid zone volume type")),
             TriggerZoneTyp::Circle { radius } => radius,
@@ -306,6 +300,7 @@ impl Db {
         let pos = zone.pos()?;
         let obj = Objective {
             id,
+            spawned: false,
             trigger_name: zone.name()?,
             pos,
             radius,
@@ -327,7 +322,7 @@ impl Db {
     /// correspond to a group in the miz file.
     fn init_objective_group(
         &mut self,
-        lua: &Lua,
+        ctx: &SpawnCtx,
         idx: &MizIndex,
         miz: &Miz,
         zone: TriggerZone,
@@ -349,20 +344,18 @@ impl Db {
                 }
             }
         };
-        let group = match miz.get_group(idx, GroupKind::Any, side, name.template())? {
-            Some(group) => group,
-            None => return Err(err("missing template for group")),
-        };
         unimplemented!()
     }
 
-    pub fn init_objectives(&mut self, lua: &Lua, idx: &MizIndex, miz: &Miz) -> LuaResult<()> {
+    pub fn init_objectives(lua: &Lua, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
+        let ctx = SpawnCtx::new(lua)?;
+        let mut t = Self::default();
         // first init all the objectives
         for zone in miz.triggers()? {
             let zone = zone?;
             let name = zone.name()?;
             if let Some(name) = name.strip_prefix("O") {
-                self.init_objective(zone, name)?
+                t.init_objective(zone, name)?
             }
         }
         // now associate groups with objectives
@@ -370,7 +363,7 @@ impl Db {
             let zone = zone?;
             let name = zone.name()?;
             if let Some(name) = name.strip_prefix("G") {
-                self.init_objective_group(lua, idx, miz, zone, name)?
+                t.init_objective_group(lua, idx, miz, zone, name)?
             } else if name.starts_with("T") || name.starts_with("O") {
                 () // ignored
             } else {
@@ -457,16 +450,16 @@ impl Db {
         }
     }
 
-    pub fn spawn_template_as_new<'lua>(
+    /// add the units to the db, but don't actually spawn them
+    fn init_template(
         &mut self,
-        lua: &'lua Lua,
+        spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
         kind: GroupKind,
         location: &SpawnLoc,
         template_name: &str,
-    ) -> LuaResult<GroupId> {
-        let spctx = SpawnCtx::new(lua)?;
+    ) -> LuaResult<(GroupId, GroupInfo)> {
         let template_name = String::from(template_name);
         let template = spctx.get_template(idx, kind, side, template_name.as_str())?;
         let pos = match location {
@@ -515,6 +508,21 @@ impl Db {
         self.groups_by_id.insert_cow(gid, spawned);
         self.groups_by_name.insert_cow(group_name, gid);
         self.groups_by_side.get_or_default_cow(side).insert_cow(gid);
+        Ok((gid, template))
+    }
+
+    pub fn spawn_template_as_new<'lua>(
+        &mut self,
+        lua: &'lua Lua,
+        idx: &MizIndex,
+        side: Side,
+        kind: GroupKind,
+        location: &SpawnLoc,
+        template_name: &str,
+    ) -> LuaResult<GroupId> {
+        let spctx = SpawnCtx::new(lua)?;
+        let (gid, template) =
+            self.init_template(&spctx, idx, side, kind, location, template_name)?;
         self.dirty = true;
         spctx.spawn(template)?;
         Ok(gid)

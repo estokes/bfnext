@@ -186,8 +186,8 @@ impl<'lua> Group<'lua> {
         self.raw_get("units")
     }
 
-    pub fn uncontrollable(&self) -> bool {
-        self.raw_get("uncontrollable").unwrap_or(true)
+    pub fn uncontrolled(&self) -> bool {
+        self.raw_get("uncontrolled").unwrap_or(true)
     }
 }
 

@@ -3,7 +3,7 @@ use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
     cvt_err,
-    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
+    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp, Group},
     err,
     group::GroupCategory,
     DeepClone, String, Vector2,
@@ -318,11 +318,12 @@ impl Db {
 
     /// Objective groups are trigger zones with the first character set to G. They are then a template
     /// name, followed by # and a number. They are associated with an objective by proximity.
-    /// e.g. GRED_IR_SHORAD#001 would be the 1st instantiation of the template RED_IR_SHORAD, which must
-    /// correspond to a group in the miz file.
+    /// e.g. GRIRSRAD#001 would be the 1st instantiation of the template RIRSRAD, which must
+    /// correspond to a group in the miz file. There is one special template name called (R|B|N)LOGI
+    /// which corresponds to the logistics template for objectives
     fn init_objective_group(
         &mut self,
-        ctx: &SpawnCtx,
+        spctx: &SpawnCtx,
         idx: &MizIndex,
         miz: &Miz,
         zone: TriggerZone,
@@ -344,11 +345,53 @@ impl Db {
                 }
             }
         };
-        unimplemented!()
+        let (gid, _) = self.init_template(
+            spctx,
+            idx,
+            side,
+            GroupKind::Any,
+            &SpawnLoc::AtPos(pos),
+            name.template(),
+        )?;
+        self.objectives[&obj]
+            .groups
+            .get_or_default_cow(side)
+            .insert_cow(name.clone(), gid);
+        self.objectives_by_group.insert_cow(gid, obj);
+        let logi = match side {
+            Side::Blue => name.template() == "BLOGI",
+            Side::Red => name.template() == "RLOGI",
+            Side::Neutral => name.template() == "NLOGI",
+        };
+        if logi {
+            self.objectives[&obj].logistics.insert_cow(name);
+        }
+        Ok(())
     }
 
-    pub fn init_objectives(lua: &Lua, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
-        let ctx = SpawnCtx::new(lua)?;
+    pub fn init_objective_slot(&mut self, slot: Group) -> LuaResult<()> {
+        let name = slot.name()?;
+        let pos = slot.pos()?;
+        let obj = {
+            let mut iter = self.objectives.into_iter();
+            loop {
+                match iter.next() {
+                    None => return Err(err("slot not associated with an objective")),
+                    Some((id, obj)) => {
+                        if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
+                            break *id
+                        }
+                    }
+                }
+            }
+        };
+        self.objectives_by_slot.insert_cow(name.clone(), obj);
+        self.objectives[&obj].slots.insert_cow(name);
+        Ok(())
+    }
+
+    pub fn init(lua: &Lua, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
+        let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
         // first init all the objectives
         for zone in miz.triggers()? {
@@ -363,14 +406,36 @@ impl Db {
             let zone = zone?;
             let name = zone.name()?;
             if let Some(name) = name.strip_prefix("G") {
-                t.init_objective_group(lua, idx, miz, zone, name)?
+                t.init_objective_group(&spctx, idx, miz, zone, name)?
             } else if name.starts_with("T") || name.starts_with("O") {
                 () // ignored
             } else {
                 return Err(err("invalid trigger zone type code, expected O, G, or T"));
             }
         }
-        unimplemented!()
+        // now associate slots with objectives
+        for coa in [
+            miz.coalition(Side::Blue)?,
+            miz.coalition(Side::Red)?,
+            miz.coalition(Side::Neutral)?,
+        ] {
+            for country in coa.countries()? {
+                let country = country?;
+                for plane in country.planes()? {
+                    let plane = plane?;
+                    if !plane.uncontrolled() {
+                        t.init_objective_slot(plane)?
+                    }
+                }
+                for heli in country.helicopters()? {
+                    let heli = heli?;
+                    if !heli.uncontrolled() {
+                        t.init_objective_slot(heli)?
+                    }
+                }
+            }
+        }
+        Ok(t)
     }
 
     pub fn unit_dead(&mut self, id: UnitId, dead: bool) {

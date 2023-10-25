@@ -133,6 +133,11 @@ impl<'lua> SpawnCtx<'lua> {
                 .add_group(template.country, category, template.group),
         }
     }
+
+    pub fn despawn(&self, name: &str) -> LuaResult<()> {
+        let group = dcso3::group::Group::get_by_name(&self.lua, name)?;
+        group.destroy()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -325,7 +330,7 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        miz: &Miz,
+        _miz: &Miz,
         zone: TriggerZone,
         name: &str,
     ) -> LuaResult<()> {
@@ -516,15 +521,15 @@ impl Db {
     }
 
     /// add the units to the db, but don't actually spawn them
-    fn init_template(
+    fn init_template<'lua>(
         &mut self,
-        spctx: &SpawnCtx,
+        spctx: &'lua SpawnCtx<'lua>,
         idx: &MizIndex,
         side: Side,
         kind: GroupKind,
         location: &SpawnLoc,
         template_name: &str,
-    ) -> LuaResult<(GroupId, GroupInfo)> {
+    ) -> LuaResult<(GroupId, GroupInfo<'lua>)> {
         let template_name = String::from(template_name);
         let template = spctx.get_template(idx, kind, side, template_name.as_str())?;
         let pos = match location {

@@ -1,20 +1,16 @@
 pub mod db;
 extern crate nalgebra as na;
 use compact_str::format_compact;
-use db::{Db, GroupId, SpawnLoc, UnitId};
+use db::{Db, UnitId};
 use dcso3::{
     coalition::Side,
-    env::{
-        self,
-        miz::{GroupKind, Miz},
-        Env,
-    },
+    env::{self, miz::Miz, Env},
     err,
     event::Event,
     lfs::Lfs,
     timer::Timer,
     world::World,
-    wrap_unit, String, UserHooks, Vector2,
+    wrap_unit, String, UserHooks,
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
@@ -65,7 +61,7 @@ impl Context {
         }
     }
 
-    unsafe fn get() -> &'static Context {
+    unsafe fn _get() -> &'static Context {
         Context::get_mut()
     }
 
@@ -79,18 +75,6 @@ impl Context {
             Ok(()) => (),
             Err(_) => println!("background loop died"),
         }
-    }
-
-    fn spawn_template_as_new(
-        &mut self,
-        lua: &Lua,
-        side: Side,
-        kind: GroupKind,
-        location: &SpawnLoc,
-        template_name: &str,
-    ) -> LuaResult<GroupId> {
-        self.db
-            .spawn_template_as_new(lua, &self.idx, side, kind, location, template_name)
     }
 
     fn respawn_groups(&mut self, lua: &Lua) -> LuaResult<()> {
@@ -192,34 +176,10 @@ fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
     wrap_unit("init_hooks", init_hooks_(lua))
 }
 
-fn spawn_new(lua: &Lua, ctx: &mut Context) -> LuaResult<()> {
-    ctx.spawn_template_as_new(
-        lua,
-        Side::Blue,
-        GroupKind::Vehicle,
-        &SpawnLoc::AtTrigger {
-            name: "TEST_TZ".into(),
-            offset: Vector2::new(100., 100.),
-        },
-        "BLUE_TEST_GROUP",
-    )?;
-    ctx.spawn_template_as_new(
-        lua,
-        Side::Red,
-        GroupKind::Vehicle,
-        &SpawnLoc::AtTrigger {
-            name: "TEST_TZ".into(),
-            offset: Vector2::new(-100., -100.),
-        },
-        "RED_TEST_GROUP",
-    )?;
-    Ok(())
-}
-
 fn init_miz_(lua: &Lua) -> LuaResult<()> {
     let ctx = unsafe { Context::get_mut() };
     println!("adding event handler");
-    World::get(lua)?.add_event_handler(on_event)?;
+    World::singleton(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
     let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
         "" => return Err(err("missing sortie in miz file")),
@@ -238,11 +198,11 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     })?;
     println!("spawning");
     if !path.exists() {
-        spawn_new(lua, ctx)?;
+        ctx.db = Db::init(lua, &ctx.idx, &Miz::singleton(lua)?)?;
     } else {
         ctx.db = Db::load(&path)?;
-        ctx.respawn_groups(lua)?
     }
+    ctx.respawn_groups(lua)?;
     println!("spawned");
     Ok(())
 }

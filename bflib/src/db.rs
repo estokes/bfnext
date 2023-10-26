@@ -3,7 +3,7 @@ use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
     cvt_err,
-    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp, Group},
+    env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     err,
     group::GroupCategory,
     DeepClone, String, Vector2,
@@ -151,16 +151,32 @@ pub enum ObjectiveKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum ObjGroupClass {
+    Logi,
+    Aaa,
+    Lr,
+    Sr,
+    Armor,
+    Other
+}
+
+impl From<&str> for ObjGroupClass {
+    fn from(value: &str) -> Self {
+        match value {
+            "BLOGI" | "RLOGI" | "NLOGI" => ObjGroupClass::Logi,
+            _ => ObjGroupClass::Other
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ObjGroup(String);
 
 impl FromStr for ObjGroup {
     type Err = LuaError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.split_once("#") {
-            None => Err(err("expected a #")),
-            Some((_, _)) => Ok(Self(String::from(s))),
-        }
+        Ok(Self(String::from(s)))
     }
 }
 
@@ -175,7 +191,10 @@ impl<'lua> FromLua<'lua> for ObjGroup {
 
 impl ObjGroup {
     fn template(&self) -> &str {
-        self.0.split_once("#").unwrap().0
+        match self.0.rsplit_once("-") {
+            Some((l, _)) => l,
+            None => self.0.as_str(),
+        }
     }
 }
 
@@ -191,7 +210,18 @@ pub struct Objective {
     kind: ObjectiveKind,
     slots: Set<String>,
     groups: Map<Side, Map<ObjGroup, GroupId>>,
-    logistics: Set<ObjGroup>,
+    health: u8,
+    logi: u8,
+}
+
+impl Objective {
+    pub fn health(&self) -> u8 {
+        self.health
+    }
+
+    pub fn logi(&self) -> u8 {
+        self.logi
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -316,7 +346,8 @@ impl Db {
             owner,
             slots: Set::new(),
             groups: Map::new(),
-            logistics: Set::new(),
+            health: 0,
+            logi: 0,
         };
         self.objectives.insert_cow(id, obj);
         self.objectives_by_name.insert_cow(name, id);
@@ -365,14 +396,6 @@ impl Db {
             .get_or_default_cow(side)
             .insert_cow(name.clone(), gid);
         self.objectives_by_group.insert_cow(gid, obj);
-        let logi = match side {
-            Side::Blue => name.template() == "BLOGI",
-            Side::Red => name.template() == "RLOGI",
-            Side::Neutral => name.template() == "NLOGI",
-        };
-        if logi {
-            self.objectives[&obj].logistics.insert_cow(name);
-        }
         Ok(())
     }
 
@@ -386,7 +409,7 @@ impl Db {
                     None => return Err(err("slot not associated with an objective")),
                     Some((id, obj)) => {
                         if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
-                            break *id
+                            break *id;
                         }
                     }
                 }
@@ -443,9 +466,47 @@ impl Db {
         Ok(t)
     }
 
+    pub fn compute_objective_status(&self, obj: &Objective) -> (u8, u8) {
+        obj.groups.get(&obj.owner).map(|groups| {
+            let mut total = 0;
+            let mut alive = 0;
+            let mut logi_total = 0;
+            let mut logi_alive = 0;
+            for (_, gid) in groups {
+                let group = &self.groups_by_id[gid];
+                let logi = match ObjGroupClass::from(group.template_name.as_str()) {
+                    ObjGroupClass::Logi => true,
+                    _ => false,
+                };
+                for uid in &group.units {
+                    total += 1;
+                    if logi {
+                        logi_total += 1;
+                    }
+                    if !self.units_by_id[uid].dead {
+                        alive += 1;
+                        if logi {
+                            logi_alive += 1;
+                        }
+                    }
+                }
+            }
+            let health = ((alive as f32 / total as f32) * 100.).trunc() as u8;
+            let logi = ((logi_alive as f32 / logi_total as f32) * 100.).trunc() as u8;
+            (health, logi)
+        }).unwrap_or((100, 100))
+    }
+
     pub fn unit_dead(&mut self, id: UnitId, dead: bool) {
         if let Some(unit) = self.units_by_id.get_mut_cow(&id) {
             unit.dead = dead;
+            if let Some(oid) = self.objectives_by_group.get(&unit.group) {
+                let (health, logi) = self.compute_objective_status(&self.objectives[oid]);
+                let obj = &mut self.objectives[oid];
+                obj.health = health;
+                obj.logi = logi;
+                println!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
+            }
         }
         self.dirty = true;
     }

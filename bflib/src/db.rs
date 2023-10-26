@@ -505,6 +505,9 @@ impl Db {
                 let obj = &mut self.objectives[oid];
                 obj.health = health;
                 obj.logi = logi;
+                if obj.health == 0 {
+                    obj.owner = Side::Neutral;
+                }
                 println!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
             }
         }

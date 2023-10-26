@@ -9,7 +9,6 @@ use dcso3::{
     DeepClone, String, Vector2,
 };
 use fxhash::FxHashMap;
-use immutable_chunkmap::{map::MapM as Map, set::SetM as Set};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -19,6 +18,9 @@ use std::{
     str::FromStr,
     sync::atomic::{AtomicU64, Ordering},
 };
+
+type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
+type Set<K> = immutable_chunkmap::set::Set<K, 32>;
 
 macro_rules! atomic_id {
     ($name:ident) => {
@@ -428,18 +430,16 @@ impl Db {
                 let country = country?;
                 for plane in country.planes()? {
                     let plane = plane?;
-                    if !plane.uncontrolled() {
-                        t.init_objective_slot(plane)?
-                    }
+                    t.init_objective_slot(plane)?
                 }
                 for heli in country.helicopters()? {
                     let heli = heli?;
-                    if !heli.uncontrolled() {
-                        t.init_objective_slot(heli)?
-                    }
+                    t.init_objective_slot(heli)?
                 }
             }
         }
+        t.dirty = true;
+        println!("{:#?}", &t);
         Ok(t)
     }
 
@@ -507,6 +507,7 @@ impl Db {
                     Some(su) => {
                         template.group.set_pos(su.pos)?;
                         unit.set_pos(su.pos)?;
+                        unit.set_name(su.name.clone())?;
                         i += 1;
                     }
                 }

@@ -6,7 +6,7 @@ use dcso3::{
     env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     err,
     group::GroupCategory,
-    DeepClone, String, Vector2,
+    DeepClone, String, Time, Vector2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -142,7 +142,7 @@ impl<'lua> SpawnCtx<'lua> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ObjectiveKind {
     Airbase,
     Fob,
@@ -157,14 +157,29 @@ pub enum ObjGroupClass {
     Lr,
     Sr,
     Armor,
-    Other
+    Other,
 }
 
 impl From<&str> for ObjGroupClass {
     fn from(value: &str) -> Self {
         match value {
             "BLOGI" | "RLOGI" | "NLOGI" => ObjGroupClass::Logi,
-            _ => ObjGroupClass::Other
+            s => {
+                if s.starts_with("BAAA") || s.starts_with("RAAA") || s.starts_with("NAAA") {
+                    ObjGroupClass::Aaa
+                } else if s.starts_with("BLR") || s.starts_with("RLR") || s.starts_with("NLR") {
+                    ObjGroupClass::Lr
+                } else if s.starts_with("BSR") || s.starts_with("RSR") || s.starts_with("NSR") {
+                    ObjGroupClass::Sr
+                } else if s.starts_with("BARMOR")
+                    || s.starts_with("RARMOR")
+                    || s.starts_with("NARMOR")
+                {
+                    ObjGroupClass::Armor
+                } else {
+                    ObjGroupClass::Other
+                }
+            }
         }
     }
 }
@@ -212,6 +227,7 @@ pub struct Objective {
     groups: Map<Side, Map<ObjGroup, GroupId>>,
     health: u8,
     logi: u8,
+    last_change_ts: Time,
 }
 
 impl Objective {
@@ -228,6 +244,7 @@ impl Objective {
 pub struct Db {
     #[serde(skip)]
     dirty: bool,
+    repair_time: f32,
     groups_by_id: Map<GroupId, SpawnedGroup>,
     units_by_id: Map<UnitId, SpawnedUnit>,
     groups_by_name: Map<String, GroupId>,
@@ -348,6 +365,7 @@ impl Db {
             groups: Map::new(),
             health: 0,
             logi: 0,
+            last_change_ts: Time(0.),
         };
         self.objectives.insert_cow(id, obj);
         self.objectives_by_name.insert_cow(name, id);
@@ -461,54 +479,128 @@ impl Db {
                 }
             }
         }
+        t.repair_time = 900.; // put it in the mission somewhere
         t.dirty = true;
         println!("{:#?}", &t);
         Ok(t)
     }
 
     pub fn compute_objective_status(&self, obj: &Objective) -> (u8, u8) {
-        obj.groups.get(&obj.owner).map(|groups| {
-            let mut total = 0;
-            let mut alive = 0;
-            let mut logi_total = 0;
-            let mut logi_alive = 0;
-            for (_, gid) in groups {
-                let group = &self.groups_by_id[gid];
-                let logi = match ObjGroupClass::from(group.template_name.as_str()) {
-                    ObjGroupClass::Logi => true,
-                    _ => false,
-                };
-                for uid in &group.units {
-                    total += 1;
-                    if logi {
-                        logi_total += 1;
-                    }
-                    if !self.units_by_id[uid].dead {
-                        alive += 1;
+        obj.groups
+            .get(&obj.owner)
+            .map(|groups| {
+                let mut total = 0;
+                let mut alive = 0;
+                let mut logi_total = 0;
+                let mut logi_alive = 0;
+                for (_, gid) in groups {
+                    let group = &self.groups_by_id[gid];
+                    let logi = match ObjGroupClass::from(group.template_name.as_str()) {
+                        ObjGroupClass::Logi => true,
+                        _ => false,
+                    };
+                    for uid in &group.units {
+                        total += 1;
                         if logi {
-                            logi_alive += 1;
+                            logi_total += 1;
+                        }
+                        if !self.units_by_id[uid].dead {
+                            alive += 1;
+                            if logi {
+                                logi_alive += 1;
+                            }
                         }
                     }
                 }
-            }
-            let health = ((alive as f32 / total as f32) * 100.).trunc() as u8;
-            let logi = ((logi_alive as f32 / logi_total as f32) * 100.).trunc() as u8;
-            (health, logi)
-        }).unwrap_or((100, 100))
+                let health = ((alive as f32 / total as f32) * 100.).trunc() as u8;
+                let logi = ((logi_alive as f32 / logi_total as f32) * 100.).trunc() as u8;
+                (health, logi)
+            })
+            .unwrap_or((100, 100))
     }
 
-    pub fn unit_dead(&mut self, id: UnitId, dead: bool) {
+    pub fn update_objective_status(&mut self, oid: &ObjectiveId, now: Time) {
+        let (health, logi) = self.compute_objective_status(&self.objectives[oid]);
+        let obj = &mut self.objectives[oid];
+        obj.health = health;
+        obj.logi = logi;
+        obj.last_change_ts = now;
+        if obj.health == 0 {
+            obj.owner = Side::Neutral;
+        }
+        println!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
+    }
+
+    pub fn repair_objective(
+        &mut self,
+        idx: &MizIndex,
+        spctx: &SpawnCtx,
+        oid: ObjectiveId,
+        now: Time,
+    ) -> LuaResult<()> {
+        let obj = &self.objectives[&oid];
+        if let Some(groups) = obj.groups.get(&obj.owner) {
+            let damaged_by_class: Map<ObjGroupClass, Set<GroupId>> =
+                groups.into_iter().fold(Map::new(), |mut m, (name, id)| {
+                    let class = ObjGroupClass::from(name.template());
+                    let mut damaged = false;
+                    for uid in &self.groups_by_id[id].units {
+                        damaged |= self.units_by_id[uid].dead;
+                    }
+                    if damaged {
+                        m.get_or_default_cow(class).insert_cow(*id);
+                        m
+                    } else {
+                        m
+                    }
+                });
+            for class in [
+                ObjGroupClass::Logi,
+                ObjGroupClass::Sr,
+                ObjGroupClass::Aaa,
+                ObjGroupClass::Lr,
+                ObjGroupClass::Armor,
+                ObjGroupClass::Other,
+            ] {
+                if let Some(groups) = damaged_by_class.get(&class) {
+                    for gid in groups {
+                        let group = &self.groups_by_id[gid];
+                        for uid in &group.units {
+                            self.units_by_id[uid].dead = false;
+                        }
+                        self.respawn_group(idx, spctx, group)?;
+                        self.update_objective_status(&oid, now);
+                        self.dirty = true;
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn maybe_do_repairs(&mut self, lua: &Lua, idx: &MizIndex, now: Time) -> LuaResult<()> {
+        let spctx = SpawnCtx::new(lua)?;
+        let to_repair = self.objectives.into_iter().filter_map(|(oid, obj)| {
+            let logi = obj.logi as f32 / 100.;
+            let repair_time = self.repair_time / logi;
+            if obj.health < 100 && (now.0 - obj.last_change_ts.0) >= repair_time {
+                Some(*oid)
+            } else {
+                None
+            }
+        }).collect::<Vec<_>>();
+        for oid in to_repair {
+            self.repair_objective(idx, &spctx, oid, now)?
+        }
+        Ok(())
+    }
+
+    pub fn unit_dead(&mut self, id: UnitId, dead: bool, now: Time) {
         if let Some(unit) = self.units_by_id.get_mut_cow(&id) {
             unit.dead = dead;
-            if let Some(oid) = self.objectives_by_group.get(&unit.group) {
-                let (health, logi) = self.compute_objective_status(&self.objectives[oid]);
-                let obj = &mut self.objectives[oid];
-                obj.health = health;
-                obj.logi = logi;
-                if obj.health == 0 {
-                    obj.owner = Side::Neutral;
-                }
-                println!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
+            if let Some(oid) = self.objectives_by_group.get(&unit.group).copied() {
+                self.update_objective_status(&oid, now)
             }
         }
         self.dirty = true;

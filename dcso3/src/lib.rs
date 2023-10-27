@@ -580,8 +580,8 @@ impl From<CompactString> for String {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize)]
-pub struct Time(f32);
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct Time(pub f32);
 
 impl<'lua> FromLua<'lua> for Time {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {

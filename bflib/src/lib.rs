@@ -10,7 +10,7 @@ use dcso3::{
     lfs::Lfs,
     timer::Timer,
     world::World,
-    wrap_unit, String, UserHooks,
+    wrap_unit, String, UserHooks, Time,
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
@@ -134,7 +134,7 @@ fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.get_object_id()?;
                 if let Some(uid) = ctx.units_by_obj_id.remove(&id) {
-                    ctx.db.unit_dead(uid, true);
+                    ctx.db.unit_dead(uid, true, e.time);
                 }
             }
         }
@@ -188,8 +188,11 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
         let path = path.clone();
-        move |_lua, _, now| {
+        move |lua, _, now| {
             let ctx = unsafe { Context::get_mut() };
+            if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, Time(now as f32)) {
+                println!("error doing repairs {:?}", e)
+            }
             if let Some(snap) = ctx.db.maybe_snapshot() {
                 ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
             }

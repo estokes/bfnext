@@ -27,6 +27,7 @@ pub mod warehouse;
 pub mod weapon;
 pub mod world;
 pub mod lfs;
+pub mod net;
 
 #[macro_export]
 macro_rules! wrapped_table {
@@ -153,6 +154,29 @@ macro_rules! string_enum {
                     $(Self::$case => lua.create_string($str)?),+,
                     Self::Custom(s) => lua.create_string(s.as_str())?
                 }))
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! wrapped_prim {
+    ($name:ident, $type:ty) => { 
+        wrapped_prim!($name, $type, );
+    };
+    ($name:ident, $type:ty, $($extra_derives:ident),*) => {
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, $($extra_derives),*)]
+        pub struct $name($type);
+
+        impl<'lua> FromLua<'lua> for $name {
+            fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+                Ok(Self(FromLua::from_lua(value, lua)?))
+            }
+        }
+
+        impl<'lua> IntoLua<'lua> for $name {
+            fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+                Ok(self.0.into_lua(lua)?)
             }
         }
     };

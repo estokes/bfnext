@@ -479,13 +479,13 @@ impl Db {
                 }
             }
         }
-        t.repair_time = 900.; // put it in the mission somewhere
+        t.repair_time = 90.; // put it in the mission somewhere
         t.dirty = true;
         println!("{:#?}", &t);
         Ok(t)
     }
 
-    pub fn compute_objective_status(&self, obj: &Objective) -> (u8, u8) {
+    fn compute_objective_status(&self, obj: &Objective) -> (u8, u8) {
         obj.groups
             .get(&obj.owner)
             .map(|groups| {
@@ -519,7 +519,7 @@ impl Db {
             .unwrap_or((100, 100))
     }
 
-    pub fn update_objective_status(&mut self, oid: &ObjectiveId, now: Time) {
+    fn update_objective_status(&mut self, oid: &ObjectiveId, now: Time) {
         let (health, logi) = self.compute_objective_status(&self.objectives[oid]);
         let obj = &mut self.objectives[oid];
         obj.health = health;
@@ -531,7 +531,7 @@ impl Db {
         println!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
     }
 
-    pub fn repair_objective(
+    fn repair_objective(
         &mut self,
         idx: &MizIndex,
         spctx: &SpawnCtx,

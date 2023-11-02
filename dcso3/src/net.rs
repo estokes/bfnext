@@ -1,5 +1,5 @@
-use crate::{simple_enum, wrapped_table, wrapped_prim, Sequence, env::miz::GroupKind};
-use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
+use crate::{simple_enum, wrapped_table, wrapped_prim, Sequence};
+use super::{as_tbl, coalition::Side, cvt_err, String};
 use mlua::{prelude::*, Value};
 use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
@@ -113,5 +113,17 @@ impl<'lua> Net<'lua> {
 
     pub fn force_player_slot(&self, id: PlayerId, side: Side, slot: SlotId) -> LuaResult<()> {
         self.t.call_function("force_player_slot", (id, side, slot))
+    }
+
+    pub fn lua2json<T: IntoLua<'lua>>(&self, v: T) -> LuaResult<String> {
+        self.t.call_function("lua2json", v)
+    }
+
+    pub fn json2lua<T: FromLua<'lua>>(&self, v: String) -> LuaResult<T> {
+        self.t.call_function("json2lua", v)
+    }
+
+    pub fn dostring_in(&self, state: String, dostring: String) -> LuaResult<String> {
+        self.t.call_function("dostring_in", (state, dostring))
     }
 }

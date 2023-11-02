@@ -28,6 +28,7 @@ pub mod weapon;
 pub mod world;
 pub mod lfs;
 pub mod net;
+pub mod coord;
 
 #[macro_export]
 macro_rules! wrapped_table {
@@ -493,6 +494,16 @@ impl<'lua> FromLua<'lua> for LuaVec3 {
             tbl.raw_get("y")?,
             tbl.raw_get("z")?,
         )))
+    }
+}
+
+impl<'lua> IntoLua<'lua> for LuaVec3 {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let tbl = lua.create_table()?;
+        tbl.raw_set("x", self.0.x)?;
+        tbl.raw_set("y", self.0.y)?;
+        tbl.raw_set("z", self.0.z)?;
+        Ok(Value::Table(tbl))
     }
 }
 

@@ -126,4 +126,8 @@ impl<'lua> Net<'lua> {
     pub fn dostring_in(&self, state: String, dostring: String) -> LuaResult<String> {
         self.t.call_function("dostring_in", (state, dostring))
     }
+
+    pub fn log(&self, message: String) -> LuaResult<()> {
+        self.t.call_function("log", message)
+    }
 }

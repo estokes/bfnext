@@ -2,6 +2,7 @@ extern crate nalgebra as na;
 use compact_str::CompactString;
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
+use net::{SlotId, PlayerId};
 use serde_derive::{Serialize, Deserialize};
 use std::{
     borrow::Borrow,
@@ -168,6 +169,12 @@ macro_rules! wrapped_prim {
     ($name:ident, $type:ty, $($extra_derives:ident),*) => {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, $($extra_derives),*)]
         pub struct $name($type);
+
+        impl From<$type> for $name {
+            fn from(t: $type) -> Self {
+                Self(t)
+            }
+        }
 
         impl<'lua> FromLua<'lua> for $name {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
@@ -935,7 +942,7 @@ impl<'lua> UserHooks<'lua> {
 
     pub fn on_player_connect<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+        F: Fn(&Lua, PlayerId) -> LuaResult<()> + 'static,
     {
         self.on_player_connect = Some(
             self.lua
@@ -946,7 +953,7 @@ impl<'lua> UserHooks<'lua> {
 
     pub fn on_player_disconnect<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+        F: Fn(&Lua, PlayerId) -> LuaResult<()> + 'static,
     {
         self.on_player_disconnect = Some(
             self.lua
@@ -957,7 +964,7 @@ impl<'lua> UserHooks<'lua> {
 
     pub fn on_player_start<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+        F: Fn(&Lua, PlayerId) -> LuaResult<()> + 'static,
     {
         self.on_player_start = Some(
             self.lua
@@ -968,7 +975,7 @@ impl<'lua> UserHooks<'lua> {
 
     pub fn on_player_stop<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+        F: Fn(&Lua, PlayerId) -> LuaResult<()> + 'static,
     {
         self.on_player_stop = Some(
             self.lua
@@ -979,7 +986,7 @@ impl<'lua> UserHooks<'lua> {
 
     pub fn on_player_change_slot<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, u32) -> LuaResult<()> + 'static,
+        F: Fn(&Lua, PlayerId) -> LuaResult<()> + 'static,
     {
         self.on_player_change_slot = Some(
             self.lua
@@ -991,7 +998,7 @@ impl<'lua> UserHooks<'lua> {
     /// f(addr, ucid, name, id)
     pub fn on_player_try_connect<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, String, String, String, u32) -> LuaResult<bool> + 'static,
+        F: Fn(&Lua, String, String, String, PlayerId) -> LuaResult<bool> + 'static,
     {
         self.on_player_try_connect = Some(self.lua.create_function(
             move |lua, (addr, ucid, name, id)| {
@@ -1004,7 +1011,7 @@ impl<'lua> UserHooks<'lua> {
     /// f(id, message, all)
     pub fn on_player_try_send_chat<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, u32, String, bool) -> LuaResult<String> + 'static,
+        F: Fn(&Lua, PlayerId, String, bool) -> LuaResult<String> + 'static,
     {
         self.on_player_try_send_chat =
             Some(self.lua.create_function(move |lua, (id, msg, all)| {
@@ -1022,7 +1029,7 @@ impl<'lua> UserHooks<'lua> {
     /// f(id, message, all)
     pub fn on_player_try_change_slot<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, u32, Side, String) -> LuaResult<bool> + 'static,
+        F: Fn(&Lua, PlayerId, Side, SlotId) -> LuaResult<bool> + 'static,
     {
         self.on_player_try_change_slot =
             Some(self.lua.create_function(move |lua, (id, side, slot)| {

@@ -10,7 +10,7 @@ use dcso3::{
     lfs::Lfs,
     timer::Timer,
     world::World,
-    wrap_unit, String, UserHooks, Time,
+    wrap_unit, String, UserHooks, Time, net::{SlotId, PlayerId},
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
@@ -91,7 +91,7 @@ fn on_player_try_connect(
     addr: String,
     name: String,
     ucid: String,
-    id: u32,
+    id: PlayerId,
 ) -> LuaResult<bool> {
     println!(
         "onPlayerTryConnect addr: {:?}, name: {:?}, ucid: {:?}, id: {:?}",
@@ -100,7 +100,7 @@ fn on_player_try_connect(
     Ok(true)
 }
 
-fn on_player_try_send_chat(_: &Lua, id: u32, msg: String, all: bool) -> LuaResult<String> {
+fn on_player_try_send_chat(_: &Lua, id: PlayerId, msg: String, all: bool) -> LuaResult<String> {
     println!(
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
@@ -108,7 +108,7 @@ fn on_player_try_send_chat(_: &Lua, id: u32, msg: String, all: bool) -> LuaResul
     Ok(msg)
 }
 
-fn on_player_try_change_slot(_: &Lua, id: u32, side: Side, slot: String) -> LuaResult<bool> {
+fn on_player_try_change_slot(_: &Lua, id: PlayerId, side: Side, slot: SlotId) -> LuaResult<bool> {
     println!(
         "onPlayerTryChangeSlot id: {:?}, side: {:?}, slot: {:?}",
         id, side, slot

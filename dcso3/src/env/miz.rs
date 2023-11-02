@@ -114,6 +114,10 @@ impl<'lua> Unit<'lua> {
         self.raw_get("name")
     }
 
+    pub fn unit_id(&self) -> LuaResult<i64> {
+        self.raw_get("unitId")
+    }
+
     pub fn set_name(&self, name: String) -> LuaResult<()> {
         self.raw_set("name", name)
     }

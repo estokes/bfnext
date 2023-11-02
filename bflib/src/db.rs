@@ -6,7 +6,7 @@ use dcso3::{
     env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     err,
     group::GroupCategory,
-    DeepClone, String, Time, Vector2,
+    DeepClone, String, Time, Vector2, net::SlotId,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -223,7 +223,7 @@ pub struct Objective {
     radius: f64,
     owner: Side,
     kind: ObjectiveKind,
-    slots: Set<String>,
+    slots: Set<SlotId>,
     groups: Map<Side, Map<ObjGroup, GroupId>>,
     health: u8,
     logi: u8,
@@ -251,7 +251,7 @@ pub struct Db {
     units_by_name: Map<String, UnitId>,
     groups_by_side: Map<Side, Set<GroupId>>,
     objectives: Map<ObjectiveId, Objective>,
-    objectives_by_slot: Map<String, ObjectiveId>,
+    objectives_by_slot: Map<SlotId, ObjectiveId>,
     objectives_by_name: Map<String, ObjectiveId>,
     objectives_by_group: Map<GroupId, ObjectiveId>,
 }
@@ -417,25 +417,28 @@ impl Db {
         Ok(())
     }
 
-    pub fn init_objective_slot(&mut self, slot: Group) -> LuaResult<()> {
-        let name = slot.name()?;
-        let pos = slot.pos()?;
-        let obj = {
-            let mut iter = self.objectives.into_iter();
-            loop {
-                match iter.next() {
-                    None => return Err(err("slot not associated with an objective")),
-                    Some((id, obj)) => {
-                        if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
-                            break *id;
+    pub fn init_objective_slots(&mut self, slot: Group) -> LuaResult<()> {
+        for unit in slot.units()? {
+            let unit = unit?;
+            let name = SlotId::from(unit.unit_id()?);
+            let pos = slot.pos()?;
+            let obj = {
+                let mut iter = self.objectives.into_iter();
+                loop {
+                    match iter.next() {
+                        None => return Err(err("slot not associated with an objective")),
+                        Some((id, obj)) => {
+                            if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
+                                break *id;
+                            }
                         }
                     }
                 }
-            }
-        };
-        self.objectives_by_slot.insert_cow(name.clone(), obj);
-        self.objectives[&obj].slots.insert_cow(name);
-        Ok(())
+            };
+            self.objectives_by_slot.insert_cow(name, obj);
+            self.objectives[&obj].slots.insert_cow(name);
+        }
+       Ok(())
     }
 
     pub fn init(lua: &Lua, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
@@ -471,11 +474,11 @@ impl Db {
                 let country = country?;
                 for plane in country.planes()? {
                     let plane = plane?;
-                    t.init_objective_slot(plane)?
+                    t.init_objective_slots(plane)?
                 }
                 for heli in country.helicopters()? {
                     let heli = heli?;
-                    t.init_objective_slot(heli)?
+                    t.init_objective_slots(heli)?
                 }
             }
         }

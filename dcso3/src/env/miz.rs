@@ -133,6 +133,10 @@ impl<'lua> Unit<'lua> {
         self.raw_set("x", pos.x)?;
         self.raw_set("y", pos.y)
     }
+
+    pub fn typ(&self) -> LuaResult<String> {
+        self.raw_get("type")
+    }
 }
 
 wrapped_table!(Group, None);

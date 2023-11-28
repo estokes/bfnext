@@ -6,7 +6,8 @@ use dcso3::{
     env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     err,
     group::GroupCategory,
-    DeepClone, String, Time, Vector2, net::SlotId,
+    net::{SlotId, Ucid},
+    DeepClone, String, Time, Vector2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -56,6 +57,14 @@ macro_rules! atomic_id {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SlotAuth {
+    Yes,
+    ObjectiveNotOwned,
+    NoLives,
+    NotRegistered(Side),
 }
 
 atomic_id!(GroupId);
@@ -160,6 +169,14 @@ pub enum ObjGroupClass {
     Other,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum LifeType {
+    Standard,
+    Logistics,
+    Attack,
+    Recon
+}
+
 impl From<&str> for ObjGroupClass {
     fn from(value: &str) -> Self {
         match value {
@@ -213,6 +230,9 @@ impl ObjGroup {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Vehicle(String);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     id: ObjectiveId,
@@ -223,7 +243,7 @@ pub struct Objective {
     radius: f64,
     owner: Side,
     kind: ObjectiveKind,
-    slots: Set<SlotId>,
+    slots: Map<SlotId, Vehicle>,
     groups: Map<Side, Map<ObjGroup, GroupId>>,
     health: u8,
     logi: u8,
@@ -240,11 +260,29 @@ impl Objective {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Player {
+    name: String,
+    side: Side,
+    side_switches: u8,
+    last_life_reset: Time,
+    lives: Map<LifeType, u8>
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Cfg {
+    repair_time: f32,
+    life_reset: u32, // seconds
+    life_types: Map<Vehicle, LifeType>,
+    default_lives: Map<LifeType, u8>
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Db {
     #[serde(skip)]
     dirty: bool,
-    repair_time: f32,
+    #[serde(skip)]
+    cfg: Cfg,
     groups_by_id: Map<GroupId, SpawnedGroup>,
     units_by_id: Map<UnitId, SpawnedUnit>,
     groups_by_name: Map<String, GroupId>,
@@ -254,6 +292,7 @@ pub struct Db {
     objectives_by_slot: Map<SlotId, ObjectiveId>,
     objectives_by_name: Map<String, ObjectiveId>,
     objectives_by_group: Map<GroupId, ObjectiveId>,
+    players: Map<Ucid, Player>,
 }
 
 impl Db {
@@ -420,7 +459,7 @@ impl Db {
     pub fn init_objective_slots(&mut self, slot: Group) -> LuaResult<()> {
         for unit in slot.units()? {
             let unit = unit?;
-            let name = SlotId::from(unit.unit_id()?);
+            let id = SlotId::from(unit.unit_id()?);
             let pos = slot.pos()?;
             let obj = {
                 let mut iter = self.objectives.into_iter();
@@ -435,10 +474,10 @@ impl Db {
                     }
                 }
             };
-            self.objectives_by_slot.insert_cow(name, obj);
-            self.objectives[&obj].slots.insert_cow(name);
+            self.objectives_by_slot.insert_cow(id, obj);
+            self.objectives[&obj].slots.insert_cow(id, Vehicle(unit.typ()?));
         }
-       Ok(())
+        Ok(())
     }
 
     pub fn init(lua: &Lua, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
@@ -584,15 +623,19 @@ impl Db {
 
     pub fn maybe_do_repairs(&mut self, lua: &Lua, idx: &MizIndex, now: Time) -> LuaResult<()> {
         let spctx = SpawnCtx::new(lua)?;
-        let to_repair = self.objectives.into_iter().filter_map(|(oid, obj)| {
-            let logi = obj.logi as f32 / 100.;
-            let repair_time = self.repair_time / logi;
-            if obj.health < 100 && (now.0 - obj.last_change_ts.0) >= repair_time {
-                Some(*oid)
-            } else {
-                None
-            }
-        }).collect::<Vec<_>>();
+        let to_repair = self
+            .objectives
+            .into_iter()
+            .filter_map(|(oid, obj)| {
+                let logi = obj.logi as f32 / 100.;
+                let repair_time = self.repair_time / logi;
+                if obj.health < 100 && (now.0 - obj.last_change_ts.0) >= repair_time {
+                    Some(*oid)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
         for oid in to_repair {
             self.repair_objective(idx, &spctx, oid, now)?
         }
@@ -756,5 +799,25 @@ impl Db {
         self.dirty = true;
         spctx.spawn(template)?;
         Ok(gid)
+    }
+
+    pub fn authorize_slot(&self, slot: SlotId, player: &Ucid) -> SlotAuth {
+        let obj_side = match self
+            .objectives_by_slot
+            .get(&slot)
+            .and_then(|id| self.objectives.get(id))
+            .map(|obj| obj.owner)
+        {
+            Some(side) => side,
+            None => return SlotAuth::ObjectiveNotOwned
+        };
+        let player = match self.players.get(player) {
+            Some(player) => player,
+            None => return SlotAuth::NotRegistered(obj_side),
+        };
+        if obj_side != player.side {
+            return SlotAuth::ObjectiveNotOwned
+        }
+        
     }
 }

@@ -10,7 +10,7 @@ use dcso3::{
     lfs::Lfs,
     timer::Timer,
     world::World,
-    wrap_unit, String, UserHooks, Time, net::{SlotId, PlayerId},
+    wrap_unit, String, UserHooks, Time, net::{SlotId, PlayerId, Ucid},
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
@@ -34,12 +34,19 @@ fn background_loop(rx: mpsc::Receiver<BgTask>) {
     }
 }
 
+#[derive(Debug)]
+struct PlayerInfo {
+    name: String,
+    ucid: Ucid
+}
+
 #[derive(Debug, Default)]
 struct Context {
     idx: env::miz::MizIndex,
     db: Db,
     to_background: Option<mpsc::Sender<BgTask>>,
     units_by_obj_id: FxHashMap<i64, UnitId>,
+    info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -90,13 +97,15 @@ fn on_player_try_connect(
     _: &Lua,
     addr: String,
     name: String,
-    ucid: String,
+    ucid: Ucid,
     id: PlayerId,
 ) -> LuaResult<bool> {
     println!(
         "onPlayerTryConnect addr: {:?}, name: {:?}, ucid: {:?}, id: {:?}",
         addr, name, ucid, id
     );
+    let ctx = unsafe { Context::get_mut() };
+    ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
     Ok(true)
 }
 

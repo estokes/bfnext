@@ -28,9 +28,9 @@ simple_enum!(PlayerStat, u8, [
     Ship => 4
 ]);
 
-wrapped_prim!(PlayerId, i64, Copy);
-wrapped_prim!(SlotId, i64, Copy);
-wrapped_prim!(Ucid, String);
+wrapped_prim!(PlayerId, i64, Copy, Hash);
+wrapped_prim!(SlotId, i64, Copy, Hash);
+wrapped_prim!(Ucid, String, Hash);
 
 wrapped_table!(PlayerInfo, None);
 

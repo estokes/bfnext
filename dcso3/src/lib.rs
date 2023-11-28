@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 use compact_str::CompactString;
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
-use net::{SlotId, PlayerId};
+use net::{SlotId, PlayerId, Ucid};
 use serde_derive::{Serialize, Deserialize};
 use std::{
     borrow::Borrow,
@@ -998,7 +998,7 @@ impl<'lua> UserHooks<'lua> {
     /// f(addr, ucid, name, id)
     pub fn on_player_try_connect<F>(&mut self, f: F) -> LuaResult<&mut Self>
     where
-        F: Fn(&Lua, String, String, String, PlayerId) -> LuaResult<bool> + 'static,
+        F: Fn(&Lua, String, String, Ucid, PlayerId) -> LuaResult<bool> + 'static,
     {
         self.on_player_try_connect = Some(self.lua.create_function(
             move |lua, (addr, ucid, name, id)| {

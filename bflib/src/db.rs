@@ -174,7 +174,7 @@ pub enum LifeType {
     Standard,
     Logistics,
     Attack,
-    Recon
+    Recon,
 }
 
 impl From<&str> for ObjGroupClass {
@@ -266,15 +266,15 @@ pub struct Player {
     side: Side,
     side_switches: u8,
     last_life_reset: Time,
-    lives: Map<LifeType, u8>
+    lives: Map<LifeType, u8>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cfg {
-    repair_time: f32,
-    life_reset: u32, // seconds
+    repair_time: f32, // seconds
+    life_reset: f32,  // seconds
     life_types: Map<Vehicle, LifeType>,
-    default_lives: Map<LifeType, u8>
+    default_lives: Map<LifeType, u8>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -297,14 +297,25 @@ pub struct Db {
 
 impl Db {
     pub fn load(path: &Path) -> LuaResult<Self> {
+        let mut cfg_path = PathBuf::from(path);
+        cfg_path.set_extension("cfg");
+        let cfg_file = File::open(&cfg_path).map_err(|e| {
+            println!("failed to open config file {:?}, {:?}", cfg_path, e);
+            err("io error")
+        })?;
         let file = File::open(&path).map_err(|e| {
             println!("failed to open save file {:?}, {:?}", path, e);
             err("io error")
         })?;
-        let db: Self = serde_json::from_reader(file).map_err(|e| {
+        let cfg: Cfg = serde_json::from_reader(cfg_file).map_err(|e| {
+            println!("failed to decode cfg file {:?}, {:?}", cfg_path, e);
+            err("cfg decode error")
+        })?;
+        let mut db: Self = serde_json::from_reader(file).map_err(|e| {
             println!("failed to decode save file {:?}, {:?}", path, e);
             err("decode error")
         })?;
+        db.cfg = cfg;
         for (id, _) in &db.groups_by_id {
             GroupId::update_max(*id)
         }
@@ -400,7 +411,7 @@ impl Db {
             name: name.clone(),
             kind,
             owner,
-            slots: Set::new(),
+            slots: Map::new(),
             groups: Map::new(),
             health: 0,
             logi: 0,
@@ -474,8 +485,25 @@ impl Db {
                     }
                 }
             };
+            let vehicle = Vehicle(unit.typ()?);
+            match self.cfg.life_types.get(&vehicle) {
+                None => {
+                    println!("vehicle {:?} doesn't have a configured life type", vehicle);
+                    return Err(err("vehicle missing life type"));
+                }
+                Some(typ) => match self.cfg.default_lives.get(&typ) {
+                    Some(i) if *i > 0 => (),
+                    Some(_) | None => {
+                        println!(
+                            "vehicle {:?} life type {:?} has no configured lives",
+                            vehicle, typ
+                        );
+                        return Err(err("vehicle's life type has no default lives"));
+                    }
+                },
+            }
             self.objectives_by_slot.insert_cow(id, obj);
-            self.objectives[&obj].slots.insert_cow(id, Vehicle(unit.typ()?));
+            self.objectives[&obj].slots.insert_cow(id, vehicle);
         }
         Ok(())
     }
@@ -521,7 +549,7 @@ impl Db {
                 }
             }
         }
-        t.repair_time = 90.; // put it in the mission somewhere
+        t.cfg.repair_time = 90.;
         t.dirty = true;
         println!("{:#?}", &t);
         Ok(t)
@@ -628,7 +656,7 @@ impl Db {
             .into_iter()
             .filter_map(|(oid, obj)| {
                 let logi = obj.logi as f32 / 100.;
-                let repair_time = self.repair_time / logi;
+                let repair_time = self.cfg.repair_time / logi;
                 if obj.health < 100 && (now.0 - obj.last_change_ts.0) >= repair_time {
                     Some(*oid)
                 } else {
@@ -801,23 +829,41 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn authorize_slot(&self, slot: SlotId, player: &Ucid) -> SlotAuth {
-        let obj_side = match self
+    pub fn authorize_slot(&mut self, time: Time, slot: SlotId, ucid: &Ucid) -> SlotAuth {
+        let objective = match self
             .objectives_by_slot
             .get(&slot)
             .and_then(|id| self.objectives.get(id))
-            .map(|obj| obj.owner)
         {
-            Some(side) => side,
-            None => return SlotAuth::ObjectiveNotOwned
+            Some(o) if o.owner != Side::Neutral => o,
+            Some(_) | None => return SlotAuth::ObjectiveNotOwned,
         };
-        let player = match self.players.get(player) {
+        let player = match self.players.get(ucid) {
             Some(player) => player,
-            None => return SlotAuth::NotRegistered(obj_side),
+            None => return SlotAuth::NotRegistered(objective.owner),
         };
-        if obj_side != player.side {
-            return SlotAuth::ObjectiveNotOwned
+        if objective.owner != player.side {
+            return SlotAuth::ObjectiveNotOwned;
         }
-        
+        let should_reset = time.0 - player.last_life_reset.0 >= self.cfg.life_reset;
+        let player = if should_reset && player.lives.len() > 0 {
+            let player = self.players.get_mut_cow(ucid).unwrap();
+            player.last_life_reset = time;
+            player.lives = Map::new();
+            self.dirty = true;
+            player
+        } else {
+            player
+        };
+        let life_type = &self.cfg.life_types[&objective.slots[&slot]];
+        let lives = *player
+            .lives
+            .get(&life_type)
+            .unwrap_or_else(|| &self.cfg.default_lives[&life_type]);
+        if lives == 0 {
+            SlotAuth::NoLives
+        } else {
+            SlotAuth::Yes
+        }
     }
 }

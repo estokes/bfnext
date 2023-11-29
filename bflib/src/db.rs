@@ -485,10 +485,14 @@ impl Db {
                     return Err(err("vehicle missing life type"));
                 }
                 Some(typ) => match self.cfg.default_lives.get(&typ) {
-                    Some((n, f)) if *n > 0 && *f < 0. => (),
-                    Some(_) | None => {
+                    Some((n, f)) if *n > 0 && *f > 0. => (),
+                    None => {
+                        println!("vehicle {:?} has no configured life type", vehicle);
+                        return Err(err("vehicle has no configured life type"))
+                    }
+                    Some((n, f)) => {
                         println!(
-                            "vehicle {:?} life type {:?} has no configured lives or negative reset time",
+                            "vehicle {:?} life type {:?} has no configured lives ({n}) or negative reset time ({f})",
                             vehicle, typ
                         );
                         return Err(err("vehicle's life type has no default lives"));
@@ -504,6 +508,7 @@ impl Db {
     pub fn init(lua: &Lua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
+        t.cfg = cfg;
         // first init all the objectives
         for zone in miz.triggers()? {
             let zone = zone?;
@@ -542,9 +547,7 @@ impl Db {
                 }
             }
         }
-        t.cfg.repair_time = 90.;
         t.dirty = true;
-        t.cfg = cfg;
         println!("{:#?}", &t);
         Ok(t)
     }

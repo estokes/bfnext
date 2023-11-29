@@ -20,7 +20,15 @@ pub struct Cfg {
 impl Cfg {
     pub fn load(miz_state_path: &Path) -> LuaResult<Self> {
         let mut path = PathBuf::from(miz_state_path);
-        path.set_extension("cfg");
+        let file_name = path
+            .file_name()
+            .map(|s| {
+                let mut s = s.to_string_lossy().into_owned();
+                s.push_str("_CFG");
+                s
+            })
+            .unwrap_or_else(|| "CFG".into());
+        path.set_file_name(file_name);
         let file = loop {
             match File::open(&path) {
                 Ok(f) => break f,

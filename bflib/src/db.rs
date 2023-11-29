@@ -1,4 +1,5 @@
 extern crate nalgebra as na;
+use crate::cfg::Cfg;
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
@@ -172,6 +173,7 @@ pub enum ObjGroupClass {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum LifeType {
     Standard,
+    Intercept,
     Logistics,
     Attack,
     Recon,
@@ -233,6 +235,12 @@ impl ObjGroup {
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Vehicle(String);
 
+impl<'a> From<&'a str> for Vehicle {
+    fn from(value: &'a str) -> Self {
+        Self(value.into())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     id: ObjectiveId,
@@ -271,13 +279,6 @@ pub struct Player {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Cfg {
-    repair_time: f32, // seconds
-    life_types: Map<Vehicle, LifeType>,
-    default_lives: Map<LifeType, (u8, f32)>, // lives / time (seconds)
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Db {
     #[serde(skip)]
     dirty: bool,
@@ -299,25 +300,15 @@ pub struct Db {
 
 impl Db {
     pub fn load(path: &Path) -> LuaResult<Self> {
-        let mut cfg_path = PathBuf::from(path);
-        cfg_path.set_extension("cfg");
-        let cfg_file = File::open(&cfg_path).map_err(|e| {
-            println!("failed to open config file {:?}, {:?}", cfg_path, e);
-            err("io error")
-        })?;
         let file = File::open(&path).map_err(|e| {
             println!("failed to open save file {:?}, {:?}", path, e);
             err("io error")
-        })?;
-        let cfg: Cfg = serde_json::from_reader(cfg_file).map_err(|e| {
-            println!("failed to decode cfg file {:?}, {:?}", cfg_path, e);
-            err("cfg decode error")
         })?;
         let mut db: Self = serde_json::from_reader(file).map_err(|e| {
             println!("failed to decode save file {:?}, {:?}", path, e);
             err("decode error")
         })?;
-        db.cfg = cfg;
+        db.cfg = Cfg::load(path)?;
         for (id, _) in &db.groups {
             GroupId::update_max(*id)
         }
@@ -510,7 +501,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn init(lua: &Lua, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
+    pub fn init(lua: &Lua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
         // first init all the objectives
@@ -553,6 +544,7 @@ impl Db {
         }
         t.cfg.repair_time = 90.;
         t.dirty = true;
+        t.cfg = cfg;
         println!("{:#?}", &t);
         Ok(t)
     }
@@ -852,7 +844,8 @@ impl Db {
         let (_, player_lives) = player
             .lives
             .get_or_insert_cow(life_type, || (time, self.cfg.default_lives[&life_type].0));
-        if *player_lives > 0 { // paranoia
+        if *player_lives > 0 {
+            // paranoia
             *player_lives -= 1;
         }
         self.dirty = true;

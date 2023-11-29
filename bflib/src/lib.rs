@@ -1,4 +1,5 @@
 pub mod db;
+pub mod cfg;
 extern crate nalgebra as na;
 use compact_str::format_compact;
 use db::{Db, UnitId};
@@ -16,7 +17,7 @@ use fxhash::FxHashMap;
 use mlua::prelude::*;
 use std::{path::PathBuf, sync::mpsc, thread};
 
-use crate::db::SlotAuth;
+use crate::{db::SlotAuth, cfg::Cfg};
 
 #[derive(Debug)]
 enum BgTask {
@@ -236,7 +237,8 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     })?;
     println!("spawning");
     if !path.exists() {
-        ctx.db = Db::init(lua, &ctx.idx, &Miz::singleton(lua)?)?;
+        let cfg = Cfg::load(&path)?;
+        ctx.db = Db::init(lua, cfg, &ctx.idx, &Miz::singleton(lua)?)?;
     } else {
         ctx.db = Db::load(&path)?;
     }

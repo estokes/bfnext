@@ -159,7 +159,7 @@ pub enum ObjectiveKind {
     Samsite,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ObjGroupClass {
     Logi,
     Aaa,
@@ -169,7 +169,7 @@ pub enum ObjGroupClass {
     Other,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum LifeType {
     Standard,
     Logistics,
@@ -265,16 +265,16 @@ pub struct Player {
     name: String,
     side: Side,
     side_switches: u8,
-    last_life_reset: Time,
-    lives: Map<LifeType, u8>,
+    lives: Map<LifeType, (Time, u8)>,
+    #[serde(skip)]
+    current_slot: Option<SlotId>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cfg {
     repair_time: f32, // seconds
-    life_reset: f32,  // seconds
     life_types: Map<Vehicle, LifeType>,
-    default_lives: Map<LifeType, u8>,
+    default_lives: Map<LifeType, (u8, f32)>, // lives / time (seconds)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -283,8 +283,8 @@ pub struct Db {
     dirty: bool,
     #[serde(skip)]
     cfg: Cfg,
-    groups_by_id: Map<GroupId, SpawnedGroup>,
-    units_by_id: Map<UnitId, SpawnedUnit>,
+    groups: Map<GroupId, SpawnedGroup>,
+    units: Map<UnitId, SpawnedUnit>,
     groups_by_name: Map<String, GroupId>,
     units_by_name: Map<String, UnitId>,
     groups_by_side: Map<Side, Set<GroupId>>,
@@ -293,6 +293,8 @@ pub struct Db {
     objectives_by_name: Map<String, ObjectiveId>,
     objectives_by_group: Map<GroupId, ObjectiveId>,
     players: Map<Ucid, Player>,
+    #[serde(skip)]
+    players_by_slot: Map<SlotId, Ucid>,
 }
 
 impl Db {
@@ -316,10 +318,10 @@ impl Db {
             err("decode error")
         })?;
         db.cfg = cfg;
-        for (id, _) in &db.groups_by_id {
+        for (id, _) in &db.groups {
             GroupId::update_max(*id)
         }
-        for (id, _) in &db.units_by_id {
+        for (id, _) in &db.units {
             UnitId::update_max(*id)
         }
         for (id, _) in &db.objectives {
@@ -492,10 +494,10 @@ impl Db {
                     return Err(err("vehicle missing life type"));
                 }
                 Some(typ) => match self.cfg.default_lives.get(&typ) {
-                    Some(i) if *i > 0 => (),
+                    Some((n, f)) if *n > 0 && *f < 0. => (),
                     Some(_) | None => {
                         println!(
-                            "vehicle {:?} life type {:?} has no configured lives",
+                            "vehicle {:?} life type {:?} has no configured lives or negative reset time",
                             vehicle, typ
                         );
                         return Err(err("vehicle's life type has no default lives"));
@@ -564,7 +566,7 @@ impl Db {
                 let mut logi_total = 0;
                 let mut logi_alive = 0;
                 for (_, gid) in groups {
-                    let group = &self.groups_by_id[gid];
+                    let group = &self.groups[gid];
                     let logi = match ObjGroupClass::from(group.template_name.as_str()) {
                         ObjGroupClass::Logi => true,
                         _ => false,
@@ -574,7 +576,7 @@ impl Db {
                         if logi {
                             logi_total += 1;
                         }
-                        if !self.units_by_id[uid].dead {
+                        if !self.units[uid].dead {
                             alive += 1;
                             if logi {
                                 logi_alive += 1;
@@ -614,8 +616,8 @@ impl Db {
                 groups.into_iter().fold(Map::new(), |mut m, (name, id)| {
                     let class = ObjGroupClass::from(name.template());
                     let mut damaged = false;
-                    for uid in &self.groups_by_id[id].units {
-                        damaged |= self.units_by_id[uid].dead;
+                    for uid in &self.groups[id].units {
+                        damaged |= self.units[uid].dead;
                     }
                     if damaged {
                         m.get_or_default_cow(class).insert_cow(*id);
@@ -634,9 +636,9 @@ impl Db {
             ] {
                 if let Some(groups) = damaged_by_class.get(&class) {
                     for gid in groups {
-                        let group = &self.groups_by_id[gid];
+                        let group = &self.groups[gid];
                         for uid in &group.units {
-                            self.units_by_id[uid].dead = false;
+                            self.units[uid].dead = false;
                         }
                         self.respawn_group(idx, spctx, group)?;
                         self.update_objective_status(&oid, now);
@@ -671,7 +673,7 @@ impl Db {
     }
 
     pub fn unit_dead(&mut self, id: UnitId, dead: bool, now: Time) {
-        if let Some(unit) = self.units_by_id.get_mut_cow(&id) {
+        if let Some(unit) = self.units.get_mut_cow(&id) {
             unit.dead = dead;
             if let Some(oid) = self.objectives_by_group.get(&unit.group).copied() {
                 self.update_objective_status(&oid, now)
@@ -681,21 +683,21 @@ impl Db {
     }
 
     pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
-        self.groups_by_id.into_iter()
+        self.groups.into_iter()
     }
 
     pub fn get_group(&self, id: &GroupId) -> Option<&SpawnedGroup> {
-        self.groups_by_id.get(id)
+        self.groups.get(id)
     }
 
     pub fn get_group_by_name(&self, name: &str) -> Option<&SpawnedGroup> {
         self.groups_by_name
             .get(name)
-            .and_then(|gid| self.groups_by_id.get(gid))
+            .and_then(|gid| self.groups.get(gid))
     }
 
     pub fn get_unit(&self, id: &UnitId) -> Option<&SpawnedUnit> {
-        self.units_by_id.get(id)
+        self.units.get(id)
     }
 
     pub fn get_unit_by_name(&self, name: &str) -> Option<&SpawnedUnit> {
@@ -718,7 +720,7 @@ impl Db {
             .units
             .into_iter()
             .filter_map(|uid| {
-                self.units_by_id.get(uid).and_then(|u| {
+                self.units.get(uid).and_then(|u| {
                     if u.dead {
                         None
                     } else {
@@ -803,10 +805,10 @@ impl Db {
                 dead: false,
             };
             spawned.units.insert_cow(uid);
-            self.units_by_id.insert_cow(uid, spawned_unit);
+            self.units.insert_cow(uid, spawned_unit);
             self.units_by_name.insert_cow(unit_name, uid);
         }
-        self.groups_by_id.insert_cow(gid, spawned);
+        self.groups.insert_cow(gid, spawned);
         self.groups_by_name.insert_cow(group_name, gid);
         self.groups_by_side.get_or_default_cow(side).insert_cow(gid);
         Ok((gid, template))
@@ -829,7 +831,63 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn authorize_slot(&mut self, time: Time, slot: SlotId, ucid: &Ucid) -> SlotAuth {
+    pub fn takeoff(&mut self, time: Time, slot: SlotId) {
+        let objective = match self
+            .objectives_by_slot
+            .get(&slot)
+            .and_then(|id| self.objectives.get(&id))
+        {
+            Some(objective) => objective,
+            None => return,
+        };
+        let player = match self
+            .players_by_slot
+            .get(&slot)
+            .and_then(|ucid| self.players.get_mut_cow(ucid))
+        {
+            Some(player) => player,
+            None => return,
+        };
+        let life_type = self.cfg.life_types[&objective.slots[&slot]];
+        let (_, player_lives) = player
+            .lives
+            .get_or_insert_cow(life_type, || (time, self.cfg.default_lives[&life_type].0));
+        if *player_lives > 0 { // paranoia
+            *player_lives -= 1;
+        }
+        self.dirty = true;
+    }
+
+    pub fn land(&mut self, slot: SlotId) {
+        let objective = match self
+            .objectives_by_slot
+            .get(&slot)
+            .and_then(|id| self.objectives.get(&id))
+        {
+            Some(objective) => objective,
+            None => return,
+        };
+        let player = match self
+            .players_by_slot
+            .get(&slot)
+            .and_then(|ucid| self.players.get_mut_cow(ucid))
+        {
+            Some(player) => player,
+            None => return,
+        };
+        let life_type = self.cfg.life_types[&objective.slots[&slot]];
+        let (_, player_lives) = match player.lives.get_mut_cow(&life_type) {
+            Some(l) => l,
+            None => return,
+        };
+        *player_lives += 1;
+        if *player_lives >= self.cfg.default_lives[&life_type].0 {
+            player.lives.remove_cow(&life_type);
+        }
+        self.dirty = true;
+    }
+
+    pub fn try_occupy_slot(&mut self, time: Time, slot: SlotId, ucid: &Ucid) -> SlotAuth {
         let objective = match self
             .objectives_by_slot
             .get(&slot)
@@ -838,32 +896,30 @@ impl Db {
             Some(o) if o.owner != Side::Neutral => o,
             Some(_) | None => return SlotAuth::ObjectiveNotOwned,
         };
-        let player = match self.players.get(ucid) {
+        let player = match self.players.get_mut_cow(ucid) {
             Some(player) => player,
             None => return SlotAuth::NotRegistered(objective.owner),
         };
         if objective.owner != player.side {
             return SlotAuth::ObjectiveNotOwned;
         }
-        let should_reset = time.0 - player.last_life_reset.0 >= self.cfg.life_reset;
-        let player = if should_reset && player.lives.len() > 0 {
-            let player = self.players.get_mut_cow(ucid).unwrap();
-            player.last_life_reset = time;
-            player.lives = Map::new();
-            self.dirty = true;
-            player
-        } else {
-            player
-        };
         let life_type = &self.cfg.life_types[&objective.slots[&slot]];
-        let lives = *player
-            .lives
-            .get(&life_type)
-            .unwrap_or_else(|| &self.cfg.default_lives[&life_type]);
-        if lives == 0 {
-            SlotAuth::NoLives
-        } else {
-            SlotAuth::Yes
+        loop {
+            match player.lives.get(life_type).map(|t| *t) {
+                Some((reset, 0)) => {
+                    if time.0 - reset.0 >= self.cfg.default_lives[life_type].1 {
+                        player.lives.remove_cow(life_type);
+                        self.dirty = true;
+                    } else {
+                        break SlotAuth::NoLives;
+                    }
+                }
+                None | Some(_) => {
+                    player.current_slot = Some(slot);
+                    self.players_by_slot.insert_cow(slot, ucid.clone());
+                    break SlotAuth::Yes;
+                }
+            }
         }
     }
 }

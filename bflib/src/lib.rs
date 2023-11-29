@@ -16,6 +16,8 @@ use fxhash::FxHashMap;
 use mlua::prelude::*;
 use std::{path::PathBuf, sync::mpsc, thread};
 
+use crate::db::SlotAuth;
+
 #[derive(Debug)]
 enum BgTask {
     MizInit,
@@ -117,12 +119,36 @@ fn on_player_try_send_chat(_: &Lua, id: PlayerId, msg: String, all: bool) -> Lua
     Ok(msg)
 }
 
-fn on_player_try_change_slot(_: &Lua, id: PlayerId, side: Side, slot: SlotId) -> LuaResult<bool> {
+fn on_player_try_change_slot(lua: &Lua, id: PlayerId, side: Side, slot: SlotId) -> LuaResult<bool> {
     println!(
         "onPlayerTryChangeSlot id: {:?}, side: {:?}, slot: {:?}",
         id, side, slot
     );
-    Ok(true)
+    let ctx = unsafe { Context::get_mut() };
+    match ctx.info_by_player_id.get(&id) {
+        None => {
+            println!("unknown player {:?}", id);
+            Ok(false)
+        },
+        Some(ifo) => {
+            let now = Timer::singleton(lua)?.get_time()?;
+            match ctx.db.try_occupy_slot(now, slot, &ifo.ucid) {
+                SlotAuth::NoLives => {
+                    println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
+                    Ok(false)
+                }
+                SlotAuth::NotRegistered(_) => {
+                    println!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
+                    Ok(false)
+                }
+                SlotAuth::ObjectiveNotOwned => {
+                    println!("player {}{:?} coalition does not own the objective", ifo.name, ifo.ucid);
+                    Ok(false)
+                }
+                SlotAuth::Yes => Ok(true)
+            }
+        }
+    }
 }
 
 fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
@@ -195,7 +221,7 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
     let timer = Timer::singleton(lua)?;
-    timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
+    timer.schedule_function(timer.get_time()?.0 + 10., mlua::Value::Nil, {
         let path = path.clone();
         move |lua, _, now| {
             let ctx = unsafe { Context::get_mut() };

@@ -1,4 +1,4 @@
-use crate::{wrapped_table, cvt_err, as_tbl};
+use crate::{wrapped_table, cvt_err, as_tbl, Time};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -28,7 +28,7 @@ impl<'lua> Timer<'lua> {
         lua.globals().raw_get("timer")
     }
 
-    pub fn get_time(&self) -> LuaResult<f64> {
+    pub fn get_time(&self) -> LuaResult<Time> {
         self.t.call_function("getTime", ())
     }
 
@@ -40,9 +40,9 @@ impl<'lua> Timer<'lua> {
         self.t.call_function("getTime0", ())
     }
 
-    pub fn schedule_function<T, F>(&self, when: f64, arg: T, f: F) -> LuaResult<FunId>
+    pub fn schedule_function<T, F>(&self, when: f32, arg: T, f: F) -> LuaResult<FunId>
     where
-        F: Fn(&'lua Lua, T, f64) -> LuaResult<Option<f64>> + 'static,
+        F: Fn(&'lua Lua, T, f32) -> LuaResult<Option<f32>> + 'static,
         T: IntoLua<'lua> + FromLua<'lua>,
     {
         let f = self

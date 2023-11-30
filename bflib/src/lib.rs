@@ -1,5 +1,5 @@
-pub mod db;
 pub mod cfg;
+pub mod db;
 extern crate nalgebra as na;
 use compact_str::format_compact;
 use db::{Db, UnitId};
@@ -9,15 +9,16 @@ use dcso3::{
     err,
     event::Event,
     lfs::Lfs,
+    net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
     world::World,
-    wrap_unit, String, UserHooks, Time, net::{SlotId, PlayerId, Ucid},
+    wrap_unit, String, Time, UserHooks,
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
 use std::{path::PathBuf, sync::mpsc, thread};
 
-use crate::{db::SlotAuth, cfg::Cfg};
+use crate::{cfg::Cfg, db::SlotAuth};
 
 #[derive(Debug)]
 enum BgTask {
@@ -40,7 +41,7 @@ fn background_loop(rx: mpsc::Receiver<BgTask>) {
 #[derive(Debug)]
 struct PlayerInfo {
     name: String,
-    ucid: Ucid
+    ucid: Ucid,
 }
 
 #[derive(Debug, Default)]
@@ -96,6 +97,23 @@ impl Context {
     }
 }
 
+fn get_player_info<'a, 'lua>(
+    tbl: &'a mut FxHashMap<PlayerId, PlayerInfo>,
+    lua: &'lua Lua,
+    id: PlayerId,
+) -> LuaResult<&'a PlayerInfo> {
+    if tbl.contains_key(&id) {
+        Ok(&tbl[&id])
+    } else {
+        let net = Net::singleton(lua)?;
+        let ifo = net.get_player_info(id)?;
+        let ucid = ifo.ucid()?.ok_or_else(|| err("player has no ucid"))?;
+        let name = ifo.name()?;
+        tbl.insert(id, PlayerInfo { name, ucid });
+        Ok(&tbl[&id])
+    }
+}
+
 fn on_player_try_connect(
     _: &Lua,
     addr: String,
@@ -112,12 +130,75 @@ fn on_player_try_connect(
     Ok(true)
 }
 
-fn on_player_try_send_chat(_: &Lua, id: PlayerId, msg: String, all: bool) -> LuaResult<String> {
+fn register_player(lua: &Lua, id: PlayerId, msg: String) -> LuaResult<String> {
+    let net = Net::singleton(lua)?;
+    let ctx = unsafe { Context::get_mut() };
+    let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
+    let side = if msg.eq_ignore_ascii_case("blue") {
+        Side::Blue
+    } else if msg.eq_ignore_ascii_case("red") {
+        Side::Red
+    } else {
+        return Err(err("side is not blue or red"));
+    };
+    match ctx
+        .db
+        .register_player(ifo.ucid.clone(), ifo.name.clone(), side)
+    {
+        Ok(()) => {
+            let msg = String::from(format_compact!("Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!", side));
+            net.send_chat_to(msg, id, None)?;
+            net.send_chat(
+                String::from(format_compact!("{} has joined {:?} team", ifo.name, side)),
+                true,
+            )?
+        }
+        Err((side_switches, orig_side)) => {
+            let msg = String::from(match side_switches {
+                None => format_compact!("You are already on the {:?} team. You may switch sides by typing -switch {:?}.", orig_side, side),
+                Some(0) => format_compact!("You are already on {:?} team, and you may not switch sides.", orig_side),
+                Some(1) => format_compact!("You are already on {:?} team. You may sitch sides 1 time by typing -switch {:?}.", orig_side, side),
+                Some(n) => format_compact!("You are already on {:?} team. You may switch sides {n} times. Type -switch {:?}.", orig_side, side),
+            });
+            net.send_chat_to(msg, id, None)?
+        }
+    }
+    Ok(String::from(""))
+}
+
+fn sideswitch_player(lua: &Lua, id: PlayerId, msg: String) -> LuaResult<String> {
+    let net = Net::singleton(lua)?;
+    let ctx = unsafe { Context::get_mut() };
+    let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
+    let side = if msg.eq_ignore_ascii_case("-switch blue") {
+        Side::Blue
+    } else if msg.eq_ignore_ascii_case("-switch red") {
+        Side::Red
+    } else {
+        return Err(err("side must be blue or red"));
+    };
+    match ctx.db.sideswitch_player(&ifo.ucid, side) {
+        Ok(()) => {
+            let msg = String::from(format_compact!("{} has switched to {:?}", ifo.name, side));
+            net.send_chat(msg, true)?
+        }
+        Err(e) => net.send_chat_to(String::from(e), id, None)?,
+    }
+    Ok(String::from(""))
+}
+
+fn on_player_try_send_chat(lua: &Lua, id: PlayerId, msg: String, all: bool) -> LuaResult<String> {
     println!(
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
     );
-    Ok(msg)
+    if msg.eq_ignore_ascii_case("blue") || msg.eq_ignore_ascii_case("red") {
+        register_player(lua, id, msg)
+    } else if msg.eq_ignore_ascii_case("-switch blue") || msg.eq_ignore_ascii_case("-switch red") {
+        sideswitch_player(lua, id, msg)
+    } else {
+        Ok(msg)
+    }
 }
 
 fn on_player_try_change_slot(lua: &Lua, id: PlayerId, side: Side, slot: SlotId) -> LuaResult<bool> {
@@ -130,7 +211,7 @@ fn on_player_try_change_slot(lua: &Lua, id: PlayerId, side: Side, slot: SlotId) 
         None => {
             println!("unknown player {:?}", id);
             Ok(false)
-        },
+        }
         Some(ifo) => {
             let now = Timer::singleton(lua)?.get_time()?;
             match ctx.db.try_occupy_slot(now, slot, &ifo.ucid) {
@@ -138,15 +219,29 @@ fn on_player_try_change_slot(lua: &Lua, id: PlayerId, side: Side, slot: SlotId) 
                     println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
                     Ok(false)
                 }
-                SlotAuth::NotRegistered(_) => {
+                SlotAuth::NotRegistered(side) => {
                     println!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
+                    let msg = String::from(format_compact!(
+                        "You must join {:?} to use this slot. Type {:?} in chat.",
+                        side,
+                        side
+                    ));
+                    Net::singleton(lua)?.send_chat_to(msg, id, None)?;
                     Ok(false)
                 }
                 SlotAuth::ObjectiveNotOwned => {
-                    println!("player {}{:?} coalition does not own the objective", ifo.name, ifo.ucid);
+                    println!(
+                        "player {}{:?} coalition does not own the objective",
+                        ifo.name, ifo.ucid
+                    );
+                    let msg = String::from(format_compact!(
+                        "{:?} does not own the objective associated with this slot",
+                        side
+                    ));
+                    Net::singleton(lua)?.send_chat_to(msg, id, None)?;
                     Ok(false)
                 }
-                SlotAuth::Yes => Ok(true)
+                SlotAuth::Yes => Ok(true),
             }
         }
     }

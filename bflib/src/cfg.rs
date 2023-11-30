@@ -11,10 +11,19 @@ use std::{
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Cfg {
-    pub repair_time: f32, // seconds
+    /// how often, in seconds, a base will repair if it has 
+    /// full logistics
+    pub repair_time: f32,
+    /// how many times a user may switch sides in a given round, 
+    /// or None for unlimited side switches
+    pub side_switches: Option<u8>,
+    /// the life types different vehicles use
     pub life_types: Map<Vehicle, LifeType>,
-    pub default_lives: Map<LifeType, (u8, f32)>, // lives per time (seconds)
+    /// the life reset configuration for each life type. A pair 
+    /// of number of lives per reset, and reset time in seconds.
+    pub default_lives: Map<LifeType, (u8, f32)>,
 }
 
 impl Cfg {
@@ -62,6 +71,7 @@ impl Default for Cfg {
     fn default() -> Self {
         Self {
             repair_time: 1800.,
+            side_switches: Some(1),
             default_lives: Map::from_iter([
                 (LifeType::Standard, (3, 21600.)),
                 (LifeType::Intercept, (4, 21600.)),

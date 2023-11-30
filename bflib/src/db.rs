@@ -272,13 +272,14 @@ impl Objective {
 pub struct Player {
     name: String,
     side: Side,
-    side_switches: u8,
+    side_switches: Option<u8>,
     lives: Map<LifeType, (Time, u8)>,
     #[serde(skip)]
     current_slot: Option<SlotId>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Db {
     #[serde(skip)]
     dirty: bool,
@@ -488,7 +489,7 @@ impl Db {
                     Some((n, f)) if *n > 0 && *f > 0. => (),
                     None => {
                         println!("vehicle {:?} has no configured life type", vehicle);
-                        return Err(err("vehicle has no configured life type"))
+                        return Err(err("vehicle has no configured life type"));
                     }
                     Some((n, f)) => {
                         println!(
@@ -914,6 +915,50 @@ impl Db {
                     player.current_slot = Some(slot);
                     self.players_by_slot.insert_cow(slot, ucid.clone());
                     break SlotAuth::Yes;
+                }
+            }
+        }
+    }
+
+    pub fn register_player(&mut self, ucid: Ucid, name: String, side: Side) -> Result<(), (Option<u8>, Side)> {
+        match self.players.get(&ucid) {
+            Some(p) if p.side != side => Err((p.side_switches, p.side)),
+            Some(_) => Ok(()),
+            None => {
+                self.players.insert_cow(
+                    ucid,
+                    Player {
+                        name,
+                        side,
+                        side_switches: self.cfg.side_switches,
+                        lives: Map::new(),
+                        current_slot: None,
+                    },
+                );
+                self.dirty = true;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn sideswitch_player(&mut self, ucid: &Ucid, side: Side) -> Result<(), &'static str> {
+        match self.players.get_mut_cow(ucid) {
+            None => Err("You are not registered. Type blue or red to join a side"),
+            Some(player) => {
+                if side == player.side {
+                    Err("you are already on the requested side")
+                } else if let Some(0) = player.side_switches {
+                    Err("you can't switch sides again this round")
+                } else if side == Side::Neutral {
+                    Err("you can't switch to neutral")
+                } else {
+                    match &mut player.side_switches {
+                        Some(n) => { *n -= 1; }
+                        None => (),
+                    }
+                    player.side = side;
+                    self.dirty = true;
+                    Ok(())
                 }
             }
         }

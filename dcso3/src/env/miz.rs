@@ -1,6 +1,6 @@
 use crate::{
-    as_tbl, coalition::Side, country, cvt_err, wrapped_table, DcsTableExt,
-    LuaVec2, Path, Sequence, String, LuaEnv,
+    as_tbl, coalition::Side, country, cvt_err, wrapped_table, DcsTableExt, LuaEnv, LuaVec2, Path,
+    Sequence, String, is_hooks_env,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -348,9 +348,14 @@ pub struct GroupInfo<'lua> {
 wrapped_table!(Miz, None);
 
 impl<'lua> Miz<'lua> {
-    pub fn singleton<L: LuaEnv<'lua>>(lua: L) -> LuaResult<Self> {
-        let env: mlua::Table = lua.inner().globals().get("env")?;
-        env.get("mission")
+    pub fn singleton<L: LuaEnv<'lua> + Copy>(lua: L) -> LuaResult<Self> {
+        if is_hooks_env(lua.inner()) {
+            let current: mlua::Table = lua.inner().globals().get("_current_mission")?;
+            current.get("mission")
+        } else {
+            let env: mlua::Table = lua.inner().globals().get("env")?;
+            env.get("mission")
+        }
     }
 
     pub fn coalition(&self, side: Side) -> LuaResult<Coalition<'lua>> {

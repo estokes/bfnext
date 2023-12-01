@@ -1,4 +1,4 @@
-use crate::{simple_enum, wrapped_table, Sequence, env::miz::GroupKind};
+use crate::{simple_enum, wrapped_table, Sequence, env::miz::GroupKind, MizLua, LuaEnv};
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use mlua::{prelude::*, Value};
 use serde_derive::{Serialize, Deserialize};
@@ -42,10 +42,10 @@ impl<'lua> FromLua<'lua> for Owner {
 wrapped_table!(Group, Some("Group"));
 
 impl<'lua> Group<'lua> {
-    pub fn get_by_name(lua: &'lua Lua, name: &str) -> LuaResult<Group<'lua>> {
-        let globals = lua.globals();
+    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> LuaResult<Group<'lua>> {
+        let globals = lua.inner().globals();
         let class = as_tbl("Group", Some("Group"), globals.raw_get("Group")?)?;
-        Self::from_lua(class.call_method("getByName", name)?, lua)
+        Self::from_lua(class.call_method("getByName", name)?, lua.inner())
     }
 
     pub fn destroy(&self) -> LuaResult<()> {

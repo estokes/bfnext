@@ -7,7 +7,7 @@ use super::{
     static_object::StaticObject,
     unit::Unit,
 };
-use crate::{simple_enum, wrapped_table, Sequence};
+use crate::{simple_enum, wrapped_table, Sequence, MizLua, LuaEnv};
 use mlua::{prelude::*, Value};
 use serde_derive::{Serialize, Deserialize};
 use std::{ops::Deref, str::FromStr};
@@ -41,10 +41,10 @@ simple_enum!(Service, u8, [Atc => 0, Awacs => 1, Fac => 3, Tanker => 2]);
 wrapped_table!(Coalition, None);
 
 impl<'lua> Coalition<'lua> {
-    pub fn singleton(lua: &'lua Lua) -> LuaResult<Self> {
+    pub fn singleton(lua: MizLua<'lua>) -> LuaResult<Self> {
         Ok(Self {
-            t: lua.globals().raw_get("coalition")?,
-            lua,
+            t: lua.inner().globals().raw_get("coalition")?,
+            lua: lua.inner(),
         })
     }
 

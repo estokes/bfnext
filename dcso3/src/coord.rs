@@ -1,5 +1,5 @@
 use super::{as_tbl, String};
-use crate::{wrapped_table, LuaVec3};
+use crate::{wrapped_table, LuaVec3, LuaEnv};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -45,8 +45,8 @@ impl<'lua> IntoLua<'lua> for MGRSPos {
 wrapped_table!(Coord, None);
 
 impl<'lua> Coord<'lua> {
-    pub fn singleton(lua: &'lua Lua) -> LuaResult<Self> {
-        lua.globals().raw_get("coord")
+    pub fn singleton<L: LuaEnv<'lua>>(lua: L) -> LuaResult<Self> {
+        lua.inner().globals().raw_get("coord")
     }
 
     pub fn ll_to_lo(&self, pos: LLPos) -> LuaResult<LuaVec3> {

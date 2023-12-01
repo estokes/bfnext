@@ -8,7 +8,7 @@ use dcso3::{
     err,
     group::GroupCategory,
     net::{SlotId, Ucid},
-    DeepClone, String, Time, Vector2,
+    DeepClone, String, Time, Vector2, MizLua, LuaEnv,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -101,11 +101,11 @@ pub enum SpawnLoc {
 pub struct SpawnCtx<'lua> {
     coalition: Coalition<'lua>,
     miz: Miz<'lua>,
-    lua: &'lua Lua,
+    lua: MizLua<'lua>,
 }
 
 impl<'lua> SpawnCtx<'lua> {
-    pub fn new(lua: &'lua Lua) -> LuaResult<Self> {
+    pub fn new(lua: MizLua<'lua>) -> LuaResult<Self> {
         Ok(Self {
             coalition: Coalition::singleton(lua)?,
             miz: Miz::singleton(lua)?,
@@ -124,7 +124,7 @@ impl<'lua> SpawnCtx<'lua> {
             .miz
             .get_group(idx, kind, side, template_name)?
             .ok_or_else(|| err("no such template"))?;
-        template.group = template.group.deep_clone(self.lua)?;
+        template.group = template.group.deep_clone(self.lua.inner())?;
         Ok(template)
     }
 
@@ -147,7 +147,7 @@ impl<'lua> SpawnCtx<'lua> {
     }
 
     pub fn despawn(&self, name: &str) -> LuaResult<()> {
-        let group = dcso3::group::Group::get_by_name(&self.lua, name)?;
+        let group = dcso3::group::Group::get_by_name(self.lua, name)?;
         group.destroy()
     }
 }
@@ -506,7 +506,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn init(lua: &Lua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
+    pub fn init(lua: MizLua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
         t.cfg = cfg;
@@ -647,7 +647,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn maybe_do_repairs(&mut self, lua: &Lua, idx: &MizIndex, now: Time) -> LuaResult<()> {
+    pub fn maybe_do_repairs(&mut self, lua: MizLua, idx: &MizIndex, now: Time) -> LuaResult<()> {
         let spctx = SpawnCtx::new(lua)?;
         let to_repair = self
             .objectives
@@ -812,7 +812,7 @@ impl Db {
 
     pub fn spawn_template_as_new<'lua>(
         &mut self,
-        lua: &'lua Lua,
+        lua: MizLua,
         idx: &MizIndex,
         side: Side,
         kind: GroupKind,

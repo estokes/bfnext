@@ -12,7 +12,7 @@ use dcso3::{
     net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
     world::World,
-    wrap_unit, String, Time, UserHooks,
+    HooksLua, LuaEnv, MizLua, String, Time, UserHooks,
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
@@ -51,6 +51,7 @@ struct Context {
     to_background: Option<mpsc::Sender<BgTask>>,
     units_by_obj_id: FxHashMap<i64, UnitId>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
+    mission_time: Time,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -88,7 +89,7 @@ impl Context {
         }
     }
 
-    fn respawn_groups(&mut self, lua: &Lua) -> LuaResult<()> {
+    fn respawn_groups(&mut self, lua: MizLua) -> LuaResult<()> {
         let spctx = db::SpawnCtx::new(lua)?;
         for (_, group) in self.db.groups() {
             self.db.respawn_group(&self.idx, &spctx, group)?
@@ -97,9 +98,9 @@ impl Context {
     }
 }
 
-fn get_player_info<'a, 'lua>(
+fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
     tbl: &'a mut FxHashMap<PlayerId, PlayerInfo>,
-    lua: &'lua Lua,
+    lua: L,
     id: PlayerId,
 ) -> LuaResult<&'a PlayerInfo> {
     if tbl.contains_key(&id) {
@@ -115,7 +116,7 @@ fn get_player_info<'a, 'lua>(
 }
 
 fn on_player_try_connect(
-    _: &Lua,
+    _: HooksLua,
     addr: String,
     name: String,
     ucid: Ucid,
@@ -130,7 +131,7 @@ fn on_player_try_connect(
     Ok(true)
 }
 
-fn register_player(lua: &Lua, id: PlayerId, msg: String) -> LuaResult<String> {
+fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String> {
     let net = Net::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
     let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
@@ -166,7 +167,7 @@ fn register_player(lua: &Lua, id: PlayerId, msg: String) -> LuaResult<String> {
     Ok(String::from(""))
 }
 
-fn sideswitch_player(lua: &Lua, id: PlayerId, msg: String) -> LuaResult<String> {
+fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String> {
     let net = Net::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
     let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
@@ -187,7 +188,12 @@ fn sideswitch_player(lua: &Lua, id: PlayerId, msg: String) -> LuaResult<String> 
     Ok(String::from(""))
 }
 
-fn on_player_try_send_chat(lua: &Lua, id: PlayerId, msg: String, all: bool) -> LuaResult<String> {
+fn on_player_try_send_chat(
+    lua: HooksLua,
+    id: PlayerId,
+    msg: String,
+    all: bool,
+) -> LuaResult<String> {
     println!(
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
@@ -201,7 +207,12 @@ fn on_player_try_send_chat(lua: &Lua, id: PlayerId, msg: String, all: bool) -> L
     }
 }
 
-fn on_player_try_change_slot(lua: &Lua, id: PlayerId, side: Side, slot: SlotId) -> LuaResult<bool> {
+fn on_player_try_change_slot(
+    lua: HooksLua,
+    id: PlayerId,
+    side: Side,
+    slot: SlotId,
+) -> LuaResult<bool> {
     println!(
         "onPlayerTryChangeSlot id: {:?}, side: {:?}, slot: {:?}",
         id, side, slot
@@ -212,42 +223,39 @@ fn on_player_try_change_slot(lua: &Lua, id: PlayerId, side: Side, slot: SlotId) 
             println!("unknown player {:?}", id);
             Ok(false)
         }
-        Some(ifo) => {
-            let now = Timer::singleton(lua)?.get_time()?;
-            match ctx.db.try_occupy_slot(now, slot, &ifo.ucid) {
-                SlotAuth::NoLives => {
-                    println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
-                    Ok(false)
-                }
-                SlotAuth::NotRegistered(side) => {
-                    println!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
-                    let msg = String::from(format_compact!(
-                        "You must join {:?} to use this slot. Type {:?} in chat.",
-                        side,
-                        side
-                    ));
-                    Net::singleton(lua)?.send_chat_to(msg, id, None)?;
-                    Ok(false)
-                }
-                SlotAuth::ObjectiveNotOwned => {
-                    println!(
-                        "player {}{:?} coalition does not own the objective",
-                        ifo.name, ifo.ucid
-                    );
-                    let msg = String::from(format_compact!(
-                        "{:?} does not own the objective associated with this slot",
-                        side
-                    ));
-                    Net::singleton(lua)?.send_chat_to(msg, id, None)?;
-                    Ok(false)
-                }
-                SlotAuth::Yes => Ok(true),
+        Some(ifo) => match ctx.db.try_occupy_slot(ctx.mission_time, slot, &ifo.ucid) {
+            SlotAuth::NoLives => {
+                println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
+                Ok(false)
             }
-        }
+            SlotAuth::NotRegistered(side) => {
+                println!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
+                let msg = String::from(format_compact!(
+                    "You must join {:?} to use this slot. Type {:?} in chat.",
+                    side,
+                    side
+                ));
+                Net::singleton(lua)?.send_chat_to(msg, id, None)?;
+                Ok(false)
+            }
+            SlotAuth::ObjectiveNotOwned => {
+                println!(
+                    "player {}{:?} coalition does not own the objective",
+                    ifo.name, ifo.ucid
+                );
+                let msg = String::from(format_compact!(
+                    "{:?} does not own the objective associated with this slot",
+                    side
+                ));
+                Net::singleton(lua)?.send_chat_to(msg, id, None)?;
+                Ok(false)
+            }
+            SlotAuth::Yes => Ok(true),
+        },
     }
 }
 
-fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
+fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
     println!("onEventTranslated: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -274,7 +282,7 @@ fn on_event(_lua: &Lua, ev: Event) -> LuaResult<()> {
     Ok(())
 }
 
-fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
+fn on_mission_load_end(lua: HooksLua) -> LuaResult<()> {
     println!("on_mission_load_end");
     let miz = env::miz::Miz::singleton(lua)?;
     println!("indexing mission");
@@ -285,12 +293,12 @@ fn on_mission_load_end(lua: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
-fn on_simulation_start(_lua: &Lua) -> LuaResult<()> {
+fn on_simulation_start(_lua: HooksLua) -> LuaResult<()> {
     println!("on_simulation_start");
     Ok(())
 }
 
-fn init_hooks_(lua: &Lua) -> LuaResult<()> {
+fn init_hooks(lua: HooksLua) -> LuaResult<()> {
     println!("setting user hooks");
     UserHooks::new(lua)
         .on_simulation_start(on_simulation_start)?
@@ -303,11 +311,7 @@ fn init_hooks_(lua: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
-fn init_hooks(lua: &Lua, _: ()) -> LuaResult<()> {
-    wrap_unit("init_hooks", init_hooks_(lua))
-}
-
-fn init_miz_(lua: &Lua) -> LuaResult<()> {
+fn init_miz(lua: MizLua) -> LuaResult<()> {
     let ctx = unsafe { Context::get_mut() };
     println!("adding event handler");
     World::singleton(lua)?.add_event_handler(on_event)?;
@@ -317,11 +321,12 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
     let timer = Timer::singleton(lua)?;
-    timer.schedule_function(timer.get_time()?.0 + 10., mlua::Value::Nil, {
+    timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
         let path = path.clone();
         move |lua, _, now| {
             let ctx = unsafe { Context::get_mut() };
-            if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, Time(now as f32)) {
+            ctx.mission_time = now;
+            if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, now) {
                 println!("error doing repairs {:?}", e)
             }
             if let Some(snap) = ctx.db.maybe_snapshot() {
@@ -342,14 +347,7 @@ fn init_miz_(lua: &Lua) -> LuaResult<()> {
     Ok(())
 }
 
-fn init_miz(lua: &Lua, _: ()) -> LuaResult<()> {
-    wrap_unit("init_miz", init_miz_(lua))
-}
-
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable> {
-    let exports = lua.create_table()?;
-    exports.set("initHooks", lua.create_function(init_hooks)?)?;
-    exports.set("initMiz", lua.create_function(init_miz)?)?;
-    Ok(exports)
+    dcso3::create_root_module(lua, init_hooks, init_miz)
 }

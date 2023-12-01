@@ -1,7 +1,7 @@
-use crate::{simple_enum, wrapped_table, wrapped_prim, Sequence};
 use super::{as_tbl, coalition::Side, cvt_err, String};
+use crate::{simple_enum, wrapped_prim, wrapped_table, Sequence, LuaEnv};
 use mlua::{prelude::*, Value};
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
 simple_enum!(PlayerStat, u8, [
@@ -67,16 +67,22 @@ impl<'lua> PlayerInfo<'lua> {
 wrapped_table!(Net, None);
 
 impl<'lua> Net<'lua> {
-    pub fn singleton(lua: &'lua Lua) -> LuaResult<Self> {
-        lua.globals().raw_get("net")
+    pub fn singleton<L: LuaEnv<'lua>>(lua: L) -> LuaResult<Self> {
+        lua.inner().globals().raw_get("net")
     }
 
     pub fn send_chat(&self, message: String, all: bool) -> LuaResult<()> {
         self.t.call_function("send_chat", (message, all))
     }
 
-    pub fn send_chat_to(&self, message: String, player: PlayerId, from_id: Option<PlayerId>) -> LuaResult<()> {
-        self.t.call_function("send_chat_to", (message, player, from_id))
+    pub fn send_chat_to(
+        &self,
+        message: String,
+        player: PlayerId,
+        from_id: Option<PlayerId>,
+    ) -> LuaResult<()> {
+        self.t
+            .call_function("send_chat_to", (message, player, from_id))
     }
 
     pub fn get_player_list(&self) -> LuaResult<Sequence<PlayerId>> {
@@ -89,7 +95,7 @@ impl<'lua> Net<'lua> {
 
     pub fn get_server_id(&self) -> LuaResult<PlayerId> {
         self.t.call_function("get_server_id", ())
-    } 
+    }
 
     pub fn get_player_info(&self, id: PlayerId) -> LuaResult<PlayerInfo> {
         self.t.call_function("get_player_info", id)

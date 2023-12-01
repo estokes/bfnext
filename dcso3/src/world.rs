@@ -1,5 +1,5 @@
 use super::{as_tbl, event::Event, unit::Unit, String};
-use crate::{airbase::Airbase, wrapped_table, Sequence};
+use crate::{airbase::Airbase, wrapped_table, Sequence, MizLua, LuaEnv};
 use compact_str::format_compact;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -25,13 +25,13 @@ impl HandlerId {
 wrapped_table!(World, None);
 
 impl<'lua> World<'lua> {
-    pub fn singleton(lua: &'lua Lua) -> LuaResult<Self> {
-        lua.globals().raw_get("world")
+    pub fn singleton(lua: MizLua<'lua>) -> LuaResult<Self> {
+        lua.inner().globals().raw_get("world")
     }
 
     pub fn add_event_handler<F>(&self, f: F) -> LuaResult<HandlerId>
     where
-        F: Fn(&'lua Lua, Event) -> LuaResult<()> + 'static,
+        F: Fn(MizLua<'lua>, Event) -> LuaResult<()> + 'static,
     {
         let globals = self.lua.globals();
         let id = HandlerId::new();
@@ -45,7 +45,7 @@ impl<'lua> World<'lua> {
                             println!("error translating event: {:?}", e);
                             Ok(())
                         }
-                        Ok(ev) => match f(lua, ev) {
+                        Ok(ev) => match f(MizLua(lua), ev) {
                             Ok(()) => Ok(()),
                             Err(e) => {
                                 println!("error in event handler: {:?}", e);

@@ -1,5 +1,5 @@
 use super::{as_tbl, controller::Controller, cvt_err, group::Group, object::Object, String};
-use crate::{simple_enum, wrapped_table};
+use crate::{simple_enum, wrapped_table, MizLua, LuaEnv};
 use mlua::{prelude::*, Value};
 use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
@@ -15,10 +15,10 @@ simple_enum!(UnitCategory, u8, [
 wrapped_table!(Unit, Some("Unit"));
 
 impl<'lua> Unit<'lua> {
-    pub fn get_by_name(lua: &'lua Lua, name: &str) -> LuaResult<Unit<'lua>> {
-        let globals = lua.globals();
+    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> LuaResult<Unit<'lua>> {
+        let globals = lua.inner().globals();
         let unit = as_tbl("Unit", Some("Unit"), globals.raw_get("Unit")?)?;
-        Self::from_lua(unit.call_method("getByName", name)?, lua)
+        Self::from_lua(unit.call_method("getByName", name)?, lua.inner())
     }
 
     pub fn as_object(&self) -> LuaResult<Object<'lua>> {

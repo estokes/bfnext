@@ -1,5 +1,5 @@
 use super::{as_tbl, coalition::Side, country::Country, object::Object};
-use crate::wrapped_table;
+use crate::{wrapped_table, MizLua, LuaEnv};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -7,14 +7,14 @@ use std::ops::Deref;
 wrapped_table!(StaticObject, Some("StaticObject"));
 
 impl<'lua> StaticObject<'lua> {
-    pub fn get_by_name(lua: &'lua Lua, name: &str) -> LuaResult<Self> {
-        let globals = lua.globals();
+    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> LuaResult<Self> {
+        let globals = lua.inner().globals();
         let unit = as_tbl(
             "StaticObject",
             Some("StaticObject"),
             globals.raw_get("StaticObject")?,
         )?;
-        Self::from_lua(unit.call_method("getByName", name)?, lua)
+        Self::from_lua(unit.call_method("getByName", name)?, lua.inner())
     }
 
     pub fn get_coalition(&self) -> LuaResult<Side> {

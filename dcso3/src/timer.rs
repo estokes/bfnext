@@ -1,4 +1,4 @@
-use crate::{wrapped_table, cvt_err, as_tbl, Time};
+use crate::{as_tbl, cvt_err, wrapped_table, LuaEnv, MizLua, Time};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -24,36 +24,36 @@ impl<'lua> IntoLua<'lua> for FunId {
 wrapped_table!(Timer, None);
 
 impl<'lua> Timer<'lua> {
-    pub fn singleton(lua: &'lua Lua) -> LuaResult<Self> {
-        lua.globals().raw_get("timer")
+    pub fn singleton(lua: MizLua<'lua>) -> LuaResult<Self> {
+        lua.inner().globals().raw_get("timer")
     }
 
     pub fn get_time(&self) -> LuaResult<Time> {
         self.t.call_function("getTime", ())
     }
 
-    pub fn get_abs_time(&self) -> LuaResult<u32> {
+    pub fn get_abs_time(&self) -> LuaResult<Time> {
         self.t.call_function("getAbsTime", ())
     }
 
-    pub fn get_time0(&self) -> LuaResult<u32> {
+    pub fn get_time0(&self) -> LuaResult<Time> {
         self.t.call_function("getTime0", ())
     }
 
-    pub fn schedule_function<T, F>(&self, when: f32, arg: T, f: F) -> LuaResult<FunId>
+    pub fn schedule_function<T, F>(&self, when: Time, arg: T, f: F) -> LuaResult<FunId>
     where
-        F: Fn(&'lua Lua, T, f32) -> LuaResult<Option<f32>> + 'static,
+        F: Fn(MizLua, T, Time) -> LuaResult<Option<Time>> + 'static,
         T: IntoLua<'lua> + FromLua<'lua>,
     {
-        let f = self
-            .lua
-            .create_function(move |lua, (arg, time)| match f(lua, arg, time) {
-                Ok(r) => Ok(r),
-                Err(e) => {
-                    println!("error in scheduled function: {:?}", e);
-                    Ok(None)
-                }
-            })?;
+        let f =
+            self.lua
+                .create_function(move |lua, (arg, time)| match f(MizLua(lua), arg, time) {
+                    Ok(r) => Ok(r),
+                    Err(e) => {
+                        println!("error in scheduled function: {:?}", e);
+                        Ok(None)
+                    }
+                })?;
         self.t.call_function("scheduleFunction", (f, arg, when))
     }
 

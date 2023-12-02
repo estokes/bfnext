@@ -666,9 +666,14 @@ impl Db {
             .into_iter()
             .filter_map(|(oid, obj)| {
                 let logi = obj.logi as f32 / 100.;
-                let repair_time = Duration::seconds(((self.cfg.repair_time as f32) / logi) as i64);
-                if obj.health < 100 && (now - obj.last_change_ts) >= repair_time {
-                    Some(*oid)
+                let repair_time = self.cfg.repair_time as f32 / logi;
+                if repair_time < i64::MAX as f32 {
+                    let repair_time = Duration::seconds(repair_time as i64);
+                    if obj.health < 100 && (now - obj.last_change_ts) >= repair_time {
+                        Some(*oid)
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }

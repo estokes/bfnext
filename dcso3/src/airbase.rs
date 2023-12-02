@@ -19,11 +19,11 @@ impl<'lua> Airbase<'lua> {
         self.t.call_method("getCallsign", ())
     }
 
-    pub fn get_unit(&self, i: u32) -> LuaResult<Object> {
+    pub fn get_unit(&self, i: i64) -> LuaResult<Object> {
         self.t.call_method("getUnit", i)
     }
 
-    pub fn get_id(&self) -> LuaResult<u32> {
+    pub fn get_id(&self) -> LuaResult<i64> {
         self.t.call_method("getId", ())
     }
 

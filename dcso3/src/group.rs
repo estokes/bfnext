@@ -32,7 +32,7 @@ pub enum Owner {
 
 impl<'lua> FromLua<'lua> for Owner {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        match u32::from_lua(value.clone(), lua)? {
+        match i64::from_lua(value.clone(), lua)? {
             3 => Ok(Self::Contested),
             _ => Ok(Owner::Side(Side::from_lua(value, lua)?)),
         }
@@ -68,15 +68,15 @@ impl<'lua> Group<'lua> {
         self.t.call_method("getName", ())
     }
 
-    pub fn get_id(&self) -> LuaResult<u32> {
+    pub fn get_id(&self) -> LuaResult<i64> {
         self.t.call_method("getID", ())
     }
 
-    pub fn get_size(&self) -> LuaResult<u32> {
+    pub fn get_size(&self) -> LuaResult<i64> {
         self.t.call_method("getSize", ())
     }
 
-    pub fn get_initial_size(&self) -> LuaResult<u32> {
+    pub fn get_initial_size(&self) -> LuaResult<i64> {
         self.t.call_method("getInitialSize", ())
     }
 

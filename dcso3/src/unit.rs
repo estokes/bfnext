@@ -33,11 +33,11 @@ impl<'lua> Unit<'lua> {
         self.t.call_method("getPlayerName", ())
     }
 
-    pub fn get_id(&self) -> LuaResult<u32> {
+    pub fn get_id(&self) -> LuaResult<i64> {
         self.t.call_method("getID", ())
     }
 
-    pub fn get_number(&self) -> LuaResult<u32> {
+    pub fn get_number(&self) -> LuaResult<i64> {
         self.t.call_method("getNumber", ())
     }
 

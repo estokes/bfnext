@@ -277,6 +277,13 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
                 }
             }
         }
+        Event::Takeoff(e) => {
+            if let Ok(unit) = e.initiator.as_unit() {
+                let slot = SlotId::from(unit.get_id()?);
+                let ctx = unsafe { Context::get_mut() };
+                ctx.db.takeoff(e.time, slot)
+            }
+        }
         _ => (),
     }
     Ok(())

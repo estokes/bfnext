@@ -165,7 +165,7 @@ simple_enum!(GroundRoe, u8, [
 pub enum GroundOption {
     AcEngagementRangeRestriction(u8),
     AlarmState(AlarmState),
-    DisperseOnAttack(u32),
+    DisperseOnAttack(i64),
     EngageAirWeapons(bool),
     Formation(VehicleFormation),
     Roe(GroundRoe),

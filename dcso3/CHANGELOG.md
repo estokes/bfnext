@@ -1,3 +1,13 @@
+## 0.0.5
+
+- separate the two DCS lua environments in a statically type safe way
+- add new events
+- convert u32 returns to i64, which is the native lua type internally
+
+## 0.0.4
+
+- bug fixes
+
 ## 0.0.3
 
 - add env.mission

@@ -218,40 +218,35 @@ fn on_player_try_change_slot(
         id, side, slot
     );
     let ctx = unsafe { Context::get_mut() };
-    match ctx.info_by_player_id.get(&id) {
-        None => {
-            println!("unknown player {:?}", id);
+    let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
+    match ctx.db.try_occupy_slot(ctx.mission_time, slot, &ifo.ucid) {
+        SlotAuth::NoLives => {
+            println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
             Ok(false)
         }
-        Some(ifo) => match ctx.db.try_occupy_slot(ctx.mission_time, slot, &ifo.ucid) {
-            SlotAuth::NoLives => {
-                println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
-                Ok(false)
-            }
-            SlotAuth::NotRegistered(side) => {
-                println!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
-                let msg = String::from(format_compact!(
-                    "You must join {:?} to use this slot. Type {:?} in chat.",
-                    side,
-                    side
-                ));
-                Net::singleton(lua)?.send_chat_to(msg, id, None)?;
-                Ok(false)
-            }
-            SlotAuth::ObjectiveNotOwned => {
-                println!(
-                    "player {}{:?} coalition does not own the objective",
-                    ifo.name, ifo.ucid
-                );
-                let msg = String::from(format_compact!(
-                    "{:?} does not own the objective associated with this slot",
-                    side
-                ));
-                Net::singleton(lua)?.send_chat_to(msg, id, None)?;
-                Ok(false)
-            }
-            SlotAuth::Yes => Ok(true),
-        },
+        SlotAuth::NotRegistered(side) => {
+            println!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
+            let msg = String::from(format_compact!(
+                "You must join {:?} to use this slot. Type {:?} in chat.",
+                side,
+                side
+            ));
+            Net::singleton(lua)?.send_chat_to(msg, id, None)?;
+            Ok(false)
+        }
+        SlotAuth::ObjectiveNotOwned => {
+            println!(
+                "player {}{:?} coalition does not own the objective",
+                ifo.name, ifo.ucid
+            );
+            let msg = String::from(format_compact!(
+                "{:?} does not own the objective associated with this slot",
+                side
+            ));
+            Net::singleton(lua)?.send_chat_to(msg, id, None)?;
+            Ok(false)
+        }
+        SlotAuth::Yes => Ok(true),
     }
 }
 
@@ -277,7 +272,7 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
                 }
             }
         }
-        Event::Takeoff(e) => {
+        Event::Takeoff(e) | Event::PostponedTakeoff(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.get_id()?);
                 let ctx = unsafe { Context::get_mut() };
@@ -328,7 +323,7 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
     let timer = Timer::singleton(lua)?;
-    timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
+    timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
         move |lua, _, now| {
             let ctx = unsafe { Context::get_mut() };
@@ -339,7 +334,7 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
             if let Some(snap) = ctx.db.maybe_snapshot() {
                 ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
             }
-            Ok(Some(now + 10.))
+            Ok(Some(now + 1.))
         }
     })?;
     println!("spawning");

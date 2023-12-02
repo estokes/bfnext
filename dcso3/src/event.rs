@@ -181,6 +181,12 @@ pub enum Event<'lua> {
     WeaponDrop,
     UnitTaskTimeout,
     UnitTaskStage,
+    MacSubtaskScore,
+    MacExtraScore,
+    MissionRestart,
+    MissionWinner,
+    PostponedTakeoff(AtPlace<'lua>),
+    PostponedLand(AtPlace<'lua>),
     Max,
 }
 
@@ -237,7 +243,13 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> LuaRe
         48 => Event::WeaponDrop,
         49 => Event::UnitTaskTimeout,
         50 => Event::UnitTaskStage,
-        51 => Event::Max,
+        51 => Event::MacSubtaskScore,
+        52 => Event::MacExtraScore,
+        53 => Event::MissionRestart,
+        54 => Event::MissionWinner,
+        55 => Event::PostponedTakeoff(AtPlace::from_lua(value, lua)?),
+        56 => Event::PostponedLand(AtPlace::from_lua(value, lua)?),
+        57 => Event::Max,
         _ => return Err(cvt_err("Event")),
     })
 }

@@ -1,5 +1,6 @@
 extern crate nalgebra as na;
 use crate::cfg::Cfg;
+use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
@@ -8,7 +9,7 @@ use dcso3::{
     err,
     group::GroupCategory,
     net::{SlotId, Ucid},
-    DeepClone, String, Time, Vector2, MizLua, LuaEnv,
+    DeepClone, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -255,7 +256,7 @@ pub struct Objective {
     groups: Map<Side, Map<ObjGroup, GroupId>>,
     health: u8,
     logi: u8,
-    last_change_ts: Time,
+    last_change_ts: DateTime<Utc>,
 }
 
 impl Objective {
@@ -273,7 +274,7 @@ pub struct Player {
     name: String,
     side: Side,
     side_switches: Option<u8>,
-    lives: Map<LifeType, (Time, u8)>,
+    lives: Map<LifeType, (DateTime<Utc>, u8)>,
     #[serde(skip)]
     current_slot: Option<SlotId>,
 }
@@ -409,7 +410,7 @@ impl Db {
             groups: Map::new(),
             health: 0,
             logi: 0,
-            last_change_ts: Time(0.),
+            last_change_ts: Utc::now(),
         };
         self.objectives.insert_cow(id, obj);
         self.objectives_by_name.insert_cow(name, id);
@@ -486,7 +487,7 @@ impl Db {
                     return Err(err("vehicle missing life type"));
                 }
                 Some(typ) => match self.cfg.default_lives.get(&typ) {
-                    Some((n, f)) if *n > 0 && *f > 0. => (),
+                    Some((n, f)) if *n > 0 && *f > 0 => (),
                     None => {
                         println!("vehicle {:?} has no configured life type", vehicle);
                         return Err(err("vehicle has no configured life type"));
@@ -587,7 +588,7 @@ impl Db {
             .unwrap_or((100, 100))
     }
 
-    fn update_objective_status(&mut self, oid: &ObjectiveId, now: Time) {
+    fn update_objective_status(&mut self, oid: &ObjectiveId, now: DateTime<Utc>) {
         let (health, logi) = self.compute_objective_status(&self.objectives[oid]);
         let obj = &mut self.objectives[oid];
         obj.health = health;
@@ -604,7 +605,7 @@ impl Db {
         idx: &MizIndex,
         spctx: &SpawnCtx,
         oid: ObjectiveId,
-        now: Time,
+        now: DateTime<Utc>,
     ) -> LuaResult<()> {
         let obj = &self.objectives[&oid];
         if let Some(groups) = obj.groups.get(&obj.owner) {
@@ -647,15 +648,20 @@ impl Db {
         Ok(())
     }
 
-    pub fn maybe_do_repairs(&mut self, lua: MizLua, idx: &MizIndex, now: Time) -> LuaResult<()> {
+    pub fn maybe_do_repairs(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        now: DateTime<Utc>,
+    ) -> LuaResult<()> {
         let spctx = SpawnCtx::new(lua)?;
         let to_repair = self
             .objectives
             .into_iter()
             .filter_map(|(oid, obj)| {
                 let logi = obj.logi as f32 / 100.;
-                let repair_time = self.cfg.repair_time / logi;
-                if obj.health < 100 && (now.0 - obj.last_change_ts.0) >= repair_time {
+                let repair_time = Duration::seconds(((self.cfg.repair_time as f32) / logi) as i64);
+                if obj.health < 100 && (now - obj.last_change_ts) >= repair_time {
                     Some(*oid)
                 } else {
                     None
@@ -668,7 +674,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn unit_dead(&mut self, id: UnitId, dead: bool, now: Time) {
+    pub fn unit_dead(&mut self, id: UnitId, dead: bool, now: DateTime<Utc>) {
         if let Some(unit) = self.units.get_mut_cow(&id) {
             unit.dead = dead;
             if let Some(oid) = self.objectives_by_group.get(&unit.group).copied() {
@@ -827,7 +833,7 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn takeoff(&mut self, time: Time, slot: SlotId) {
+    pub fn takeoff(&mut self, time: DateTime<Utc>, slot: SlotId) {
         let objective = match self
             .objectives_by_slot
             .get(&slot)
@@ -884,7 +890,7 @@ impl Db {
         self.dirty = true;
     }
 
-    pub fn try_occupy_slot(&mut self, time: Time, slot: SlotId, ucid: &Ucid) -> SlotAuth {
+    pub fn try_occupy_slot(&mut self, time: DateTime<Utc>, slot: SlotId, ucid: &Ucid) -> SlotAuth {
         let objective = match self
             .objectives_by_slot
             .get(&slot)
@@ -904,7 +910,8 @@ impl Db {
         loop {
             match player.lives.get(life_type).map(|t| *t) {
                 Some((reset, 0)) => {
-                    if time.0 - reset.0 >= self.cfg.default_lives[life_type].1 {
+                    let reset_after = Duration::seconds(self.cfg.default_lives[life_type].1 as i64);
+                    if time - reset >= reset_after {
                         player.lives.remove_cow(life_type);
                         self.dirty = true;
                     } else {
@@ -920,7 +927,12 @@ impl Db {
         }
     }
 
-    pub fn register_player(&mut self, ucid: Ucid, name: String, side: Side) -> Result<(), (Option<u8>, Side)> {
+    pub fn register_player(
+        &mut self,
+        ucid: Ucid,
+        name: String,
+        side: Side,
+    ) -> Result<(), (Option<u8>, Side)> {
         match self.players.get(&ucid) {
             Some(p) if p.side != side => Err((p.side_switches, p.side)),
             Some(_) => Ok(()),
@@ -953,7 +965,9 @@ impl Db {
                     Err("you can't switch to neutral")
                 } else {
                     match &mut player.side_switches {
-                        Some(n) => { *n -= 1; }
+                        Some(n) => {
+                            *n -= 1;
+                        }
                         None => (),
                     }
                     player.side = side;

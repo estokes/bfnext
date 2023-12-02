@@ -12,8 +12,9 @@ use dcso3::{
     net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, Time, UserHooks,
+    HooksLua, LuaEnv, MizLua, String, UserHooks,
 };
+use chrono::prelude::*;
 use fxhash::FxHashMap;
 use mlua::prelude::*;
 use std::{path::PathBuf, sync::mpsc, thread};
@@ -51,7 +52,6 @@ struct Context {
     to_background: Option<mpsc::Sender<BgTask>>,
     units_by_obj_id: FxHashMap<i64, UnitId>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
-    mission_time: Time,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -217,9 +217,10 @@ fn on_player_try_change_slot(
         "onPlayerTryChangeSlot id: {:?}, side: {:?}, slot: {:?}",
         id, side, slot
     );
+    let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
-    match ctx.db.try_occupy_slot(ctx.mission_time, slot, &ifo.ucid) {
+    match ctx.db.try_occupy_slot(now, slot, &ifo.ucid) {
         SlotAuth::NoLives => {
             println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
             Ok(false)
@@ -268,7 +269,7 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.get_object_id()?;
                 if let Some(uid) = ctx.units_by_obj_id.remove(&id) {
-                    ctx.db.unit_dead(uid, true, e.time);
+                    ctx.db.unit_dead(uid, true, Utc::now());
                 }
             }
         }
@@ -276,7 +277,7 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.get_id()?);
                 let ctx = unsafe { Context::get_mut() };
-                ctx.db.takeoff(e.time, slot)
+                ctx.db.takeoff(Utc::now(), slot)
             }
         }
         _ => (),
@@ -323,18 +324,17 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
     let timer = Timer::singleton(lua)?;
-    timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
+    timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
         let path = path.clone();
         move |lua, _, now| {
             let ctx = unsafe { Context::get_mut() };
-            ctx.mission_time = now;
-            if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, now) {
+            if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, Utc::now()) {
                 println!("error doing repairs {:?}", e)
             }
             if let Some(snap) = ctx.db.maybe_snapshot() {
                 ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
             }
-            Ok(Some(now + 1.))
+            Ok(Some(now + 10.))
         }
     })?;
     println!("spawning");

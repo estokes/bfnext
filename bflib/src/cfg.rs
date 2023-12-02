@@ -15,7 +15,7 @@ type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
 pub struct Cfg {
     /// how often, in seconds, a base will repair if it has 
     /// full logistics
-    pub repair_time: f32,
+    pub repair_time: u32,
     /// how many times a user may switch sides in a given round, 
     /// or None for unlimited side switches
     pub side_switches: Option<u8>,
@@ -23,7 +23,7 @@ pub struct Cfg {
     pub life_types: Map<Vehicle, LifeType>,
     /// the life reset configuration for each life type. A pair 
     /// of number of lives per reset, and reset time in seconds.
-    pub default_lives: Map<LifeType, (u8, f32)>,
+    pub default_lives: Map<LifeType, (u8, u32)>,
 }
 
 impl Cfg {
@@ -70,14 +70,14 @@ impl Cfg {
 impl Default for Cfg {
     fn default() -> Self {
         Self {
-            repair_time: 1800.,
+            repair_time: 1800,
             side_switches: Some(1),
             default_lives: Map::from_iter([
-                (LifeType::Standard, (3, 21600.)),
-                (LifeType::Intercept, (4, 21600.)),
-                (LifeType::Attack, (4, 21600.)),
-                (LifeType::Logistics, (6, 21600.)),
-                (LifeType::Recon, (6, 21600.)),
+                (LifeType::Standard, (3, 21600)),
+                (LifeType::Intercept, (4, 21600)),
+                (LifeType::Attack, (4, 21600)),
+                (LifeType::Logistics, (6, 21600)),
+                (LifeType::Recon, (6, 21600)),
             ]),
             life_types: Map::from_iter([
                 ("FA-18C_hornet".into(), LifeType::Standard),

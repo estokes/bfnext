@@ -10,6 +10,7 @@ lto = "thin"
 debug = 1
 
 [workspace.dependencies]
+chrono = { version = "0.4.31", features = ["serde"] }
 mlua = { version = "0.9.1", features = ["lua51", "module", "serialize"] }
 serde = "1"
 serde_json = "1"

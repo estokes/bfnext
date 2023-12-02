@@ -1,6 +1,7 @@
 pub mod cfg;
 pub mod db;
 extern crate nalgebra as na;
+use chrono::prelude::*;
 use compact_str::format_compact;
 use db::{Db, UnitId};
 use dcso3::{
@@ -14,7 +15,6 @@ use dcso3::{
     world::World,
     HooksLua, LuaEnv, MizLua, String, UserHooks,
 };
-use chrono::prelude::*;
 use fxhash::FxHashMap;
 use mlua::prelude::*;
 use std::{path::PathBuf, sync::mpsc, thread};
@@ -52,6 +52,7 @@ struct Context {
     to_background: Option<mpsc::Sender<BgTask>>,
     units_by_obj_id: FxHashMap<i64, UnitId>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
+    recently_landed: FxHashMap<SlotId, DateTime<Utc>>,
 }
 
 static mut CONTEXT: Option<Context> = None;

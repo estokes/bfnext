@@ -10,7 +10,7 @@ use dcso3::{
     err,
     event::Event,
     lfs::Lfs,
-    net::{Net, PlayerId, SlotId, Ucid},
+    net::{Net, PlayerId, SlotId, Ucid, SPECTATOR},
     timer::Timer,
     unit::Unit,
     world::World,
@@ -209,20 +209,12 @@ fn on_player_try_send_chat(
     }
 }
 
-fn on_player_try_change_slot(
-    lua: HooksLua,
-    id: PlayerId,
-    side: Side,
-    slot: SlotId,
-) -> LuaResult<bool> {
-    println!(
-        "onPlayerTryChangeSlot id: {:?}, side: {:?}, slot: {:?}",
-        id, side, slot
-    );
+fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
+    let (side, slot) = net.get_slot(id)?;
     let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
-    match ctx.db.try_occupy_slot(now, slot, &ifo.ucid) {
+    match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::NoLives => {
             println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
             Ok(false)
@@ -251,6 +243,19 @@ fn on_player_try_change_slot(
         }
         SlotAuth::Yes => Ok(true),
     }
+}
+
+fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> LuaResult<()> {
+    let net = Net::singleton(lua)?;
+    match try_occupy_slot(lua, &net, id) {
+        Err(e) => {
+            println!("error checking slot {:?}", e);
+            net.force_player_slot(id, Side::Neutral, SPECTATOR)?
+        }
+        Ok(false) => net.force_player_slot(id, Side::Neutral, SPECTATOR)?,
+        Ok(true) => (),
+    }
+    Ok(())
 }
 
 fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
@@ -283,7 +288,7 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
                 ctx.recently_landed.remove(&slot);
             }
         }
-        Event::Takeoff(e) | Event::PostponedTakeoff(e) => {
+        Event::Takeoff(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.get_id()?);
                 let ctx = unsafe { Context::get_mut() };
@@ -291,7 +296,7 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
                 ctx.recently_landed.remove(&slot);
             }
         }
-        Event::Land(e) | Event::PostponedLand(e) => {
+        Event::Land(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.get_id()?);
                 let name = unit.as_object()?.get_name()?;
@@ -325,7 +330,7 @@ fn init_hooks(lua: HooksLua) -> LuaResult<()> {
     UserHooks::new(lua)
         .on_simulation_start(on_simulation_start)?
         .on_mission_load_end(on_mission_load_end)?
-        .on_player_try_change_slot(on_player_try_change_slot)?
+        .on_player_change_slot(on_player_change_slot)?
         .on_player_try_connect(on_player_try_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .register()?;

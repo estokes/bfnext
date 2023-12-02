@@ -8,7 +8,7 @@ use dcso3::{
     env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     err,
     group::GroupCategory,
-    net::{SlotId, Ucid},
+    net::{SlotId, SlotIdKind, Ucid, SPECTATOR},
     DeepClone, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
@@ -909,38 +909,63 @@ impl Db {
         }
     }
 
-    pub fn try_occupy_slot(&mut self, time: DateTime<Utc>, slot: SlotId, ucid: &Ucid) -> SlotAuth {
-        let objective = match self
-            .objectives_by_slot
-            .get(&slot)
-            .and_then(|id| self.objectives.get(id))
-        {
-            Some(o) if o.owner != Side::Neutral => o,
-            Some(_) | None => return SlotAuth::ObjectiveNotOwned,
-        };
+    pub fn try_occupy_slot(
+        &mut self,
+        time: DateTime<Utc>,
+        side: Side,
+        slot: SlotId,
+        ucid: &Ucid,
+    ) -> SlotAuth {
+        if side == Side::Neutral && slot == SPECTATOR {
+            return SlotAuth::Yes;
+        }
         let player = match self.players.get_mut_cow(ucid) {
             Some(player) => player,
-            None => return SlotAuth::NotRegistered(objective.owner),
+            None => return SlotAuth::NotRegistered(side),
         };
-        if objective.owner != player.side {
-            return SlotAuth::ObjectiveNotOwned;
-        }
-        let life_type = &self.cfg.life_types[&objective.slots[&slot]];
-        loop {
-            match player.lives.get(life_type).map(|t| *t) {
-                Some((reset, 0)) => {
-                    let reset_after = Duration::seconds(self.cfg.default_lives[life_type].1 as i64);
-                    if time - reset >= reset_after {
-                        player.lives.remove_cow(life_type);
-                        self.dirty = true;
-                    } else {
-                        break SlotAuth::NoLives;
-                    }
+        match slot.classify() {
+            SlotIdKind::ArtilleryCommander
+            | SlotIdKind::ForwardObserver
+            | SlotIdKind::Instructor
+            | SlotIdKind::Observer => {
+                // CR estokes: add permissions for game master
+                if player.side == side {
+                    SlotAuth::Yes
+                } else {
+                    SlotAuth::ObjectiveNotOwned
                 }
-                None | Some(_) => {
-                    player.current_slot = Some(slot);
-                    self.players_by_slot.insert_cow(slot, ucid.clone());
-                    break SlotAuth::Yes;
+            }
+            SlotIdKind::Normal => {
+                let objective = match self
+                    .objectives_by_slot
+                    .get(&slot)
+                    .and_then(|id| self.objectives.get(id))
+                {
+                    Some(o) if o.owner != Side::Neutral => o,
+                    Some(_) | None => return SlotAuth::ObjectiveNotOwned,
+                };
+                if objective.owner != player.side {
+                    return SlotAuth::ObjectiveNotOwned;
+                }
+                let life_type = &self.cfg.life_types[&objective.slots[&slot]];
+                loop {
+                    match player.lives.get(life_type).map(|t| *t) {
+                        Some((reset, 0)) => {
+                            let reset_after =
+                                Duration::seconds(self.cfg.default_lives[life_type].1 as i64);
+                            if time - reset >= reset_after {
+                                player.lives.remove_cow(life_type);
+                                self.dirty = true;
+                            } else {
+                                break SlotAuth::NoLives;
+                            }
+                        }
+                        None | Some(_) => {
+                            player.current_slot = Some(slot);
+                            self.players_by_slot.insert_cow(slot, ucid.clone());
+                            break SlotAuth::Yes;
+                        }
+                    }
                 }
             }
         }

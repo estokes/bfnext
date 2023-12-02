@@ -8,7 +8,7 @@ use dcso3::{
     env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     err,
     group::GroupCategory,
-    net::{SlotId, SlotIdKind, Ucid, SPECTATOR},
+    net::{SlotId, SlotIdKind, Ucid},
     DeepClone, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
@@ -507,7 +507,7 @@ impl Db {
                     }
                 },
             }
-            self.objectives_by_slot.insert_cow(id, obj);
+            self.objectives_by_slot.insert_cow(id.clone(), obj);
             self.objectives[&obj].slots.insert_cow(id, vehicle);
         }
         Ok(())
@@ -916,7 +916,7 @@ impl Db {
         slot: SlotId,
         ucid: &Ucid,
     ) -> SlotAuth {
-        if side == Side::Neutral && slot == SPECTATOR {
+        if side == Side::Neutral && slot == SlotId::spectator() {
             return SlotAuth::Yes;
         }
         let player = match self.players.get_mut_cow(ucid) {
@@ -961,7 +961,7 @@ impl Db {
                             }
                         }
                         None | Some(_) => {
-                            player.current_slot = Some(slot);
+                            player.current_slot = Some(slot.clone());
                             self.players_by_slot.insert_cow(slot, ucid.clone());
                             break SlotAuth::Yes;
                         }

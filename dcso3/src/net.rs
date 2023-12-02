@@ -31,24 +31,6 @@ simple_enum!(PlayerStat, u8, [
 
 wrapped_prim!(PlayerId, i64, Copy, Hash);
 
-// slots in dcs are always positive numbers except for 4 special cases
-// - artillery commanders
-// - forward observers
-// - observers
-// - instructors
-//
-// Those slots are strings. Since it would be very inefficent to make slotid a string
-// just because of a few special cases, we instead use the top 8 bits of slot id as flags
-// indicating whether a given slot id is a special case or not.
-const ARTYCMDR_MASK: u64 = 0x8000_0000_0000_0000;
-const OBSVR_MASK: u64 = 0x4000_0000_0000_0000;
-const FWDOBSVR_MASK: u64 = 0x2000_0000_0000_0000;
-const INSTR_MASK: u64 = 0x1000_0000_0000_0000;
-const RED_MASK: u64 = 0x0100_0000_0000_0000;
-const BLUE_MASK: u64 = 0x0200_0000_0000_0000;
-const NEUTRAL_MASK: u64 = 0x0400_0000_0000_0000;
-const FLAGS_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
-
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum SlotIdKind {
     Normal,
@@ -58,100 +40,11 @@ pub enum SlotIdKind {
     Instructor
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct SlotId(u64);
+wrapped_prim!(SlotId, String, Hash);
 
-pub const SPECTATOR: SlotId = SlotId(0);
-
-impl<'lua> FromLua<'lua> for SlotId {
-    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
-        fn parse(s: &str) -> LuaResult<u64> {
-            s.parse::<u64>()
-                .map_err(|_| cvt_err("number expected in slotid"))
-        }
-        match value {
-            Value::Integer(i) => {
-                if i < 0 {
-                    Err(cvt_err("slots must be positive"))
-                } else {
-                    Ok(Self(i as u64))
-                }
-            }
-            Value::String(s) => {
-                let s = s.to_str()?;
-                if s.starts_with("artillery_commander") {
-                    if let Some(s) = s.strip_prefix("artillery_commander_red_") {
-                        Ok(Self(ARTYCMDR_MASK | RED_MASK | parse(s)?))
-                    } else if let Some(s) = s.strip_prefix("artillery_commander_blue_") {
-                        Ok(Self(ARTYCMDR_MASK | BLUE_MASK | parse(s)?))
-                    } else if let Some(s) = s.strip_prefix("artillery_commander_neutral_") {
-                        Ok(Self(ARTYCMDR_MASK | NEUTRAL_MASK | parse(s)?))
-                    } else {
-                        Err(cvt_err("malformed artillery commander slot"))
-                    }
-                } else if s.starts_with("observer") {
-                    if let Some(s) = s.strip_prefix("observer_red_") {
-                        Ok(Self(OBSVR_MASK | RED_MASK | parse(s)?))
-                    } else if let Some(s) = s.strip_prefix("observer_blue_") {
-                        Ok(Self(OBSVR_MASK | BLUE_MASK | parse(s)?))
-                    } else if let Some(s) = s.strip_prefix("observer_neutral_") {
-                        Ok(Self(OBSVR_MASK | NEUTRAL_MASK | parse(s)?))
-                    } else {
-                        Err(cvt_err("malformed observer slot"))
-                    }
-                } else if s.starts_with("forward_observer") {
-                    if let Some(s) = s.strip_prefix("forward_observer_red_") {
-                        Ok(Self(FWDOBSVR_MASK | RED_MASK | parse(s)?))
-                    } else if let Some(s) = s.strip_prefix("forward_observer_blue_") {
-                        Ok(Self(FWDOBSVR_MASK | BLUE_MASK | parse(s)?))
-                    } else if let Some(s) = s.strip_prefix("forward_observer_neutral_") {
-                        Ok(Self(FWDOBSVR_MASK | BLUE_MASK | parse(s)?))
-                    } else {
-                        Err(cvt_err("malformed forward observer slot"))
-                    }
-                } else if s.starts_with("instructor") {
-                    if let Some(s) = s.strip_prefix("instructor_red_") {
-                        Ok(Self(INSTR_MASK | RED_MASK | parse(s)?))
-                    } else if let Some(s) = s.strip_prefix("instructor_blue_") {
-                        Ok(Self(INSTR_MASK | BLUE_MASK | parse(s)?))
-                    } else if let Some(s) = s.strip_prefix("instructor_neutral_") {
-                        Ok(Self(FWDOBSVR_MASK | NEUTRAL_MASK | parse(s)?))
-                    } else {
-                        Err(cvt_err("malformed instructor slot"))
-                    }
-                } else {
-                    Err(cvt_err("invalid string slot id"))
-                }
-            }
-            _ => Err(cvt_err("Invalid type for slotid")),
-        }
-    }
-}
-
-impl<'lua> IntoLua<'lua> for SlotId {
-    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
-        let index = self.index();
-        match self.classify() {
-            SlotIdKind::ArtilleryCommander => {
-                let side = self.side_str().unwrap();
-                String(format_compact!("artillery_commander_{}_{}", side, index)).into_lua(lua)
-            }
-            SlotIdKind::ForwardObserver => {
-                let side = self.side_str().unwrap();
-                String(format_compact!("forward_observer_{}_{}", side, index)).into_lua(lua)
-            }
-            SlotIdKind::Instructor => {
-                let side = self.side_str().unwrap();
-                String(format_compact!("instructor_{}_{}", side, index)).into_lua(lua)
-            }
-            SlotIdKind::Observer => {
-                let side = self.side_str().unwrap();
-                String(format_compact!("observer_{}_{}", side, index)).into_lua(lua)
-            }
-            SlotIdKind::Normal => {
-                index.into_lua(lua)
-            }
-        }
+impl From<i64> for SlotId {
+    fn from(value: i64) -> Self {
+        Self(String::from(format_compact!("{}", value)))
     }
 }
 
@@ -171,56 +64,23 @@ impl SlotId {
     }
 
     pub fn is_artillery_commander(&self) -> bool {
-        self.0 & ARTYCMDR_MASK > 0
+        self.0.starts_with("artillery_commander_")
     }
 
     pub fn is_observer(&self) -> bool {
-        self.0 & OBSVR_MASK > 0
+        self.0.starts_with("observer_")
     }
 
     pub fn is_forward_observer(&self) -> bool {
-        self.0 & FWDOBSVR_MASK > 0
+        self.0.starts_with("forward_observer_")
     }
 
     pub fn is_instructor(&self) -> bool {
-        self.0 & INSTR_MASK > 0
+        self.0.starts_with("instructor_")
     }
 
-    pub fn side(&self) -> Option<Side> {
-        if self.0 & RED_MASK > 0 {
-            Some(Side::Red)
-        } else if self.0 & BLUE_MASK > 0 {
-            Some(Side::Blue)
-        } else if self.0 & NEUTRAL_MASK > 0 {
-            Some(Side::Neutral)
-        } else {
-            None
-        }
-    }
-
-    pub fn side_str(&self) -> Option<&'static str> {
-        match self.side() {
-            Some(Side::Red) => Some("red"),
-            Some(Side::Blue) => Some("blue"),
-            Some(Side::Neutral) => Some("neutral"),
-            None => None
-        }
-    }
-
-    pub fn index(&self) -> u64 {
-        self.0 & FLAGS_MASK
-    }
-}
-
-impl From<i64> for SlotId {
-    fn from(value: i64) -> Self {
-        Self(value as u64 & FLAGS_MASK)
-    }
-}
-
-impl From<u64> for SlotId {
-    fn from(value: u64) -> Self {
-        Self(value & FLAGS_MASK)
+    pub fn spectator() -> SlotId {
+        Self(String::from("0"))
     }
 }
 

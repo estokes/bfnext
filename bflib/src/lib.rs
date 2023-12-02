@@ -10,7 +10,7 @@ use dcso3::{
     err,
     event::Event,
     lfs::Lfs,
-    net::{Net, PlayerId, SlotId, Ucid, SPECTATOR},
+    net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
     unit::Unit,
     world::World,
@@ -250,9 +250,9 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> LuaResult<()> {
     match try_occupy_slot(lua, &net, id) {
         Err(e) => {
             println!("error checking slot {:?}", e);
-            net.force_player_slot(id, Side::Neutral, SPECTATOR)?
+            net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
         }
-        Ok(false) => net.force_player_slot(id, Side::Neutral, SPECTATOR)?,
+        Ok(false) => net.force_player_slot(id, Side::Neutral, SlotId::spectator())?,
         Ok(true) => (),
     }
     Ok(())
@@ -292,7 +292,7 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.get_id()?);
                 let ctx = unsafe { Context::get_mut() };
-                ctx.db.takeoff(Utc::now(), slot);
+                ctx.db.takeoff(Utc::now(), slot.clone());
                 ctx.recently_landed.remove(&slot);
             }
         }
@@ -351,7 +351,7 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
                 Ok(pos) => pos,
                 Err(_) => return false,
             };
-            !db.land(*slot, pos)
+            !db.land(slot.clone(), pos)
         } else {
             true
         }

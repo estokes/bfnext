@@ -912,28 +912,27 @@ impl Db {
     pub fn try_occupy_slot(
         &mut self,
         time: DateTime<Utc>,
-        side: Side,
+        slot_side: Side,
         slot: SlotId,
         ucid: &Ucid,
     ) -> SlotAuth {
-        if side == Side::Neutral && slot == SlotId::spectator() {
+        if slot_side == Side::Neutral && slot == SlotId::spectator() {
             return SlotAuth::Yes;
         }
         let player = match self.players.get_mut_cow(ucid) {
             Some(player) => player,
-            None => return SlotAuth::NotRegistered(side),
+            None => return SlotAuth::NotRegistered(slot_side),
         };
+        if slot_side != player.side {
+            return SlotAuth::ObjectiveNotOwned;
+        }
         match slot.classify() {
             SlotIdKind::ArtilleryCommander
             | SlotIdKind::ForwardObserver
             | SlotIdKind::Instructor
             | SlotIdKind::Observer => {
                 // CR estokes: add permissions for game master
-                if player.side == side {
-                    SlotAuth::Yes
-                } else {
-                    SlotAuth::ObjectiveNotOwned
-                }
+                SlotAuth::Yes
             }
             SlotIdKind::Normal => {
                 let objective = match self

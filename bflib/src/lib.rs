@@ -1,7 +1,7 @@
 pub mod cfg;
 pub mod db;
 extern crate nalgebra as na;
-use chrono::prelude::*;
+use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use db::{Db, UnitId};
 use dcso3::{
@@ -12,8 +12,9 @@ use dcso3::{
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
+    unit::Unit,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, UserHooks,
+    HooksLua, LuaEnv, MizLua, String, UserHooks, Vector2,
 };
 use fxhash::FxHashMap;
 use mlua::prelude::*;
@@ -52,7 +53,7 @@ struct Context {
     to_background: Option<mpsc::Sender<BgTask>>,
     units_by_obj_id: FxHashMap<i64, UnitId>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
-    recently_landed: FxHashMap<SlotId, DateTime<Utc>>,
+    recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -266,19 +267,36 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
                 }
             }
         }
-        Event::Dead(e) => {
+        Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.get_object_id()?;
                 if let Some(uid) = ctx.units_by_obj_id.remove(&id) {
                     ctx.db.unit_dead(uid, true, Utc::now());
                 }
+                let slot = SlotId::from(unit.get_id()?);
+                ctx.recently_landed.remove(&slot);
+            }
+        }
+        Event::Ejection(e) => {
+            if let Ok(unit) = e.initiator.as_unit() {
+                let slot = SlotId::from(unit.get_id()?);
+                ctx.recently_landed.remove(&slot);
             }
         }
         Event::Takeoff(e) | Event::PostponedTakeoff(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.get_id()?);
                 let ctx = unsafe { Context::get_mut() };
-                ctx.db.takeoff(Utc::now(), slot)
+                ctx.db.takeoff(Utc::now(), slot);
+                ctx.recently_landed.remove(&slot);
+            }
+        }
+        Event::Land(e) | Event::PostponedLand(e) => {
+            if let Ok(unit) = e.initiator.as_unit() {
+                let slot = SlotId::from(unit.get_id()?);
+                let name = unit.as_object()?.get_name()?;
+                let ctx = unsafe { Context::get_mut() };
+                ctx.recently_landed.insert(slot, (name, Utc::now()));
             }
         }
         _ => (),
@@ -315,6 +333,26 @@ fn init_hooks(lua: HooksLua) -> LuaResult<()> {
     Ok(())
 }
 
+fn get_unit_ground_pos(lua: MizLua, name: &str) -> LuaResult<Vector2> {
+    let pos = Unit::get_by_name(lua, name)?.as_object()?.get_point()?;
+    Ok(Vector2::from(na::Vector2::new(pos.0.x, pos.0.z)))
+}
+
+fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
+    let db = &mut ctx.db;
+    ctx.recently_landed.retain(|slot, (name, landed_ts)| {
+        if ts - *landed_ts >= Duration::seconds(10) {
+            let pos = match get_unit_ground_pos(lua, &**name) {
+                Ok(pos) => pos,
+                Err(_) => return false,
+            };
+            !db.land(*slot, pos)
+        } else {
+            true
+        }
+    });
+}
+
 fn init_miz(lua: MizLua) -> LuaResult<()> {
     let ctx = unsafe { Context::get_mut() };
     println!("adding event handler");
@@ -328,10 +366,12 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
     timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
         let path = path.clone();
         move |lua, _, now| {
+            let ts = Utc::now();
             let ctx = unsafe { Context::get_mut() };
-            if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, Utc::now()) {
+            if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, ts) {
                 println!("error doing repairs {:?}", e)
             }
+            return_lives(lua, ctx, ts);
             if let Some(snap) = ctx.db.maybe_snapshot() {
                 ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
             }

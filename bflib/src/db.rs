@@ -260,6 +260,12 @@ pub struct Objective {
 }
 
 impl Objective {
+    pub fn is_in_circle(&self, pos: Vector2) -> bool {
+        na::distance(&self.pos.into(), &pos.into()) <= self.radius
+    }
+}
+
+impl Objective {
     pub fn health(&self) -> u8 {
         self.health
     }
@@ -861,14 +867,14 @@ impl Db {
         self.dirty = true;
     }
 
-    pub fn land(&mut self, slot: SlotId) {
+    pub fn land(&mut self, slot: SlotId, position: Vector2) -> bool {
         let objective = match self
             .objectives_by_slot
             .get(&slot)
             .and_then(|id| self.objectives.get(&id))
         {
             Some(objective) => objective,
-            None => return,
+            None => return true,
         };
         let player = match self
             .players_by_slot
@@ -876,18 +882,26 @@ impl Db {
             .and_then(|ucid| self.players.get_mut_cow(ucid))
         {
             Some(player) => player,
-            None => return,
+            None => return true,
         };
         let life_type = self.cfg.life_types[&objective.slots[&slot]];
         let (_, player_lives) = match player.lives.get_mut_cow(&life_type) {
             Some(l) => l,
-            None => return,
+            None => return true,
         };
-        *player_lives += 1;
-        if *player_lives >= self.cfg.default_lives[&life_type].0 {
-            player.lives.remove_cow(&life_type);
+        let is_on_owned_objective = self.objectives.into_iter().fold(false, |res, (_, obj)| {
+            res || (obj.owner == player.side && obj.is_in_circle(position))
+        });
+        if is_on_owned_objective {
+            *player_lives += 1;
+            if *player_lives >= self.cfg.default_lives[&life_type].0 {
+                player.lives.remove_cow(&life_type);
+            }
+            self.dirty = true;
+            true
+        } else {
+            false
         }
-        self.dirty = true;
     }
 
     pub fn try_occupy_slot(&mut self, time: DateTime<Utc>, slot: SlotId, ucid: &Ucid) -> SlotAuth {

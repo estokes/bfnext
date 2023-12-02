@@ -88,6 +88,24 @@ impl<'lua> FromLua<'lua> for UnitEvent<'lua> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct EjectionEvent<'lua> {
+    pub time: Time,
+    pub initiator: Object<'lua>,
+    pub target: Object<'lua>,
+}
+
+impl<'lua> FromLua<'lua> for EjectionEvent<'lua> {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("EjectionEvent", None, value)?;
+        Ok(Self {
+            time: tbl.raw_get("time")?,
+            initiator: tbl.raw_get("initiator")?,
+            target: tbl.raw_get("target")?
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Birth<'lua> {
     pub time: Time,
     pub initiator: Object<'lua>,
@@ -136,7 +154,7 @@ pub enum Event<'lua> {
     Takeoff(AtPlace<'lua>),
     Land(AtPlace<'lua>),
     Crash(UnitEvent<'lua>),
-    Ejection,
+    Ejection(EjectionEvent<'lua>),
     Refueling,
     Dead(UnitEvent<'lua>),
     PilotDead(UnitEvent<'lua>),
@@ -198,7 +216,7 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> LuaRe
         3 => Event::Takeoff(AtPlace::from_lua(value, lua)?),
         4 => Event::Land(AtPlace::from_lua(value, lua)?),
         5 => Event::Crash(UnitEvent::from_lua(value, lua)?),
-        6 => Event::Ejection,
+        6 => Event::Ejection(EjectionEvent::from_lua(value, lua)?),
         7 => Event::Refueling,
         8 => Event::Dead(UnitEvent::from_lua(value, lua)?),
         9 => Event::PilotDead(UnitEvent::from_lua(value, lua)?),

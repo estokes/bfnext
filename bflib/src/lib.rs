@@ -16,7 +16,7 @@ use dcso3::{
     world::World,
     HooksLua, LuaEnv, MizLua, String, UserHooks, Vector2,
 };
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use mlua::prelude::*;
 use std::{path::PathBuf, sync::mpsc, thread};
 
@@ -55,6 +55,7 @@ struct Context {
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
     recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
+    force_to_spectators: FxHashSet<PlayerId>,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -262,19 +263,15 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> LuaResult<()> {
     Ok(())
 }
 
-fn force_player_in_slot_to_spectators(lua: MizLua, ctx: &Context, slot: &SlotId) -> LuaResult<()> {
-    match ctx.db.player_in_slot(slot) {
-        None => Ok(()),
-        Some(ucid) => match ctx.id_by_ucid.get(ucid) {
-            None => Ok(()),
-            Some(id) => {
-                Net::singleton(lua)?.force_player_slot(*id, Side::Neutral, SlotId::spectator())
-            }
-        },
+fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
+    if let Some(ucid) = ctx.db.player_in_slot(slot) {
+        if let Some(id) = ctx.id_by_ucid.get(ucid) {
+            ctx.force_to_spectators.insert(*id);
+        }
     }
 }
 
-fn on_event(lua: MizLua, ev: Event) -> LuaResult<()> {
+fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
     println!("onEventTranslated: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -296,14 +293,14 @@ fn on_event(lua: MizLua, ev: Event) -> LuaResult<()> {
                 }
                 let slot = SlotId::from(unit.get_id()?);
                 ctx.recently_landed.remove(&slot);
-                force_player_in_slot_to_spectators(lua, ctx, &slot)?
+                force_player_in_slot_to_spectators(ctx, &slot)
             }
         }
         Event::Ejection(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.get_id()?);
                 ctx.recently_landed.remove(&slot);
-                force_player_in_slot_to_spectators(lua, ctx, &slot)?
+                force_player_in_slot_to_spectators(ctx, &slot)
             }
         }
         Event::Takeoff(e) => {
@@ -386,7 +383,7 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
     let timer = Timer::singleton(lua)?;
-    timer.schedule_function(timer.get_time()? + 10., mlua::Value::Nil, {
+    timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
         move |lua, _, now| {
             let ts = Utc::now();
@@ -398,7 +395,11 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
             if let Some(snap) = ctx.db.maybe_snapshot() {
                 ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
             }
-            Ok(Some(now + 10.))
+            let net = Net::singleton(lua)?;
+            for id in ctx.force_to_spectators.drain() {
+                net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
+            }
+            Ok(Some(now + 1.))
         }
     })?;
     println!("spawning");

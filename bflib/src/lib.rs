@@ -53,6 +53,7 @@ struct Context {
     to_background: Option<mpsc::Sender<BgTask>>,
     units_by_obj_id: FxHashMap<i64, UnitId>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
+    id_by_ucid: FxHashMap<Ucid, PlayerId>,
     recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
 }
 
@@ -102,6 +103,7 @@ impl Context {
 
 fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
     tbl: &'a mut FxHashMap<PlayerId, PlayerInfo>,
+    rtbl: &'a mut FxHashMap<Ucid, PlayerId>,
     lua: L,
     id: PlayerId,
 ) -> LuaResult<&'a PlayerInfo> {
@@ -112,6 +114,7 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
         let ifo = net.get_player_info(id)?;
         let ucid = ifo.ucid()?.ok_or_else(|| err("player has no ucid"))?;
         let name = ifo.name()?;
+        rtbl.insert(ucid.clone(), id);
         tbl.insert(id, PlayerInfo { name, ucid });
         Ok(&tbl[&id])
     }
@@ -129,6 +132,7 @@ fn on_player_try_connect(
         addr, name, ucid, id
     );
     let ctx = unsafe { Context::get_mut() };
+    ctx.id_by_ucid.insert(ucid.clone(), id);
     ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
     Ok(true)
 }
@@ -136,7 +140,7 @@ fn on_player_try_connect(
 fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String> {
     let net = Net::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
-    let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
+    let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     let side = if msg.eq_ignore_ascii_case("blue") {
         Side::Blue
     } else if msg.eq_ignore_ascii_case("red") {
@@ -172,7 +176,7 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String
 fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String> {
     let net = Net::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
-    let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
+    let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     let side = if msg.eq_ignore_ascii_case("-switch blue") {
         Side::Blue
     } else if msg.eq_ignore_ascii_case("-switch red") {
@@ -213,7 +217,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = net.get_slot(id)?;
-    let ifo = get_player_info(&mut ctx.info_by_player_id, lua, id)?;
+    let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::NoLives => {
             println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
@@ -258,7 +262,19 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> LuaResult<()> {
     Ok(())
 }
 
-fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
+fn force_player_in_slot_to_spectators(lua: MizLua, ctx: &Context, slot: &SlotId) -> LuaResult<()> {
+    match ctx.db.player_in_slot(slot) {
+        None => Ok(()),
+        Some(ucid) => match ctx.id_by_ucid.get(ucid) {
+            None => Ok(()),
+            Some(id) => {
+                Net::singleton(lua)?.force_player_slot(*id, Side::Neutral, SlotId::spectator())
+            }
+        },
+    }
+}
+
+fn on_event(lua: MizLua, ev: Event) -> LuaResult<()> {
     println!("onEventTranslated: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -280,12 +296,14 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
                 }
                 let slot = SlotId::from(unit.get_id()?);
                 ctx.recently_landed.remove(&slot);
+                force_player_in_slot_to_spectators(lua, ctx, &slot)?
             }
         }
         Event::Ejection(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.get_id()?);
                 ctx.recently_landed.remove(&slot);
+                force_player_in_slot_to_spectators(lua, ctx, &slot)?
             }
         }
         Event::Takeoff(e) => {

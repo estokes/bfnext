@@ -844,6 +844,10 @@ impl Db {
         Ok(gid)
     }
 
+    pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {
+        self.players_by_slot.get(&slot)
+    }
+
     pub fn takeoff(&mut self, time: DateTime<Utc>, slot: SlotId) {
         let objective = match self
             .objectives_by_slot

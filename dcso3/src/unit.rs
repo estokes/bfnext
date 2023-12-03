@@ -29,7 +29,7 @@ impl<'lua> Unit<'lua> {
         self.t.call_method("isActive", ())
     }
 
-    pub fn get_player_name(&self) -> LuaResult<String> {
+    pub fn get_player_name(&self) -> LuaResult<Option<String>> {
         self.t.call_method("getPlayerName", ())
     }
 

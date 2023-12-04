@@ -21,17 +21,15 @@ impl io::Write for LogHandle {
         LOGBUF.with(|lbuf| {
             let mut lbuf = lbuf.borrow_mut();
             lbuf.extend_from_slice(buf);
+            self.0
+                .send(Task::WriteLog(lbuf.split().freeze()))
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "backend dead"))?;
             Ok(buf.len())
         })
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        LOGBUF.with(|lbuf| {
-            let mut lbuf = lbuf.borrow_mut();
-            self.0
-                .send(Task::WriteLog(lbuf.split().freeze()))
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "backend dead"))
-        })
+        Ok(())
     }
 }
 
@@ -74,7 +72,7 @@ fn setup_logger(tx: UnboundedSender<Task>) {
         Some(s) if &s == "off" => LevelFilter::Off,
         Some(_) => LevelFilter::Warn,
     };
-    WriteLogger::init(level, simplelog::Config::default(), LogHandle(tx)).unwrap()
+    WriteLogger::init(dbg!(level), simplelog::Config::default(), LogHandle(tx)).unwrap()
 }
 
 pub fn init(write_dir: PathBuf) -> UnboundedSender<Task> {

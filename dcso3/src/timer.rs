@@ -1,4 +1,5 @@
 use crate::{as_tbl, cvt_err, wrapped_table, LuaEnv, MizLua, Time};
+use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -50,7 +51,7 @@ impl<'lua> Timer<'lua> {
                 .create_function(move |lua, (arg, time)| match f(MizLua(lua), arg, time) {
                     Ok(r) => Ok(r),
                     Err(e) => {
-                        println!("error in scheduled function: {:?}", e);
+                        error!("error in scheduled function: {:?}", e);
                         Ok(None)
                     }
                 })?;

@@ -1,3 +1,4 @@
+pub mod bg;
 pub mod cfg;
 pub mod db;
 extern crate nalgebra as na;
@@ -17,28 +18,12 @@ use dcso3::{
     HooksLua, LuaEnv, MizLua, String, UserHooks, Vector2,
 };
 use fxhash::{FxHashMap, FxHashSet};
+use log::{debug, error, info};
 use mlua::prelude::*;
-use std::{path::PathBuf, sync::mpsc, thread};
+use std::path::PathBuf;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{cfg::Cfg, db::SlotAuth};
-
-#[derive(Debug)]
-enum BgTask {
-    MizInit,
-    SaveState(PathBuf, Db),
-}
-
-fn background_loop(rx: mpsc::Receiver<BgTask>) {
-    while let Ok(msg) = rx.recv() {
-        match msg {
-            BgTask::MizInit => (),
-            BgTask::SaveState(path, db) => match db.save(&path) {
-                Ok(()) => (),
-                Err(e) => println!("failed to save state to {:?}, {:?}", path, e),
-            },
-        }
-    }
-}
 
 #[derive(Debug)]
 struct PlayerInfo {
@@ -50,7 +35,7 @@ struct PlayerInfo {
 struct Context {
     idx: env::miz::MizIndex,
     db: Db,
-    to_background: Option<mpsc::Sender<BgTask>>,
+    to_background: Option<UnboundedSender<bg::Task>>,
     units_by_obj_id: FxHashMap<i64, UnitId>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
@@ -70,7 +55,6 @@ impl Context {
         match CONTEXT.as_mut() {
             Some(ctx) => ctx,
             None => {
-                println!("init ctx");
                 CONTEXT = Some(Context::default());
                 CONTEXT.as_mut().unwrap()
             }
@@ -81,16 +65,21 @@ impl Context {
         Context::get_mut()
     }
 
-    fn do_background_task(&mut self, task: BgTask) {
+    fn do_bg_task(&mut self, task: bg::Task) {
+        if let Some(to_bg) = &self.to_background {
+            match to_bg.send(task) {
+                Ok(()) => (),
+                Err(_) => panic!("background thread is dead"),
+            }
+        }
+    }
+
+    fn init_async_bg(&mut self, lua: &Lua) -> LuaResult<()> {
         if self.to_background.is_none() {
-            let (tx, rx) = mpsc::channel();
-            self.to_background = Some(tx);
-            thread::spawn(move || background_loop(rx));
+            let write_dir = PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str());
+            self.to_background = Some(bg::init(write_dir));
         }
-        match self.to_background.as_ref().unwrap().send(task) {
-            Ok(()) => (),
-            Err(_) => println!("background loop died"),
-        }
+        Ok(())
     }
 
     fn respawn_groups(&mut self, lua: MizLua) -> LuaResult<()> {
@@ -128,7 +117,7 @@ fn on_player_try_connect(
     ucid: Ucid,
     id: PlayerId,
 ) -> LuaResult<bool> {
-    println!(
+    info!(
         "onPlayerTryConnect addr: {:?}, name: {:?}, ucid: {:?}, id: {:?}",
         addr, name, ucid, id
     );
@@ -201,7 +190,7 @@ fn on_player_try_send_chat(
     msg: String,
     all: bool,
 ) -> LuaResult<String> {
-    println!(
+    info!(
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
     );
@@ -221,11 +210,11 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::NoLives => {
-            println!("player {}{:?} has no lives", ifo.name, ifo.ucid);
+            info!("player {}{:?} has no lives", ifo.name, ifo.ucid);
             Ok(false)
         }
         SlotAuth::NotRegistered(side) => {
-            println!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
+            info!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
             let msg = String::from(format_compact!(
                 "You must join {:?} to use this slot. Type {:?} in chat.",
                 side,
@@ -235,7 +224,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
             Ok(false)
         }
         SlotAuth::ObjectiveNotOwned => {
-            println!(
+            info!(
                 "player {}{:?} coalition does not own the objective",
                 ifo.name, ifo.ucid
             );
@@ -251,10 +240,11 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
 }
 
 fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> LuaResult<()> {
+    info!("onPlayerChangeSlot: {:?}", id);
     let net = Net::singleton(lua)?;
     match try_occupy_slot(lua, &net, id) {
         Err(e) => {
-            println!("error checking slot {:?}", e);
+            error!("error checking slot {:?}", e);
             net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
         }
         Ok(false) => net.force_player_slot(id, Side::Neutral, SlotId::spectator())?,
@@ -272,7 +262,7 @@ fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
 }
 
 fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
-    println!("onEventTranslated: {:?}", ev);
+    info!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
         Event::Birth(b) => {
@@ -325,23 +315,23 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
 }
 
 fn on_mission_load_end(lua: HooksLua) -> LuaResult<()> {
-    println!("on_mission_load_end");
+    info!("on_mission_load_end");
     let miz = env::miz::Miz::singleton(lua)?;
-    println!("indexing mission");
+    debug!("indexing mission");
     let ctx = unsafe { Context::get_mut() };
     ctx.idx = miz.index()?;
-    ctx.do_background_task(BgTask::MizInit);
-    println!("indexed mission");
+    ctx.do_bg_task(bg::Task::MizInit);
+    debug!("indexed mission");
     Ok(())
 }
 
 fn on_simulation_start(_lua: HooksLua) -> LuaResult<()> {
-    println!("on_simulation_start");
+    info!("on_simulation_start");
     Ok(())
 }
 
 fn init_hooks(lua: HooksLua) -> LuaResult<()> {
-    println!("setting user hooks");
+    debug!("setting user hooks");
     UserHooks::new(lua)
         .on_simulation_start(on_simulation_start)?
         .on_mission_load_end(on_mission_load_end)?
@@ -349,7 +339,7 @@ fn init_hooks(lua: HooksLua) -> LuaResult<()> {
         .on_player_try_connect(on_player_try_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .register()?;
-    println!("set user hooks");
+    debug!("set user hooks");
     Ok(())
 }
 
@@ -374,8 +364,9 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
 }
 
 fn init_miz(lua: MizLua) -> LuaResult<()> {
+    info!("init_miz");
     let ctx = unsafe { Context::get_mut() };
-    println!("adding event handler");
+    debug!("adding event handler");
     World::singleton(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
     let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
@@ -389,11 +380,11 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
             let ts = Utc::now();
             let ctx = unsafe { Context::get_mut() };
             if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, ts) {
-                println!("error doing repairs {:?}", e)
+                error!("error doing repairs {:?}", e)
             }
             return_lives(lua, ctx, ts);
             if let Some(snap) = ctx.db.maybe_snapshot() {
-                ctx.do_background_task(BgTask::SaveState(path.clone(), snap));
+                ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
             }
             let net = Net::singleton(lua)?;
             for id in ctx.force_to_spectators.drain() {
@@ -402,7 +393,7 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
             Ok(Some(now + 1.))
         }
     })?;
-    println!("spawning");
+    debug!("spawning");
     if !path.exists() {
         let cfg = Cfg::load(&path)?;
         ctx.db = Db::init(lua, cfg, &ctx.idx, &Miz::singleton(lua)?)?;
@@ -410,11 +401,12 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
         ctx.db = Db::load(&path)?;
     }
     ctx.respawn_groups(lua)?;
-    println!("spawned");
+    debug!("spawned");
     Ok(())
 }
 
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable> {
+    unsafe { Context::get_mut() }.init_async_bg(lua)?;
     dcso3::create_root_module(lua, init_hooks, init_miz)
 }

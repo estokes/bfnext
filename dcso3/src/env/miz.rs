@@ -415,7 +415,6 @@ impl<'lua> Miz<'lua> {
         let mut idx = MizIndex::default();
         {
             let base = base.append(["triggers", "zones"]);
-            println!("indexing triggers");
             for (i, tz) in self.triggers()?.into_iter().enumerate() {
                 let tz = tz?;
                 let base = base.append([i + 1]);

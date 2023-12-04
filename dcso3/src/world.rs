@@ -1,6 +1,7 @@
 use super::{as_tbl, event::Event, unit::Unit, String};
 use crate::{airbase::Airbase, wrapped_table, Sequence, MizLua, LuaEnv};
 use compact_str::format_compact;
+use log::{warn, error};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::{
@@ -42,13 +43,13 @@ impl<'lua> World<'lua> {
                 .create_function(move |lua, (_, ev): (Value, Value)| {
                     match Event::from_lua(ev, lua) {
                         Err(e) => {
-                            println!("error translating event: {:?}", e);
+                            warn!("error translating event: {:?}", e);
                             Ok(())
                         }
                         Ok(ev) => match f(MizLua(lua), ev) {
                             Ok(()) => Ok(()),
                             Err(e) => {
-                                println!("error in event handler: {:?}", e);
+                                error!("error in event handler: {:?}", e);
                                 Ok(())
                             }
                         },

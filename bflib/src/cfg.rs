@@ -1,5 +1,6 @@
 use crate::db::{LifeType, Vehicle};
 use dcso3::err;
+use log::error;
 use mlua::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -44,23 +45,23 @@ impl Cfg {
                 Err(e) => match e.kind() {
                     io::ErrorKind::NotFound => {
                         let file = File::create(&path).map_err(|e| {
-                            println!("could not create default config {}", e);
+                            error!("could not create default config {}", e);
                             err("creating cfg")
                         })?;
                         serde_json::to_writer_pretty(file, &Cfg::default()).map_err(|e| {
-                            println!("could not write default config {}", e);
+                            error!("could not write default config {}", e);
                             err("writing default cfg")
                         })?;
                     }
                     e => {
-                        println!("could not open config file {}", e);
+                        error!("could not open config file {}", e);
                         return Err(err("opening config"));
                     }
                 },
             }
         };
         let cfg: Self = serde_json::from_reader(file).map_err(|e| {
-            println!("failed to decode cfg file {:?}, {:?}", path, e);
+            error!("failed to decode cfg file {:?}, {:?}", path, e);
             err("cfg decode error")
         })?;
         Ok(cfg)

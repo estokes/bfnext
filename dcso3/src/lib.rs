@@ -1,4 +1,5 @@
 extern crate nalgebra as na;
+use log::{warn, error};
 use compact_str::CompactString;
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -33,6 +34,12 @@ pub mod world;
 
 pub trait LuaEnv<'a> {
     fn inner(self) -> &'a Lua;
+}
+
+impl<'lua> LuaEnv<'lua> for &'lua Lua {
+    fn inner(self) -> &'lua Lua {
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -806,7 +813,7 @@ pub fn wrap_unit(name: &str, res: LuaResult<()>) -> LuaResult<()> {
     match res {
         Ok(()) => Ok(()),
         Err(e) => {
-            println!("{}: {:?}", name, e);
+            error!("{}: {:?}", name, e);
             Ok(())
         }
     }
@@ -816,7 +823,7 @@ fn wrap_bool(name: &str, res: LuaResult<bool>) -> LuaResult<bool> {
     match res {
         Ok(b) => Ok(b),
         Err(e) => {
-            println!("{}: {:?}", name, e);
+            error!("{}: {:?}", name, e);
             Ok(false)
         }
     }
@@ -1087,7 +1094,7 @@ impl<'lua> UserHooks<'lua> {
                 match f(HooksLua(lua), id, msg, all) {
                     Ok(s) => Ok(s),
                     Err(e) => {
-                        println!("on_player_try_send_chat: {:?}", e);
+                        warn!("on_player_try_send_chat: {:?}", e);
                         Ok(String::from(""))
                     }
                 }

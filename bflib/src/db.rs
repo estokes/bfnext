@@ -12,6 +12,7 @@ use dcso3::{
     DeepClone, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
+use log::{error, debug};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -309,11 +310,11 @@ pub struct Db {
 impl Db {
     pub fn load(path: &Path) -> LuaResult<Self> {
         let file = File::open(&path).map_err(|e| {
-            println!("failed to open save file {:?}, {:?}", path, e);
+            error!("failed to open save file {:?}, {:?}", path, e);
             err("io error")
         })?;
         let mut db: Self = serde_json::from_reader(file).map_err(|e| {
-            println!("failed to decode save file {:?}, {:?}", path, e);
+            error!("failed to decode save file {:?}, {:?}", path, e);
             err("decode error")
         })?;
         db.cfg = Cfg::load(path)?;
@@ -489,17 +490,17 @@ impl Db {
             let vehicle = Vehicle(unit.typ()?);
             match self.cfg.life_types.get(&vehicle) {
                 None => {
-                    println!("vehicle {:?} doesn't have a configured life type", vehicle);
+                    error!("vehicle {:?} doesn't have a configured life type", vehicle);
                     return Err(err("vehicle missing life type"));
                 }
                 Some(typ) => match self.cfg.default_lives.get(&typ) {
                     Some((n, f)) if *n > 0 && *f > 0 => (),
                     None => {
-                        println!("vehicle {:?} has no configured life type", vehicle);
+                        error!("vehicle {:?} has no configured life type", vehicle);
                         return Err(err("vehicle has no configured life type"));
                     }
                     Some((n, f)) => {
-                        println!(
+                        error!(
                             "vehicle {:?} life type {:?} has no configured lives ({n}) or negative reset time ({f})",
                             vehicle, typ
                         );
@@ -556,7 +557,7 @@ impl Db {
             }
         }
         t.dirty = true;
-        println!("{:#?}", &t);
+        debug!("{:#?}", &t);
         Ok(t)
     }
 
@@ -603,7 +604,7 @@ impl Db {
         if obj.health == 0 {
             obj.owner = Side::Neutral;
         }
-        println!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
+        debug!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
     }
 
     fn repair_objective(

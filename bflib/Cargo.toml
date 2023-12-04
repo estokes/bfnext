@@ -27,3 +27,6 @@ nalgebra = { workspace = true }
 immutable-chunkmap = { workspace = true }
 anyhow = { workspace = true }
 paste = { workspace = true }
+log = { workspace = true }
+tokio = { workspace = true }
+simplelog = { workspace = true }

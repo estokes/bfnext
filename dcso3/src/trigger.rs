@@ -1,16 +1,10 @@
 use crate::{
-    as_tbl,
-    coalition::Side,
-    cvt_err,
-    env::miz::{Country, Miz},
-    net::SlotId,
-    simple_enum, wrapped_table, LuaEnv, LuaVec3, MizLua, Time,
+    as_tbl, coalition::Side, cvt_err, env::miz::Country, simple_enum, wrapped_table, LuaEnv,
+    LuaVec3, MizLua,
 };
-use log::error;
-use mlua::{prelude::*, serde::de, Value};
-use nalgebra::Storage;
+use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::{ops::Deref, ptr::metadata};
+use std::ops::Deref;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Zone {

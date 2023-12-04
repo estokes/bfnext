@@ -72,7 +72,7 @@ fn setup_logger(tx: UnboundedSender<Task>) {
         Some(s) if &s == "off" => LevelFilter::Off,
         Some(_) => LevelFilter::Warn,
     };
-    WriteLogger::init(dbg!(level), simplelog::Config::default(), LogHandle(tx)).unwrap()
+    WriteLogger::init(level, simplelog::Config::default(), LogHandle(tx)).unwrap()
 }
 
 pub fn init(write_dir: PathBuf) -> UnboundedSender<Task> {

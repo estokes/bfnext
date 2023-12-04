@@ -27,6 +27,7 @@ pub mod net;
 pub mod object;
 pub mod static_object;
 pub mod timer;
+pub mod trigger;
 pub mod unit;
 pub mod warehouse;
 pub mod weapon;

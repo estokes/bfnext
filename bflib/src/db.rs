@@ -12,7 +12,7 @@ use dcso3::{
     DeepClone, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
-use log::{error, debug};
+use log::{debug, error};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -952,9 +952,19 @@ impl Db {
                     return SlotAuth::ObjectiveNotOwned;
                 }
                 let life_type = &self.cfg.life_types[&objective.slots[&slot]];
+                macro_rules! yes {
+                    () => {
+                        player.current_slot = Some(slot.clone());
+                        self.players_by_slot.insert_cow(slot, ucid.clone());
+                        break SlotAuth::Yes;
+                    };
+                }
                 loop {
                     match player.lives.get(life_type).map(|t| *t) {
-                        Some((reset, n)) => {
+                        None => {
+                            yes!();
+                        }
+                         Some((reset, n)) => {
                             let reset_after =
                                 Duration::seconds(self.cfg.default_lives[life_type].1 as i64);
                             if time - reset >= reset_after {
@@ -963,15 +973,10 @@ impl Db {
                             } else if n == 0 {
                                 break SlotAuth::NoLives;
                             } else {
-                                break SlotAuth::Yes;
+                                yes!();
                             }
                         }
-                        None => {
-                            player.current_slot = Some(slot.clone());
-                            self.players_by_slot.insert_cow(slot, ucid.clone());
-                            break SlotAuth::Yes;
-                        }
-                    }
+                   }
                 }
             }
         }

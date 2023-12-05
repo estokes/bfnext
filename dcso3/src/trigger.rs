@@ -159,6 +159,7 @@ pub struct LineSpec {
     pub end: LuaVec3,
     pub color: Color,
     pub line_type: LineType,
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -167,16 +168,50 @@ pub struct CircleSpec {
     pub radius: f64,
     pub color: Color,
     pub fill_color: Color,
-    line_type: LineType,
+    pub line_type: LineType,
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RectSpec {
-    start: LuaVec3,
-    end: LuaVec3,
-    color: Color,
-    fill_color: Color,
-    line_type: LineType,
+    pub start: LuaVec3,
+    pub end: LuaVec3,
+    pub color: Color,
+    pub fill_color: Color,
+    pub line_type: LineType,
+    pub read_only: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct QuadSpec {
+    pub p0: LuaVec3,
+    pub p1: LuaVec3,
+    pub p2: LuaVec3,
+    pub p3: LuaVec3,
+    pub color: Color,
+    pub fill_color: Color,
+    pub line_type: LineType,
+    pub read_only: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextSpec {
+    pub pos: LuaVec3,
+    pub color: Color,
+    pub fill_color: Color,
+    pub font_size: u8,
+    pub read_only: bool,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ArrowSpec {
+    pub start: LuaVec3,
+    pub end: LuaVec3,
+    pub color: Color,
+    pub fill_color: Color,
+    pub line_type: LineType,
+    pub read_only: bool,
 }
 
 wrapped_table!(Action, None);
@@ -356,12 +391,11 @@ impl<'lua> Action<'lua> {
         self.call_function("removeMark", id)
     }
 
-    pub fn line(
+    pub fn line_to_all(
         &self,
         side: SideFilter,
         id: MarkId,
         spec: LineSpec,
-        read_only: bool,
         message: Option<String>,
     ) -> LuaResult<()> {
         self.call_function(
@@ -373,18 +407,17 @@ impl<'lua> Action<'lua> {
                 spec.end,
                 spec.color,
                 spec.line_type,
-                read_only,
+                spec.read_only,
                 message,
             ),
         )
     }
 
-    pub fn circle(
+    pub fn circle_to_all(
         &self,
         side: SideFilter,
         id: MarkId,
         spec: CircleSpec,
-        read_only: bool,
         message: Option<String>,
     ) -> LuaResult<()> {
         self.call_function(
@@ -397,18 +430,17 @@ impl<'lua> Action<'lua> {
                 spec.color,
                 spec.fill_color,
                 spec.line_type,
-                read_only,
+                spec.read_only,
                 message,
             ),
         )
     }
 
-    pub fn rect(
+    pub fn rect_to_all(
         &self,
         side: SideFilter,
         id: MarkId,
         spec: RectSpec,
-        read_only: bool,
         message: Option<String>,
     ) -> LuaResult<()> {
         self.call_function(
@@ -421,10 +453,106 @@ impl<'lua> Action<'lua> {
                 spec.color,
                 spec.fill_color,
                 spec.line_type,
-                read_only,
+                spec.read_only,
                 message,
             ),
         )
+    }
+
+    pub fn quad_to_all(
+        &self,
+        side: SideFilter,
+        id: MarkId,
+        spec: QuadSpec,
+        message: Option<String>,
+    ) -> LuaResult<()> {
+        self.call_function(
+            "quadToAll",
+            (
+                side,
+                id,
+                spec.p0,
+                spec.p1,
+                spec.p2,
+                spec.p3,
+                spec.color,
+                spec.fill_color,
+                spec.line_type,
+                spec.read_only,
+                message,
+            ),
+        )
+    }
+
+    pub fn text_to_all(&self, side: SideFilter, id: MarkId, spec: TextSpec) -> LuaResult<()> {
+        self.call_function(
+            "textToAll",
+            (
+                side,
+                id,
+                spec.pos,
+                spec.color,
+                spec.fill_color,
+                spec.font_size,
+                spec.read_only,
+                spec.text,
+            ),
+        )
+    }
+
+    pub fn arrow_to_all(
+        &self,
+        side: SideFilter,
+        id: MarkId,
+        spec: ArrowSpec,
+        message: Option<String>,
+    ) -> LuaResult<()> {
+        self.call_function(
+            "arrowToAll",
+            (
+                side,
+                id,
+                spec.start,
+                spec.end,
+                spec.color,
+                spec.fill_color,
+                spec.line_type,
+                spec.read_only,
+                message,
+            ),
+        )
+    }
+
+    pub fn set_markup_radius(&self, id: MarkId, radius: f64) -> LuaResult<()> {
+        self.call_function("setMarkupRadius", (id, radius))
+    }
+
+    pub fn set_markup_text(&self, id: MarkId, text: String) -> LuaResult<()> {
+        self.call_function("setMarkupText", (id, text))
+    }
+
+    pub fn set_markup_font_size(&self, id: MarkId, font_size: u8) -> LuaResult<()> {
+        self.call_function("setMarkupFontSize", (id, font_size))
+    }
+
+    pub fn set_markup_color(&self, id: MarkId, color: Color) -> LuaResult<()> {
+        self.call_function("setMarkupColor", (id, color))
+    }
+
+    pub fn set_markup_fill_color(&self, id: MarkId, fill_color: Color) -> LuaResult<()> {
+        self.call_function("setMarkupColorFill", (id, fill_color))
+    }
+
+    pub fn set_markup_line_type(&self, id: MarkId, line_type: LineType) -> LuaResult<()> {
+        self.call_function("setMarkupTypeLine", (id, line_type))
+    }
+
+    pub fn set_markup_position_end(&self, id: MarkId, pos: LuaVec3) -> LuaResult<()> {
+        self.call_function("setMarkupPositionEnd", (id, pos))
+    }
+
+    pub fn set_markup_position_start(&self, id: MarkId, pos: LuaVec3) -> LuaResult<()> {
+        self.call_function("setMarkupPositionStart", (id, pos))
     }
 }
 

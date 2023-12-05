@@ -32,14 +32,14 @@ pub mod warehouse;
 pub mod weapon;
 pub mod world;
 
-pub struct Quad {
+pub struct Quad2 {
     pub p0: LuaVec2,
     pub p1: LuaVec2,
     pub p2: LuaVec2,
     pub p3: LuaVec2,
 }
 
-impl<'lua> FromLua<'lua> for Quad {
+impl<'lua> FromLua<'lua> for Quad2 {
     fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
         let verts = as_tbl("Quad", None, value)?;
         Ok(Self {
@@ -51,7 +51,7 @@ impl<'lua> FromLua<'lua> for Quad {
     }
 }
 
-impl Quad {
+impl Quad2 {
     pub fn contains(&self, p: LuaVec2) -> bool {
         fn horizontal_ray_intersects_edge(p: &LuaVec2, v0: &LuaVec2, v1: &LuaVec2) -> bool {
             if (v0.y > p.y) == (v1.y > p.y) {

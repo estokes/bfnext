@@ -1,6 +1,6 @@
 use crate::{
     as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, Color, DcsTableExt,
-    LuaEnv, LuaVec2, Path, Quad, Sequence, String,
+    LuaEnv, LuaVec2, Path, Quad2, Sequence, String,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -11,7 +11,7 @@ wrapped_table!(Weather, None);
 
 pub enum TriggerZoneTyp {
     Circle { radius: f64 },
-    Quad(Quad),
+    Quad(Quad2),
 }
 
 wrapped_table!(TriggerZone, None);

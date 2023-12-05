@@ -1,6 +1,6 @@
 use crate::{
-    as_tbl, coalition::Side, country, cvt_err, wrapped_table, DcsTableExt, LuaEnv, LuaVec2, Path,
-    Sequence, String, is_hooks_env,
+    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, Color, DcsTableExt,
+    LuaEnv, LuaVec2, Path, Quad, Sequence, String,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -9,59 +9,9 @@ use std::{collections::hash_map::Entry, ops::Deref};
 
 wrapped_table!(Weather, None);
 
-pub struct Quad {
-    pub p0: LuaVec2,
-    pub p1: LuaVec2,
-    pub p2: LuaVec2,
-    pub p3: LuaVec2,
-}
-
-impl<'lua> FromLua<'lua> for Quad {
-    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
-        let verts = as_tbl("Quad", None, value)?;
-        Ok(Self {
-            p0: verts.raw_get(1)?,
-            p1: verts.raw_get(2)?,
-            p2: verts.raw_get(3)?,
-            p3: verts.raw_get(4)?,
-        })
-    }
-}
-
 pub enum TriggerZoneTyp {
     Circle { radius: f64 },
     Quad(Quad),
-}
-
-#[derive(Clone, Copy, PartialEq, Serialize)]
-pub struct Color {
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
-}
-
-impl<'lua> FromLua<'lua> for Color {
-    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("Color", None, value)?;
-        Ok(Self {
-            r: tbl.raw_get(1)?,
-            g: tbl.raw_get(2)?,
-            b: tbl.raw_get(3)?,
-            a: tbl.raw_get(4)?,
-        })
-    }
-}
-
-impl<'lua> IntoLua<'lua> for Color {
-    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
-        let tbl = lua.create_table()?;
-        tbl.set(1, self.r)?;
-        tbl.set(2, self.g)?;
-        tbl.set(3, self.b)?;
-        tbl.set(4, self.a)?;
-        Ok(Value::Table(tbl))
-    }
 }
 
 wrapped_table!(TriggerZone, None);

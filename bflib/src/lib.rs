@@ -10,12 +10,13 @@ use dcso3::{
     env::{self, miz::Miz, Env},
     err,
     event::Event,
+    hooks::UserHooks,
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
     unit::Unit,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, UserHooks, Vector2,
+    HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};

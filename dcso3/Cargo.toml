@@ -1,6 +1,6 @@
 [package]
 name = "dcso3"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2021"
 authors = ["Eric Stokes <eestokes@pm.me>"]
 license = "MIT"

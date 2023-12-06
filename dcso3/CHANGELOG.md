@@ -1,3 +1,9 @@
+## 0.0.6
+
+- add bindings for most of the triggers singleton, including almost all of the f10 map
+shape options
+- add bindings for the missionCommands singleton
+
 ## 0.0.5
 
 - separate the two DCS lua environments in a statically type safe way

@@ -22,6 +22,7 @@ pub mod event;
 pub mod group;
 pub mod hooks;
 pub mod lfs;
+pub mod mission_commands;
 pub mod net;
 pub mod object;
 pub mod static_object;

@@ -44,6 +44,12 @@ macro_rules! item {
                 Ok(Self(ItemPath::from_lua(value, lua)?))
             }
         }
+
+        impl From<Vec<String>> for $name {
+            fn from(v: Vec<String>) -> Self {
+                Self(ItemPath(v))
+            }
+        }
     };
 }
 

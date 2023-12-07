@@ -163,6 +163,15 @@ pub enum ObjectiveKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum LifeType {
+    Standard,
+    Intercept,
+    Logistics,
+    Attack,
+    Recon,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ObjGroupClass {
     Logi,
     Aaa,
@@ -170,15 +179,6 @@ pub enum ObjGroupClass {
     Sr,
     Armor,
     Other,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum LifeType {
-    Standard,
-    Intercept,
-    Logistics,
-    Attack,
-    Recon,
 }
 
 impl From<&str> for ObjGroupClass {
@@ -298,6 +298,7 @@ pub struct Db {
     groups_by_name: Map<String, GroupId>,
     units_by_name: Map<String, UnitId>,
     groups_by_side: Map<Side, Set<GroupId>>,
+    player_deployed_groups: Set<GroupId>,
     objectives: Map<ObjectiveId, Objective>,
     objectives_by_slot: Map<SlotId, ObjectiveId>,
     objectives_by_name: Map<String, ObjectiveId>,

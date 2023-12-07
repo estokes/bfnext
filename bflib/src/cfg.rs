@@ -1,5 +1,5 @@
 use crate::db::{LifeType, Vehicle};
-use dcso3::err;
+use dcso3::{coalition::Side, err, String};
 use log::error;
 use mlua::prelude::*;
 use serde_derive::{Deserialize, Serialize};
@@ -12,19 +12,114 @@ use std::{
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PersistTyp {
+    /// The deployable persists until it is destroyed
+    Forever,
+    /// The deployable doesn't persist across restarts
+    UntilRestart,
+    /// The deployable persists for the specified number of
+    /// real world seconds
+    WallTime(f32),
+    /// The deployable persists for the the specified number
+    /// of server restart cycles
+    Restarts(u32),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LimitEnforceTyp {
+    /// Handle the limit by removing the oldest instance of the deployable when
+    /// a new one is unpacked. (lifo)
+    DeleteOldest,
+    /// Handle the limit by refusing to spawn new construction crates for
+    /// the deployable
+    DenyCrate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Crate {
+    /// The name of the crate in the menu
+    pub name: String,
+    /// The weight of the crate in kg
+    pub weight: u32,
+    /// The number of crates of this type required to build the deployable
+    pub required: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Deployable {
+    /// The full menu path of the deployable in the menu
+    pub path: Vec<String>,
+    /// The template used to spawn the deployable
+    pub template: String,
+    /// How the deployable should persist across restarts
+    pub persist: PersistTyp,
+    /// How many instances are allowed at the same time
+    pub limit: u32,
+    /// How to deal with it when the max number of instances are deployed and
+    /// a player wants to deploy a new instance
+    pub limit_enforce: LimitEnforceTyp,
+    /// What crates are required to build the deployable
+    pub crates: Vec<Crate>,
+    /// Can the damaged deployable be repaired, and if so, by which crate
+    pub repair_crate: Option<Crate>,
+    /// Does this deployable provide logistics services
+    pub logistics: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Troop {
+    /// The name of the squad in the menu
+    pub name: String,
+    /// The name of the template used to spawn the group
+    pub template: String,
+    /// How the troops will persist
+    pub persist: PersistTyp,
+    /// Can the troops capture objectives?
+    pub can_capture: bool,
+    /// How many simultaneous instances of the group are allowed
+    pub limit: u32,
+    /// How to deal with it when the max number of instances are deployed and the user
+    /// wants to deploy an additional instance
+    pub limit_enforce: LimitEnforceTyp,
+    /// How much weight does the group add to the carrier unit
+    pub weight: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CargoConfig {
+    /// How many troop slots does this vehicle have
+    troop_slots: u8,
+    /// How many crate slots does this vehicle have
+    crate_slots: u8,
+    /// How many total troops and crates can this vehicle carry.
+    /// e.g. if troop_slots is 1, crate_slots is 1, and total_slots is 1
+    /// then the vehicle can carry either a troop or a crate but not both.
+    total_slots: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {
-    /// how often, in seconds, a base will repair if it has 
+    /// how often, in seconds, a base will repair if it has
     /// full logistics
     pub repair_time: u32,
-    /// how many times a user may switch sides in a given round, 
+    /// how many times a user may switch sides in a given round,
     /// or None for unlimited side switches
     pub side_switches: Option<u8>,
     /// the life types different vehicles use
     pub life_types: Map<Vehicle, LifeType>,
-    /// the life reset configuration for each life type. A pair 
+    /// the life reset configuration for each life type. A pair
     /// of number of lives per reset, and reset time in seconds.
     pub default_lives: Map<LifeType, (u8, u32)>,
+    /// vehicle cargo configuration
+    pub cargo: Map<Vehicle, CargoConfig>,
+    /// deployables configuration for each side
+    pub deployables: Map<Side, Vec<Deployable>>,
+    /// deployable troops configuration for each side
+    pub troops: Map<Side, Vec<Troop>>,
 }
 
 impl Cfg {
@@ -66,6 +161,424 @@ impl Cfg {
         })?;
         Ok(cfg)
     }
+}
+
+fn default_red_troops() -> Vec<Troop> {
+    vec![
+        Troop {
+            name: "JTAC Squad".into(),
+            template: "RJTACTROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: false,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 1200,
+        },
+        Troop {
+            name: "Standard Squad".into(),
+            template: "RSTANDARDTROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: true,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 800,
+        },
+        Troop {
+            name: "Anti Tank Squad".into(),
+            template: "RATTROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: true,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 1000,
+        },
+        Troop {
+            name: "Mortar Squad".into(),
+            template: "RMORTARTROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: true,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 1200,
+        },
+        Troop {
+            name: "Igla Squad".into(),
+            template: "RIGLATROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: false,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 500,
+        },
+    ]
+}
+
+fn default_blue_troops() -> Vec<Troop> {
+    vec![
+        Troop {
+            name: "JTAC Squad".into(),
+            template: "BJTACTROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: false,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 1200,
+        },
+        Troop {
+            name: "Standard Squad".into(),
+            template: "BSTANDARDTROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: true,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 800,
+        },
+        Troop {
+            name: "Anti Tank Squad".into(),
+            template: "BATTROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: true,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 1000,
+        },
+        Troop {
+            name: "Mortar Squad".into(),
+            template: "BMORTARTROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: true,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 1200,
+        },
+        Troop {
+            name: "Stinger Squad".into(),
+            template: "BSTINGERROOP".into(),
+            persist: PersistTyp::Forever,
+            can_capture: false,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            weight: 500,
+        },
+    ]
+}
+
+fn default_red_deployables() -> Vec<Deployable> {
+    vec![
+        Deployable {
+            path: vec!["Radar SAMs".into(), "SA 6 Kub".into()],
+            template: "DEPSA6".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![
+                Crate {
+                    name: "Kub Launcher".into(),
+                    weight: 1000,
+                    required: 1,
+                },
+                Crate {
+                    name: "Kub Radar".into(),
+                    weight: 1000,
+                    required: 1,
+                },
+            ],
+            repair_crate: Some(Crate {
+                name: "Kub Repair".into(),
+                weight: 1200,
+                required: 1,
+            }),
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["Radar SAMs".into(), "SA 11 Buk".into()],
+            template: "DEPSA11".into(),
+            persist: PersistTyp::Forever,
+            limit: 2,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![
+                Crate {
+                    name: "SA11 Launcher".into(),
+                    weight: 1000,
+                    required: 2,
+                },
+                Crate {
+                    name: "SA11 Search Radar".into(),
+                    weight: 1000,
+                    required: 1,
+                },
+                Crate {
+                    name: "SA11 CC".into(),
+                    weight: 1000,
+                    required: 1,
+                },
+            ],
+            repair_crate: Some(Crate {
+                name: "Buk Repair".into(),
+                weight: 1200,
+                required: 1,
+            }),
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["Radar SAMs".into(), "SA15 Tor".into()],
+            template: "DEPSA15".into(),
+            persist: PersistTyp::Forever,
+            limit: 2,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "SA15 Tor".into(),
+                weight: 1000,
+                required: 3,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["Radar SAMs".into(), "SA8 Osa".into()],
+            template: "DEPSA8".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "SA8 Osa".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["AAA".into(), "ZU23 Emplacement".into()],
+            template: "DEPZU23".into(),
+            persist: PersistTyp::Forever,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "ZU23 Emplacement".into(),
+                weight: 500,
+                required: 1,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["AAA".into(), "Shilka".into()],
+            template: "DEPSHILKA".into(),
+            persist: PersistTyp::Forever,
+            limit: 6,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Shilka Crate".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["AAA".into(), "Tunguska".into()],
+            template: "DEPTUNGUSKA".into(),
+            persist: PersistTyp::Forever,
+            limit: 6,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Tunguska Crate".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["IR SAMs".into(), "SA13 Strela".into()],
+            template: "DEPSA13".into(),
+            persist: PersistTyp::Forever,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "SA13 Strela Crate".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["Ground Units".into(), "M109".into()],
+            template: "DEPM109".into(),
+            persist: PersistTyp::Forever,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "M109 Crate".into(),
+                weight: 1000,
+                required: 1,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["FARP".into()],
+            template: "DEPFARP".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "FARP Crate".into(),
+                weight: 1000,
+                required: 4,
+            }],
+            repair_crate: Some(Crate {
+                name: "FARP Repair".into(),
+                weight: 1000,
+                required: 1,
+            }),
+            logistics: true,
+        },
+    ]
+}
+
+fn default_blue_deployables() -> Vec<Deployable> {
+    vec![
+        Deployable {
+            path: vec!["Radar SAMs".into(), "Roland ADS".into()],
+            template: "DEPROLAND".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Roland".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["Radar SAMs".into(), "Hawk System".into()],
+            template: "DEPHAWK".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![
+                Crate {
+                    name: "Hawk Launcher".into(),
+                    weight: 1000,
+                    required: 1,
+                },
+                Crate {
+                    name: "Hawk Search Radar".into(),
+                    weight: 1000,
+                    required: 1,
+                },
+                Crate {
+                    name: "Hawk Track Radar".into(),
+                    weight: 1000,
+                    required: 1,
+                },
+                Crate {
+                    name: "Hawk CC".into(),
+                    weight: 1000,
+                    required: 1,
+                },
+            ],
+            repair_crate: Some(Crate {
+                name: "Hawk Repair".into(),
+                weight: 1200,
+                required: 1,
+            }),
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["IR SAMs".into(), "Avenger".into()],
+            template: "DEPAVENGER".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Avenger Crate".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["IR SAMs".into(), "Linebacker".into()],
+            template: "DEPLINEBACKER".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Linebacker Crate".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["AAA".into(), "Flakpanzergepard".into()],
+            template: "DEPGEPARD".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Flakpanzergepard Crate".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["AAA".into(), "Vulkan".into()],
+            template: "DEPVULKAN".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Vulkan Crate".into(),
+                weight: 1000,
+                required: 2,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["Ground Units".into(), "M109".into()],
+            template: "DEPM109".into(),
+            persist: PersistTyp::Forever,
+            limit: 10,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "M109 Crate".into(),
+                weight: 1000,
+                required: 1,
+            }],
+            repair_crate: None,
+            logistics: false,
+        },
+        Deployable {
+            path: vec!["FARP".into()],
+            template: "DEPFARP".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "FARP Crate".into(),
+                weight: 1000,
+                required: 4,
+            }],
+            repair_crate: Some(Crate {
+                name: "FARP Repair".into(),
+                weight: 1000,
+                required: 1,
+            }),
+            logistics: true,
+        },
+    ]
 }
 
 impl Default for Cfg {
@@ -118,6 +631,56 @@ impl Default for Cfg {
                 ("MiG-19P".into(), LifeType::Intercept),
                 ("Mirage-F1EE".into(), LifeType::Intercept),
                 ("Mirage-F1CE".into(), LifeType::Intercept),
+            ]),
+            cargo: Map::from_iter([
+                (
+                    "UH-1H".into(),
+                    CargoConfig {
+                        troop_slots: 1,
+                        crate_slots: 1,
+                        total_slots: 2,
+                    },
+                ),
+                (
+                    "Mi-8MT".into(),
+                    CargoConfig {
+                        troop_slots: 1,
+                        crate_slots: 1,
+                        total_slots: 2,
+                    },
+                ),
+                (
+                    "SA342L".into(),
+                    CargoConfig {
+                        troop_slots: 1,
+                        crate_slots: 1,
+                        total_slots: 1,
+                    },
+                ),
+                (
+                    "SA342M".into(),
+                    CargoConfig {
+                        troop_slots: 1,
+                        crate_slots: 1,
+                        total_slots: 1,
+                    },
+                ),
+                (
+                    "Mi-24P".into(),
+                    CargoConfig {
+                        troop_slots: 1,
+                        crate_slots: 1,
+                        total_slots: 1,
+                    },
+                ),
+            ]),
+            deployables: Map::from_iter([
+                (Side::Red, default_red_deployables()),
+                (Side::Blue, default_blue_deployables()),
+            ]),
+            troops: Map::from_iter([
+                (Side::Red, default_red_troops()),
+                (Side::Blue, default_blue_troops()),
             ]),
         }
     }

@@ -1,5 +1,5 @@
 extern crate nalgebra as na;
-use crate::cfg::Cfg;
+use crate::cfg::{Cfg, Crate, Deployable, Troop};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
@@ -62,6 +62,10 @@ macro_rules! atomic_id {
     }
 }
 
+atomic_id!(GroupId);
+atomic_id!(UnitId);
+atomic_id!(ObjectiveId);
+
 #[derive(Debug, Clone, Copy)]
 pub enum SlotAuth {
     Yes,
@@ -70,9 +74,19 @@ pub enum SlotAuth {
     NotRegistered(Side),
 }
 
-atomic_id!(GroupId);
-atomic_id!(UnitId);
-atomic_id!(ObjectiveId);
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum DeployKind {
+    Objective,
+    Deployed(Deployable),
+    Troop(Troop),
+    Crate(Crate),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Cargo {
+    troops: Vec<Troop>,
+    crates: Vec<Crate>,
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SpawnedUnit {
@@ -91,6 +105,7 @@ pub struct SpawnedGroup {
     pub template_name: String,
     pub side: Side,
     pub kind: GroupKind,
+    pub origin: DeployKind,
     pub units: Set<UnitId>,
 }
 
@@ -289,23 +304,26 @@ pub struct Player {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Db {
-    #[serde(skip)]
-    dirty: bool,
-    #[serde(skip)]
-    cfg: Cfg,
     groups: Map<GroupId, SpawnedGroup>,
     units: Map<UnitId, SpawnedUnit>,
     groups_by_name: Map<String, GroupId>,
     units_by_name: Map<String, UnitId>,
     groups_by_side: Map<Side, Set<GroupId>>,
-    player_deployed_groups: Set<GroupId>,
+    deployed: Set<GroupId>,
+    crates: Set<GroupId>,
     objectives: Map<ObjectiveId, Objective>,
     objectives_by_slot: Map<SlotId, ObjectiveId>,
     objectives_by_name: Map<String, ObjectiveId>,
     objectives_by_group: Map<GroupId, ObjectiveId>,
     players: Map<Ucid, Player>,
     #[serde(skip)]
+    dirty: bool,
+    #[serde(skip)]
+    cfg: Cfg,
+    #[serde(skip)]
     players_by_slot: Map<SlotId, Ucid>,
+    #[serde(skip)]
+    cargo: Map<SlotId, Cargo>,
 }
 
 impl Db {
@@ -461,6 +479,7 @@ impl Db {
             GroupKind::Any,
             &SpawnLoc::AtPos(pos),
             name.template(),
+            DeployKind::Objective,
         )?;
         self.objectives[&obj]
             .groups
@@ -777,6 +796,7 @@ impl Db {
         kind: GroupKind,
         location: &SpawnLoc,
         template_name: &str,
+        origin: DeployKind,
     ) -> LuaResult<(GroupId, GroupInfo<'lua>)> {
         let template_name = String::from(template_name);
         let template = spctx.get_template(idx, kind, side, template_name.as_str())?;
@@ -799,6 +819,7 @@ impl Db {
             template_name: template_name.clone(),
             side,
             kind,
+            origin,
             units: Set::new(),
         };
         for unit in template.group.units()? {
@@ -837,10 +858,11 @@ impl Db {
         kind: GroupKind,
         location: &SpawnLoc,
         template_name: &str,
+        origin: DeployKind,
     ) -> LuaResult<GroupId> {
         let spctx = SpawnCtx::new(lua)?;
         let (gid, template) =
-            self.init_template(&spctx, idx, side, kind, location, template_name)?;
+            self.init_template(&spctx, idx, side, kind, location, template_name, origin)?;
         self.dirty = true;
         spctx.spawn(template)?;
         Ok(gid)
@@ -965,7 +987,7 @@ impl Db {
                         None => {
                             yes!();
                         }
-                         Some((reset, n)) => {
+                        Some((reset, n)) => {
                             let reset_after =
                                 Duration::seconds(self.cfg.default_lives[life_type].1 as i64);
                             if time - reset >= reset_after {
@@ -977,7 +999,7 @@ impl Db {
                                 yes!();
                             }
                         }
-                   }
+                    }
                 }
             }
         }
@@ -1032,5 +1054,9 @@ impl Db {
                 }
             }
         }
+    }
+
+    pub fn spawn_crate(&mut self, lua: MizLua, ucid: &Ucid, name: &str) -> LuaResult<&'static str> {
+        
     }
 }

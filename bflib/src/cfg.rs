@@ -63,8 +63,9 @@ pub struct Deployable {
     pub crates: Vec<Crate>,
     /// Can the damaged deployable be repaired, and if so, by which crate
     pub repair_crate: Option<Crate>,
-    /// Does this deployable provide logistics services
-    pub logistics: bool,
+    /// Does this deployable provide logistics services, if so, what is it's
+    /// exclusion zone size
+    pub logistics: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,6 +107,8 @@ pub struct Cfg {
     /// how often, in seconds, a base will repair if it has
     /// full logistics
     pub repair_time: u32,
+    /// how far must you fly from an objective to deploy deployables
+    pub logistics_exclusion: u32,
     /// how many times a user may switch sides in a given round,
     /// or None for unlimited side switches
     pub side_switches: Option<u8>,
@@ -116,6 +119,8 @@ pub struct Cfg {
     pub default_lives: Map<LifeType, (u8, u32)>,
     /// vehicle cargo configuration
     pub cargo: Map<Vehicle, CargoConfig>,
+    /// The name of the crate group for each side
+    pub crate_template: Map<Side, String>,
     /// deployables configuration for each side
     pub deployables: Map<Side, Vec<Deployable>>,
     /// deployable troops configuration for each side
@@ -288,7 +293,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 weight: 1200,
                 required: 1,
             }),
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA 11 Buk".into()],
@@ -318,7 +323,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 weight: 1200,
                 required: 1,
             }),
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA15 Tor".into()],
@@ -332,7 +337,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 required: 3,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA8 Osa".into()],
@@ -346,7 +351,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "ZU23 Emplacement".into()],
@@ -360,7 +365,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 required: 1,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Shilka".into()],
@@ -374,7 +379,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Tunguska".into()],
@@ -388,7 +393,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "SA13 Strela".into()],
@@ -402,7 +407,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "M109".into()],
@@ -416,7 +421,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 required: 1,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -434,7 +439,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 weight: 1000,
                 required: 1,
             }),
-            logistics: true,
+            logistics: Some(2000),
         },
     ]
 }
@@ -453,7 +458,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "Hawk System".into()],
@@ -488,7 +493,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 weight: 1200,
                 required: 1,
             }),
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Avenger".into()],
@@ -502,7 +507,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Linebacker".into()],
@@ -516,7 +521,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Flakpanzergepard".into()],
@@ -530,7 +535,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Vulkan".into()],
@@ -544,7 +549,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 required: 2,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "M109".into()],
@@ -558,7 +563,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 required: 1,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -576,7 +581,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 weight: 1000,
                 required: 1,
             }),
-            logistics: true,
+            logistics: Some(2000),
         },
     ]
 }
@@ -585,6 +590,7 @@ impl Default for Cfg {
     fn default() -> Self {
         Self {
             repair_time: 1800,
+            logistics_exclusion: 4000,
             side_switches: Some(1),
             default_lives: Map::from_iter([
                 (LifeType::Standard, (3, 21600)),
@@ -673,6 +679,10 @@ impl Default for Cfg {
                         total_slots: 1,
                     },
                 ),
+            ]),
+            crate_template: Map::from_iter([
+                (Side::Red, "RCRATE".into()),
+                (Side::Blue, "BCRATE".into()),
             ]),
             deployables: Map::from_iter([
                 (Side::Red, default_red_deployables()),

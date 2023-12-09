@@ -1,4 +1,4 @@
-use crate::{simple_enum, wrapped_table, Sequence, env::miz::GroupKind, MizLua, LuaEnv};
+use crate::{simple_enum, wrapped_table, Sequence, env::miz::{GroupKind, GroupId}, MizLua, LuaEnv};
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use mlua::{prelude::*, Value};
 use serde_derive::{Serialize, Deserialize};
@@ -68,7 +68,7 @@ impl<'lua> Group<'lua> {
         self.t.call_method("getName", ())
     }
 
-    pub fn get_id(&self) -> LuaResult<i64> {
+    pub fn id(&self) -> LuaResult<GroupId> {
         self.t.call_method("getID", ())
     }
 

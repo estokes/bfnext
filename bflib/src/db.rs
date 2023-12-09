@@ -9,7 +9,7 @@ use dcso3::{
     err,
     group::GroupCategory,
     net::{SlotId, SlotIdKind, Ucid},
-    DeepClone, LuaEnv, MizLua, String, Vector2,
+    DeepClone, LuaEnv, MizLua, String, Vector2, unit::Unit, atomic_id
 };
 use fxhash::FxHashMap;
 use log::{debug, error};
@@ -25,42 +25,6 @@ use std::{
 
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
 type Set<K> = immutable_chunkmap::set::Set<K, 32>;
-
-macro_rules! atomic_id {
-    ($name:ident) => {
-        paste::paste! {
-            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-            pub struct $name(u64);
-
-            static [<MAX_ $name:upper _ID>]: AtomicU64 = AtomicU64::new(0);
-
-            impl Display for $name {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    write!(f, "{}", self.0)
-                }
-            }
-
-            impl Default for $name {
-                fn default() -> Self {
-                    Self(0)
-                }
-            }
-
-            impl $name {
-                pub fn new() -> Self {
-                    Self([<MAX_ $name:upper _ID>].fetch_add(1, Ordering::Relaxed))
-                }
-
-                fn update_max(id: Self) {
-                    // not strictly thread safe, but it doesn't matter in this context
-                    if id.0 >= [<MAX_ $name:upper _ID>].load(Ordering::Relaxed) {
-                        [<MAX_ $name:upper _ID>].store(id.0 + 1, Ordering::Relaxed)
-                    }
-                }
-            }
-        }
-    }
-}
 
 atomic_id!(GroupId);
 atomic_id!(UnitId);
@@ -139,7 +103,7 @@ impl<'lua> SpawnCtx<'lua> {
     ) -> LuaResult<GroupInfo> {
         let mut template = self
             .miz
-            .get_group(idx, kind, side, template_name)?
+            .get_group_by_name(idx, kind, side, template_name)?
             .ok_or_else(|| err("no such template"))?;
         template.group = template.group.deep_clone(self.lua.inner())?;
         Ok(template)
@@ -337,15 +301,6 @@ impl Db {
             err("decode error")
         })?;
         db.cfg = Cfg::load(path)?;
-        for (id, _) in &db.groups {
-            GroupId::update_max(*id)
-        }
-        for (id, _) in &db.units {
-            UnitId::update_max(*id)
-        }
-        for (id, _) in &db.objectives {
-            ObjectiveId::update_max(*id)
-        }
         Ok(db)
     }
 
@@ -492,7 +447,7 @@ impl Db {
     pub fn init_objective_slots(&mut self, slot: Group) -> LuaResult<()> {
         for unit in slot.units()? {
             let unit = unit?;
-            let id = SlotId::from(unit.unit_id()?);
+            let id = SlotId::from(unit.id()?);
             let pos = slot.pos()?;
             let obj = {
                 let mut iter = self.objectives.into_iter();
@@ -1056,7 +1011,14 @@ impl Db {
         }
     }
 
-    pub fn spawn_crate(&mut self, lua: MizLua, ucid: &Ucid, name: &str) -> LuaResult<&'static str> {
-        
+/* 
+    pub fn spawn_crate(&mut self, lua: MizLua, idx: &MizIndex, ucid: &Ucid, name: &str) -> LuaResult<&'static str> {
+        match self.players.get(ucid).and_then(|p| p.current_slot.as_ref()) {
+            None => Ok("player not in a slot"),
+            Some(id) => {
+                
+            }
+        }
     }
+*/
 }

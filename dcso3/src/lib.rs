@@ -33,6 +33,90 @@ pub mod warehouse;
 pub mod weapon;
 pub mod world;
 
+#[macro_export]
+macro_rules! atomic_id {
+    ($name:ident) => {
+        paste::paste! {
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            pub struct $name(i64);
+
+            impl serde::Serialize for $name {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+                    serializer.serialize_i64(self.0)
+                }
+            }
+
+            pub struct [<$name Visitor>];
+
+            impl<'de> serde::de::Visitor<'de> for [<$name Visitor>] {
+                type Value = $name;
+
+                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(formatter, "a i64")
+                }
+
+                fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+                where
+                    E: serde::de::Error,
+                {
+                    $name::update_max(v);
+                    Ok($name(v))
+                }
+            }
+
+            impl<'de> serde::Deserialize<'de> for $name {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: serde::Deserializer<'de> {
+                    deserializer.deserialize_i64([<$name Visitor>])
+                }
+            }
+
+            static [<MAX_ $name:upper _ID>]: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+            impl std::fmt::Display for $name {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    write!(f, "{}", self.0)
+                }
+            }
+
+            impl std::default::Default for $name {
+                fn default() -> Self {
+                    Self::new()
+                }
+            }
+
+            impl<'lua> mlua::FromLua<'lua> for $name {
+                fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+                    let i = i64::from_lua(value, lua)?;
+                    Ok($name(i))
+                }
+            }
+
+            impl<'lua> mlua::IntoLua<'lua> for $name {
+                fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+                    self.0.into_lua(lua)
+                }
+            }
+
+            impl $name {
+                pub fn new() -> Self {
+                    Self([<MAX_ $name:upper _ID>].fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+                }
+
+                fn update_max(n: i64) {
+                    const O: std::sync::atomic::Ordering = std::sync::atomic::Ordering::Relaxed;
+                    let _: Result<_, _> = [<MAX_ $name:upper _ID>].fetch_update(O, O, |cur| {
+                        if n >= cur {
+                            Some(n.wrapping_add(1))
+                        } else {
+                            None
+                        }
+                    });
+                }
+            }
+        }
+    }
+}
+
 pub struct Quad2 {
     pub p0: LuaVec2,
     pub p1: LuaVec2,
@@ -326,6 +410,12 @@ macro_rules! wrapped_prim {
     ($name:ident, $type:ty, $($extra_derives:ident),*) => {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, $($extra_derives),*)]
         pub struct $name($type);
+
+        impl $name {
+            pub fn inner(self) -> $type {
+                self.0
+            }
+        }
 
         impl From<$type> for $name {
             fn from(t: $type) -> Self {

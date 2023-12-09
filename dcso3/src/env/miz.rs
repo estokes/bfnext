@@ -1,6 +1,6 @@
 use crate::{
-    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_table, Color, DcsTableExt,
-    LuaEnv, LuaVec2, Path, Quad2, Sequence, String,
+    as_tbl, coalition::Side, country, cvt_err, is_hooks_env, wrapped_prim, wrapped_table, Color,
+    DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -8,6 +8,9 @@ use serde_derive::{Deserialize, Serialize};
 use std::{collections::hash_map::Entry, ops::Deref};
 
 wrapped_table!(Weather, None);
+
+wrapped_prim!(UnitId, i64, Hash, Copy);
+wrapped_prim!(GroupId, i64, Hash, Copy);
 
 pub enum TriggerZoneTyp {
     Circle { radius: f64 },
@@ -64,7 +67,7 @@ impl<'lua> Unit<'lua> {
         self.raw_get("name")
     }
 
-    pub fn unit_id(&self) -> LuaResult<i64> {
+    pub fn id(&self) -> LuaResult<UnitId> {
         self.raw_get("unitId")
     }
 
@@ -124,7 +127,7 @@ impl<'lua> Group<'lua> {
         self.raw_get("lateActivation").unwrap_or(false)
     }
 
-    pub fn group_id(&self) -> LuaResult<i64> {
+    pub fn id(&self) -> LuaResult<GroupId> {
         self.raw_get("groupId")
     }
 
@@ -221,8 +224,10 @@ impl<'lua> Coalition<'lua> {
                 ($name:literal, $cat:expr, $tbl:ident) => {
                     for (i, group) in country.$tbl()?.into_iter().enumerate() {
                         let group = group?;
+                        let name = group.name()?;
+                        let gid = group.id()?;
                         let base = base.append([$name, "group"]).append([i + 1]);
-                        match idx.$tbl.entry(group.name()?) {
+                        match idx.groups.entry(gid) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
                             Entry::Vacant(e) => {
                                 e.insert(IndexedGroup {
@@ -232,15 +237,31 @@ impl<'lua> Coalition<'lua> {
                                 });
                             }
                         }
-                        match idx.all.entry(group.name()?) {
+                        match idx.groups_by_name.entry(name.clone()) {
                             Entry::Occupied(_) => return Err(cvt_err($name)),
-                            Entry::Vacant(e) => {
-                                e.insert(IndexedGroup {
-                                    country: cid,
-                                    category: $cat,
-                                    path: base,
-                                });
-                            }
+                            Entry::Vacant(e) => e.insert(gid),
+                        };
+                        match idx.$tbl.entry(name) {
+                            Entry::Occupied(_) => return Err(cvt_err($name)),
+                            Entry::Vacant(e) => e.insert(gid),
+                        };
+                        for (i, unit) in group.units()?.into_iter().enumerate() {
+                            let unit = unit?;
+                            let base = base.append(["units"]).append([i + 1]);
+                            let name = unit.name()?;
+                            let uid = unit.id()?;
+                            match idx.units.entry(uid) {
+                                Entry::Occupied(_) => return Err(cvt_err($name)),
+                                Entry::Vacant(e) => e.insert(base.clone()),
+                            };
+                            match idx.units_by_name.entry(name) {
+                                Entry::Occupied(_) => return Err(cvt_err($name)),
+                                Entry::Vacant(e) => e.insert(uid),
+                            };
+                            match idx.groups_by_unit.entry(uid) {
+                                Entry::Occupied(_) => return Err(cvt_err($name)),
+                                Entry::Vacant(e) => e.insert(gid),
+                            };
                         }
                     }
                 };
@@ -264,12 +285,16 @@ struct IndexedGroup {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct CoalitionIndex {
-    all: FxHashMap<String, IndexedGroup>,
-    planes: FxHashMap<String, IndexedGroup>,
-    helicopters: FxHashMap<String, IndexedGroup>,
-    ships: FxHashMap<String, IndexedGroup>,
-    vehicles: FxHashMap<String, IndexedGroup>,
-    statics: FxHashMap<String, IndexedGroup>,
+    units: FxHashMap<UnitId, Path>,
+    units_by_name: FxHashMap<String, UnitId>,
+    groups: FxHashMap<GroupId, IndexedGroup>,
+    groups_by_name: FxHashMap<String, GroupId>,
+    groups_by_unit: FxHashMap<UnitId, GroupId>,
+    planes: FxHashMap<String, GroupId>,
+    helicopters: FxHashMap<String, GroupId>,
+    ships: FxHashMap<String, GroupId>,
+    vehicles: FxHashMap<String, GroupId>,
+    statics: FxHashMap<String, GroupId>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -322,7 +347,21 @@ impl<'lua> Miz<'lua> {
         self.t.raw_get("weather")
     }
 
-    pub fn get_group(
+    pub fn get_group(&self, idx: &MizIndex, id: &GroupId) -> LuaResult<Option<GroupInfo>> {
+        idx.by_side
+            .iter()
+            .find_map(|(_, idx)| idx.groups.get(id))
+            .map(|ifo| {
+                self.raw_get_path(&ifo.path).map(|group| GroupInfo {
+                    country: ifo.country,
+                    category: ifo.category,
+                    group,
+                })
+            })
+            .transpose()
+    }
+
+    pub fn get_group_by_name(
         &self,
         idx: &MizIndex,
         kind: GroupKind,
@@ -332,20 +371,54 @@ impl<'lua> Miz<'lua> {
         idx.by_side
             .get(&side)
             .and_then(|cidx| match kind {
-                GroupKind::Any => cidx.all.get(name),
+                GroupKind::Any => cidx.groups_by_name.get(name),
                 GroupKind::Plane => cidx.planes.get(name),
                 GroupKind::Helicopter => cidx.helicopters.get(name),
                 GroupKind::Vehicle => cidx.vehicles.get(name),
                 GroupKind::Ship => cidx.ships.get(name),
                 GroupKind::Static => cidx.statics.get(name),
             })
-            .map(|ifo| {
-                self.raw_get_path(&ifo.path).map(|group| GroupInfo {
-                    country: ifo.country,
-                    category: ifo.category,
-                    group,
-                })
+            .and_then(|gid| self.get_group(idx, gid).transpose())
+            .transpose()
+    }
+
+    pub fn get_unit(&self, idx: &MizIndex, id: &UnitId) -> LuaResult<Option<Unit>> {
+        idx.by_side
+            .iter()
+            .find_map(|(_, idx)| idx.units.get(id))
+            .map(|path| self.raw_get_path(path))
+            .transpose()
+    }
+
+    pub fn get_unit_by_name(&self, idx: &MizIndex, name: &str) -> LuaResult<Option<Unit>> {
+        idx.by_side
+            .iter()
+            .find_map(|(_, idx)| idx.units_by_name.get(name).and_then(|id| idx.units.get(id)))
+            .map(|path| self.raw_get_path(path))
+            .transpose()
+    }
+
+    pub fn get_group_by_unit(&self, idx: &MizIndex, id: &UnitId) -> LuaResult<Option<GroupInfo>> {
+        idx.by_side
+            .iter()
+            .find_map(|(_, idx)| idx.groups_by_unit.get(id))
+            .and_then(|gid| self.get_group(idx, gid).transpose())
+            .transpose()
+    }
+
+    pub fn get_group_by_unit_name(
+        &self,
+        idx: &MizIndex,
+        name: &str,
+    ) -> LuaResult<Option<GroupInfo>> {
+        idx.by_side
+            .iter()
+            .find_map(|(_, idx)| {
+                idx.units_by_name
+                    .get(name)
+                    .and_then(|uid| idx.groups_by_unit.get(uid))
             })
+            .and_then(|gid| self.get_group(idx, gid).transpose())
             .transpose()
     }
 

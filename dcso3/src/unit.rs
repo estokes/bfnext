@@ -1,5 +1,5 @@
 use super::{as_tbl, controller::Controller, cvt_err, group::Group, object::Object, String};
-use crate::{simple_enum, wrapped_table, MizLua, LuaEnv};
+use crate::{simple_enum, wrapped_table, MizLua, LuaEnv, env::miz::UnitId};
 use mlua::{prelude::*, Value};
 use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
@@ -33,7 +33,7 @@ impl<'lua> Unit<'lua> {
         self.t.call_method("getPlayerName", ())
     }
 
-    pub fn get_id(&self) -> LuaResult<i64> {
+    pub fn id(&self) -> LuaResult<UnitId> {
         self.t.call_method("getID", ())
     }
 

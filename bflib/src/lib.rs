@@ -207,7 +207,7 @@ fn on_player_try_send_chat(
 fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = net.get_slot(id)?;
+    let (side, slot) = dbg!(net.get_slot(id))?;
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::NoLives => {
@@ -282,21 +282,21 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
                 if let Some(uid) = ctx.units_by_obj_id.remove(&id) {
                     ctx.db.unit_dead(uid, true, Utc::now());
                 }
-                let slot = SlotId::from(unit.get_id()?);
+                let slot = SlotId::from(unit.id()?);
                 ctx.recently_landed.remove(&slot);
                 force_player_in_slot_to_spectators(ctx, &slot)
             }
         }
         Event::Ejection(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
-                let slot = SlotId::from(unit.get_id()?);
+                let slot = SlotId::from(unit.id()?);
                 ctx.recently_landed.remove(&slot);
                 force_player_in_slot_to_spectators(ctx, &slot)
             }
         }
         Event::Takeoff(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
-                let slot = SlotId::from(unit.get_id()?);
+                let slot = SlotId::from(unit.id()?);
                 let ctx = unsafe { Context::get_mut() };
                 ctx.db.takeoff(Utc::now(), slot.clone());
                 ctx.recently_landed.remove(&slot);
@@ -304,7 +304,7 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
         }
         Event::Land(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
-                let slot = SlotId::from(unit.get_id()?);
+                let slot = SlotId::from(unit.id()?);
                 let name = unit.as_object()?.get_name()?;
                 let ctx = unsafe { Context::get_mut() };
                 ctx.recently_landed.insert(slot, (name, Utc::now()));

@@ -1,5 +1,5 @@
 use super::{as_tbl, coalition::Side, cvt_err, String};
-use crate::{simple_enum, wrapped_prim, wrapped_table, LuaEnv, Sequence};
+use crate::{env::miz::UnitId, simple_enum, wrapped_prim, wrapped_table, LuaEnv, Sequence};
 use compact_str::format_compact;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
@@ -37,14 +37,14 @@ pub enum SlotIdKind {
     ArtilleryCommander,
     ForwardObserver,
     Observer,
-    Instructor
+    Instructor,
 }
 
 wrapped_prim!(SlotId, String, Hash);
 
-impl From<i64> for SlotId {
-    fn from(value: i64) -> Self {
-        Self(String::from(format_compact!("{}", value)))
+impl From<UnitId> for SlotId {
+    fn from(value: UnitId) -> Self {
+        Self::from(String(format_compact!("{}", value.inner())))
     }
 }
 
@@ -81,6 +81,10 @@ impl SlotId {
 
     pub fn spectator() -> SlotId {
         Self(String::from("0"))
+    }
+
+    pub fn as_unit_id(&self) -> Option<UnitId> {
+        self.0.parse::<i64>().ok().map(UnitId::from)
     }
 }
 

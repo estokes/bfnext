@@ -3,13 +3,15 @@ use crate::cfg::{Cfg, Crate, Deployable, Troop};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
+    atomic_id,
     coalition::{Coalition, Side},
     cvt_err,
     env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     err,
     group::GroupCategory,
     net::{SlotId, SlotIdKind, Ucid},
-    DeepClone, LuaEnv, MizLua, String, Vector2, unit::Unit, atomic_id
+    unit::Unit,
+    DeepClone, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
 use log::{debug, error};
@@ -118,13 +120,16 @@ impl<'lua> SpawnCtx<'lua> {
 
     pub fn spawn(&self, template: GroupInfo) -> LuaResult<()> {
         match GroupCategory::from_kind(template.category) {
-            None => self
-                .coalition
-                .add_static_object(template.country, template.group),
-            Some(category) => self
-                .coalition
-                .add_group(template.country, category, template.group),
+            None => {
+                self.coalition
+                    .add_static_object(template.country, template.group)?;
+            }
+            Some(category) => {
+                self.coalition
+                    .add_group(template.country, category, template.group)?;
+            }
         }
+        Ok(())
     }
 
     pub fn despawn(&self, name: &str) -> LuaResult<()> {
@@ -1011,14 +1016,14 @@ impl Db {
         }
     }
 
-/* 
-    pub fn spawn_crate(&mut self, lua: MizLua, idx: &MizIndex, ucid: &Ucid, name: &str) -> LuaResult<&'static str> {
-        match self.players.get(ucid).and_then(|p| p.current_slot.as_ref()) {
-            None => Ok("player not in a slot"),
-            Some(id) => {
-                
+    /*
+        pub fn spawn_crate(&mut self, lua: MizLua, idx: &MizIndex, ucid: &Ucid, name: &str) -> LuaResult<&'static str> {
+            match self.players.get(ucid).and_then(|p| p.current_slot.as_ref()) {
+                None => Ok("player not in a slot"),
+                Some(id) => {
+
+                }
             }
         }
-    }
-*/
+    */
 }

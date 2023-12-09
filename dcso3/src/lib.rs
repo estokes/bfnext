@@ -62,6 +62,15 @@ macro_rules! atomic_id {
                     $name::update_max(v);
                     Ok($name(v))
                 }
+
+                fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+                where
+                    E: serde::de::Error,
+                {
+                    let v = v as i64;
+                    $name::update_max(v);
+                    Ok($name(v))
+                }
             }
 
             impl<'de> serde::Deserialize<'de> for $name {
@@ -456,15 +465,20 @@ fn as_tbl_ref<'a: 'lua, 'lua>(
     value.as_table().ok_or_else(|| cvt_err(to))
 }
 
-fn check_implements(mut tbl: mlua::Table, class: &str) -> bool {
+fn check_implements(tbl: &mlua::Table, class: &str) -> bool {
+    let mut parent = None;
     loop {
+        let tbl = match parent.as_ref() {
+            None => tbl,
+            Some(tbl) => tbl,
+        };
         match tbl.raw_get::<_, String>("className_") {
             Err(_) => break false,
             Ok(s) if s.as_str() == class => break true,
             Ok(_) => match tbl.raw_get::<_, mlua::Table>("parentClass_") {
                 Err(_) => break false,
                 Ok(t) => {
-                    tbl = t;
+                    parent = Some(t);
                 }
             },
         }
@@ -486,7 +500,7 @@ fn as_tbl<'lua>(
                     message: Some(format!("table is not an object")),
                 }),
                 Some(meta) => {
-                    if check_implements(meta, typ) {
+                    if check_implements(&meta, typ) {
                         Ok(tbl)
                     } else {
                         Err(LuaError::FromLuaConversionError {

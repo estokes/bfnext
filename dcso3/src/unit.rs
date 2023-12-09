@@ -17,8 +17,8 @@ wrapped_table!(Unit, Some("Unit"));
 impl<'lua> Unit<'lua> {
     pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> LuaResult<Unit<'lua>> {
         let globals = lua.inner().globals();
-        let unit = as_tbl("Unit", Some("Unit"), globals.raw_get("Unit")?)?;
-        Self::from_lua(unit.call_method("getByName", name)?, lua.inner())
+        let unit = as_tbl("Unit", None, globals.raw_get("Unit")?)?;
+        Self::from_lua(unit.call_function("getByName", name)?, lua.inner())
     }
 
     pub fn as_object(&self) -> LuaResult<Object<'lua>> {

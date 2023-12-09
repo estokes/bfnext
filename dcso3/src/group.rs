@@ -44,8 +44,8 @@ wrapped_table!(Group, Some("Group"));
 impl<'lua> Group<'lua> {
     pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> LuaResult<Group<'lua>> {
         let globals = lua.inner().globals();
-        let class = as_tbl("Group", Some("Group"), globals.raw_get("Group")?)?;
-        Self::from_lua(class.call_method("getByName", name)?, lua.inner())
+        let class = as_tbl("Group", None, globals.raw_get("Group")?)?;
+        Self::from_lua(class.call_function("getByName", name)?, lua.inner())
     }
 
     pub fn destroy(&self) -> LuaResult<()> {

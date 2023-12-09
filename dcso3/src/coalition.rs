@@ -7,9 +7,9 @@ use super::{
     static_object::StaticObject,
     unit::Unit,
 };
-use crate::{simple_enum, wrapped_table, Sequence, MizLua, LuaEnv};
+use crate::{simple_enum, wrapped_table, LuaEnv, MizLua, Sequence};
 use mlua::{prelude::*, Value};
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 use std::{ops::Deref, str::FromStr};
 
 simple_enum!(Side, u8, [Neutral => 0, Red => 1, Blue => 2]);
@@ -52,12 +52,16 @@ impl<'lua> Coalition<'lua> {
         &self,
         country: Country,
         category: GroupCategory,
-        data: env::miz::Group,
-    ) -> LuaResult<()> {
+        data: env::miz::Group<'lua>,
+    ) -> LuaResult<Group<'lua>> {
         self.t.call_function("addGroup", (country, category, data))
     }
 
-    pub fn add_static_object(&self, country: Country, data: env::miz::Group) -> LuaResult<()> {
+    pub fn add_static_object(
+        &self,
+        country: Country,
+        data: env::miz::Group<'lua>,
+    ) -> LuaResult<StaticObject<'lua>> {
         self.t.call_function("addStaticObject", (country, data))
     }
 

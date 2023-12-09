@@ -6,7 +6,7 @@ use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use db::{Db, UnitId};
 use dcso3::{
-    coalition::Side,
+    coalition::{Side, Coalition},
     env::{self, miz::Miz, Env},
     err,
     event::Event,
@@ -207,7 +207,7 @@ fn on_player_try_send_chat(
 fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = dbg!(net.get_slot(id))?;
+    let (side, slot) = net.get_slot(id)?;
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::NoLives => {

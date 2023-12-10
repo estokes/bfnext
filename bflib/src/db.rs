@@ -19,14 +19,10 @@ use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
-    fmt::Display,
+    collections::{btree_map, hash_map::Entry, BTreeMap},
     fs::{self, File},
     path::{Path, PathBuf},
     str::FromStr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    }, collections::{hash_map::Entry, BTreeMap, btree_map},
 };
 
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
@@ -326,7 +322,7 @@ pub struct Ephemeral {
     cfg: Cfg,
     players_by_slot: FxHashMap<SlotId, Ucid>,
     cargo: FxHashMap<SlotId, Cargo>,
-    deployable_idx: FxHashMap<Side, DeployableIndex>
+    deployable_idx: FxHashMap<Side, DeployableIndex>,
 }
 
 impl Ephemeral {
@@ -336,7 +332,7 @@ impl Ephemeral {
             for dep in deployables.iter() {
                 let name = match dep.path.last() {
                     None => return Err(cvt_err("deployable without path")),
-                    Some(name) => name
+                    Some(name) => name,
                 };
                 match idx.deployables_by_name.entry(name.clone()) {
                     Entry::Occupied(_) => return Err(cvt_err("duplicate deployable name")),
@@ -350,7 +346,7 @@ impl Ephemeral {
                 for c in dep.crates.iter() {
                     match idx.crates_by_name.entry(c.name.clone()) {
                         Entry::Occupied(_) => return Err(cvt_err("duplicate crate name")),
-                        Entry::Vacant(e) => e.insert(c.clone())
+                        Entry::Vacant(e) => e.insert(c.clone()),
                     };
                 }
             }
@@ -380,7 +376,7 @@ impl Db {
             persisted,
             ephemeral: Ephemeral::default(),
         };
-        db.ephemeral.set_cfg(Cfg::load(path)?);
+        db.ephemeral.set_cfg(Cfg::load(path)?)?;
         Ok(db)
     }
 
@@ -563,7 +559,7 @@ impl Db {
     pub fn init(lua: MizLua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
-        t.ephemeral.set_cfg(cfg);
+        t.ephemeral.set_cfg(cfg)?;
         // first init all the objectives
         for zone in miz.triggers()? {
             let zone = zone?;

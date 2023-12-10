@@ -286,6 +286,7 @@ pub struct Persisted {
     groups_by_side: Map<Side, Set<GroupId>>,
     deployed: Set<GroupId>,
     crates: Set<GroupId>,
+    troops: Set<GroupId>,
     objectives: Map<ObjectiveId, Objective>,
     objectives_by_slot: Map<SlotId, ObjectiveId>,
     objectives_by_name: Map<String, ObjectiveId>,
@@ -812,6 +813,41 @@ impl Db {
         }
     }
 
+    pub fn delete_group<'lua>(
+        &mut self,
+        spctx: &'lua SpawnCtx<'lua>,
+        gid: &GroupId,
+    ) -> LuaResult<()> {
+        let group = self
+            .persisted
+            .groups
+            .remove_cow(gid)
+            .ok_or(err("no such group"))?;
+        self.persisted.groups_by_name.remove_cow(&group.name);
+        self.persisted
+            .groups_by_side
+            .get_mut_cow(&group.side)
+            .map(|m| m.remove_cow(gid));
+        match &group.origin {
+            DeployKind::Objective => (),
+            DeployKind::Crate(_) => {
+                self.persisted.crates.remove_cow(gid);
+            }
+            DeployKind::Deployed(_) => {
+                self.persisted.deployed.remove_cow(gid);
+            }
+            DeployKind::Troop(_) => {
+                self.persisted.troops.remove_cow(gid);
+            }
+        }
+        for uid in &group.units {
+            if let Some(unit) = self.persisted.units.remove_cow(uid) {
+                self.persisted.units_by_name.remove_cow(&unit.name);
+            }
+        }
+        spctx.despawn(&*group.name)
+    }
+
     /// add the units to the db, but don't actually spawn them
     fn init_template<'lua>(
         &mut self,
@@ -868,6 +904,18 @@ impl Db {
             spawned.units.insert_cow(uid);
             self.persisted.units.insert_cow(uid, spawned_unit);
             self.persisted.units_by_name.insert_cow(unit_name, uid);
+        }
+        match &spawned.origin {
+            DeployKind::Objective => (),
+            DeployKind::Crate(_) => {
+                self.persisted.crates.insert_cow(gid);
+            }
+            DeployKind::Deployed(_) => {
+                self.persisted.deployed.insert_cow(gid);
+            }
+            DeployKind::Troop(_) => {
+                self.persisted.troops.insert_cow(gid);
+            }
         }
         self.persisted.groups.insert_cow(gid, spawned);
         self.persisted.groups_by_name.insert_cow(group_name, gid);
@@ -1117,28 +1165,38 @@ impl Db {
         let unit = Unit::get_by_name(lua, &*mizunit.name()?)?;
         let pos = unit.as_object()?.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
-        let obj = {
-            let mut iter = self.persisted.objectives.into_iter();
-            loop {
-                match iter.next() {
-                    None => return Ok("not near logistics"),
-                    Some((_, obj)) => {
-                        if na::distance(&obj.pos.into(), &point.into()) <= obj.radius {
-                            if obj.owner == player.side && obj.logi() > 0 {
-                                break obj;
-                            } else {
-                                return Ok("not near friendly logistics");
-                            }
-                        }
-                    }
-                }
+        let obj = self.persisted.objectives.into_iter().find_map(|(_, obj)| {
+            if obj.owner == player.side
+                && obj.logi() > 0
+                && na::distance(&obj.pos.into(), &point.into()) <= obj.radius
+            {
+                return Some(obj);
             }
-        };
-        /*
-        let crate_cfg = self.ephemeral.cfg.deployables.get(&player.side).and_then(|dep| dep.iter().find_map(|dep| {
-            dep.crates.iter().find(|cr| )
-        }))
-        */
-        unimplemented!()
+            None
+        });
+        if let None = &obj {
+            return Ok("not near friendly logistics");
+        }
+        let crate_cfg = or_msg!(
+            self.ephemeral
+                .deployable_idx
+                .get(&player.side)
+                .and_then(|idx| idx.crates_by_name.get(name)),
+            "no such crate"
+        )
+        .clone();
+        let template = self.ephemeral.cfg.crate_template[&player.side].clone();
+        let spawnpos = 5. * pos.x.0 + pos.p.0; // spawn it five meters in front of the player
+        let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
+        self.spawn_template_as_new(
+            lua,
+            idx,
+            player.side,
+            GroupKind::Any,
+            &spawnpos,
+            &template,
+            DeployKind::Crate(crate_cfg.clone()),
+        )?;
+        Ok("crate spawned at your 12 o'clock")
     }
 }

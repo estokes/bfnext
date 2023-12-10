@@ -1,4 +1,4 @@
-# Experimental DCS Mission Scripting in Rust
+# Rust Binding to DCS's Lua api
 
 This is a minimal binding to the DCS lua api. With it, mission scripting can be done almost entirely in Rust. To use it, you build your rust library as a cdylib and load the dll using lua into one or both of the DCS lua environments using the normal lua `require` statement (see the mlua docs about module mode for more details on that). When building you should make sure to instruct mlua to link to the same lua dll that DCS is linking (for obvious reasons), you can do that by setting some environment variables.
 

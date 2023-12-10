@@ -26,7 +26,7 @@ use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
-    },
+    }, collections::{hash_map::Entry, BTreeMap, btree_map},
 };
 
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
@@ -150,7 +150,7 @@ pub enum ObjectiveKind {
     Samsite,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub enum LifeType {
     Standard,
     Intercept,
@@ -313,20 +313,50 @@ impl Persisted {
 }
 
 #[derive(Debug, Default)]
+struct DeployableIndex {
+    deployables_by_name: FxHashMap<String, Deployable>,
+    // set of crate names -> deployable name
+    deployables_by_crates: BTreeMap<Set<String>, String>,
+    crates_by_name: FxHashMap<String, Crate>,
+}
+
+#[derive(Debug, Default)]
 pub struct Ephemeral {
     dirty: bool,
     cfg: Cfg,
     players_by_slot: FxHashMap<SlotId, Ucid>,
     cargo: FxHashMap<SlotId, Cargo>,
-    deployables_by_name: FxHashMap<Side, FxHashMap<String, Deployable>>,
-    // set of crate names -> deployable name
-    deployables_by_crates: FxHashMap<Side, FxHashMap<Set<String>, String>>,
-    crates_by_name: FxHashMap<Side, FxHashMap<String, Crate>>,
+    deployable_idx: FxHashMap<Side, DeployableIndex>
 }
 
 impl Ephemeral {
     fn set_cfg(&mut self, cfg: Cfg) -> LuaResult<()> {
-        unimplemented!()
+        for (side, deployables) in cfg.deployables.iter() {
+            let idx = self.deployable_idx.entry(*side).or_default();
+            for dep in deployables.iter() {
+                let name = match dep.path.last() {
+                    None => return Err(cvt_err("deployable without path")),
+                    Some(name) => name
+                };
+                match idx.deployables_by_name.entry(name.clone()) {
+                    Entry::Occupied(_) => return Err(cvt_err("duplicate deployable name")),
+                    Entry::Vacant(e) => e.insert(dep.clone()),
+                };
+                let crates = dep.crates.iter().map(|c| c.name.clone()).collect();
+                match idx.deployables_by_crates.entry(crates) {
+                    btree_map::Entry::Occupied(_) => return Err(cvt_err("crate set conflict")),
+                    btree_map::Entry::Vacant(e) => e.insert(name.clone()),
+                };
+                for c in dep.crates.iter() {
+                    match idx.crates_by_name.entry(c.name.clone()) {
+                        Entry::Occupied(_) => return Err(cvt_err("duplicate crate name")),
+                        Entry::Vacant(e) => e.insert(c.clone())
+                    };
+                }
+            }
+        }
+        self.cfg = cfg;
+        Ok(())
     }
 }
 

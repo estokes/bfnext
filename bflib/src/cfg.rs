@@ -1,5 +1,6 @@
 use crate::db::{LifeType, Vehicle};
 use dcso3::{coalition::Side, err, String};
+use fxhash::FxHashMap;
 use log::error;
 use mlua::prelude::*;
 use serde_derive::{Deserialize, Serialize};
@@ -8,8 +9,6 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-
-type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PersistTyp {
@@ -113,18 +112,18 @@ pub struct Cfg {
     /// or None for unlimited side switches
     pub side_switches: Option<u8>,
     /// the life types different vehicles use
-    pub life_types: Map<Vehicle, LifeType>,
+    pub life_types: FxHashMap<Vehicle, LifeType>,
     /// the life reset configuration for each life type. A pair
     /// of number of lives per reset, and reset time in seconds.
-    pub default_lives: Map<LifeType, (u8, u32)>,
+    pub default_lives: FxHashMap<LifeType, (u8, u32)>,
     /// vehicle cargo configuration
-    pub cargo: Map<Vehicle, CargoConfig>,
+    pub cargo: FxHashMap<Vehicle, CargoConfig>,
     /// The name of the crate group for each side
-    pub crate_template: Map<Side, String>,
+    pub crate_template: FxHashMap<Side, String>,
     /// deployables configuration for each side
-    pub deployables: Map<Side, Vec<Deployable>>,
+    pub deployables: FxHashMap<Side, Vec<Deployable>>,
     /// deployable troops configuration for each side
-    pub troops: Map<Side, Vec<Troop>>,
+    pub troops: FxHashMap<Side, Vec<Troop>>,
 }
 
 impl Cfg {
@@ -592,14 +591,14 @@ impl Default for Cfg {
             repair_time: 1800,
             logistics_exclusion: 4000,
             side_switches: Some(1),
-            default_lives: Map::from_iter([
+            default_lives: FxHashMap::from_iter([
                 (LifeType::Standard, (3, 21600)),
                 (LifeType::Intercept, (4, 21600)),
                 (LifeType::Attack, (4, 21600)),
                 (LifeType::Logistics, (6, 21600)),
                 (LifeType::Recon, (6, 21600)),
             ]),
-            life_types: Map::from_iter([
+            life_types: FxHashMap::from_iter([
                 ("FA-18C_hornet".into(), LifeType::Standard),
                 ("F-14A-135-GR".into(), LifeType::Standard),
                 ("F-14B".into(), LifeType::Standard),
@@ -638,7 +637,7 @@ impl Default for Cfg {
                 ("Mirage-F1EE".into(), LifeType::Intercept),
                 ("Mirage-F1CE".into(), LifeType::Intercept),
             ]),
-            cargo: Map::from_iter([
+            cargo: FxHashMap::from_iter([
                 (
                     "UH-1H".into(),
                     CargoConfig {
@@ -680,15 +679,15 @@ impl Default for Cfg {
                     },
                 ),
             ]),
-            crate_template: Map::from_iter([
+            crate_template: FxHashMap::from_iter([
                 (Side::Red, "RCRATE".into()),
                 (Side::Blue, "BCRATE".into()),
             ]),
-            deployables: Map::from_iter([
+            deployables: FxHashMap::from_iter([
                 (Side::Red, default_red_deployables()),
                 (Side::Blue, default_blue_deployables()),
             ]),
-            troops: Map::from_iter([
+            troops: FxHashMap::from_iter([
                 (Side::Red, default_red_troops()),
                 (Side::Blue, default_blue_troops()),
             ]),

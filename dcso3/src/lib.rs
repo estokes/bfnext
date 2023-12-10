@@ -805,10 +805,10 @@ impl<'lua> IntoLua<'lua> for LuaVec3 {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Position3 {
-    p: LuaVec3,
-    x: LuaVec3,
-    y: LuaVec3,
-    z: LuaVec3,
+    pub p: LuaVec3,
+    pub x: LuaVec3,
+    pub y: LuaVec3,
+    pub z: LuaVec3,
 }
 
 impl<'lua> FromLua<'lua> for Position3 {

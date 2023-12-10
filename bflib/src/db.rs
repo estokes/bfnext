@@ -18,11 +18,15 @@ use log::{debug, error};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
+    borrow::Borrow,
     fmt::Display,
     fs::{self, File},
     path::{Path, PathBuf},
     str::FromStr,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
 };
 
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
@@ -48,7 +52,7 @@ pub enum DeployKind {
     Crate(Crate),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cargo {
     troops: Vec<Troop>,
     crates: Vec<Crate>,
@@ -227,6 +231,12 @@ impl<'a> From<&'a str> for Vehicle {
     }
 }
 
+impl Borrow<str> for Vehicle {
+    fn borrow(&self) -> &str {
+        &*self.0
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     id: ObjectiveId,
@@ -272,7 +282,7 @@ pub struct Player {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Db {
+pub struct Persisted {
     groups: Map<GroupId, SpawnedGroup>,
     units: Map<UnitId, SpawnedUnit>,
     groups_by_name: Map<String, GroupId>,
@@ -285,30 +295,9 @@ pub struct Db {
     objectives_by_name: Map<String, ObjectiveId>,
     objectives_by_group: Map<GroupId, ObjectiveId>,
     players: Map<Ucid, Player>,
-    #[serde(skip)]
-    dirty: bool,
-    #[serde(skip)]
-    cfg: Cfg,
-    #[serde(skip)]
-    players_by_slot: Map<SlotId, Ucid>,
-    #[serde(skip)]
-    cargo: Map<SlotId, Cargo>,
 }
 
-impl Db {
-    pub fn load(path: &Path) -> LuaResult<Self> {
-        let file = File::open(&path).map_err(|e| {
-            error!("failed to open save file {:?}, {:?}", path, e);
-            err("io error")
-        })?;
-        let mut db: Self = serde_json::from_reader(file).map_err(|e| {
-            error!("failed to decode save file {:?}, {:?}", path, e);
-            err("decode error")
-        })?;
-        db.cfg = Cfg::load(path)?;
-        Ok(db)
-    }
-
+impl Persisted {
     pub fn save(&self, path: &Path) -> anyhow::Result<()> {
         let mut tmp = PathBuf::from(path);
         tmp.set_extension("tmp");
@@ -317,15 +306,58 @@ impl Db {
             .truncate(true)
             .create(true)
             .open(&tmp)?;
-        serde_json::to_writer(file, self)?;
+        serde_json::to_writer(file, &self)?;
         fs::rename(tmp, path)?;
         Ok(())
     }
+}
 
-    pub fn maybe_snapshot(&mut self) -> Option<Self> {
-        if self.dirty {
-            self.dirty = false;
-            Some(self.clone())
+#[derive(Debug, Default)]
+pub struct Ephemeral {
+    dirty: bool,
+    cfg: Cfg,
+    players_by_slot: FxHashMap<SlotId, Ucid>,
+    cargo: FxHashMap<SlotId, Cargo>,
+    deployables_by_name: FxHashMap<Side, FxHashMap<String, Deployable>>,
+    // set of crate names -> deployable name
+    deployables_by_crates: FxHashMap<Side, FxHashMap<Set<String>, String>>,
+    crates_by_name: FxHashMap<Side, FxHashMap<String, Crate>>,
+}
+
+impl Ephemeral {
+    fn set_cfg(&mut self, cfg: Cfg) -> LuaResult<()> {
+        unimplemented!()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Db {
+    persisted: Persisted,
+    ephemeral: Ephemeral,
+}
+
+impl Db {
+    pub fn load(path: &Path) -> LuaResult<Self> {
+        let file = File::open(&path).map_err(|e| {
+            error!("failed to open save file {:?}, {:?}", path, e);
+            err("io error")
+        })?;
+        let persisted: Persisted = serde_json::from_reader(file).map_err(|e| {
+            error!("failed to decode save file {:?}, {:?}", path, e);
+            err("decode error")
+        })?;
+        let mut db = Db {
+            persisted,
+            ephemeral: Ephemeral::default(),
+        };
+        db.ephemeral.set_cfg(Cfg::load(path)?);
+        Ok(db)
+    }
+
+    pub fn maybe_snapshot(&mut self) -> Option<Persisted> {
+        if self.ephemeral.dirty {
+            self.ephemeral.dirty = false;
+            Some(self.persisted.clone())
         } else {
             None
         }
@@ -398,8 +430,8 @@ impl Db {
             logi: 0,
             last_change_ts: Utc::now(),
         };
-        self.objectives.insert_cow(id, obj);
-        self.objectives_by_name.insert_cow(name, id);
+        self.persisted.objectives.insert_cow(id, obj);
+        self.persisted.objectives_by_name.insert_cow(name, id);
         Ok(())
     }
 
@@ -419,7 +451,7 @@ impl Db {
         let name = name.parse::<ObjGroup>()?;
         let pos = zone.pos()?;
         let (obj, side) = {
-            let mut iter = self.objectives.into_iter();
+            let mut iter = self.persisted.objectives.into_iter();
             loop {
                 match iter.next() {
                     None => return Err(err("group isn't associated with an objective")),
@@ -441,11 +473,11 @@ impl Db {
             name.template(),
             DeployKind::Objective,
         )?;
-        self.objectives[&obj]
+        self.persisted.objectives[&obj]
             .groups
             .get_or_default_cow(side)
             .insert_cow(name.clone(), gid);
-        self.objectives_by_group.insert_cow(gid, obj);
+        self.persisted.objectives_by_group.insert_cow(gid, obj);
         Ok(())
     }
 
@@ -455,7 +487,7 @@ impl Db {
             let id = SlotId::from(unit.id()?);
             let pos = slot.pos()?;
             let obj = {
-                let mut iter = self.objectives.into_iter();
+                let mut iter = self.persisted.objectives.into_iter();
                 loop {
                     match iter.next() {
                         None => return Err(err("slot not associated with an objective")),
@@ -468,12 +500,12 @@ impl Db {
                 }
             };
             let vehicle = Vehicle(unit.typ()?);
-            match self.cfg.life_types.get(&vehicle) {
+            match self.ephemeral.cfg.life_types.get(&vehicle) {
                 None => {
                     error!("vehicle {:?} doesn't have a configured life type", vehicle);
                     return Err(err("vehicle missing life type"));
                 }
-                Some(typ) => match self.cfg.default_lives.get(&typ) {
+                Some(typ) => match self.ephemeral.cfg.default_lives.get(&typ) {
                     Some((n, f)) if *n > 0 && *f > 0 => (),
                     None => {
                         error!("vehicle {:?} has no configured life type", vehicle);
@@ -488,8 +520,12 @@ impl Db {
                     }
                 },
             }
-            self.objectives_by_slot.insert_cow(id.clone(), obj);
-            self.objectives[&obj].slots.insert_cow(id, vehicle);
+            self.persisted
+                .objectives_by_slot
+                .insert_cow(id.clone(), obj);
+            self.persisted.objectives[&obj]
+                .slots
+                .insert_cow(id, vehicle);
         }
         Ok(())
     }
@@ -497,7 +533,7 @@ impl Db {
     pub fn init(lua: MizLua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
-        t.cfg = cfg;
+        t.ephemeral.set_cfg(cfg);
         // first init all the objectives
         for zone in miz.triggers()? {
             let zone = zone?;
@@ -536,7 +572,7 @@ impl Db {
                 }
             }
         }
-        t.dirty = true;
+        t.ephemeral.dirty = true;
         debug!("{:#?}", &t);
         Ok(t)
     }
@@ -550,7 +586,7 @@ impl Db {
                 let mut logi_total = 0;
                 let mut logi_alive = 0;
                 for (_, gid) in groups {
-                    let group = &self.groups[gid];
+                    let group = &self.persisted.groups[gid];
                     let logi = match ObjGroupClass::from(group.template_name.as_str()) {
                         ObjGroupClass::Logi => true,
                         _ => false,
@@ -560,7 +596,7 @@ impl Db {
                         if logi {
                             logi_total += 1;
                         }
-                        if !self.units[uid].dead {
+                        if !self.persisted.units[uid].dead {
                             alive += 1;
                             if logi {
                                 logi_alive += 1;
@@ -576,8 +612,8 @@ impl Db {
     }
 
     fn update_objective_status(&mut self, oid: &ObjectiveId, now: DateTime<Utc>) {
-        let (health, logi) = self.compute_objective_status(&self.objectives[oid]);
-        let obj = &mut self.objectives[oid];
+        let (health, logi) = self.compute_objective_status(&self.persisted.objectives[oid]);
+        let obj = &mut self.persisted.objectives[oid];
         obj.health = health;
         obj.logi = logi;
         obj.last_change_ts = now;
@@ -594,14 +630,14 @@ impl Db {
         oid: ObjectiveId,
         now: DateTime<Utc>,
     ) -> LuaResult<()> {
-        let obj = &self.objectives[&oid];
+        let obj = &self.persisted.objectives[&oid];
         if let Some(groups) = obj.groups.get(&obj.owner) {
             let damaged_by_class: Map<ObjGroupClass, Set<GroupId>> =
                 groups.into_iter().fold(Map::new(), |mut m, (name, id)| {
                     let class = ObjGroupClass::from(name.template());
                     let mut damaged = false;
-                    for uid in &self.groups[id].units {
-                        damaged |= self.units[uid].dead;
+                    for uid in &self.persisted.groups[id].units {
+                        damaged |= self.persisted.units[uid].dead;
                     }
                     if damaged {
                         m.get_or_default_cow(class).insert_cow(*id);
@@ -620,13 +656,13 @@ impl Db {
             ] {
                 if let Some(groups) = damaged_by_class.get(&class) {
                     for gid in groups {
-                        let group = &self.groups[gid];
+                        let group = &self.persisted.groups[gid];
                         for uid in &group.units {
-                            self.units[uid].dead = false;
+                            self.persisted.units[uid].dead = false;
                         }
                         self.respawn_group(idx, spctx, group)?;
                         self.update_objective_status(&oid, now);
-                        self.dirty = true;
+                        self.ephemeral.dirty = true;
                         return Ok(());
                     }
                 }
@@ -643,11 +679,12 @@ impl Db {
     ) -> LuaResult<()> {
         let spctx = SpawnCtx::new(lua)?;
         let to_repair = self
+            .persisted
             .objectives
             .into_iter()
             .filter_map(|(oid, obj)| {
                 let logi = obj.logi as f32 / 100.;
-                let repair_time = self.cfg.repair_time as f32 / logi;
+                let repair_time = self.ephemeral.cfg.repair_time as f32 / logi;
                 if repair_time < i64::MAX as f32 {
                     let repair_time = Duration::seconds(repair_time as i64);
                     if obj.health < 100 && (now - obj.last_change_ts) >= repair_time {
@@ -667,35 +704,37 @@ impl Db {
     }
 
     pub fn unit_dead(&mut self, id: UnitId, dead: bool, now: DateTime<Utc>) {
-        if let Some(unit) = self.units.get_mut_cow(&id) {
+        if let Some(unit) = self.persisted.units.get_mut_cow(&id) {
             unit.dead = dead;
-            if let Some(oid) = self.objectives_by_group.get(&unit.group).copied() {
+            if let Some(oid) = self.persisted.objectives_by_group.get(&unit.group).copied() {
                 self.update_objective_status(&oid, now)
             }
         }
-        self.dirty = true;
+        self.ephemeral.dirty = true;
     }
 
     pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
-        self.groups.into_iter()
+        self.persisted.groups.into_iter()
     }
 
     pub fn get_group(&self, id: &GroupId) -> Option<&SpawnedGroup> {
-        self.groups.get(id)
+        self.persisted.groups.get(id)
     }
 
     pub fn get_group_by_name(&self, name: &str) -> Option<&SpawnedGroup> {
-        self.groups_by_name
+        self.persisted
+            .groups_by_name
             .get(name)
-            .and_then(|gid| self.groups.get(gid))
+            .and_then(|gid| self.persisted.groups.get(gid))
     }
 
     pub fn get_unit(&self, id: &UnitId) -> Option<&SpawnedUnit> {
-        self.units.get(id)
+        self.persisted.units.get(id)
     }
 
     pub fn get_unit_by_name(&self, name: &str) -> Option<&SpawnedUnit> {
-        self.units_by_name
+        self.persisted
+            .units_by_name
             .get(name)
             .and_then(|uid| self.get_unit(uid))
     }
@@ -714,7 +753,7 @@ impl Db {
             .units
             .into_iter()
             .filter_map(|uid| {
-                self.units.get(uid).and_then(|u| {
+                self.persisted.units.get(uid).and_then(|u| {
                     if u.dead {
                         None
                     } else {
@@ -801,12 +840,15 @@ impl Db {
                 dead: false,
             };
             spawned.units.insert_cow(uid);
-            self.units.insert_cow(uid, spawned_unit);
-            self.units_by_name.insert_cow(unit_name, uid);
+            self.persisted.units.insert_cow(uid, spawned_unit);
+            self.persisted.units_by_name.insert_cow(unit_name, uid);
         }
-        self.groups.insert_cow(gid, spawned);
-        self.groups_by_name.insert_cow(group_name, gid);
-        self.groups_by_side.get_or_default_cow(side).insert_cow(gid);
+        self.persisted.groups.insert_cow(gid, spawned);
+        self.persisted.groups_by_name.insert_cow(group_name, gid);
+        self.persisted
+            .groups_by_side
+            .get_or_default_cow(side)
+            .insert_cow(gid);
         Ok((gid, template))
     }
 
@@ -823,74 +865,82 @@ impl Db {
         let spctx = SpawnCtx::new(lua)?;
         let (gid, template) =
             self.init_template(&spctx, idx, side, kind, location, template_name, origin)?;
-        self.dirty = true;
+        self.ephemeral.dirty = true;
         spctx.spawn(template)?;
         Ok(gid)
     }
 
     pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {
-        self.players_by_slot.get(&slot)
+        self.ephemeral.players_by_slot.get(&slot)
     }
 
     pub fn takeoff(&mut self, time: DateTime<Utc>, slot: SlotId) {
         let objective = match self
+            .persisted
             .objectives_by_slot
             .get(&slot)
-            .and_then(|id| self.objectives.get(&id))
+            .and_then(|id| self.persisted.objectives.get(&id))
         {
             Some(objective) => objective,
             None => return,
         };
         let player = match self
+            .ephemeral
             .players_by_slot
             .get(&slot)
-            .and_then(|ucid| self.players.get_mut_cow(ucid))
+            .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
         {
             Some(player) => player,
             None => return,
         };
-        let life_type = self.cfg.life_types[&objective.slots[&slot]];
-        let (_, player_lives) = player
-            .lives
-            .get_or_insert_cow(life_type, || (time, self.cfg.default_lives[&life_type].0));
+        let life_type = self.ephemeral.cfg.life_types[&objective.slots[&slot]];
+        let (_, player_lives) = player.lives.get_or_insert_cow(life_type, || {
+            (time, self.ephemeral.cfg.default_lives[&life_type].0)
+        });
         if *player_lives > 0 {
             // paranoia
             *player_lives -= 1;
         }
-        self.dirty = true;
+        self.ephemeral.dirty = true;
     }
 
     pub fn land(&mut self, slot: SlotId, position: Vector2) -> bool {
         let objective = match self
+            .persisted
             .objectives_by_slot
             .get(&slot)
-            .and_then(|id| self.objectives.get(&id))
+            .and_then(|id| self.persisted.objectives.get(&id))
         {
             Some(objective) => objective,
             None => return true,
         };
         let player = match self
+            .ephemeral
             .players_by_slot
             .get(&slot)
-            .and_then(|ucid| self.players.get_mut_cow(ucid))
+            .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
         {
             Some(player) => player,
             None => return true,
         };
-        let life_type = self.cfg.life_types[&objective.slots[&slot]];
+        let life_type = self.ephemeral.cfg.life_types[&objective.slots[&slot]];
         let (_, player_lives) = match player.lives.get_mut_cow(&life_type) {
             Some(l) => l,
             None => return true,
         };
-        let is_on_owned_objective = self.objectives.into_iter().fold(false, |res, (_, obj)| {
-            res || (obj.owner == player.side && obj.is_in_circle(position))
-        });
+        let is_on_owned_objective = self
+            .persisted
+            .objectives
+            .into_iter()
+            .fold(false, |res, (_, obj)| {
+                res || (obj.owner == player.side && obj.is_in_circle(position))
+            });
         if is_on_owned_objective {
             *player_lives += 1;
-            if *player_lives >= self.cfg.default_lives[&life_type].0 {
+            if *player_lives >= self.ephemeral.cfg.default_lives[&life_type].0 {
                 player.lives.remove_cow(&life_type);
             }
-            self.dirty = true;
+            self.ephemeral.dirty = true;
             true
         } else {
             false
@@ -907,7 +957,7 @@ impl Db {
         if slot_side == Side::Neutral && slot == SlotId::spectator() {
             return SlotAuth::Yes;
         }
-        let player = match self.players.get_mut_cow(ucid) {
+        let player = match self.persisted.players.get_mut_cow(ucid) {
             Some(player) => player,
             None => return SlotAuth::NotRegistered(slot_side),
         };
@@ -924,9 +974,10 @@ impl Db {
             }
             SlotIdKind::Normal => {
                 let objective = match self
+                    .persisted
                     .objectives_by_slot
                     .get(&slot)
-                    .and_then(|id| self.objectives.get(id))
+                    .and_then(|id| self.persisted.objectives.get(id))
                 {
                     Some(o) if o.owner != Side::Neutral => o,
                     Some(_) | None => return SlotAuth::ObjectiveNotOwned,
@@ -934,11 +985,11 @@ impl Db {
                 if objective.owner != player.side {
                     return SlotAuth::ObjectiveNotOwned;
                 }
-                let life_type = &self.cfg.life_types[&objective.slots[&slot]];
+                let life_type = &self.ephemeral.cfg.life_types[&objective.slots[&slot]];
                 macro_rules! yes {
                     () => {
                         player.current_slot = Some(slot.clone());
-                        self.players_by_slot.insert_cow(slot, ucid.clone());
+                        self.ephemeral.players_by_slot.insert(slot, ucid.clone());
                         break SlotAuth::Yes;
                     };
                 }
@@ -948,11 +999,12 @@ impl Db {
                             yes!();
                         }
                         Some((reset, n)) => {
-                            let reset_after =
-                                Duration::seconds(self.cfg.default_lives[life_type].1 as i64);
+                            let reset_after = Duration::seconds(
+                                self.ephemeral.cfg.default_lives[life_type].1 as i64,
+                            );
                             if time - reset >= reset_after {
                                 player.lives.remove_cow(life_type);
-                                self.dirty = true;
+                                self.ephemeral.dirty = true;
                             } else if n == 0 {
                                 break SlotAuth::NoLives;
                             } else {
@@ -971,28 +1023,28 @@ impl Db {
         name: String,
         side: Side,
     ) -> Result<(), (Option<u8>, Side)> {
-        match self.players.get(&ucid) {
+        match self.persisted.players.get(&ucid) {
             Some(p) if p.side != side => Err((p.side_switches, p.side)),
             Some(_) => Ok(()),
             None => {
-                self.players.insert_cow(
+                self.persisted.players.insert_cow(
                     ucid,
                     Player {
                         name,
                         side,
-                        side_switches: self.cfg.side_switches,
+                        side_switches: self.ephemeral.cfg.side_switches,
                         lives: Map::new(),
                         current_slot: None,
                     },
                 );
-                self.dirty = true;
+                self.ephemeral.dirty = true;
                 Ok(())
             }
         }
     }
 
     pub fn sideswitch_player(&mut self, ucid: &Ucid, side: Side) -> Result<(), &'static str> {
-        match self.players.get_mut_cow(ucid) {
+        match self.persisted.players.get_mut_cow(ucid) {
             None => Err("You are not registered. Type blue or red to join a side"),
             Some(player) => {
                 if side == player.side {
@@ -1009,21 +1061,58 @@ impl Db {
                         None => (),
                     }
                     player.side = side;
-                    self.dirty = true;
+                    self.ephemeral.dirty = true;
                     Ok(())
                 }
             }
         }
     }
 
-    /*
-        pub fn spawn_crate(&mut self, lua: MizLua, idx: &MizIndex, ucid: &Ucid, name: &str) -> LuaResult<&'static str> {
-            match self.players.get(ucid).and_then(|p| p.current_slot.as_ref()) {
-                None => Ok("player not in a slot"),
-                Some(id) => {
-
+    pub fn spawn_crate(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        ucid: &Ucid,
+        name: &str,
+    ) -> LuaResult<&'static str> {
+        macro_rules! or_msg {
+            ($e:expr, $msg:expr) => {
+                match $e {
+                    Some(res) => res,
+                    None => return Ok($msg),
+                }
+            };
+        }
+        let miz = Miz::singleton(lua)?;
+        let player = or_msg!(self.persisted.players.get(ucid), "not registered");
+        let slot = or_msg!(player.current_slot.as_ref(), "player not in a slot");
+        let uid = or_msg!(slot.as_unit_id(), "player is in jtac");
+        let mizunit = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
+        let unit = Unit::get_by_name(lua, &*mizunit.name()?)?;
+        let pos = unit.as_object()?.get_position()?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        let obj = {
+            let mut iter = self.persisted.objectives.into_iter();
+            loop {
+                match iter.next() {
+                    None => return Ok("not near logistics"),
+                    Some((_, obj)) => {
+                        if na::distance(&obj.pos.into(), &point.into()) <= obj.radius {
+                            if obj.owner == player.side && obj.logi() > 0 {
+                                break obj;
+                            } else {
+                                return Ok("not near friendly logistics");
+                            }
+                        }
+                    }
                 }
             }
-        }
-    */
+        };
+        /*
+        let crate_cfg = self.ephemeral.cfg.deployables.get(&player.side).and_then(|dep| dep.iter().find_map(|dep| {
+            dep.crates.iter().find(|cr| )
+        }))
+        */
+        unimplemented!()
+    }
 }

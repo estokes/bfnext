@@ -92,13 +92,13 @@ pub struct Troop {
 #[serde(deny_unknown_fields)]
 pub struct CargoConfig {
     /// How many troop slots does this vehicle have
-    troop_slots: u8,
+    pub troop_slots: u8,
     /// How many crate slots does this vehicle have
-    crate_slots: u8,
+    pub crate_slots: u8,
     /// How many total troops and crates can this vehicle carry.
     /// e.g. if troop_slots is 1, crate_slots is 1, and total_slots is 1
     /// then the vehicle can carry either a troop or a crate but not both.
-    total_slots: u16,
+    pub total_slots: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

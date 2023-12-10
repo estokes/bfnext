@@ -1,4 +1,4 @@
-use crate::db::Db;
+use crate::db::Persisted;
 use bytes::{Bytes, BytesMut};
 use log::error;
 use simplelog::{LevelFilter, WriteLogger};
@@ -36,7 +36,7 @@ impl io::Write for LogHandle {
 #[derive(Debug)]
 pub enum Task {
     MizInit,
-    SaveState(PathBuf, Db),
+    SaveState(PathBuf, Persisted),
     WriteLog(Bytes),
 }
 

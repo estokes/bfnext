@@ -1,4 +1,4 @@
-use crate::{as_tbl, coalition::Side, wrapped_table};
+use crate::{as_tbl, coalition::Side, wrapped_table, env::miz::GroupId};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -129,7 +129,7 @@ impl<'lua> MissionCommands<'lua> {
 
     pub fn add_submenu_for_group(
         &self,
-        group: i64,
+        group: GroupId,
         name: String,
         parent: Option<GroupSubMenu>,
     ) -> LuaResult<GroupSubMenu> {
@@ -138,7 +138,7 @@ impl<'lua> MissionCommands<'lua> {
 
     pub fn add_command_for_group<F, A>(
         &self,
-        group: i64,
+        group: GroupId,
         name: String,
         parent: Option<GroupSubMenu>,
         f: F,

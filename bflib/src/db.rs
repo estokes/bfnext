@@ -13,7 +13,7 @@ use dcso3::{
     unit::Unit,
     DeepClone, LuaEnv, MizLua, String, Vector2,
 };
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
@@ -364,6 +364,10 @@ pub struct Db {
 }
 
 impl Db {
+    pub fn cfg(&self) -> &Cfg {
+        &self.ephemeral.cfg
+    }
+
     pub fn load(path: &Path) -> LuaResult<Self> {
         let file = File::open(&path).map_err(|e| {
             error!("failed to open save file {:?}, {:?}", path, e);

@@ -1,5 +1,6 @@
 use super::{as_tbl, String};
 use crate::{wrapped_table, string_enum};
+use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -116,18 +117,18 @@ string_enum!(Attribute, u8, [
 wrapped_table!(Attributes, None);
 
 impl<'lua> Attributes<'lua> {
-    pub fn new(lua: &'lua Lua) -> LuaResult<Self> {
+    pub fn new(lua: &'lua Lua) -> Result<Self> {
         Ok(Self {
             t: lua.create_table()?,
             lua
         })
     }
 
-    pub fn get(&self, attr: Attribute) -> LuaResult<bool> {
-        self.t.get(attr)
+    pub fn get(&self, attr: Attribute) -> Result<bool> {
+        Ok(self.t.get(attr)?)
     }
 
-    pub fn set(&self, attr: Attribute, val: bool) -> LuaResult<()> {
-        self.t.set(attr, val)
+    pub fn set(&self, attr: Attribute, val: bool) -> Result<()> {
+        Ok(self.t.set(attr, val)?)
     }
 }

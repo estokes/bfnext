@@ -23,3 +23,4 @@ enumflags2 = { workspace = true }
 nalgebra = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }
+anyhow = { workspace = true }

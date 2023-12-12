@@ -1,7 +1,8 @@
 use super::{as_tbl, event::Event, unit::Unit, String};
-use crate::{airbase::Airbase, wrapped_table, Sequence, MizLua, LuaEnv};
+use crate::{airbase::Airbase, wrapped_table, LuaEnv, MizLua, Sequence};
+use anyhow::Result;
 use compact_str::format_compact;
-use log::{warn, error};
+use log::{error, warn};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::{
@@ -26,13 +27,13 @@ impl HandlerId {
 wrapped_table!(World, None);
 
 impl<'lua> World<'lua> {
-    pub fn singleton(lua: MizLua<'lua>) -> LuaResult<Self> {
-        lua.inner().globals().raw_get("world")
+    pub fn singleton(lua: MizLua<'lua>) -> Result<Self> {
+        Ok(lua.inner().globals().raw_get("world")?)
     }
 
-    pub fn add_event_handler<F>(&self, f: F) -> LuaResult<HandlerId>
+    pub fn add_event_handler<F>(&self, f: F) -> Result<HandlerId>
     where
-        F: Fn(MizLua<'lua>, Event) -> LuaResult<()> + 'static,
+        F: Fn(MizLua<'lua>, Event) -> Result<()> + 'static,
     {
         let globals = self.lua.globals();
         let id = HandlerId::new();
@@ -61,7 +62,7 @@ impl<'lua> World<'lua> {
         Ok(id)
     }
 
-    pub fn remove_event_handler(&self, id: HandlerId) -> LuaResult<()> {
+    pub fn remove_event_handler(&self, id: HandlerId) -> Result<()> {
         let globals = self.lua.globals();
         let key = id.key();
         let handler = globals.raw_get(key.clone())?;
@@ -71,11 +72,11 @@ impl<'lua> World<'lua> {
         Ok(())
     }
 
-    pub fn get_player(&self) -> LuaResult<Sequence<Unit>> {
-        self.t.call_function("getPlayer", ())
+    pub fn get_player(&self) -> Result<Sequence<Unit>> {
+        Ok(self.t.call_function("getPlayer", ())?)
     }
 
-    pub fn get_airbases(&self) -> LuaResult<Sequence<Airbase>> {
-        self.t.call_function("getAirbases", ())
+    pub fn get_airbases(&self) -> Result<Sequence<Airbase>> {
+        Ok(self.t.call_function("getAirbases", ())?)
     }
 }

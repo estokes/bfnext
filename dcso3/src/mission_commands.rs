@@ -1,4 +1,5 @@
-use crate::{as_tbl, coalition::Side, wrapped_table, env::miz::GroupId};
+use crate::{as_tbl, coalition::Side, env::miz::GroupId, wrap_unit, wrapped_table, LuaEnv, MizLua};
+use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -63,12 +64,12 @@ item!(GroupCommandItem);
 wrapped_table!(MissionCommands, None);
 
 impl<'lua> MissionCommands<'lua> {
-    pub fn add_submenu(
-        &self,
-        name: String,
-        parent: Option<SubMenu>,
-    ) -> LuaResult<SubMenu> {
-        self.call_function("addSubMenu", (name, parent))
+    pub fn singleton(lua: MizLua<'lua>) -> Result<Self> {
+        Ok(lua.inner().globals().raw_get("missionCommands")?)
+    }
+
+    pub fn add_submenu(&self, name: String, parent: Option<SubMenu>) -> Result<SubMenu> {
+        Ok(self.call_function("addSubMenu", (name, parent))?)
     }
 
     pub fn add_command<F, A>(
@@ -77,21 +78,23 @@ impl<'lua> MissionCommands<'lua> {
         parent: Option<SubMenu>,
         f: F,
         arg: Option<A>,
-    ) -> LuaResult<CommandItem>
+    ) -> Result<CommandItem>
     where
-        F: Fn(&Lua, Option<A>) -> LuaResult<()> + 'static,
+        F: Fn(MizLua, Option<A>) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
-        let f = self.lua.create_function(f)?;
-        self.call_function("addCommand", (name, parent, f, arg))
+        let f = self
+            .lua
+            .create_function(move |lua, arg| wrap_unit("command", f(MizLua(lua), arg)))?;
+        Ok(self.call_function("addCommand", (name, parent, f, arg))?)
     }
 
-    pub fn remove_submenu(&self, menu: SubMenu) -> LuaResult<()> {
-        self.call_function("removeItem", menu)
+    pub fn remove_submenu(&self, menu: SubMenu) -> Result<()> {
+        Ok(self.call_function("removeItem", menu)?)
     }
 
-    pub fn remove_command(&self, item: CommandItem) -> LuaResult<()> {
-        self.call_function("removeItem", item)
+    pub fn remove_command(&self, item: CommandItem) -> Result<()> {
+        Ok(self.call_function("removeItem", item)?)
     }
 
     pub fn add_submenu_for_coalition(
@@ -99,8 +102,8 @@ impl<'lua> MissionCommands<'lua> {
         side: Side,
         name: String,
         parent: Option<CoalitionSubMenu>,
-    ) -> LuaResult<CoalitionSubMenu> {
-        self.call_function("addSubMenuForCoalition", (side, name, parent))
+    ) -> Result<CoalitionSubMenu> {
+        Ok(self.call_function("addSubMenuForCoalition", (side, name, parent))?)
     }
 
     pub fn add_command_for_coalition<F, A>(
@@ -110,21 +113,23 @@ impl<'lua> MissionCommands<'lua> {
         parent: Option<CoalitionSubMenu>,
         f: F,
         arg: Option<A>,
-    ) -> LuaResult<CoalitionCommandItem>
+    ) -> Result<CoalitionCommandItem>
     where
-        F: Fn(&Lua, Option<A>) -> LuaResult<()> + 'static,
+        F: Fn(MizLua, Option<A>) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
-        let f = self.lua.create_function(f)?;
-        self.call_function("addCommandForCoalition", (side, name, parent, f, arg))
+        let f = self
+            .lua
+            .create_function(move |lua, arg| wrap_unit("coa command", f(MizLua(lua), arg)))?;
+        Ok(self.call_function("addCommandForCoalition", (side, name, parent, f, arg))?)
     }
 
-    pub fn remove_submenu_for_coalition(&self, menu: CoalitionSubMenu) -> LuaResult<()> {
-        self.call_function("removeItemForCoalition", menu)
+    pub fn remove_submenu_for_coalition(&self, menu: CoalitionSubMenu) -> Result<()> {
+        Ok(self.call_function("removeItemForCoalition", menu)?)
     }
 
-    pub fn remove_command_for_coalition(&self, item: CoalitionCommandItem) -> LuaResult<()> {
-        self.call_function("removeItemForCoalition", item)
+    pub fn remove_command_for_coalition(&self, item: CoalitionCommandItem) -> Result<()> {
+        Ok(self.call_function("removeItemForCoalition", item)?)
     }
 
     pub fn add_submenu_for_group(
@@ -132,8 +137,8 @@ impl<'lua> MissionCommands<'lua> {
         group: GroupId,
         name: String,
         parent: Option<GroupSubMenu>,
-    ) -> LuaResult<GroupSubMenu> {
-        self.call_function("addSubMenuForGroup", (group, name, parent))
+    ) -> Result<GroupSubMenu> {
+        Ok(self.call_function("addSubMenuForGroup", (group, name, parent))?)
     }
 
     pub fn add_command_for_group<F, A>(
@@ -143,24 +148,26 @@ impl<'lua> MissionCommands<'lua> {
         parent: Option<GroupSubMenu>,
         f: F,
         arg: Option<A>,
-    ) -> LuaResult<GroupCommandItem>
+    ) -> Result<GroupCommandItem>
     where
-        F: Fn(&Lua, Option<A>) -> LuaResult<()> + 'static,
+        F: Fn(MizLua, Option<A>) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
-        let f = self.lua.create_function(f)?;
-        self.call_function("addCommandForGroup", (group, name, parent, f, arg))
+        let f = self
+            .lua
+            .create_function(move |lua, arg| wrap_unit("group command", f(MizLua(lua), arg)))?;
+        Ok(self.call_function("addCommandForGroup", (group, name, parent, f, arg))?)
     }
 
-    pub fn remove_submenu_for_group(&self, menu: GroupSubMenu) -> LuaResult<()> {
-        self.call_function("removeItemForGroup", menu)
+    pub fn remove_submenu_for_group(&self, menu: GroupSubMenu) -> Result<()> {
+        Ok(self.call_function("removeItemForGroup", menu)?)
     }
 
-    pub fn remove_command_for_group(&self, item: GroupCommandItem) -> LuaResult<()> {
-        self.call_function("removeItemForGroup", item)
+    pub fn remove_command_for_group(&self, item: GroupCommandItem) -> Result<()> {
+        Ok(self.call_function("removeItemForGroup", item)?)
     }
 
-    pub fn clear_all_menus(&self) -> LuaResult<()> {
-        self.call_function("removeItem", ())
+    pub fn clear_all_menus(&self) -> Result<()> {
+        Ok(self.call_function("removeItem", ())?)
     }
 }

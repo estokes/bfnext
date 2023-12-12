@@ -1,6 +1,8 @@
 use super::{
-    as_tbl, as_tbl_ref, cvt_err, object::Object, unit::Unit, weapon::Weapon, String, Time,
+    as_tbl, as_tbl_ref, lua_err, object::Object, unit::Unit, weapon::Weapon, String, Time,
 };
+use anyhow::{bail, Result};
+use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 
@@ -23,7 +25,7 @@ pub struct Shot<'lua> {
 
 impl<'lua> FromLua<'lua> for Shot<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("Shot", None, value)?;
+        let tbl = as_tbl("Shot", None, value).map_err(lua_err)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -42,7 +44,7 @@ pub struct ShootingEnd<'lua> {
 
 impl<'lua> FromLua<'lua> for ShootingEnd<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("Shot", None, value)?;
+        let tbl = as_tbl("Shot", None, value).map_err(lua_err)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -61,7 +63,7 @@ pub struct WeaponUse<'lua> {
 
 impl<'lua> FromLua<'lua> for WeaponUse<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("WeaponUse", None, value)?;
+        let tbl = as_tbl("WeaponUse", None, value).map_err(lua_err)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -79,7 +81,7 @@ pub struct UnitEvent<'lua> {
 
 impl<'lua> FromLua<'lua> for UnitEvent<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("UnitEvent", None, value)?;
+        let tbl = as_tbl("UnitEvent", None, value).map_err(lua_err)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -96,11 +98,11 @@ pub struct EjectionEvent<'lua> {
 
 impl<'lua> FromLua<'lua> for EjectionEvent<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("EjectionEvent", None, value)?;
+        let tbl = as_tbl("EjectionEvent", None, value).map_err(lua_err)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
-            target: tbl.raw_get("target")?
+            target: tbl.raw_get("target")?,
         })
     }
 }
@@ -115,7 +117,7 @@ pub struct Birth<'lua> {
 
 impl<'lua> FromLua<'lua> for Birth<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("AtPlace", None, value)?;
+        let tbl = as_tbl("AtPlace", None, value).map_err(lua_err)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -135,7 +137,7 @@ pub struct AtPlace<'lua> {
 
 impl<'lua> FromLua<'lua> for AtPlace<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("AtPlace", None, value)?;
+        let tbl = as_tbl("AtPlace", None, value).map_err(lua_err)?;
         Ok(Self {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
@@ -208,7 +210,7 @@ pub enum Event<'lua> {
     Max,
 }
 
-fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> LuaResult<Event<'lua>> {
+fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> Result<Event<'lua>> {
     Ok(match id {
         0 => Event::Invalid,
         1 => Event::Shot(Shot::from_lua(value, lua)?),
@@ -268,18 +270,20 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> LuaRe
         55 => Event::PostponedTakeoff(AtPlace::from_lua(value, lua)?),
         56 => Event::PostponedLand(AtPlace::from_lua(value, lua)?),
         57 => Event::Max,
-        _ => return Err(cvt_err("Event")),
+        n => bail!("unknown event {n}"),
     })
 }
 
 impl<'lua> FromLua<'lua> for Event<'lua> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        let id = as_tbl_ref("Event", &value)?.raw_get("id")?;
+        let id = as_tbl_ref("Event", &value)
+            .map_err(lua_err)?
+            .raw_get("id")?;
         match translate(lua, id, value) {
             Ok(ev) => Ok(ev),
             Err(e) => {
-                println!("error translating event {id}: {:?}", e);
-                Err(e)
+                error!("error translating event {id}: {:?}", e);
+                Err(lua_err(e))
             }
         }
     }

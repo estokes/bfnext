@@ -1,7 +1,11 @@
-use crate::{simple_enum, wrapped_table, Sequence, env::miz::{GroupKind, GroupId}, MizLua, LuaEnv};
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
+use crate::{
+    env::miz::{GroupId, GroupKind},
+    simple_enum, wrapped_table, LuaEnv, MizLua, Sequence,
+};
+use anyhow::Result;
 use mlua::{prelude::*, Value};
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
 simple_enum!(GroupCategory, u8, [
@@ -42,60 +46,57 @@ impl<'lua> FromLua<'lua> for Owner {
 wrapped_table!(Group, Some("Group"));
 
 impl<'lua> Group<'lua> {
-    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> LuaResult<Group<'lua>> {
+    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> Result<Group<'lua>> {
         let globals = lua.inner().globals();
         let class = as_tbl("Group", None, globals.raw_get("Group")?)?;
-        Self::from_lua(class.call_function("getByName", name)?, lua.inner())
+        Ok(class.call_function("getByName", name)?)
     }
 
-    pub fn destroy(&self) -> LuaResult<()> {
-        self.t.call_method("destroy", ())
+    pub fn destroy(&self) -> Result<()> {
+        Ok(self.t.call_method("destroy", ())?)
     }
 
-    pub fn activate(&self) -> LuaResult<()> {
-        self.t.call_method("activate", ())
+    pub fn activate(&self) -> Result<()> {
+        Ok(self.t.call_method("activate", ())?)
     }
 
-    pub fn get_category(&self) -> LuaResult<GroupCategory> {
-        self.t.call_method("getCategory", ())
+    pub fn get_category(&self) -> Result<GroupCategory> {
+        Ok(self.t.call_method("getCategory", ())?)
     }
 
-    pub fn get_coalition(&self) -> LuaResult<Owner> {
-        self.t.call_method("getCoalition", ())
+    pub fn get_coalition(&self) -> Result<Owner> {
+        Ok(self.t.call_method("getCoalition", ())?)
     }
 
-    pub fn get_name(&self) -> LuaResult<String> {
-        self.t.call_method("getName", ())
+    pub fn get_name(&self) -> Result<String> {
+        Ok(self.t.call_method("getName", ())?)
     }
 
-    pub fn id(&self) -> LuaResult<GroupId> {
-        self.t.call_method("getID", ())
+    pub fn id(&self) -> Result<GroupId> {
+        Ok(self.t.call_method("getID", ())?)
     }
 
-    pub fn get_size(&self) -> LuaResult<i64> {
-        self.t.call_method("getSize", ())
+    pub fn get_size(&self) -> Result<i64> {
+        Ok(self.t.call_method("getSize", ())?)
     }
 
-    pub fn get_initial_size(&self) -> LuaResult<i64> {
-        self.t.call_method("getInitialSize", ())
+    pub fn get_initial_size(&self) -> Result<i64> {
+        Ok(self.t.call_method("getInitialSize", ())?)
     }
 
-    pub fn get_unit(&self, index: usize) -> LuaResult<Unit> {
-        Unit::from_lua(self.t.call_method("getUnit", index)?, self.lua)
+    pub fn get_unit(&self, index: usize) -> Result<Unit> {
+        Ok(self.t.call_method("getUnit", index)?)
     }
 
-    pub fn get_units(&self) -> LuaResult<Sequence<Unit>> {
-        self.t.call_method("getUnits", ())
+    pub fn get_units(&self) -> Result<Sequence<Unit>> {
+        Ok(self.t.call_method("getUnits", ())?)
     }
 
-    pub fn get_controller(&self) -> LuaResult<Controller> {
-        Ok(Controller::from_lua(
-            self.t.call_method("getController", ())?,
-            self.lua,
-        )?)
+    pub fn get_controller(&self) -> Result<Controller> {
+        Ok(self.t.call_method("getController", ())?)
     }
 
-    pub fn enable_emission(&self, on: bool) -> LuaResult<()> {
-        self.t.call_method("enableEmission", on)
+    pub fn enable_emission(&self, on: bool) -> Result<()> {
+        Ok(self.t.call_method("enableEmission", on)?)
     }
 }

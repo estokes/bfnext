@@ -1,4 +1,5 @@
 use crate::{as_tbl, cvt_err, wrapped_table, LuaEnv, MizLua, Time};
+use anyhow::Result;
 use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -25,25 +26,25 @@ impl<'lua> IntoLua<'lua> for FunId {
 wrapped_table!(Timer, None);
 
 impl<'lua> Timer<'lua> {
-    pub fn singleton(lua: MizLua<'lua>) -> LuaResult<Self> {
-        lua.inner().globals().raw_get("timer")
+    pub fn singleton(lua: MizLua<'lua>) -> Result<Self> {
+        Ok(lua.inner().globals().raw_get("timer")?)
     }
 
-    pub fn get_time(&self) -> LuaResult<Time> {
-        self.t.call_function("getTime", ())
+    pub fn get_time(&self) -> Result<Time> {
+        Ok(self.t.call_function("getTime", ())?)
     }
 
-    pub fn get_abs_time(&self) -> LuaResult<Time> {
-        self.t.call_function("getAbsTime", ())
+    pub fn get_abs_time(&self) -> Result<Time> {
+        Ok(self.t.call_function("getAbsTime", ())?)
     }
 
-    pub fn get_time0(&self) -> LuaResult<Time> {
-        self.t.call_function("getTime0", ())
+    pub fn get_time0(&self) -> Result<Time> {
+        Ok(self.t.call_function("getTime0", ())?)
     }
 
-    pub fn schedule_function<T, F>(&self, when: Time, arg: T, f: F) -> LuaResult<FunId>
+    pub fn schedule_function<T, F>(&self, when: Time, arg: T, f: F) -> Result<FunId>
     where
-        F: Fn(MizLua, T, Time) -> LuaResult<Option<Time>> + 'static,
+        F: Fn(MizLua, T, Time) -> Result<Option<Time>> + 'static,
         T: IntoLua<'lua> + FromLua<'lua>,
     {
         let f =
@@ -55,14 +56,14 @@ impl<'lua> Timer<'lua> {
                         Ok(None)
                     }
                 })?;
-        self.t.call_function("scheduleFunction", (f, arg, when))
+        Ok(self.t.call_function("scheduleFunction", (f, arg, when))?)
     }
 
-    pub fn remove_function(&self, id: FunId) -> LuaResult<()> {
-        self.t.call_function("removeFunction", id)
+    pub fn remove_function(&self, id: FunId) -> Result<()> {
+        Ok(self.t.call_function("removeFunction", id)?)
     }
 
-    pub fn set_function_fime(&self, id: FunId, when: f64) -> LuaResult<()> {
-        self.t.call_function("removeFunction", (id, when))
+    pub fn set_function_fime(&self, id: FunId, when: f64) -> Result<()> {
+        Ok(self.t.call_function("removeFunction", (id, when))?)
     }
 }

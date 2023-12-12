@@ -2,6 +2,7 @@ use crate::{
     as_tbl, atomic_id, coalition::Side, cvt_err, env::miz::Country, simple_enum, wrapped_table,
     Color, LuaEnv, LuaVec3, MizLua,
 };
+use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -147,12 +148,12 @@ pub struct ArrowSpec {
 wrapped_table!(Action, None);
 
 impl<'lua> Action<'lua> {
-    pub fn explosion(&self, position: LuaVec3, power: f32) -> LuaResult<()> {
-        self.call_function("explosion", (position, power))
+    pub fn explosion(&self, position: LuaVec3, power: f32) -> Result<()> {
+        Ok(self.call_function("explosion", (position, power))?)
     }
 
-    pub fn smoke(&self, position: LuaVec3, color: SmokeColor) -> LuaResult<()> {
-        self.call_function("smoke", (position, color))
+    pub fn smoke(&self, position: LuaVec3, color: SmokeColor) -> Result<()> {
+        Ok(self.call_function("smoke", (position, color))?)
     }
 
     pub fn effect_smoke_big(
@@ -161,16 +162,16 @@ impl<'lua> Action<'lua> {
         preset: SmokePreset,
         density: f32,
         name: String,
-    ) -> LuaResult<()> {
-        self.call_function("effectSmokeBig", (position, preset, density, name))
+    ) -> Result<()> {
+        Ok(self.call_function("effectSmokeBig", (position, preset, density, name))?)
     }
 
-    pub fn effect_smoke_stop(&self, name: String) -> LuaResult<()> {
-        self.call_function("effectSmokeStop", name)
+    pub fn effect_smoke_stop(&self, name: String) -> Result<()> {
+        Ok(self.call_function("effectSmokeStop", name)?)
     }
 
-    pub fn illumination_bomb(&self, position: LuaVec3, power: f32) -> LuaResult<()> {
-        self.call_function("illuminationBomb", (position, power))
+    pub fn illumination_bomb(&self, position: LuaVec3, power: f32) -> Result<()> {
+        Ok(self.call_function("illuminationBomb", (position, power))?)
     }
 
     pub fn signal_flare(
@@ -178,8 +179,8 @@ impl<'lua> Action<'lua> {
         position: LuaVec3,
         color: FlareColor,
         azimuth: u16,
-    ) -> LuaResult<()> {
-        self.call_function("signalFlare", (position, color, azimuth))
+    ) -> Result<()> {
+        Ok(self.call_function("signalFlare", (position, color, azimuth))?)
     }
 
     pub fn radio_transmission(
@@ -191,43 +192,43 @@ impl<'lua> Action<'lua> {
         frequency: u64,
         power: u64,
         name: String,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "radioTransmission",
             (file, origin, modulation, repeat, frequency, power, name),
-        )
+        )?)
     }
 
-    pub fn stop_transmission(&self, name: String) -> LuaResult<()> {
-        self.call_function("stopRadioTransmission", name)
+    pub fn stop_transmission(&self, name: String) -> Result<()> {
+        Ok(self.call_function("stopRadioTransmission", name)?)
     }
 
-    pub fn set_unit_internal_cargo(&self, unit_name: String, mass: i64) -> LuaResult<()> {
-        self.call_function("setUnitInternalCargo", (unit_name, mass))
+    pub fn set_unit_internal_cargo(&self, unit_name: String, mass: i64) -> Result<()> {
+        Ok(self.call_function("setUnitInternalCargo", (unit_name, mass))?)
     }
 
-    pub fn out_sound(&self, file: String) -> LuaResult<()> {
-        self.call_function("outSound", file)
+    pub fn out_sound(&self, file: String) -> Result<()> {
+        Ok(self.call_function("outSound", file)?)
     }
 
-    pub fn out_sound_for_coalition(&self, side: Side, file: String) -> LuaResult<()> {
-        self.call_function("outSoundForCoalition", (side, file))
+    pub fn out_sound_for_coalition(&self, side: Side, file: String) -> Result<()> {
+        Ok(self.call_function("outSoundForCoalition", (side, file))?)
     }
 
-    pub fn out_sound_for_country(&self, country: Country, file: String) -> LuaResult<()> {
-        self.call_function("outSoundForCountry", (country, file))
+    pub fn out_sound_for_country(&self, country: Country, file: String) -> Result<()> {
+        Ok(self.call_function("outSoundForCountry", (country, file))?)
     }
 
-    pub fn out_sound_for_group(&self, group: i64, file: String) -> LuaResult<()> {
-        self.call_function("outSoundForGroup", (group, file))
+    pub fn out_sound_for_group(&self, group: i64, file: String) -> Result<()> {
+        Ok(self.call_function("outSoundForGroup", (group, file))?)
     }
 
-    pub fn out_sound_for_unit(&self, unit: i64, file: String) -> LuaResult<()> {
-        self.call_function("outSoundForUnit", (unit, file))
+    pub fn out_sound_for_unit(&self, unit: i64, file: String) -> Result<()> {
+        Ok(self.call_function("outSoundForUnit", (unit, file))?)
     }
 
-    pub fn out_text(&self, text: String, display_time: i64, clear_view: bool) -> LuaResult<()> {
-        self.call_function("outText", (text, display_time, clear_view))
+    pub fn out_text(&self, text: String, display_time: i64, clear_view: bool) -> Result<()> {
+        Ok(self.call_function("outText", (text, display_time, clear_view))?)
     }
 
     pub fn out_text_for_coalition(
@@ -236,11 +237,11 @@ impl<'lua> Action<'lua> {
         text: String,
         display_time: i64,
         clear_view: bool,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "outTextForCoalition",
             (side, text, display_time, clear_view),
-        )
+        )?)
     }
 
     pub fn out_text_for_country(
@@ -249,11 +250,11 @@ impl<'lua> Action<'lua> {
         text: String,
         display_time: i64,
         clear_view: bool,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "outTextForCountry",
             (country, text, display_time, clear_view),
-        )
+        )?)
     }
 
     pub fn out_text_for_group(
@@ -262,8 +263,8 @@ impl<'lua> Action<'lua> {
         text: String,
         display_time: i64,
         clear_view: bool,
-    ) -> LuaResult<()> {
-        self.call_function("outTextForGroup", (group, text, display_time, clear_view))
+    ) -> Result<()> {
+        Ok(self.call_function("outTextForGroup", (group, text, display_time, clear_view))?)
     }
 
     pub fn out_text_for_unit(
@@ -272,8 +273,8 @@ impl<'lua> Action<'lua> {
         text: String,
         display_time: i64,
         clear_view: bool,
-    ) -> LuaResult<()> {
-        self.call_function("outTextForUnit", (unit, text, display_time, clear_view))
+    ) -> Result<()> {
+        Ok(self.call_function("outTextForUnit", (unit, text, display_time, clear_view))?)
     }
 
     pub fn mark_to_all(
@@ -283,8 +284,8 @@ impl<'lua> Action<'lua> {
         position: LuaVec3,
         read_only: bool,
         message: Option<String>,
-    ) -> LuaResult<()> {
-        self.call_function("markToAll", (id, text, position, read_only, message))
+    ) -> Result<()> {
+        Ok(self.call_function("markToAll", (id, text, position, read_only, message))?)
     }
 
     pub fn mark_to_coalition(
@@ -295,11 +296,11 @@ impl<'lua> Action<'lua> {
         side: Side,
         read_only: bool,
         message: Option<String>,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "markToCoalition",
             (id, text, position, side, read_only, message),
-        )
+        )?)
     }
 
     pub fn mark_to_group(
@@ -310,15 +311,15 @@ impl<'lua> Action<'lua> {
         group: i64,
         read_only: bool,
         message: Option<String>,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "markToGroup",
             (id, text, position, group, read_only, message),
-        )
+        )?)
     }
 
-    pub fn remove_mark(&self, id: MarkId) -> LuaResult<()> {
-        self.call_function("removeMark", id)
+    pub fn remove_mark(&self, id: MarkId) -> Result<()> {
+        Ok(self.call_function("removeMark", id)?)
     }
 
     pub fn line_to_all(
@@ -327,8 +328,8 @@ impl<'lua> Action<'lua> {
         id: MarkId,
         spec: LineSpec,
         message: Option<String>,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "lineToAll",
             (
                 side,
@@ -340,7 +341,7 @@ impl<'lua> Action<'lua> {
                 spec.read_only,
                 message,
             ),
-        )
+        )?)
     }
 
     pub fn circle_to_all(
@@ -349,8 +350,8 @@ impl<'lua> Action<'lua> {
         id: MarkId,
         spec: CircleSpec,
         message: Option<String>,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "circleToAll",
             (
                 side,
@@ -363,7 +364,7 @@ impl<'lua> Action<'lua> {
                 spec.read_only,
                 message,
             ),
-        )
+        )?)
     }
 
     pub fn rect_to_all(
@@ -372,8 +373,8 @@ impl<'lua> Action<'lua> {
         id: MarkId,
         spec: RectSpec,
         message: Option<String>,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "rectToAll",
             (
                 side,
@@ -386,7 +387,7 @@ impl<'lua> Action<'lua> {
                 spec.read_only,
                 message,
             ),
-        )
+        )?)
     }
 
     pub fn quad_to_all(
@@ -395,8 +396,8 @@ impl<'lua> Action<'lua> {
         id: MarkId,
         spec: QuadSpec,
         message: Option<String>,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "quadToAll",
             (
                 side,
@@ -411,11 +412,11 @@ impl<'lua> Action<'lua> {
                 spec.read_only,
                 message,
             ),
-        )
+        )?)
     }
 
-    pub fn text_to_all(&self, side: SideFilter, id: MarkId, spec: TextSpec) -> LuaResult<()> {
-        self.call_function(
+    pub fn text_to_all(&self, side: SideFilter, id: MarkId, spec: TextSpec) -> Result<()> {
+        Ok(self.call_function(
             "textToAll",
             (
                 side,
@@ -427,7 +428,7 @@ impl<'lua> Action<'lua> {
                 spec.read_only,
                 spec.text,
             ),
-        )
+        )?)
     }
 
     pub fn arrow_to_all(
@@ -436,8 +437,8 @@ impl<'lua> Action<'lua> {
         id: MarkId,
         spec: ArrowSpec,
         message: Option<String>,
-    ) -> LuaResult<()> {
-        self.call_function(
+    ) -> Result<()> {
+        Ok(self.call_function(
             "arrowToAll",
             (
                 side,
@@ -450,55 +451,55 @@ impl<'lua> Action<'lua> {
                 spec.read_only,
                 message,
             ),
-        )
+        )?)
     }
 
-    pub fn set_markup_radius(&self, id: MarkId, radius: f64) -> LuaResult<()> {
-        self.call_function("setMarkupRadius", (id, radius))
+    pub fn set_markup_radius(&self, id: MarkId, radius: f64) -> Result<()> {
+        Ok(self.call_function("setMarkupRadius", (id, radius))?)
     }
 
-    pub fn set_markup_text(&self, id: MarkId, text: String) -> LuaResult<()> {
-        self.call_function("setMarkupText", (id, text))
+    pub fn set_markup_text(&self, id: MarkId, text: String) -> Result<()> {
+        Ok(self.call_function("setMarkupText", (id, text))?)
     }
 
-    pub fn set_markup_font_size(&self, id: MarkId, font_size: u8) -> LuaResult<()> {
-        self.call_function("setMarkupFontSize", (id, font_size))
+    pub fn set_markup_font_size(&self, id: MarkId, font_size: u8) -> Result<()> {
+        Ok(self.call_function("setMarkupFontSize", (id, font_size))?)
     }
 
-    pub fn set_markup_color(&self, id: MarkId, color: Color) -> LuaResult<()> {
-        self.call_function("setMarkupColor", (id, color))
+    pub fn set_markup_color(&self, id: MarkId, color: Color) -> Result<()> {
+        Ok(self.call_function("setMarkupColor", (id, color))?)
     }
 
-    pub fn set_markup_fill_color(&self, id: MarkId, fill_color: Color) -> LuaResult<()> {
-        self.call_function("setMarkupColorFill", (id, fill_color))
+    pub fn set_markup_fill_color(&self, id: MarkId, fill_color: Color) -> Result<()> {
+        Ok(self.call_function("setMarkupColorFill", (id, fill_color))?)
     }
 
-    pub fn set_markup_line_type(&self, id: MarkId, line_type: LineType) -> LuaResult<()> {
-        self.call_function("setMarkupTypeLine", (id, line_type))
+    pub fn set_markup_line_type(&self, id: MarkId, line_type: LineType) -> Result<()> {
+        Ok(self.call_function("setMarkupTypeLine", (id, line_type))?)
     }
 
-    pub fn set_markup_position_end(&self, id: MarkId, pos: LuaVec3) -> LuaResult<()> {
-        self.call_function("setMarkupPositionEnd", (id, pos))
+    pub fn set_markup_position_end(&self, id: MarkId, pos: LuaVec3) -> Result<()> {
+        Ok(self.call_function("setMarkupPositionEnd", (id, pos))?)
     }
 
-    pub fn set_markup_position_start(&self, id: MarkId, pos: LuaVec3) -> LuaResult<()> {
-        self.call_function("setMarkupPositionStart", (id, pos))
+    pub fn set_markup_position_start(&self, id: MarkId, pos: LuaVec3) -> Result<()> {
+        Ok(self.call_function("setMarkupPositionStart", (id, pos))?)
     }
 }
 
 wrapped_table!(Trigger, None);
 
 impl<'lua> Trigger<'lua> {
-    pub fn singleton(lua: MizLua<'lua>) -> LuaResult<Self> {
-        lua.inner().globals().raw_get("trigger")
+    pub fn singleton(lua: MizLua<'lua>) -> Result<Self> {
+        Ok(lua.inner().globals().raw_get("trigger")?)
     }
 
-    pub fn action(&self) -> LuaResult<Action<'lua>> {
-        self.raw_get("action")
+    pub fn action(&self) -> Result<Action<'lua>> {
+        Ok(self.raw_get("action")?)
     }
 
-    pub fn get_zone(&self, name: String) -> LuaResult<Zone> {
+    pub fn get_zone(&self, name: String) -> Result<Zone> {
         let misc: LuaTable = self.t.raw_get("misc")?;
-        misc.call_function("getZone", name)
+        Ok(misc.call_function("getZone", name)?)
     }
 }

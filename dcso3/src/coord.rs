@@ -1,5 +1,6 @@
 use super::{as_tbl, String};
-use crate::{wrapped_table, LuaVec3, LuaEnv};
+use crate::{lua_err, wrapped_table, LuaEnv, LuaVec3};
+use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -21,7 +22,7 @@ pub struct MGRSPos {
 
 impl<'lua> FromLua<'lua> for MGRSPos {
     fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("MGRSPos", None, value)?;
+        let tbl = as_tbl("MGRSPos", None, value).map_err(lua_err)?;
         Ok(MGRSPos {
             utm_zone: tbl.raw_get("UTMZone")?,
             mgrs_digraph: tbl.raw_get("MGRSDigraph")?,
@@ -45,16 +46,17 @@ impl<'lua> IntoLua<'lua> for MGRSPos {
 wrapped_table!(Coord, None);
 
 impl<'lua> Coord<'lua> {
-    pub fn singleton<L: LuaEnv<'lua>>(lua: L) -> LuaResult<Self> {
-        lua.inner().globals().raw_get("coord")
+    pub fn singleton<L: LuaEnv<'lua>>(lua: L) -> Result<Self> {
+        Ok(lua.inner().globals().raw_get("coord")?)
     }
 
-    pub fn ll_to_lo(&self, pos: LLPos) -> LuaResult<LuaVec3> {
-        self.t
-            .call_function("LLtoLO", (pos.latitude, pos.longitude, pos.altitude))
+    pub fn ll_to_lo(&self, pos: LLPos) -> Result<LuaVec3> {
+        Ok(self
+            .t
+            .call_function("LLtoLO", (pos.latitude, pos.longitude, pos.altitude))?)
     }
 
-    pub fn lo_to_ll(&self, pos: LuaVec3) -> LuaResult<LLPos> {
+    pub fn lo_to_ll(&self, pos: LuaVec3) -> Result<LLPos> {
         let (latitude, longitude, altitude) = self.t.call_function("LOtoLL", pos)?;
         Ok(LLPos {
             latitude,
@@ -63,11 +65,11 @@ impl<'lua> Coord<'lua> {
         })
     }
 
-    pub fn ll_to_mgrs(&self, latitude: f64, longitude: f64) -> LuaResult<MGRSPos> {
-        self.t.call_function("LLtoMGRS", (latitude, longitude))
+    pub fn ll_to_mgrs(&self, latitude: f64, longitude: f64) -> Result<MGRSPos> {
+        Ok(self.t.call_function("LLtoMGRS", (latitude, longitude))?)
     }
 
-    pub fn mgrs_to_ll(&self, mgrs: MGRSPos) -> LuaResult<LLPos> {
+    pub fn mgrs_to_ll(&self, mgrs: MGRSPos) -> Result<LLPos> {
         let (latitude, longitude, altitude) = self.t.call_function("MGRStoLL", mgrs)?;
         Ok(LLPos {
             latitude,

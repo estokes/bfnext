@@ -1,5 +1,6 @@
 use super::{as_tbl, cvt_err, unit::Unit, weapon::Weapon, Position3, String, LuaVec3};
 use crate::{simple_enum, wrapped_table};
+use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
@@ -17,43 +18,43 @@ simple_enum!(ObjectCategory, u8, [
 wrapped_table!(Object, Some("Object"));
 
 impl<'lua> Object<'lua> {
-    pub fn destroy(&self) -> LuaResult<()> {
-        self.t.call_method("destroy", ())
+    pub fn destroy(&self) -> Result<()> {
+        Ok(self.t.call_method("destroy", ())?)
     }
 
-    pub fn get_category(&self) -> LuaResult<ObjectCategory> {
-        self.t.call_method("getCategory", ())
+    pub fn get_category(&self) -> Result<ObjectCategory> {
+        Ok(self.t.call_method("getCategory", ())?)
     }
 
-    pub fn get_desc(&self) -> LuaResult<mlua::Table<'lua>> {
-        self.t.call_method("getDesc", ())
+    pub fn get_desc(&self) -> Result<mlua::Table<'lua>> {
+        Ok(self.t.call_method("getDesc", ())?)
     }
 
-    pub fn get_name(&self) -> LuaResult<String> {
-        self.t.call_method("getName", ())
+    pub fn get_name(&self) -> Result<String> {
+        Ok(self.t.call_method("getName", ())?)
     }
 
-    pub fn get_point(&self) -> LuaResult<LuaVec3> {
-        self.t.call_method("getPoint", ())
+    pub fn get_point(&self) -> Result<LuaVec3> {
+        Ok(self.t.call_method("getPoint", ())?)
     }
 
-    pub fn get_position(&self) -> LuaResult<Position3> {
-        self.t.call_method("getPosition", ())
+    pub fn get_position(&self) -> Result<Position3> {
+        Ok(self.t.call_method("getPosition", ())?)
     }
 
-    pub fn get_velocity(&self) -> LuaResult<LuaVec3> {
-        self.t.call_method("getPosition", ())
+    pub fn get_velocity(&self) -> Result<LuaVec3> {
+        Ok(self.t.call_method("getPosition", ())?)
     }
 
-    pub fn in_air(&self) -> LuaResult<bool> {
-        self.t.call_method("inAir", ())
+    pub fn in_air(&self) -> Result<bool> {
+        Ok(self.t.call_method("inAir", ())?)
     }
 
-    pub fn as_unit(&self) -> LuaResult<Unit> {
-        Unit::from_lua(Value::Table(self.t.clone()), self.lua)
+    pub fn as_unit(&self) -> Result<Unit> {
+        Ok(Unit::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 
-    pub fn as_weapon(&self) -> LuaResult<Weapon> {
-        Weapon::from_lua(Value::Table(self.t.clone()), self.lua)
+    pub fn as_weapon(&self) -> Result<Weapon> {
+        Ok(Weapon::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 }

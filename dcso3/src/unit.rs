@@ -1,7 +1,8 @@
 use super::{as_tbl, controller::Controller, cvt_err, group::Group, object::Object, String};
-use crate::{simple_enum, wrapped_table, MizLua, LuaEnv, env::miz::UnitId};
+use crate::{env::miz::UnitId, simple_enum, wrapped_table, LuaEnv, MizLua};
+use anyhow::Result;
 use mlua::{prelude::*, Value};
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
 simple_enum!(UnitCategory, u8, [
@@ -15,65 +16,65 @@ simple_enum!(UnitCategory, u8, [
 wrapped_table!(Unit, Some("Unit"));
 
 impl<'lua> Unit<'lua> {
-    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> LuaResult<Unit<'lua>> {
+    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> Result<Unit<'lua>> {
         let globals = lua.inner().globals();
         let unit = as_tbl("Unit", None, globals.raw_get("Unit")?)?;
-        Self::from_lua(unit.call_function("getByName", name)?, lua.inner())
+        Ok(unit.call_function("getByName", name)?)
     }
 
-    pub fn as_object(&self) -> LuaResult<Object<'lua>> {
-        Object::from_lua(Value::Table(self.t.clone()), self.lua)
+    pub fn as_object(&self) -> Result<Object<'lua>> {
+        Ok(Object::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 
-    pub fn is_active(&self) -> LuaResult<bool> {
-        self.t.call_method("isActive", ())
+    pub fn is_active(&self) -> Result<bool> {
+        Ok(self.t.call_method("isActive", ())?)
     }
 
-    pub fn get_player_name(&self) -> LuaResult<Option<String>> {
-        self.t.call_method("getPlayerName", ())
+    pub fn get_player_name(&self) -> Result<Option<String>> {
+        Ok(self.t.call_method("getPlayerName", ())?)
     }
 
-    pub fn id(&self) -> LuaResult<UnitId> {
-        self.t.call_method("getID", ())
+    pub fn id(&self) -> Result<UnitId> {
+        Ok(self.t.call_method("getID", ())?)
     }
 
-    pub fn get_number(&self) -> LuaResult<i64> {
-        self.t.call_method("getNumber", ())
+    pub fn get_number(&self) -> Result<i64> {
+        Ok(self.t.call_method("getNumber", ())?)
     }
 
-    pub fn get_object_id(&self) -> LuaResult<i64> {
-        self.t.call_method("getObjectID", ())
+    pub fn get_object_id(&self) -> Result<i64> {
+        Ok(self.t.call_method("getObjectID", ())?)
     }
 
-    pub fn get_controller(&self) -> LuaResult<Controller<'lua>> {
-        Controller::from_lua(self.t.call_method("getController", ())?, self.lua)
+    pub fn get_controller(&self) -> Result<Controller<'lua>> {
+        Ok(self.t.call_method("getController", ())?)
     }
 
-    pub fn get_group(&self) -> LuaResult<Group<'lua>> {
-        Group::from_lua(self.t.call_method("getGroup", ())?, self.lua)
+    pub fn get_group(&self) -> Result<Group<'lua>> {
+        Ok(self.t.call_method("getGroup", ())?)
     }
 
-    pub fn get_callsign(&self) -> LuaResult<String> {
-        self.t.call_method("getCallsign", ())
+    pub fn get_callsign(&self) -> Result<String> {
+        Ok(self.t.call_method("getCallsign", ())?)
     }
 
-    pub fn get_life(&self) -> LuaResult<i32> {
-        self.t.call_method("getLife", ())
+    pub fn get_life(&self) -> Result<i32> {
+        Ok(self.t.call_method("getLife", ())?)
     }
 
-    pub fn get_life0(&self) -> LuaResult<i32> {
-        self.t.call_method("getLife0", ())
+    pub fn get_life0(&self) -> Result<i32> {
+        Ok(self.t.call_method("getLife0", ())?)
     }
 
-    pub fn get_fuel(&self) -> LuaResult<f32> {
-        self.t.call_method("getFuel", ())
+    pub fn get_fuel(&self) -> Result<f32> {
+        Ok(self.t.call_method("getFuel", ())?)
     }
 
-    pub fn enable_emission(&self, on: bool) -> LuaResult<()> {
-        self.t.call_method("enableEmission", on)
+    pub fn enable_emission(&self, on: bool) -> Result<()> {
+        Ok(self.t.call_method("enableEmission", on)?)
     }
 
-    pub fn get_category(&self) -> LuaResult<UnitCategory> {
-        self.t.call_method("getCategory", ())
+    pub fn get_category(&self) -> Result<UnitCategory> {
+        Ok(self.t.call_method("getCategory", ())?)
     }
 }

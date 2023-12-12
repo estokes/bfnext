@@ -4,6 +4,7 @@ use crate::{
     net::{PlayerId, SlotId, Ucid},
     wrap_bool, wrap_unit, HooksLua, LuaEnv, String,
 };
+use anyhow::Result;
 use log::warn;
 use mlua::prelude::*;
 
@@ -51,7 +52,7 @@ impl<'lua> UserHooks<'lua> {
         }
     }
 
-    pub fn register(&mut self) -> LuaResult<()> {
+    pub fn register(&mut self) -> Result<()> {
         let Self {
             on_mission_load_begin,
             on_mission_load_progress,
@@ -121,12 +122,12 @@ impl<'lua> UserHooks<'lua> {
             tbl.set("onPlayerTryChangeSlot", f)?;
         }
         let dcs: mlua::Table = self.lua.globals().get("DCS")?;
-        dcs.call_function("setUserCallbacks", tbl)
+        Ok(dcs.call_function("setUserCallbacks", tbl)?)
     }
 
-    pub fn on_mission_load_begin<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_mission_load_begin<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua) -> Result<()> + 'static,
     {
         self.on_mission_load_begin = Some(self.lua.create_function(move |lua, ()| {
             wrap_unit("on_mission_load_begin", f(HooksLua(lua)))
@@ -135,9 +136,9 @@ impl<'lua> UserHooks<'lua> {
     }
 
     /// f(progress, message)
-    pub fn on_mission_load_progress<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_mission_load_progress<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, String, String) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua, String, String) -> Result<()> + 'static,
     {
         self.on_mission_load_progress =
             Some(self.lua.create_function(move |lua, (progress, message)| {
@@ -149,9 +150,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_mission_load_end<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_mission_load_end<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua) -> Result<()> + 'static,
     {
         self.on_mission_load_end =
             Some(self.lua.create_function(move |lua, ()| {
@@ -160,9 +161,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_simulation_start<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_simulation_start<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua) -> Result<()> + 'static,
     {
         self.on_simulation_start =
             Some(self.lua.create_function(move |lua, ()| {
@@ -171,9 +172,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_simulation_stop<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_simulation_stop<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua) -> Result<()> + 'static,
     {
         self.on_simulation_stop =
             Some(self.lua.create_function(move |lua, ()| {
@@ -182,9 +183,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_simulation_frame<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_simulation_frame<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua) -> Result<()> + 'static,
     {
         self.on_simulation_frame =
             Some(self.lua.create_function(move |lua, ()| {
@@ -193,9 +194,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_simulation_pause<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_simulation_pause<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua) -> Result<()> + 'static,
     {
         self.on_simulation_pause =
             Some(self.lua.create_function(move |lua, ()| {
@@ -204,9 +205,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_simulation_resume<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_simulation_resume<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua) -> Result<()> + 'static,
     {
         self.on_simulation_resume =
             Some(self.lua.create_function(move |lua, ()| {
@@ -215,9 +216,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_player_connect<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_player_connect<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua, PlayerId) -> Result<()> + 'static,
     {
         self.on_player_connect = Some(self.lua.create_function(move |lua, id| {
             wrap_unit("on_player_connect", f(HooksLua(lua), id))
@@ -225,9 +226,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_player_disconnect<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_player_disconnect<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua, PlayerId) -> Result<()> + 'static,
     {
         self.on_player_disconnect = Some(self.lua.create_function(move |lua, id| {
             wrap_unit("on_player_disconnect", f(HooksLua(lua), id))
@@ -235,9 +236,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_player_start<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_player_start<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua, PlayerId) -> Result<()> + 'static,
     {
         self.on_player_start =
             Some(self.lua.create_function(move |lua, id| {
@@ -246,9 +247,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_player_stop<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_player_stop<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua, PlayerId) -> Result<()> + 'static,
     {
         self.on_player_stop =
             Some(self.lua.create_function(move |lua, id| {
@@ -257,9 +258,9 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    pub fn on_player_change_slot<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_player_change_slot<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId) -> LuaResult<()> + 'static,
+        F: Fn(HooksLua, PlayerId) -> Result<()> + 'static,
     {
         self.on_player_change_slot = Some(self.lua.create_function(move |lua, id| {
             wrap_unit("on_player_change_slot", f(HooksLua(lua), id))
@@ -268,9 +269,9 @@ impl<'lua> UserHooks<'lua> {
     }
 
     /// f(addr, ucid, name, id)
-    pub fn on_player_try_connect<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_player_try_connect<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, String, String, Ucid, PlayerId) -> LuaResult<bool> + 'static,
+        F: Fn(HooksLua, String, String, Ucid, PlayerId) -> Result<bool> + 'static,
     {
         self.on_player_try_connect = Some(self.lua.create_function(
             move |lua, (addr, ucid, name, id)| {
@@ -284,9 +285,9 @@ impl<'lua> UserHooks<'lua> {
     }
 
     /// f(id, message, all)
-    pub fn on_player_try_send_chat<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_player_try_send_chat<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId, String, bool) -> LuaResult<String> + 'static,
+        F: Fn(HooksLua, PlayerId, String, bool) -> Result<String> + 'static,
     {
         self.on_player_try_send_chat =
             Some(self.lua.create_function(move |lua, (id, msg, all)| {
@@ -302,9 +303,9 @@ impl<'lua> UserHooks<'lua> {
     }
 
     /// f(id, message, all)
-    pub fn on_player_try_change_slot<F>(&mut self, f: F) -> LuaResult<&mut Self>
+    pub fn on_player_try_change_slot<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId, Side, SlotId) -> LuaResult<bool> + 'static,
+        F: Fn(HooksLua, PlayerId, Side, SlotId) -> Result<bool> + 'static,
     {
         self.on_player_try_change_slot =
             Some(self.lua.create_function(move |lua, (id, side, slot)| {

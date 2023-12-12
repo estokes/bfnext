@@ -1,8 +1,9 @@
 use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, LuaVec3, String};
-use crate::{bitflags_enum, simple_enum, string_enum, wrapped_table, Sequence};
+use crate::{bitflags_enum, simple_enum, string_enum, wrapped_table, Sequence, lua_err};
+use anyhow::Result;
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
 wrapped_table!(Task, None);
@@ -331,7 +332,7 @@ pub struct DetectedTarget<'lua> {
 
 impl<'lua> FromLua<'lua> for DetectedTarget<'lua> {
     fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("DetectedTarget", None, value)?;
+        let tbl = as_tbl("DetectedTarget", None, value).map_err(lua_err)?;
         Ok(Self {
             object: tbl.raw_get("object")?,
             is_visible: tbl.raw_get("visible")?,
@@ -352,36 +353,36 @@ string_enum!(AltitudeKind, u8, [
 wrapped_table!(Controller, Some("Controller"));
 
 impl<'lua> Controller<'lua> {
-    pub fn set_task(&self, task: Task) -> LuaResult<()> {
-        self.t.call_method("setTask", task)
+    pub fn set_task(&self, task: Task) -> Result<()> {
+        Ok(self.t.call_method("setTask", task)?)
     }
 
-    pub fn reset_task(&self) -> LuaResult<()> {
-        self.t.call_method("resetTask", ())
+    pub fn reset_task(&self) -> Result<()> {
+        Ok(self.t.call_method("resetTask", ())?)
     }
 
-    pub fn push_task(&self, task: Task) -> LuaResult<()> {
-        self.t.call_method("pushTask", task)
+    pub fn push_task(&self, task: Task) -> Result<()> {
+        Ok(self.t.call_method("pushTask", task)?)
     }
 
-    pub fn pop_task(&self) -> LuaResult<()> {
-        self.t.call_method("popTask", ())
+    pub fn pop_task(&self) -> Result<()> {
+        Ok(self.t.call_method("popTask", ())?)
     }
 
-    pub fn has_task(&self) -> LuaResult<bool> {
-        self.t.call_method("hasTask", ())
+    pub fn has_task(&self) -> Result<bool> {
+        Ok(self.t.call_method("hasTask", ())?)
     }
 
-    pub fn set_command(&self, command: Command) -> LuaResult<()> {
-        self.t.call_method("setCommand", command)
+    pub fn set_command(&self, command: Command) -> Result<()> {
+        Ok(self.t.call_method("setCommand", command)?)
     }
 
-    pub fn set_option(&self, option: AiOption<'lua>) -> LuaResult<()> {
-        self.t.call_method("setOption", (option.tag(), option))
+    pub fn set_option(&self, option: AiOption<'lua>) -> Result<()> {
+        Ok(self.t.call_method("setOption", (option.tag(), option))?)
     }
 
-    pub fn set_on_off(&self, on: bool) -> LuaResult<()> {
-        self.t.call_method("setOnOff", on)
+    pub fn set_on_off(&self, on: bool) -> Result<()> {
+        Ok(self.t.call_method("setOnOff", on)?)
     }
 
     pub fn set_altitude(
@@ -389,42 +390,42 @@ impl<'lua> Controller<'lua> {
         altitude: f32,
         keep: bool,
         kind: Option<AltitudeKind>,
-    ) -> LuaResult<()> {
-        match kind {
+    ) -> Result<()> {
+        Ok(match kind {
             None => self.t.call_method("setAltitude", (altitude, keep)),
             Some(kind) => self.t.call_method("setAltitude", (altitude, keep, kind)),
-        }
+        }?)
     }
 
-    pub fn set_speed(&self, speed: f32, keep: bool) -> LuaResult<()> {
-        self.t.call_method("setSpeed", (speed, keep))
+    pub fn set_speed(&self, speed: f32, keep: bool) -> Result<()> {
+        Ok(self.t.call_method("setSpeed", (speed, keep))?)
     }
 
-    pub fn know_target(&self, object: Object, typ: bool, distance: bool) -> LuaResult<()> {
-        self.t.call_method("knowTarget", (object, typ, distance))
+    pub fn know_target(&self, object: Object, typ: bool, distance: bool) -> Result<()> {
+        Ok(self.t.call_method("knowTarget", (object, typ, distance))?)
     }
 
     pub fn is_target_detected(
         &self,
         object: Object,
         methods: BitFlags<Detection>,
-    ) -> LuaResult<DetectedTargetInfo> {
+    ) -> Result<DetectedTargetInfo> {
         let mut args = Variadic::new();
         args.push(object.into_lua(self.lua)?);
         for method in methods {
             args.push(method.into_lua(self.lua)?);
         }
-        self.t.call_method("isTargetDetected", args)
+        Ok(self.t.call_method("isTargetDetected", args)?)
     }
 
     pub fn get_detected_targets(
         &self,
         methods: BitFlags<Detection>,
-    ) -> LuaResult<Sequence<DetectedTarget>> {
+    ) -> Result<Sequence<DetectedTarget>> {
         let mut args = Variadic::new();
         for method in methods {
             args.push(method.into_lua(self.lua)?);
         }
-        self.t.call_method("getDetectedTargets", args)
+        Ok(self.t.call_method("getDetectedTargets", args)?)
     }
 }

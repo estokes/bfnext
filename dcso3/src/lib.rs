@@ -807,7 +807,7 @@ impl<'lua> IntoLua<'lua> for LuaVec3 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Position3 {
     pub p: LuaVec3,
     pub x: LuaVec3,
@@ -824,6 +824,17 @@ impl<'lua> FromLua<'lua> for Position3 {
             y: tbl.raw_get("y")?,
             z: tbl.raw_get("z")?,
         })
+    }
+}
+
+impl<'lua> IntoLua<'lua> for Position3 {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let tbl = lua.create_table()?;
+        tbl.raw_set("p", self.p)?;
+        tbl.raw_set("x", self.x)?;
+        tbl.raw_set("y", self.y)?;
+        tbl.raw_set("z", self.z)?;
+        Ok(Value::Table(tbl))
     }
 }
 

@@ -1,5 +1,6 @@
 extern crate nalgebra as na;
 use crate::cfg::{Cfg, Crate, Deployable, Troop};
+use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
@@ -13,8 +14,8 @@ use dcso3::{
     unit::Unit,
     DeepClone, LuaEnv, MizLua, String, Vector2,
 };
-use fxhash::{FxHashMap, FxHashSet};
-use log::{debug, error};
+use fxhash::FxHashMap;
+use log::debug;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -88,7 +89,7 @@ pub struct SpawnCtx<'lua> {
 }
 
 impl<'lua> SpawnCtx<'lua> {
-    pub fn new(lua: MizLua<'lua>) -> LuaResult<Self> {
+    pub fn new(lua: MizLua<'lua>) -> Result<Self> {
         Ok(Self {
             coalition: Coalition::singleton(lua)?,
             miz: Miz::singleton(lua)?,
@@ -102,7 +103,7 @@ impl<'lua> SpawnCtx<'lua> {
         kind: GroupKind,
         side: Side,
         template_name: &str,
-    ) -> LuaResult<GroupInfo> {
+    ) -> Result<GroupInfo> {
         let mut template = self
             .miz
             .get_group_by_name(idx, kind, side, template_name)?
@@ -111,14 +112,14 @@ impl<'lua> SpawnCtx<'lua> {
         Ok(template)
     }
 
-    pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> LuaResult<TriggerZone> {
+    pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> Result<TriggerZone> {
         Ok(self
             .miz
             .get_trigger_zone(idx, name)?
-            .ok_or_else(|| err("no such trigger zone"))?)
+            .ok_or_else(|| anyhow!("no such trigger zone {name}"))?)
     }
 
-    pub fn spawn(&self, template: GroupInfo) -> LuaResult<()> {
+    pub fn spawn(&self, template: GroupInfo) -> Result<()> {
         match GroupCategory::from_kind(template.category) {
             None => {
                 self.coalition
@@ -132,9 +133,9 @@ impl<'lua> SpawnCtx<'lua> {
         Ok(())
     }
 
-    pub fn despawn(&self, name: &str) -> LuaResult<()> {
+    pub fn despawn(&self, name: &str) -> Result<()> {
         let group = dcso3::group::Group::get_by_name(self.lua, name)?;
-        group.destroy()
+        Ok(group.destroy()?)
     }
 }
 
@@ -327,26 +328,28 @@ pub struct Ephemeral {
 }
 
 impl Ephemeral {
-    fn set_cfg(&mut self, cfg: Cfg) -> LuaResult<()> {
+    fn set_cfg(&mut self, cfg: Cfg) -> Result<()> {
         for (side, deployables) in cfg.deployables.iter() {
             let idx = self.deployable_idx.entry(*side).or_default();
             for dep in deployables.iter() {
                 let name = match dep.path.last() {
-                    None => return Err(cvt_err("deployable without path")),
+                    None => bail!("deployable with empty path {:?}", dep),
                     Some(name) => name,
                 };
                 match idx.deployables_by_name.entry(name.clone()) {
-                    Entry::Occupied(_) => return Err(cvt_err("duplicate deployable name")),
+                    Entry::Occupied(_) => bail!("deployable with duplicate name {name}"),
                     Entry::Vacant(e) => e.insert(dep.clone()),
                 };
-                let crates = dep.crates.iter().map(|c| c.name.clone()).collect();
-                match idx.deployables_by_crates.entry(crates) {
-                    btree_map::Entry::Occupied(_) => return Err(cvt_err("crate set conflict")),
+                let crates: Set<String> = dep.crates.iter().map(|c| c.name.clone()).collect();
+                match idx.deployables_by_crates.entry(crates.clone()) {
+                    btree_map::Entry::Occupied(_) => {
+                        bail!("different deployables take the same crate(s) {:?}", crates)
+                    }
                     btree_map::Entry::Vacant(e) => e.insert(name.clone()),
                 };
                 for c in dep.crates.iter() {
                     match idx.crates_by_name.entry(c.name.clone()) {
-                        Entry::Occupied(_) => return Err(cvt_err("duplicate crate name")),
+                        Entry::Occupied(_) => bail!("duplicate crate name {}", c.name),
                         Entry::Vacant(e) => e.insert(c.clone()),
                     };
                 }
@@ -368,15 +371,11 @@ impl Db {
         &self.ephemeral.cfg
     }
 
-    pub fn load(path: &Path) -> LuaResult<Self> {
-        let file = File::open(&path).map_err(|e| {
-            error!("failed to open save file {:?}, {:?}", path, e);
-            err("io error")
-        })?;
-        let persisted: Persisted = serde_json::from_reader(file).map_err(|e| {
-            error!("failed to decode save file {:?}, {:?}", path, e);
-            err("decode error")
-        })?;
+    pub fn load(path: &Path) -> Result<Self> {
+        let file = File::open(&path)
+            .map_err(|e| anyhow!("failed to open save file {:?}, {:?}", path, e))?;
+        let persisted: Persisted = serde_json::from_reader(file)
+            .map_err(|e| anyhow!("failed to decode save file {:?}, {:?}", path, e))?;
         let mut db = Db {
             persisted,
             ephemeral: Ephemeral::default(),
@@ -413,8 +412,8 @@ impl Db {
     /// - N: Neutral
     ///
     /// So e.g. Tblisi would be OABBTBLISI -> Objective, Airbase, Default to Blue, named Tblisi
-    fn init_objective(&mut self, zone: TriggerZone, name: &str) -> LuaResult<()> {
-        fn side_and_name(s: &str) -> LuaResult<(Side, String)> {
+    fn init_objective(&mut self, zone: TriggerZone, name: &str) -> Result<()> {
+        fn side_and_name(s: &str) -> Result<(Side, String)> {
             if let Some(name) = s.strip_prefix("R") {
                 Ok((Side::Red, String::from(name)))
             } else if let Some(name) = s.strip_prefix("B") {
@@ -422,7 +421,7 @@ impl Db {
             } else if let Some(name) = s.strip_prefix("N") {
                 Ok((Side::Neutral, String::from(name)))
             } else {
-                Err(err("invalid default coalition, expected B, R, or N"))
+                bail!("invalid default coalition {s} expected B, R, or N prefix")
             }
         }
         let (kind, owner, name) = if let Some(name) = name.strip_prefix("AB") {
@@ -438,11 +437,11 @@ impl Db {
             let (side, name) = side_and_name(name)?;
             (ObjectiveKind::Samsite, side, name)
         } else {
-            return Err(err("invalid objective type"));
+            bail!("invalid objective type for {name}, expected AB, FO, FB, or SA prefix")
         };
         let id = ObjectiveId::new();
         let radius = match zone.typ()? {
-            TriggerZoneTyp::Quad(_) => return Err(err("invalid zone volume type")),
+            TriggerZoneTyp::Quad(_) => bail!("zone volume type quad isn't supported yet"),
             TriggerZoneTyp::Circle { radius } => radius,
         };
         let pos = zone.pos()?;
@@ -478,14 +477,14 @@ impl Db {
         _miz: &Miz,
         zone: TriggerZone,
         name: &str,
-    ) -> LuaResult<()> {
+    ) -> Result<()> {
         let name = name.parse::<ObjGroup>()?;
         let pos = zone.pos()?;
         let (obj, side) = {
             let mut iter = self.persisted.objectives.into_iter();
             loop {
                 match iter.next() {
-                    None => return Err(err("group isn't associated with an objective")),
+                    None => bail!("group {:?} isn't associated with an objective", name),
                     Some((id, obj)) => {
                         // this is inefficent; look into an orthographic database
                         if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
@@ -512,7 +511,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn init_objective_slots(&mut self, slot: Group) -> LuaResult<()> {
+    pub fn init_objective_slots(&mut self, slot: Group) -> Result<()> {
         for unit in slot.units()? {
             let unit = unit?;
             let id = SlotId::from(unit.id()?);
@@ -521,7 +520,7 @@ impl Db {
                 let mut iter = self.persisted.objectives.into_iter();
                 loop {
                     match iter.next() {
-                        None => return Err(err("slot not associated with an objective")),
+                        None => bail!("slot {:?} not associated with an objective", slot),
                         Some((id, obj)) => {
                             if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
                                 break *id;
@@ -532,22 +531,15 @@ impl Db {
             };
             let vehicle = Vehicle(unit.typ()?);
             match self.ephemeral.cfg.life_types.get(&vehicle) {
-                None => {
-                    error!("vehicle {:?} doesn't have a configured life type", vehicle);
-                    return Err(err("vehicle missing life type"));
-                }
+                None => bail!("vehicle {:?} doesn't have a configured life type", vehicle),
                 Some(typ) => match self.ephemeral.cfg.default_lives.get(&typ) {
                     Some((n, f)) if *n > 0 && *f > 0 => (),
-                    None => {
-                        error!("vehicle {:?} has no configured life type", vehicle);
-                        return Err(err("vehicle has no configured life type"));
-                    }
+                    None => bail!("vehicle {:?} has no configured life type", vehicle),
                     Some((n, f)) => {
-                        error!(
+                        bail!(
                             "vehicle {:?} life type {:?} has no configured lives ({n}) or negative reset time ({f})",
                             vehicle, typ
-                        );
-                        return Err(err("vehicle's life type has no default lives"));
+                        )
                     }
                 },
             }
@@ -561,7 +553,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn init(lua: MizLua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> LuaResult<Self> {
+    pub fn init(lua: MizLua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> Result<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
         t.ephemeral.set_cfg(cfg)?;
@@ -582,7 +574,7 @@ impl Db {
             } else if name.starts_with("T") || name.starts_with("O") {
                 () // ignored
             } else {
-                return Err(err("invalid trigger zone type code, expected O, G, or T"));
+                bail!("invalid trigger zone type code {name}, expected O, G, or T prefix")
             }
         }
         // now associate slots with objectives
@@ -660,7 +652,7 @@ impl Db {
         spctx: &SpawnCtx,
         oid: ObjectiveId,
         now: DateTime<Utc>,
-    ) -> LuaResult<()> {
+    ) -> Result<()> {
         let obj = &self.persisted.objectives[&oid];
         if let Some(groups) = obj.groups.get(&obj.owner) {
             let damaged_by_class: Map<ObjGroupClass, Set<GroupId>> =
@@ -707,7 +699,7 @@ impl Db {
         lua: MizLua,
         idx: &MizIndex,
         now: DateTime<Utc>,
-    ) -> LuaResult<()> {
+    ) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
         let to_repair = self
             .persisted
@@ -775,7 +767,7 @@ impl Db {
         idx: &MizIndex,
         spctx: &SpawnCtx,
         group: &SpawnedGroup,
-    ) -> LuaResult<()> {
+    ) -> Result<()> {
         let template =
             spctx.get_template(idx, group.kind, group.side, group.template_name.as_str())?;
         template.group.set("lateActivation", false)?;
@@ -817,16 +809,12 @@ impl Db {
         }
     }
 
-    pub fn delete_group<'lua>(
-        &mut self,
-        spctx: &'lua SpawnCtx<'lua>,
-        gid: &GroupId,
-    ) -> LuaResult<()> {
+    pub fn delete_group<'lua>(&mut self, spctx: &'lua SpawnCtx<'lua>, gid: &GroupId) -> Result<()> {
         let group = self
             .persisted
             .groups
             .remove_cow(gid)
-            .ok_or(err("no such group"))?;
+            .ok_or_else(|| anyhow!("no such group {:?}", gid))?;
         self.persisted.groups_by_name.remove_cow(&group.name);
         self.persisted
             .groups_by_side
@@ -862,7 +850,7 @@ impl Db {
         location: &SpawnLoc,
         template_name: &str,
         origin: DeployKind,
-    ) -> LuaResult<(GroupId, GroupInfo<'lua>)> {
+    ) -> Result<(GroupId, GroupInfo<'lua>)> {
         let template_name = String::from(template_name);
         let template = spctx.get_template(idx, kind, side, template_name.as_str())?;
         let pos = match location {
@@ -939,7 +927,7 @@ impl Db {
         location: &SpawnLoc,
         template_name: &str,
         origin: DeployKind,
-    ) -> LuaResult<GroupId> {
+    ) -> Result<GroupId> {
         let spctx = SpawnCtx::new(lua)?;
         let (gid, template) =
             self.init_template(&spctx, idx, side, kind, location, template_name, origin)?;
@@ -1152,12 +1140,12 @@ impl Db {
         idx: &MizIndex,
         ucid: &Ucid,
         name: &str,
-    ) -> LuaResult<&'static str> {
+    ) -> Result<()> {
         macro_rules! or_msg {
             ($e:expr, $msg:expr) => {
                 match $e {
                     Some(res) => res,
-                    None => return Ok($msg),
+                    None => bail!($msg),
                 }
             };
         }
@@ -1179,7 +1167,7 @@ impl Db {
             None
         });
         if let None = &obj {
-            return Ok("not near friendly logistics");
+            bail!("not near friendly logistics");
         }
         let crate_cfg = or_msg!(
             self.ephemeral
@@ -1201,6 +1189,6 @@ impl Db {
             &template,
             DeployKind::Crate(crate_cfg.clone()),
         )?;
-        Ok("crate spawned at your 12 o'clock")
+        Ok(())
     }
 }

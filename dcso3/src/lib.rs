@@ -227,7 +227,7 @@ pub fn wrap_unit(name: &str, res: Result<()>) -> LuaResult<()> {
     }
 }
 
-fn wrap_bool(name: &str, res: Result<bool>) -> LuaResult<bool> {
+pub fn wrap_bool(name: &str, res: Result<bool>) -> LuaResult<bool> {
     match res {
         Ok(b) => Ok(b),
         Err(e) => {
@@ -237,7 +237,7 @@ fn wrap_bool(name: &str, res: Result<bool>) -> LuaResult<bool> {
     }
 }
 
-fn lua_err(err: anyhow::Error) -> LuaError {
+pub fn lua_err(err: anyhow::Error) -> LuaError {
     LuaError::RuntimeError(format!("{:?}", err))
 }
 

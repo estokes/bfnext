@@ -4,12 +4,17 @@ pub mod db;
 pub mod menu;
 
 extern crate nalgebra as na;
+use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use db::{Db, UnitId};
 use dcso3::{
-    coalition::{Side, Coalition},
-    env::{self, miz::{Miz, GroupId}, Env},
+    coalition::{Coalition, Side},
+    env::{
+        self,
+        miz::{GroupId, Miz},
+        Env,
+    },
     err,
     event::Event,
     hooks::UserHooks,
@@ -77,7 +82,7 @@ impl Context {
         }
     }
 
-    fn init_async_bg(&mut self, lua: &Lua) -> LuaResult<()> {
+    fn init_async_bg(&mut self, lua: &Lua) -> Result<()> {
         if self.to_background.is_none() {
             let write_dir = PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str());
             self.to_background = Some(bg::init(write_dir));
@@ -85,7 +90,7 @@ impl Context {
         Ok(())
     }
 
-    fn respawn_groups(&mut self, lua: MizLua) -> LuaResult<()> {
+    fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
         let spctx = db::SpawnCtx::new(lua)?;
         for (_, group) in self.db.groups() {
             self.db.respawn_group(&self.idx, &spctx, group)?
@@ -99,13 +104,15 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
     rtbl: &'a mut FxHashMap<Ucid, PlayerId>,
     lua: L,
     id: PlayerId,
-) -> LuaResult<&'a PlayerInfo> {
+) -> Result<&'a PlayerInfo> {
     if tbl.contains_key(&id) {
         Ok(&tbl[&id])
     } else {
         let net = Net::singleton(lua)?;
         let ifo = net.get_player_info(id)?;
-        let ucid = ifo.ucid()?.ok_or_else(|| err("player has no ucid"))?;
+        let ucid = ifo
+            .ucid()?
+            .ok_or_else(|| anyhow!("player {:?} has no ucid", ifo))?;
         let name = ifo.name()?;
         rtbl.insert(ucid.clone(), id);
         tbl.insert(id, PlayerInfo { name, ucid });
@@ -119,7 +126,7 @@ fn on_player_try_connect(
     name: String,
     ucid: Ucid,
     id: PlayerId,
-) -> LuaResult<bool> {
+) -> Result<bool> {
     info!(
         "onPlayerTryConnect addr: {:?}, name: {:?}, ucid: {:?}, id: {:?}",
         addr, name, ucid, id
@@ -130,7 +137,7 @@ fn on_player_try_connect(
     Ok(true)
 }
 
-fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String> {
+fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     let net = Net::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
@@ -139,7 +146,7 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String
     } else if msg.eq_ignore_ascii_case("red") {
         Side::Red
     } else {
-        return Err(err("side is not blue or red"));
+        bail!("side \"{msg}\" is not blue or red")
     };
     match ctx
         .db
@@ -166,7 +173,7 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String
     Ok(String::from(""))
 }
 
-fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<String> {
+fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     let net = Net::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
@@ -175,7 +182,7 @@ fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<Stri
     } else if msg.eq_ignore_ascii_case("-switch red") {
         Side::Red
     } else {
-        return Err(err("side must be blue or red"));
+        bail!("side must be blue or red \"{msg}\"");
     };
     match ctx.db.sideswitch_player(&ifo.ucid, side) {
         Ok(()) => {
@@ -187,12 +194,7 @@ fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> LuaResult<Stri
     Ok(String::from(""))
 }
 
-fn on_player_try_send_chat(
-    lua: HooksLua,
-    id: PlayerId,
-    msg: String,
-    all: bool,
-) -> LuaResult<String> {
+fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
     info!(
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
@@ -206,7 +208,7 @@ fn on_player_try_send_chat(
     }
 }
 
-fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
+fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = net.get_slot(id)?;
@@ -242,7 +244,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> LuaResult<bool> {
     }
 }
 
-fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> LuaResult<()> {
+fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
     info!("onPlayerChangeSlot: {:?}", id);
     let net = Net::singleton(lua)?;
     match try_occupy_slot(lua, &net, id) {
@@ -264,7 +266,7 @@ fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
     }
 }
 
-fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
+fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
     info!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -317,7 +319,7 @@ fn on_event(_lua: MizLua, ev: Event) -> LuaResult<()> {
     Ok(())
 }
 
-fn on_mission_load_end(lua: HooksLua) -> LuaResult<()> {
+fn on_mission_load_end(lua: HooksLua) -> Result<()> {
     info!("on_mission_load_end");
     let miz = env::miz::Miz::singleton(lua)?;
     debug!("indexing mission");
@@ -328,12 +330,12 @@ fn on_mission_load_end(lua: HooksLua) -> LuaResult<()> {
     Ok(())
 }
 
-fn on_simulation_start(_lua: HooksLua) -> LuaResult<()> {
+fn on_simulation_start(_lua: HooksLua) -> Result<()> {
     info!("on_simulation_start");
     Ok(())
 }
 
-fn init_hooks(lua: HooksLua) -> LuaResult<()> {
+fn init_hooks(lua: HooksLua) -> Result<()> {
     debug!("setting user hooks");
     UserHooks::new(lua)
         .on_simulation_start(on_simulation_start)?
@@ -346,7 +348,7 @@ fn init_hooks(lua: HooksLua) -> LuaResult<()> {
     Ok(())
 }
 
-fn get_unit_ground_pos(lua: MizLua, name: &str) -> LuaResult<Vector2> {
+fn get_unit_ground_pos(lua: MizLua, name: &str) -> Result<Vector2> {
     let pos = Unit::get_by_name(lua, name)?.as_object()?.get_point()?;
     Ok(Vector2::from(na::Vector2::new(pos.0.x, pos.0.z)))
 }
@@ -366,14 +368,14 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     });
 }
 
-fn init_miz(lua: MizLua) -> LuaResult<()> {
+fn init_miz(lua: MizLua) -> Result<()> {
     info!("init_miz");
     let ctx = unsafe { Context::get_mut() };
     debug!("adding event handler");
     World::singleton(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
     let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
-        "" => return Err(err("missing sortie in miz file")),
+        "" => bail!("missing sortie in miz file"),
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
     let timer = Timer::singleton(lua)?;
@@ -410,6 +412,6 @@ fn init_miz(lua: MizLua) -> LuaResult<()> {
 
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable> {
-    unsafe { Context::get_mut() }.init_async_bg(lua)?;
+    unsafe { Context::get_mut() }.init_async_bg(lua).map_err(dcso3::lua_err)?;
     dcso3::create_root_module(lua, init_hooks, init_miz)
 }

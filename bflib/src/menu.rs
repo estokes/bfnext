@@ -1,4 +1,5 @@
 use crate::{cfg::Cfg, Context};
+use anyhow::Result;
 use dcso3::{
     coalition::Side,
     env::miz::{GroupId, Miz},
@@ -13,16 +14,16 @@ fn add_cargo_menu_for_group(
     mc: &MissionCommands,
     side: &Side,
     group: GroupId,
-) -> LuaResult<()> {
+) -> Result<()> {
     let root = mc.add_submenu_for_group(group, "Cargo".into(), None)?;
-
+    // mc.add_command_for_group(group, "Load Nearby Crate".into(), Some(root.clone()), f, arg)?;
     for dep in cfg.deployables.get(side).unwrap_or(&vec![]) {
 
     }
     unimplemented!()
 }
 
-pub(super) fn init(ctx: &Context, lua: MizLua) -> LuaResult<()> {
+pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
     let cfg = ctx.db.cfg();
     let miz = Miz::singleton(lua)?;
     let mc = MissionCommands::singleton(lua)?;

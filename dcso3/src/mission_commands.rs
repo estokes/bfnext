@@ -1,4 +1,4 @@
-use crate::{as_tbl, coalition::Side, env::miz::GroupId, wrap_unit, wrapped_table, LuaEnv, MizLua};
+use crate::{as_tbl, coalition::Side, env::miz::GroupId, wrap_unit, wrapped_table, LuaEnv, MizLua, String};
 use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -77,10 +77,10 @@ impl<'lua> MissionCommands<'lua> {
         name: String,
         parent: Option<SubMenu>,
         f: F,
-        arg: Option<A>,
+        arg: A,
     ) -> Result<CommandItem>
     where
-        F: Fn(MizLua, Option<A>) -> Result<()> + 'static,
+        F: Fn(MizLua, A) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
         let f = self
@@ -112,10 +112,10 @@ impl<'lua> MissionCommands<'lua> {
         name: String,
         parent: Option<CoalitionSubMenu>,
         f: F,
-        arg: Option<A>,
+        arg: A,
     ) -> Result<CoalitionCommandItem>
     where
-        F: Fn(MizLua, Option<A>) -> Result<()> + 'static,
+        F: Fn(MizLua, A) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
         let f = self
@@ -147,10 +147,10 @@ impl<'lua> MissionCommands<'lua> {
         name: String,
         parent: Option<GroupSubMenu>,
         f: F,
-        arg: Option<A>,
+        arg: A,
     ) -> Result<GroupCommandItem>
     where
-        F: Fn(MizLua, Option<A>) -> Result<()> + 'static,
+        F: Fn(MizLua, A) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
         let f = self

@@ -9,13 +9,8 @@ use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use db::{Db, UnitId};
 use dcso3::{
-    coalition::{Coalition, Side},
-    env::{
-        self,
-        miz::{GroupId, Miz},
-        Env,
-    },
-    err,
+    coalition::Side,
+    env::{self, miz::Miz, Env},
     event::Event,
     hooks::UserHooks,
     lfs::Lfs,
@@ -412,6 +407,8 @@ fn init_miz(lua: MizLua) -> Result<()> {
 
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable> {
-    unsafe { Context::get_mut() }.init_async_bg(lua).map_err(dcso3::lua_err)?;
+    unsafe { Context::get_mut() }
+        .init_async_bg(lua)
+        .map_err(dcso3::lua_err)?;
     dcso3::create_root_module(lua, init_hooks, init_miz)
 }

@@ -463,7 +463,7 @@ pub fn err(msg: &str) -> LuaError {
     LuaError::runtime(msg)
 }
 
-fn as_tbl_ref<'a: 'lua, 'lua>(
+pub fn as_tbl_ref<'a: 'lua, 'lua>(
     to: &'static str,
     value: &'a Value<'lua>,
 ) -> Result<&'a mlua::Table<'lua>> {
@@ -492,7 +492,7 @@ fn check_implements(tbl: &mlua::Table, class: &str) -> bool {
     }
 }
 
-fn as_tbl<'lua>(
+pub fn as_tbl<'lua>(
     to: &'static str,
     objtyp: Option<&'static str>,
     value: Value<'lua>,

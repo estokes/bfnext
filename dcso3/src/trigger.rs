@@ -3,7 +3,7 @@ use crate::{
     coalition::Side,
     cvt_err,
     env::miz::{Country, GroupId, UnitId},
-    simple_enum, wrapped_table, Color, LuaEnv, LuaVec3, MizLua,
+    simple_enum, wrapped_table, Color, LuaEnv, LuaVec3, MizLua, String
 };
 use anyhow::Result;
 use mlua::{prelude::*, Value};

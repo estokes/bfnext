@@ -62,7 +62,19 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
 }
 
 fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+    let ctx = unsafe { Context::get_mut() };
+    let slot = slot_for_group(lua, ctx, &gid)?;
+    let act = Trigger::singleton(lua)?.action()?;
+    match ctx.db.load_nearby_crate(lua, &ctx.idx, &slot) {
+        Ok(cr) => {
+            let msg = format_compact!("{} crate loaded", cr.name);
+            act.out_text_for_group(gid, msg.into(), 10, false)
+        }
+        Err(e) => {
+            let msg = format_compact!("crate could not be loaded: {}", e);
+            act.out_text_for_group(gid, msg.into(), 10, false)
+        }
+    }
 }
 
 fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
@@ -84,9 +96,9 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
                 nc.distance as u32
             ));
         }
-        act.out_text_for_group(gid, msg.into(), 10, true)
+        act.out_text_for_group(gid, msg.into(), 10, false)
     } else {
-        act.out_text_for_group(gid, "No nearby crates".into(), 10, true)
+        act.out_text_for_group(gid, "No nearby crates".into(), 10, false)
     }
 }
 

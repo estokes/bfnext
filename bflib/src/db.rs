@@ -1179,8 +1179,8 @@ impl Db {
     pub fn get_slot_pos(&self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Position3> {
         let miz = Miz::singleton(lua)?;
         let uid = or_msg!(slot.as_unit_id(), "player is in jtac");
-        let mizunit = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
-        let unit = Unit::get_by_name(lua, &*mizunit.name()?)?;
+        let uifo = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
+        let unit = Unit::get_by_name(lua, &*uifo.unit.name()?)?;
         unit.as_object()?.get_position()
     }
 
@@ -1246,7 +1246,7 @@ impl Db {
         let pos = self.get_slot_pos(lua, idx, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
-        let mut res = smallvec![];
+        let mut res: SmallVec<[NearbyCrate; 2]> = smallvec![];
         for gid in &self.persisted.crates {
             let group = &self.persisted.groups[gid];
             let crate_def = match &group.origin {
@@ -1270,21 +1270,24 @@ impl Db {
                 }
             }
         }
+        res.sort_by_key(|nc| (nc.distance * 1000.) as u32);
         Ok(res)
     }
 
-    pub fn load_nearby_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
+    pub fn load_nearby_crate(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<Crate> {
         let miz = Miz::singleton(lua)?;
-        let uid = slot.as_unit_id().ok_or_else(|| anyhow!("player is in jtac"))?;
-        let unit = miz.get_unit(idx, &uid)?.ok_or_else(|| anyhow!("unknown slot"))?;
-        let vehicle = {
-            let oid = self
-                .persisted
-                .objectives_by_slot
-                .get(slot)
-                .ok_or_else(|| anyhow!("unknown slot {:?}", slot))?;
-            self.persisted.objectives[&oid].slots[slot].clone()
-        };
+        let uid = slot
+            .as_unit_id()
+            .ok_or_else(|| anyhow!("player is in jtac"))?;
+        let uifo = miz
+            .get_unit(idx, &uid)?
+            .ok_or_else(|| anyhow!("unknown slot"))?;
+        let vehicle = Vehicle(uifo.unit.typ()?);
         let cargo_capacity = self
             .ephemeral
             .cfg
@@ -1297,13 +1300,23 @@ impl Db {
         {
             bail!("you already have a full load onboard")
         }
-        let mut nearby = self.list_nearby_crates(lua, idx, slot)?;
-        nearby.retain(|nc| nc.group.side)
-        if nearby.is_empty() {
-            bail!("no crates within {} meters", self.ephemeral.cfg.crate_load_distance);
-        }
-        nearby.sort_by_key(|nc| nc.distance);
-
-        unimplemented!()
+        let (gid, crate_def) = {
+            let mut nearby = self.list_nearby_crates(lua, idx, slot)?;
+            nearby.retain(|nc| nc.group.side == uifo.side);
+            if nearby.is_empty() {
+                bail!(
+                    "no friendly crates within {} meters",
+                    self.ephemeral.cfg.crate_load_distance
+                );
+            }
+            let the_crate = nearby.first().unwrap();
+            let gid = the_crate.group.id;
+            let crate_def = the_crate.crate_def.clone();
+            (gid, crate_def)
+        };
+        let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
+        cargo.crates.push(crate_def.clone());
+        self.delete_group(&SpawnCtx::new(lua)?, &gid)?;
+        Ok(crate_def)
     }
 }

@@ -76,12 +76,12 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
     let act = Trigger::singleton(lua)?.action()?;
     if nearby.len() > 0 {
         let mut msg = CompactString::new("");
-        for (name, heading, dist) in nearby {
+        for nc in nearby {
             msg.push_str(&format_compact!(
                 "{} crate, bearing {}, {}M away",
-                name,
-                heading as u32,
-                dist as u32
+                nc.crate_def.name,
+                nc.heading as u32,
+                nc.distance as u32
             ));
         }
         act.out_text_for_group(gid, msg.into(), 10, true)

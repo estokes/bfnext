@@ -30,3 +30,4 @@ log = { workspace = true }
 tokio = { workspace = true }
 simplelog = { workspace = true }
 paste = { workspace = true }
+smallvec = { workspace = true }

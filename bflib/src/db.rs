@@ -18,6 +18,7 @@ use fxhash::FxHashMap;
 use log::debug;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
+use smallvec::{smallvec, SmallVec};
 use std::{
     borrow::Borrow,
     collections::{btree_map, hash_map::Entry, BTreeMap},
@@ -50,6 +51,14 @@ pub enum SlotAuth {
     NotRegistered(Side),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct NearbyCrate<'a> {
+    pub group: &'a SpawnedGroup,
+    pub crate_def: &'a Crate,
+    pub heading: f64,
+    pub distance: f64,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
     Objective,
@@ -60,8 +69,22 @@ pub enum DeployKind {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cargo {
-    troops: Vec<Troop>,
-    crates: Vec<Crate>,
+    troops: SmallVec<[Troop; 1]>,
+    crates: SmallVec<[Crate; 1]>,
+}
+
+impl Cargo {
+    pub fn num_troops(&self) -> usize {
+        self.troops.len()
+    }
+
+    pub fn num_crates(&self) -> usize {
+        self.crates.len()
+    }
+
+    pub fn num_total(&self) -> usize {
+        self.num_crates() + self.num_troops()
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1214,42 +1237,73 @@ impl Db {
         Ok(())
     }
 
-    pub fn list_nearby_crates(
-        &self,
+    pub fn list_nearby_crates<'a>(
+        &'a self,
         lua: MizLua,
         idx: &MizIndex,
         slot: &SlotId,
-    ) -> Result<Vec<(String, f64, f64)>> {
+    ) -> Result<SmallVec<[NearbyCrate<'a>; 2]>> {
         let pos = self.get_slot_pos(lua, idx, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
-        let mut res = vec![];
+        let mut res = smallvec![];
         for gid in &self.persisted.crates {
-            let group = self
-                .persisted
-                .groups
-                .get(gid)
-                .ok_or_else(|| anyhow!("missing group {:?}", gid))?;
-            let crt = match &group.origin {
+            let group = &self.persisted.groups[gid];
+            let crate_def = match &group.origin {
                 DeployKind::Crate(crt) => crt,
                 DeployKind::Deployed(_) | DeployKind::Troop(_) | DeployKind::Objective => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
             };
             for uid in &group.units {
-                let unit = self
-                    .persisted
-                    .units
-                    .get(uid)
-                    .ok_or_else(|| anyhow!("missing unit {:?}", uid))?;
-                let dist = na::distance(&point.into(), &unit.pos.into());
-                if dist <= max_dist {
+                let unit = &self.persisted.units[uid];
+                let distance = na::distance(&point.into(), &unit.pos.into());
+                if distance <= max_dist {
                     let v = unit.pos - point;
-                    let heading = v.y.atan2(v.x);
-                    res.push((crt.name.clone(), heading, dist))
+                    let heading = v.y.atan2(v.x) * (180. / std::f64::consts::PI);
+                    res.push(NearbyCrate {
+                        group,
+                        crate_def,
+                        heading,
+                        distance,
+                    })
                 }
             }
         }
         Ok(res)
+    }
+
+    pub fn load_nearby_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
+        let miz = Miz::singleton(lua)?;
+        let uid = slot.as_unit_id().ok_or_else(|| anyhow!("player is in jtac"))?;
+        let unit = miz.get_unit(idx, &uid)?.ok_or_else(|| anyhow!("unknown slot"))?;
+        let vehicle = {
+            let oid = self
+                .persisted
+                .objectives_by_slot
+                .get(slot)
+                .ok_or_else(|| anyhow!("unknown slot {:?}", slot))?;
+            self.persisted.objectives[&oid].slots[slot].clone()
+        };
+        let cargo_capacity = self
+            .ephemeral
+            .cfg
+            .cargo
+            .get(&vehicle)
+            .ok_or_else(|| anyhow!("{:?} can't carry cargo", vehicle))?;
+        let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
+        if cargo_capacity.crate_slots as usize <= cargo.num_crates()
+            || cargo_capacity.total_slots as usize <= cargo.num_total()
+        {
+            bail!("you already have a full load onboard")
+        }
+        let mut nearby = self.list_nearby_crates(lua, idx, slot)?;
+        nearby.retain(|nc| nc.group.side)
+        if nearby.is_empty() {
+            bail!("no crates within {} meters", self.ephemeral.cfg.crate_load_distance);
+        }
+        nearby.sort_by_key(|nc| nc.distance);
+
+        unimplemented!()
     }
 }

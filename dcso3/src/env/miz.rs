@@ -2,12 +2,12 @@ use crate::{
     as_tbl, coalition::Side, country, is_hooks_env, wrapped_prim, wrapped_table, Color,
     DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String,
 };
+use anyhow::{bail, Result};
 use fxhash::FxHashMap;
 use log::debug;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::hash_map::Entry, ops::Deref};
-use anyhow::{Result, bail};
 
 wrapped_table!(Weather, None);
 
@@ -217,7 +217,7 @@ impl<'lua> Coalition<'lua> {
         Ok(self.t.raw_get("country")?)
     }
 
-    fn index(&self, base: Path) -> Result<CoalitionIndex> {
+    fn index(&self, side: Side, base: Path) -> Result<CoalitionIndex> {
         let base = base.append(["country"]);
         let mut idx = CoalitionIndex::default();
         for (i, country) in self.countries()?.into_iter().enumerate() {
@@ -235,6 +235,7 @@ impl<'lua> Coalition<'lua> {
                             Entry::Occupied(_) => bail!("duplicate group id {:?}", gid),
                             Entry::Vacant(e) => {
                                 e.insert(IndexedGroup {
+                                    side,
                                     country: cid,
                                     category: $cat,
                                     path: base.clone(),
@@ -256,7 +257,11 @@ impl<'lua> Coalition<'lua> {
                             let uid = unit.id()?;
                             match idx.units.entry(uid) {
                                 Entry::Occupied(_) => bail!("duplicate unit id {:?}", uid),
-                                Entry::Vacant(e) => e.insert(base.clone()),
+                                Entry::Vacant(e) => e.insert(IndexedUnit {
+                                    side,
+                                    country: cid,
+                                    path: base.clone(),
+                                }),
                             };
                             match idx.units_by_name.entry(name.clone()) {
                                 Entry::Occupied(_) => bail!("duplicate unit name {name}"),
@@ -282,14 +287,22 @@ impl<'lua> Coalition<'lua> {
 
 #[derive(Debug, Clone, Serialize)]
 struct IndexedGroup {
+    side: Side,
     country: country::Country,
     category: GroupKind,
     path: Path,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct IndexedUnit {
+    side: Side,
+    country: country::Country,
+    path: Path,
+}
+
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct CoalitionIndex {
-    units: FxHashMap<UnitId, Path>,
+    units: FxHashMap<UnitId, IndexedUnit>,
     units_by_name: FxHashMap<String, UnitId>,
     groups: FxHashMap<GroupId, IndexedGroup>,
     groups_by_name: FxHashMap<String, GroupId>,
@@ -319,9 +332,17 @@ pub enum GroupKind {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GroupInfo<'lua> {
+    pub side: Side,
     pub country: country::Country,
     pub category: GroupKind,
     pub group: Group<'lua>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UnitInfo<'lua> {
+    pub side: Side,
+    pub country: country::Country,
+    pub unit: Unit<'lua>,
 }
 
 wrapped_table!(Miz, None);
@@ -358,6 +379,7 @@ impl<'lua> Miz<'lua> {
             .map(|ifo| {
                 debug!("looking up {:?}", ifo);
                 let res = self.raw_get_path(&ifo.path).map(|group| GroupInfo {
+                    side: ifo.side,
                     country: ifo.country,
                     category: ifo.category,
                     group,
@@ -389,19 +411,31 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_unit(&self, idx: &MizIndex, id: &UnitId) -> Result<Option<Unit>> {
+    pub fn get_unit(&self, idx: &MizIndex, id: &UnitId) -> Result<Option<UnitInfo>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| idx.units.get(id))
-            .map(|path| self.raw_get_path(path))
+            .map(|ifo| {
+                self.raw_get_path(&ifo.path).map(|unit| UnitInfo {
+                    side: ifo.side,
+                    country: ifo.country,
+                    unit,
+                })
+            })
             .transpose()
     }
 
-    pub fn get_unit_by_name(&self, idx: &MizIndex, name: &str) -> Result<Option<Unit>> {
+    pub fn get_unit_by_name(&self, idx: &MizIndex, name: &str) -> Result<Option<UnitInfo>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| idx.units_by_name.get(name).and_then(|id| idx.units.get(id)))
-            .map(|path| self.raw_get_path(path))
+            .map(|ifo| {
+                self.raw_get_path(&ifo.path).map(|unit| UnitInfo {
+                    side: ifo.side,
+                    country: ifo.country,
+                    unit,
+                })
+            })
             .transpose()
     }
 
@@ -413,11 +447,7 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_group_by_unit_name(
-        &self,
-        idx: &MizIndex,
-        name: &str,
-    ) -> Result<Option<GroupInfo>> {
+    pub fn get_group_by_unit_name(&self, idx: &MizIndex, name: &str) -> Result<Option<GroupInfo>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| {
@@ -459,7 +489,7 @@ impl<'lua> Miz<'lua> {
             let base = base.append(["coalition", side.to_str()]);
             idx.by_side
                 .entry(side)
-                .or_insert(self.coalition(side)?.index(base)?);
+                .or_insert(self.coalition(side)?.index(side, base)?);
         }
         Ok(idx)
     }

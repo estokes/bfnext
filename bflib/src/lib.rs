@@ -373,6 +373,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
         "" => bail!("missing sortie in miz file"),
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
+    menu::init(&ctx, lua)?;
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();

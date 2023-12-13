@@ -1,6 +1,9 @@
 use crate::{
-    as_tbl, atomic_id, coalition::Side, cvt_err, env::miz::Country, simple_enum, wrapped_table,
-    Color, LuaEnv, LuaVec3, MizLua,
+    as_tbl, atomic_id,
+    coalition::Side,
+    cvt_err,
+    env::miz::{Country, GroupId, UnitId},
+    simple_enum, wrapped_table, Color, LuaEnv, LuaVec3, MizLua,
 };
 use anyhow::Result;
 use mlua::{prelude::*, Value};
@@ -174,12 +177,7 @@ impl<'lua> Action<'lua> {
         Ok(self.call_function("illuminationBomb", (position, power))?)
     }
 
-    pub fn signal_flare(
-        &self,
-        position: LuaVec3,
-        color: FlareColor,
-        azimuth: u16,
-    ) -> Result<()> {
+    pub fn signal_flare(&self, position: LuaVec3, color: FlareColor, azimuth: u16) -> Result<()> {
         Ok(self.call_function("signalFlare", (position, color, azimuth))?)
     }
 
@@ -219,11 +217,11 @@ impl<'lua> Action<'lua> {
         Ok(self.call_function("outSoundForCountry", (country, file))?)
     }
 
-    pub fn out_sound_for_group(&self, group: i64, file: String) -> Result<()> {
+    pub fn out_sound_for_group(&self, group: GroupId, file: String) -> Result<()> {
         Ok(self.call_function("outSoundForGroup", (group, file))?)
     }
 
-    pub fn out_sound_for_unit(&self, unit: i64, file: String) -> Result<()> {
+    pub fn out_sound_for_unit(&self, unit: UnitId, file: String) -> Result<()> {
         Ok(self.call_function("outSoundForUnit", (unit, file))?)
     }
 
@@ -259,7 +257,7 @@ impl<'lua> Action<'lua> {
 
     pub fn out_text_for_group(
         &self,
-        group: i64,
+        group: GroupId,
         text: String,
         display_time: i64,
         clear_view: bool,
@@ -269,7 +267,7 @@ impl<'lua> Action<'lua> {
 
     pub fn out_text_for_unit(
         &self,
-        unit: i64,
+        unit: GroupId,
         text: String,
         display_time: i64,
         clear_view: bool,
@@ -308,7 +306,7 @@ impl<'lua> Action<'lua> {
         id: MarkId,
         text: String,
         position: LuaVec3,
-        group: i64,
+        group: GroupId,
         read_only: bool,
         message: Option<String>,
     ) -> Result<()> {

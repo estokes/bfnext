@@ -18,6 +18,6 @@
 # to this directory and run dll2lib.bat on it to generate a new lua.lib file. 
 # (you must have the windows sdk installed and the tools in your path for that to work).
 
-$env:LUA_LIB=pwd
+$env:LUA_LIB=Get-Location
 $env:LUA_LINK="dylib"
 $env:LUA_LIB_NAME="lua"

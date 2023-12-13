@@ -12,7 +12,7 @@ use dcso3::{
     group::GroupCategory,
     net::{SlotId, SlotIdKind, Ucid},
     unit::Unit,
-    DeepClone, LuaEnv, MizLua, String, Vector2,
+    DeepClone, LuaEnv, MizLua, Position3, String, Vector2,
 };
 use fxhash::FxHashMap;
 use log::debug;
@@ -28,6 +28,15 @@ use std::{
 
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
 type Set<K> = immutable_chunkmap::set::Set<K, 32>;
+
+macro_rules! or_msg {
+    ($e:expr, $msg:expr) => {
+        match $e {
+            Some(res) => res,
+            None => bail!($msg),
+        }
+    };
+}
 
 atomic_id!(GroupId);
 atomic_id!(UnitId);
@@ -124,8 +133,7 @@ impl<'lua> SpawnCtx<'lua> {
             None => {
                 // static objects are not fed to addStaticObject as groups
                 let unit = template.group.units()?.first()?;
-                self.coalition
-                    .add_static_object(template.country, unit)?;
+                self.coalition.add_static_object(template.country, unit)?;
             }
             Some(category) => {
                 self.coalition
@@ -608,7 +616,6 @@ impl Db {
             t.update_objective_status(&id, now)
         }
         t.ephemeral.dirty = true;
-        debug!("{:#?}", &t);
         Ok(t)
     }
 
@@ -940,16 +947,11 @@ impl Db {
         template_name: &str,
         origin: DeployKind,
     ) -> Result<GroupId> {
-        debug!("creating spawn context");
         let spctx = SpawnCtx::new(lua)?;
-        debug!("initializing template {template_name}");
         let (gid, template) =
             self.init_template(&spctx, idx, side, kind, location, template_name, origin)?;
         self.ephemeral.dirty = true;
-        debug!("spawning template");
-        let res = spctx.spawn(template);
-        debug!("spawn result {:?}", res);
-        res?;
+        spctx.spawn(template)?;
         Ok(gid)
     }
 
@@ -1151,6 +1153,14 @@ impl Db {
         }
     }
 
+    pub fn get_slot_pos(&self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Position3> {
+        let miz = Miz::singleton(lua)?;
+        let uid = or_msg!(slot.as_unit_id(), "player is in jtac");
+        let mizunit = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
+        let unit = Unit::get_by_name(lua, &*mizunit.name()?)?;
+        unit.as_object()?.get_position()
+    }
+
     pub fn spawn_crate(
         &mut self,
         lua: MizLua,
@@ -1158,33 +1168,16 @@ impl Db {
         slot: &SlotId,
         name: &str,
     ) -> Result<()> {
-        macro_rules! or_msg {
-            ($e:expr, $msg:expr) => {
-                match $e {
-                    Some(res) => res,
-                    None => bail!($msg),
-                }
-            };
-        }
         debug!("db spawning crate");
-        let miz = Miz::singleton(lua)?;
         let ucid = or_msg!(
             self.ephemeral.players_by_slot.get(&slot),
             "no player in slot"
         );
-        debug!("spawner ucid {:?}", ucid);
         let player = or_msg!(
             self.persisted.players.get(&ucid),
             "no such registered player"
         );
-        debug!("spawner {:?}", player);
-        let uid = or_msg!(slot.as_unit_id(), "player is in jtac");
-        let mizunit = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
-        debug!("miz unit {:?}", mizunit);
-        let unit = Unit::get_by_name(lua, &*mizunit.name()?)?;
-        debug!("instanced unit {:?}", unit);
-        let pos = unit.as_object()?.get_position()?;
-        debug!("unit position {:?}", pos);
+        let pos = self.get_slot_pos(lua, idx, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let obj = self.persisted.objectives.into_iter().find_map(|(_, obj)| {
             if obj.owner == player.side
@@ -1195,7 +1188,6 @@ impl Db {
             }
             None
         });
-        debug!("spawner is near {:?}", obj);
         if let None = &obj {
             bail!("not near friendly logistics");
         }
@@ -1207,13 +1199,10 @@ impl Db {
             "no such crate"
         )
         .clone();
-        debug!("we are spawning {:?}", crate_cfg);
         let template = self.ephemeral.cfg.crate_template[&player.side].clone();
-        debug!("crate uses template {:?}", template);
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
-        debug!("we are spawning it at {:?}", spawnpos);
-        let res = self.spawn_template_as_new(
+        self.spawn_template_as_new(
             lua,
             idx,
             player.side,
@@ -1221,9 +1210,46 @@ impl Db {
             &spawnpos,
             &template,
             DeployKind::Crate(crate_cfg.clone()),
-        );
-        debug!("spawn result {:?}", res);
-        res?;
+        )?;
         Ok(())
+    }
+
+    pub fn list_nearby_crates(
+        &self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<Vec<(String, f64, f64)>> {
+        let pos = self.get_slot_pos(lua, idx, slot)?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
+        let mut res = vec![];
+        for gid in &self.persisted.crates {
+            let group = self
+                .persisted
+                .groups
+                .get(gid)
+                .ok_or_else(|| anyhow!("missing group {:?}", gid))?;
+            let crt = match &group.origin {
+                DeployKind::Crate(crt) => crt,
+                DeployKind::Deployed(_) | DeployKind::Troop(_) | DeployKind::Objective => {
+                    bail!("group {:?} is listed in crates but isn't a crate", gid)
+                }
+            };
+            for uid in &group.units {
+                let unit = self
+                    .persisted
+                    .units
+                    .get(uid)
+                    .ok_or_else(|| anyhow!("missing unit {:?}", uid))?;
+                let dist = na::distance(&point.into(), &unit.pos.into());
+                if dist <= max_dist {
+                    let v = unit.pos - point;
+                    let heading = v.y.atan2(v.x);
+                    res.push((crt.name.clone(), heading, dist))
+                }
+            }
+        }
+        Ok(res)
     }
 }

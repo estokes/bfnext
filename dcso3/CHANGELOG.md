@@ -1,3 +1,9 @@
+## 0.0.7
+
+- wherever possible transition error handing to anyhow
+- some callback type changes
+- a lot of bugs fixed
+
 ## 0.0.6
 
 - add bindings for most of the triggers singleton, including almost all of the f10 map

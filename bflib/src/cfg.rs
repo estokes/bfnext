@@ -108,6 +108,9 @@ pub struct Cfg {
     pub repair_time: u32,
     /// how far must you fly from an objective to deploy deployables
     pub logistics_exclusion: u32,
+    /// how far in meters can a crate be from the player and still be
+    /// unpackable and loadable 
+    pub crate_load_distance: u32,
     /// how many times a user may switch sides in a given round,
     /// or None for unlimited side switches
     pub side_switches: Option<u8>,
@@ -590,6 +593,7 @@ impl Default for Cfg {
         Self {
             repair_time: 1800,
             logistics_exclusion: 4000,
+            crate_load_distance: 50,
             side_switches: Some(1),
             default_lives: FxHashMap::from_iter([
                 (LifeType::Standard, (3, 21600)),

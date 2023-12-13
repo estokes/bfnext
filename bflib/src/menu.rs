@@ -1,17 +1,17 @@
-use std::collections::hash_map::Entry;
-
 use crate::{cfg::Cfg, Context};
-use anyhow::Result;
+use anyhow::{Result, bail, anyhow};
+use compact_str::format_compact;
 use dcso3::{
     as_tbl,
     coalition::Side,
     env::miz::{Group, GroupId, Miz},
     lua_err,
     mission_commands::{GroupSubMenu, MissionCommands},
-    MizLua, String,
+    MizLua, String, net::{SlotId, Ucid},
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
+use std::collections::hash_map::Entry;
 
 struct SpawnCrateArg {
     group: GroupId,
@@ -37,6 +37,17 @@ impl<'lua> FromLua<'lua> for SpawnCrateArg {
     }
 }
 
+fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<SlotId> {
+    let miz = Miz::singleton(lua)?;
+    let group = miz.get_group(&ctx.idx, gid)?.ok_or_else(|| anyhow!("no such group {:?}", gid))?;
+    let units = group.group.units()?;
+    if units.len() > 1 {
+        bail!("groups with more than one member can't spawn crates {:?}", gid)
+    }
+    let unit = units.get(0)?;
+    Ok(SlotId::from(unit.id()?))
+}
+
 fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
     unimplemented!()
 }
@@ -58,7 +69,9 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 }
 
 fn spawn_crate(lua: MizLua, arg: SpawnCrateArg) -> Result<()> {
-    unimplemented!()
+    let ctx = unsafe { Context::get_mut() };
+    let slot = slot_for_group(lua, ctx, &arg.group)?;
+    ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.crate_name)
 }
 
 fn add_cargo_menu_for_group(
@@ -118,9 +131,14 @@ fn add_cargo_menu_for_group(
                 }
             })?;
         for cr in dep.crates.iter() {
+            let title = if cr.required > 1 {
+                String::from(format_compact!("{}({})", cr.name, cr.required))
+            } else {
+                cr.name.clone()
+            };
             mc.add_command_for_group(
                 group,
-                cr.name.clone(),
+                title,
                 Some(root.clone()),
                 spawn_crate,
                 SpawnCrateArg {

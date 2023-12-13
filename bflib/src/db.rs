@@ -1138,7 +1138,7 @@ impl Db {
         &mut self,
         lua: MizLua,
         idx: &MizIndex,
-        ucid: &Ucid,
+        slot: &SlotId,
         name: &str,
     ) -> Result<()> {
         macro_rules! or_msg {
@@ -1150,8 +1150,8 @@ impl Db {
             };
         }
         let miz = Miz::singleton(lua)?;
-        let player = or_msg!(self.persisted.players.get(ucid), "not registered");
-        let slot = or_msg!(player.current_slot.as_ref(), "player not in a slot");
+        let ucid = or_msg!(self.ephemeral.players_by_slot.get(&slot), "no player in slot");
+        let player = or_msg!(self.persisted.players.get(&ucid), "no such registered player");
         let uid = or_msg!(slot.as_unit_id(), "player is in jtac");
         let mizunit = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
         let unit = Unit::get_by_name(lua, &*mizunit.name()?)?;

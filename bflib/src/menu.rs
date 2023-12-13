@@ -1,5 +1,5 @@
 use crate::{cfg::Cfg, Context};
-use anyhow::{Result, bail, anyhow};
+use anyhow::{anyhow, bail, Result};
 use compact_str::format_compact;
 use dcso3::{
     as_tbl,
@@ -7,12 +7,15 @@ use dcso3::{
     env::miz::{Group, GroupId, Miz},
     lua_err,
     mission_commands::{GroupSubMenu, MissionCommands},
-    MizLua, String, net::{SlotId, Ucid},
+    net::SlotId,
+    LuaEnv, MizLua, String,
 };
 use fxhash::FxHashMap;
+use log::debug;
 use mlua::{prelude::*, Value};
 use std::collections::hash_map::Entry;
 
+#[derive(Debug)]
 struct SpawnCrateArg {
     group: GroupId,
     crate_name: String,
@@ -38,14 +41,26 @@ impl<'lua> FromLua<'lua> for SpawnCrateArg {
 }
 
 fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<SlotId> {
+    let hooks = dcso3::is_hooks_env(lua.inner());
+    debug!("getting mission. is hooks: {hooks}");
     let miz = Miz::singleton(lua)?;
-    let group = miz.get_group(&ctx.idx, gid)?.ok_or_else(|| anyhow!("no such group {:?}", gid))?;
+    debug!("getting slot for group {:?}", gid);
+    let group = miz
+        .get_group(&ctx.idx, gid)?
+        .ok_or_else(|| anyhow!("no such group {:?}", gid))?;
+    debug!("got group {:?}", group);
     let units = group.group.units()?;
     if units.len() > 1 {
-        bail!("groups with more than one member can't spawn crates {:?}", gid)
+        bail!(
+            "groups with more than one member can't spawn crates {:?}",
+            gid
+        )
     }
-    let unit = units.get(0)?;
-    Ok(SlotId::from(unit.id()?))
+    debug!("getting unit");
+    let unit = units.first()?;
+    debug!("got unit {:?}", unit);
+    let slot = SlotId::from(unit.id()?);
+    Ok(slot)
 }
 
 fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
@@ -69,8 +84,11 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 }
 
 fn spawn_crate(lua: MizLua, arg: SpawnCrateArg) -> Result<()> {
+    debug!("spawning crate {:?}", arg);
     let ctx = unsafe { Context::get_mut() };
+    debug!("getting slot for group");
     let slot = slot_for_group(lua, ctx, &arg.group)?;
+    debug!("group slot is {:?}", slot);
     ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.crate_name)
 }
 
@@ -172,22 +190,29 @@ fn can_carry_cargo(cfg: &Cfg, group: &Group) -> Result<bool> {
 }
 
 pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
+    debug!("initializing menus");
     let cfg = ctx.db.cfg();
     let miz = Miz::singleton(lua)?;
     let mc = MissionCommands::singleton(lua)?;
     for side in [Side::Red, Side::Blue, Side::Neutral] {
+        debug!("init menus for {:?}", side);
         let coa = miz.coalition(side)?;
         for country in coa.countries()? {
             let country = country?;
+            debug!("init menus for country {:?}", country);
             for heli in country.helicopters()? {
                 let heli = heli?;
+                debug!("checking if heli {:?} can carry cargo", heli);
                 if can_carry_cargo(cfg, &heli)? {
+                    debug!("adding cargo menus for heli");
                     add_cargo_menu_for_group(cfg, &mc, &side, heli.id()?)?
                 }
             }
             for plane in country.planes()? {
                 let plane = plane?;
+                debug!("checking if plane {:?} can carry cargo", plane);
                 if can_carry_cargo(cfg, &plane)? {
+                    debug!("adding cargo menus for plane");
                     add_cargo_menu_for_group(cfg, &mc, &side, plane.id()?)?
                 }
             }

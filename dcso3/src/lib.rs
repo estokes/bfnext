@@ -1024,7 +1024,7 @@ impl<'lua, T: IntoLua<'lua> + 'lua> Sequence<'lua, T> {
     }
 }
 
-impl<'lua, T: 'lua> Sequence<'lua, T> {
+impl<'lua, T: FromLua<'lua> + 'lua> Sequence<'lua, T> {
     pub fn empty(lua: &'lua Lua) -> Result<Self> {
         Ok(Self {
             t: lua.create_table()?,
@@ -1043,6 +1043,10 @@ impl<'lua, T: 'lua> Sequence<'lua, T> {
 
     pub fn remove(&self, i: i64) -> Result<()> {
         Ok(self.t.raw_remove(i)?)
+    }
+
+    pub fn first(&self) -> Result<T> {
+        Ok(self.t.raw_get(1)?)
     }
 }
 

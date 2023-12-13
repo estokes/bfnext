@@ -369,11 +369,12 @@ fn init_miz(lua: MizLua) -> Result<()> {
     debug!("adding event handler");
     World::singleton(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
+    debug!("sortie is {:?}", sortie);
     let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
         "" => bail!("missing sortie in miz file"),
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
-    menu::init(&ctx, lua)?;
+    debug!("path to saved state is {:?}", path);
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
@@ -396,13 +397,17 @@ fn init_miz(lua: MizLua) -> Result<()> {
     })?;
     debug!("spawning");
     if !path.exists() {
+        debug!("saved state doesn't exist, starting from default");
         let cfg = Cfg::load(&path)?;
         ctx.db = Db::init(lua, cfg, &ctx.idx, &Miz::singleton(lua)?)?;
     } else {
+        debug!("saved state exists, loading it");
         ctx.db = Db::load(&path)?;
     }
+    debug!("spawning units");
     ctx.respawn_groups(lua)?;
     debug!("spawned");
+    menu::init(&ctx, lua)?;
     Ok(())
 }
 

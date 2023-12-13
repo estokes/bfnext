@@ -63,14 +63,14 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
 
 fn setup_logger(tx: UnboundedSender<Task>) {
     let level = match env::var("RUST_LOG").ok().map(|s| s.to_ascii_lowercase()) {
-        None => LevelFilter::Warn,
+        None => LevelFilter::Debug,
         Some(s) if &s == "trace" => LevelFilter::Trace,
         Some(s) if &s == "debug" => LevelFilter::Debug,
         Some(s) if &s == "info" => LevelFilter::Info,
         Some(s) if &s == "error" => LevelFilter::Error,
         Some(s) if &s == "warn" => LevelFilter::Warn,
         Some(s) if &s == "off" => LevelFilter::Off,
-        Some(_) => LevelFilter::Warn,
+        Some(_) => LevelFilter::Debug,
     };
     WriteLogger::init(level, simplelog::Config::default(), LogHandle(tx)).unwrap()
 }

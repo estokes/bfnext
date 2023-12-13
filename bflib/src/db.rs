@@ -120,10 +120,12 @@ impl<'lua> SpawnCtx<'lua> {
     }
 
     pub fn spawn(&self, template: GroupInfo) -> Result<()> {
-        match GroupCategory::from_kind(template.category) {
+        match dbg!(GroupCategory::from_kind(dbg!(template.category))) {
             None => {
+                // static objects are not fed to addStaticObject as groups
+                let unit = template.group.units()?.first()?;
                 self.coalition
-                    .add_static_object(template.country, template.group)?;
+                    .add_static_object(template.country, unit)?;
             }
             Some(category) => {
                 self.coalition
@@ -595,6 +597,16 @@ impl Db {
                 }
             }
         }
+        let now = Utc::now();
+        let ids = t
+            .persisted
+            .objectives
+            .into_iter()
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        for id in ids {
+            t.update_objective_status(&id, now)
+        }
         t.ephemeral.dirty = true;
         debug!("{:#?}", &t);
         Ok(t)
@@ -928,11 +940,16 @@ impl Db {
         template_name: &str,
         origin: DeployKind,
     ) -> Result<GroupId> {
+        debug!("creating spawn context");
         let spctx = SpawnCtx::new(lua)?;
+        debug!("initializing template {template_name}");
         let (gid, template) =
             self.init_template(&spctx, idx, side, kind, location, template_name, origin)?;
         self.ephemeral.dirty = true;
-        spctx.spawn(template)?;
+        debug!("spawning template");
+        let res = spctx.spawn(template);
+        debug!("spawn result {:?}", res);
+        res?;
         Ok(gid)
     }
 
@@ -1149,13 +1166,25 @@ impl Db {
                 }
             };
         }
+        debug!("db spawning crate");
         let miz = Miz::singleton(lua)?;
-        let ucid = or_msg!(self.ephemeral.players_by_slot.get(&slot), "no player in slot");
-        let player = or_msg!(self.persisted.players.get(&ucid), "no such registered player");
+        let ucid = or_msg!(
+            self.ephemeral.players_by_slot.get(&slot),
+            "no player in slot"
+        );
+        debug!("spawner ucid {:?}", ucid);
+        let player = or_msg!(
+            self.persisted.players.get(&ucid),
+            "no such registered player"
+        );
+        debug!("spawner {:?}", player);
         let uid = or_msg!(slot.as_unit_id(), "player is in jtac");
         let mizunit = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
+        debug!("miz unit {:?}", mizunit);
         let unit = Unit::get_by_name(lua, &*mizunit.name()?)?;
+        debug!("instanced unit {:?}", unit);
         let pos = unit.as_object()?.get_position()?;
+        debug!("unit position {:?}", pos);
         let point = Vector2::new(pos.p.x, pos.p.z);
         let obj = self.persisted.objectives.into_iter().find_map(|(_, obj)| {
             if obj.owner == player.side
@@ -1166,6 +1195,7 @@ impl Db {
             }
             None
         });
+        debug!("spawner is near {:?}", obj);
         if let None = &obj {
             bail!("not near friendly logistics");
         }
@@ -1177,10 +1207,13 @@ impl Db {
             "no such crate"
         )
         .clone();
+        debug!("we are spawning {:?}", crate_cfg);
         let template = self.ephemeral.cfg.crate_template[&player.side].clone();
-        let spawnpos = 5. * pos.x.0 + pos.p.0; // spawn it five meters in front of the player
+        debug!("crate uses template {:?}", template);
+        let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
-        self.spawn_template_as_new(
+        debug!("we are spawning it at {:?}", spawnpos);
+        let res = self.spawn_template_as_new(
             lua,
             idx,
             player.side,
@@ -1188,7 +1221,9 @@ impl Db {
             &spawnpos,
             &template,
             DeployKind::Crate(crate_cfg.clone()),
-        )?;
+        );
+        debug!("spawn result {:?}", res);
+        res?;
         Ok(())
     }
 }

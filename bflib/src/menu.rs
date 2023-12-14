@@ -90,11 +90,11 @@ pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
     let cargo = ctx.db.list_cargo(&slot).unwrap_or(&cargo);
     let uinfo = ctx.db.unit_from_slot(&miz, &ctx.idx, &slot)?;
     let capacity = ctx.db.cargo_capacity(&uinfo.unit)?;
-    let mut msg = CompactString::new("current cargo\n--------------\n");
+    let mut msg = CompactString::new("Current Cargo\n----------------------------\n");
     msg.push_str(&format_compact!("troops: {} of {}\n", cargo.num_troops(), capacity.troop_slots));
     msg.push_str(&format_compact!("crates: {} of {}\n", cargo.num_crates(), capacity.crate_slots));
     msg.push_str(&format_compact!("total : {} of {}\n", cargo.num_total(), capacity.total_slots));
-    msg.push_str("--------------\n");
+    msg.push_str("----------------------------\n");
     let mut total = 0;
     for cr in &cargo.crates {
         msg.push_str(&format_compact!("{} crate weighing {} kg\n", cr.name, cr.weight));
@@ -103,6 +103,9 @@ pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
     for tr in &cargo.troops {
         msg.push_str(&format_compact!("{} troop weiging {} kg\n", tr.name, tr.weight));
         total += tr.weight
+    }
+    if total > 0 {
+        msg.push_str("----------------------------\n");
     }
     msg.push_str(&format_compact!("total cargo weight: {} kg", total as u32));
     act.out_text_for_group(gid, msg.into(), 15, false)

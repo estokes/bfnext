@@ -25,7 +25,7 @@ use std::{
     collections::{btree_map, hash_map::Entry, BTreeMap},
     fs::{self, File},
     path::{Path, PathBuf},
-    str::FromStr, 
+    str::FromStr,
 };
 
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
@@ -1207,14 +1207,6 @@ impl Db {
         }
     }
 
-    pub fn get_slot_pos(&self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Position3> {
-        let miz = Miz::singleton(lua)?;
-        let uid = or_msg!(slot.as_unit_id(), "player is in jtac");
-        let uifo = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
-        let unit = Unit::get_by_name(lua, &*uifo.unit.name()?)?;
-        unit.as_object()?.get_position()
-    }
-
     pub fn spawn_crate(
         &mut self,
         lua: MizLua,
@@ -1223,18 +1215,11 @@ impl Db {
         name: &str,
     ) -> Result<()> {
         debug!("db spawning crate");
-        let ucid = or_msg!(
-            self.ephemeral.players_by_slot.get(&slot),
-            "no player in slot"
-        );
-        let player = or_msg!(
-            self.persisted.players.get(&ucid),
-            "no such registered player"
-        );
-        let pos = self.get_slot_pos(lua, idx, slot)?;
+        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let pos = self.slot_instance_pos(lua, idx, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let obj = self.persisted.objectives.into_iter().find_map(|(_, obj)| {
-            if obj.owner == player.side
+            if obj.owner == side
                 && obj.logi() > 0
                 && na::distance(&obj.pos.into(), &point.into()) <= obj.radius
             {
@@ -1248,22 +1233,16 @@ impl Db {
         let crate_cfg = or_msg!(
             self.ephemeral
                 .deployable_idx
-                .get(&player.side)
+                .get(&side)
                 .and_then(|idx| idx.crates_by_name.get(name)),
             "no such crate"
         )
         .clone();
-        let template = self.ephemeral.cfg.crate_template[&player.side].clone();
+        let template = self.ephemeral.cfg.crate_template[&side].clone();
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
-        self.spawn_template_as_new(
-            lua,
-            idx,
-            player.side,
-            &spawnpos,
-            &template,
-            DeployKind::Crate(crate_cfg.clone()),
-        )?;
+        let dk = DeployKind::Crate(crate_cfg.clone());
+        self.spawn_template_as_new(lua, idx, side, &spawnpos, &template, dk)?;
         Ok(())
     }
 
@@ -1273,7 +1252,7 @@ impl Db {
         idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<SmallVec<[NearbyCrate<'a>; 2]>> {
-        let pos = self.get_slot_pos(lua, idx, slot)?;
+        let pos = self.slot_instance_pos(lua, idx, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
         let mut res: SmallVec<[NearbyCrate; 2]> = smallvec![];
@@ -1308,15 +1287,36 @@ impl Db {
         self.ephemeral.cargo.get(slot)
     }
 
-    pub fn unit_from_slot<'a>(&self, miz: &'a Miz, idx: &MizIndex, slot: &SlotId) -> Result<UnitInfo<'a>> {
+    pub fn slot_miz_unit<'lua>(
+        &self,
+        lua: MizLua<'lua>,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<UnitInfo<'lua>> {
+        let miz = Miz::singleton(lua)?;
         let uid = slot
             .as_unit_id()
             .ok_or_else(|| anyhow!("player is in jtac"))?;
-        miz
-            .get_unit(idx, &uid)?
+        miz.get_unit(idx, &uid)?
             .ok_or_else(|| anyhow!("unknown slot"))
     }
 
+    pub fn slot_instance_unit<'lua>(
+        &self,
+        lua: MizLua<'lua>,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<Unit<'lua>> {
+        let miz = Miz::singleton(lua)?;
+        let uid = or_msg!(slot.as_unit_id(), "player is in jtac");
+        let uifo = or_msg!(miz.get_unit(idx, &uid)?, "unit not in mission");
+        Unit::get_by_name(lua, &*uifo.unit.name()?)
+    }
+
+    pub fn slot_instance_pos(&self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Position3> {
+        let unit = self.slot_instance_unit(lua, idx, slot)?;
+        unit.as_object()?.get_position()
+    }
     pub fn cargo_capacity(&self, unit: &dcso3::env::miz::Unit) -> Result<CargoConfig> {
         let vehicle = Vehicle(unit.typ()?);
         let cargo_capacity = self
@@ -1327,6 +1327,35 @@ impl Db {
             .ok_or_else(|| anyhow!("{:?} can't carry cargo", vehicle))
             .map(|c| *c)?;
         Ok(cargo_capacity)
+    }
+
+    pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
+        let cargo = self.ephemeral.cargo.get(slot);
+        if cargo.map(|c| c.crates.is_empty()).unwrap_or(true) {
+            bail!("no crates onboard")
+        }
+        let unit = self.slot_instance_unit(lua, idx, slot)?;
+        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let pos = unit.as_object()?.get_position()?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        let too_close = self.persisted.objectives.into_iter().any(|(_, obj)| {
+            obj.owner == side && {
+                let dist = na::distance(&obj.pos.into(), &point.into());
+                let excl_dist = self.ephemeral.cfg.logistics_exclusion as f64;
+                dist <= excl_dist
+            }
+        });
+        if too_close {
+            bail!("too close to friendly logistics");
+        }
+        let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
+        let crate_cfg = cargo.crates.pop().unwrap();
+        let template = self.ephemeral.cfg.crate_template[&side].clone();
+        let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
+        let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
+        let dk = DeployKind::Crate(crate_cfg);
+        self.spawn_template_as_new(lua, idx, side, &spawnpos, &template, dk)?;
+        Ok(())
     }
 
     pub fn load_nearby_crate(

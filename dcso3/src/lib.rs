@@ -22,6 +22,7 @@ pub mod env;
 pub mod event;
 pub mod group;
 pub mod hooks;
+pub mod land;
 pub mod lfs;
 pub mod mission_commands;
 pub mod net;

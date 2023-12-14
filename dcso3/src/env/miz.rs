@@ -362,7 +362,7 @@ impl<'lua> Miz<'lua> {
         Ok(coa.raw_get(side.to_str())?)
     }
 
-    pub fn triggers(&self) -> Result<Sequence<TriggerZone>> {
+    pub fn triggers(&self) -> Result<Sequence<TriggerZone<'lua>>> {
         let triggers: mlua::Table = self.t.raw_get("triggers")?;
         Ok(triggers.raw_get("zones")?)
     }
@@ -371,7 +371,7 @@ impl<'lua> Miz<'lua> {
         Ok(self.t.raw_get("weather")?)
     }
 
-    pub fn get_group(&self, idx: &MizIndex, id: &GroupId) -> Result<Option<GroupInfo>> {
+    pub fn get_group(&self, idx: &MizIndex, id: &GroupId) -> Result<Option<GroupInfo<'lua>>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| idx.groups.get(id))
@@ -392,7 +392,7 @@ impl<'lua> Miz<'lua> {
         kind: GroupKind,
         side: Side,
         name: &str,
-    ) -> Result<Option<GroupInfo>> {
+    ) -> Result<Option<GroupInfo<'lua>>> {
         idx.by_side
             .get(&side)
             .and_then(|cidx| match kind {
@@ -407,7 +407,7 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_unit(&self, idx: &MizIndex, id: &UnitId) -> Result<Option<UnitInfo>> {
+    pub fn get_unit(&self, idx: &MizIndex, id: &UnitId) -> Result<Option<UnitInfo<'lua>>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| idx.units.get(id))
@@ -421,7 +421,7 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_unit_by_name(&self, idx: &MizIndex, name: &str) -> Result<Option<UnitInfo>> {
+    pub fn get_unit_by_name(&self, idx: &MizIndex, name: &str) -> Result<Option<UnitInfo<'lua>>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| idx.units_by_name.get(name).and_then(|id| idx.units.get(id)))
@@ -435,7 +435,7 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_group_by_unit(&self, idx: &MizIndex, id: &UnitId) -> Result<Option<GroupInfo>> {
+    pub fn get_group_by_unit(&self, idx: &MizIndex, id: &UnitId) -> Result<Option<GroupInfo<'lua>>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| idx.groups_by_unit.get(id))
@@ -443,7 +443,7 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_group_by_unit_name(&self, idx: &MizIndex, name: &str) -> Result<Option<GroupInfo>> {
+    pub fn get_group_by_unit_name(&self, idx: &MizIndex, name: &str) -> Result<Option<GroupInfo<'lua>>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| {
@@ -455,7 +455,7 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> Result<Option<TriggerZone>> {
+    pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> Result<Option<TriggerZone<'lua>>> {
         idx.triggers
             .get(name)
             .map(|path| self.raw_get_path(path))

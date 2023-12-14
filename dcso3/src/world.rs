@@ -145,7 +145,7 @@ impl<'lua> World<'lua> {
     ) -> Result<()>
     where
         T: IntoLua<'lua> + FromLua<'lua>,
-        F: Fn(MizLua, Object, Option<T>) -> Result<bool> + 'static,
+        F: Fn(MizLua, Object<'lua>, Option<T>) -> Result<bool> + 'static,
     {
         let f = self.lua.create_function(move |lua, (o, arg)| {
             wrap_bool("searchObjects", f(MizLua(lua), o, arg))

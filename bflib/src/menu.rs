@@ -83,12 +83,11 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 
 pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
     let act = Trigger::singleton(lua)?.action()?;
-    let miz = Miz::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
     let slot = slot_for_group(lua, ctx, &gid)?;
     let cargo = Cargo::default();
     let cargo = ctx.db.list_cargo(&slot).unwrap_or(&cargo);
-    let uinfo = ctx.db.unit_from_slot(&miz, &ctx.idx, &slot)?;
+    let uinfo = ctx.db.slot_miz_unit(lua, &ctx.idx, &slot)?;
     let capacity = ctx.db.cargo_capacity(&uinfo.unit)?;
     let mut msg = CompactString::new("Current Cargo\n----------------------------\n");
     msg.push_str(&format_compact!("troops: {} of {}\n", cargo.num_troops(), capacity.troop_slots));

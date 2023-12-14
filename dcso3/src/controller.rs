@@ -421,7 +421,7 @@ impl<'lua> Controller<'lua> {
     pub fn get_detected_targets(
         &self,
         methods: BitFlags<Detection>,
-    ) -> Result<Sequence<DetectedTarget>> {
+    ) -> Result<Sequence<'lua, DetectedTarget<'lua>>> {
         let mut args = Variadic::new();
         for method in methods {
             args.push(method.into_lua(self.lua)?);

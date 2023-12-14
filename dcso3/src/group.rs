@@ -84,15 +84,15 @@ impl<'lua> Group<'lua> {
         Ok(self.t.call_method("getInitialSize", ())?)
     }
 
-    pub fn get_unit(&self, index: usize) -> Result<Unit> {
+    pub fn get_unit(&self, index: usize) -> Result<Unit<'lua>> {
         Ok(self.t.call_method("getUnit", index)?)
     }
 
-    pub fn get_units(&self) -> Result<Sequence<Unit>> {
+    pub fn get_units(&self) -> Result<Sequence<'lua, Unit<'lua>>> {
         Ok(self.t.call_method("getUnits", ())?)
     }
 
-    pub fn get_controller(&self) -> Result<Controller> {
+    pub fn get_controller(&self) -> Result<Controller<'lua>> {
         Ok(self.t.call_method("getController", ())?)
     }
 

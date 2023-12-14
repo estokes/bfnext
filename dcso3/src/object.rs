@@ -50,11 +50,11 @@ impl<'lua> Object<'lua> {
         Ok(self.t.call_method("inAir", ())?)
     }
 
-    pub fn as_unit(&self) -> Result<Unit> {
+    pub fn as_unit(&self) -> Result<Unit<'lua>> {
         Ok(Unit::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 
-    pub fn as_weapon(&self) -> Result<Weapon> {
+    pub fn as_weapon(&self) -> Result<Weapon<'lua>> {
         Ok(Weapon::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 }

@@ -71,23 +71,23 @@ impl<'lua> Coalition<'lua> {
         Ok(res?)
     }
 
-    pub fn get_groups(&self, side: Side) -> Result<Sequence<Group>> {
+    pub fn get_groups(&self, side: Side) -> Result<Sequence<'lua, Group<'lua>>> {
         Ok(self.t.call_function("getGroups", side)?)
     }
 
-    pub fn get_static_objects(&self, side: Side) -> Result<Sequence<StaticObject>> {
+    pub fn get_static_objects(&self, side: Side) -> Result<Sequence<'lua, StaticObject<'lua>>> {
         Ok(self.t.call_function("getStaticObjects", side)?)
     }
 
-    pub fn get_airbases(&self, side: Side) -> Result<Sequence<Airbase>> {
+    pub fn get_airbases(&self, side: Side) -> Result<Sequence<'lua, Airbase<'lua>>> {
         Ok(self.t.call_function("getAirbases", side)?)
     }
 
-    pub fn get_players(&self, side: Side) -> Result<Sequence<Unit>> {
+    pub fn get_players(&self, side: Side) -> Result<Sequence<'lua, Unit<'lua>>> {
         Ok(self.t.call_function("getPlayers", side)?)
     }
 
-    pub fn get_service_providers(&self, side: Side, service: Service) -> Result<Sequence<Unit>> {
+    pub fn get_service_providers(&self, side: Side, service: Service) -> Result<Sequence<'lua, Unit<'lua>>> {
         Ok(self
             .t
             .call_function("getServiceProviders", (side, service))?)

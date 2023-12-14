@@ -13,7 +13,7 @@ use dcso3::{
     net::{SlotId, SlotIdKind, Ucid},
     trigger::Trigger,
     unit::Unit,
-    DeepClone, LuaEnv, MizLua, Position3, String, Vector2,
+    DeepClone, LuaEnv, MizLua, Position3, String, Vector2, land::Land, LuaVec2,
 };
 use fxhash::FxHashMap;
 use log::debug;
@@ -1338,6 +1338,9 @@ impl Db {
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.as_object()?.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
+        let ground_alt = Land::singleton(lua)?.get_height(LuaVec2(point))?;
+        let agl = pos.p.y - ground_alt;
+        let speed = dbg!(unit.as_object()?.get_velocity()?.0.magnitude());
         let too_close = self.persisted.objectives.into_iter().any(|(_, obj)| {
             obj.owner == side && {
                 let dist = na::distance(&obj.pos.into(), &point.into());
@@ -1350,6 +1353,12 @@ impl Db {
         }
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let crate_cfg = cargo.crates.pop().unwrap();
+        if speed > crate_cfg.max_drop_speed as f64 {
+            bail!("you are going too fast to unload your cargo")
+        }
+        if agl > crate_cfg.max_drop_height_agl as f64 {
+            bail!("you are too high to unload your cargo")
+        }
         let template = self.ephemeral.cfg.crate_template[&side].clone();
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
@@ -1365,8 +1374,7 @@ impl Db {
         slot: &SlotId,
     ) -> Result<Crate> {
         let (cargo_capacity, side, unit_name) = {
-            let miz = Miz::singleton(lua)?;
-            let uifo = self.unit_from_slot(&miz, idx, slot)?;
+            let uifo = self.slot_miz_unit(lua, idx, slot)?;
             let side = uifo.side;
             let unit_name = uifo.unit.name()?;
             let cargo_capacity = self.cargo_capacity(&uifo.unit)?;

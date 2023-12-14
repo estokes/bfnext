@@ -20,7 +20,7 @@ impl<'lua> Airbase<'lua> {
         Ok(self.t.call_method("getCallsign", ())?)
     }
 
-    pub fn get_unit(&self, i: i64) -> Result<Object> {
+    pub fn get_unit(&self, i: i64) -> Result<Object<'lua>> {
         Ok(self.t.call_method("getUnit", i)?)
     }
 
@@ -32,7 +32,7 @@ impl<'lua> Airbase<'lua> {
         Ok(self.t.call_method("getParking", available)?)
     }
 
-    pub fn get_runways(&self) -> Result<Sequence<Runway>> {
+    pub fn get_runways(&self) -> Result<Sequence<Runway<'lua>>> {
         Ok(self.t.call_method("getRunways", ())?)
     }
 
@@ -60,7 +60,7 @@ impl<'lua> Airbase<'lua> {
         Ok(self.t.call_method("setCoalition", coa)?)
     }
 
-    pub fn get_warehouse(&self) -> Result<Warehouse> {
+    pub fn get_warehouse(&self) -> Result<Warehouse<'lua>> {
         Ok(self.t.call_method("getWarehouse", ())?)
     }
 }

@@ -11,6 +11,7 @@ use dcso3::{
     err,
     group::GroupCategory,
     net::{SlotId, SlotIdKind, Ucid},
+    trigger::Trigger,
     unit::Unit,
     DeepClone, LuaEnv, MizLua, Position3, String, Vector2,
 };
@@ -1310,13 +1311,13 @@ impl Db {
         slot: &SlotId,
     ) -> Result<Crate> {
         let miz = Miz::singleton(lua)?;
-        let uid = dbg!(slot
+        let uid = slot
             .as_unit_id()
-            .ok_or_else(|| anyhow!("player is in jtac")))?;
-        let uifo = dbg!(miz
+            .ok_or_else(|| anyhow!("player is in jtac"))?;
+        let uifo = miz
             .get_unit(idx, &uid)?
-            .ok_or_else(|| anyhow!("unknown slot")))?;
-        let vehicle = Vehicle(dbg!(uifo.unit.typ())?);
+            .ok_or_else(|| anyhow!("unknown slot"))?;
+        let vehicle = Vehicle(uifo.unit.typ()?);
         let cargo_capacity = self
             .ephemeral
             .cfg
@@ -1330,7 +1331,7 @@ impl Db {
             bail!("you already have a full load onboard")
         }
         let (gid, crate_def) = {
-            let mut nearby = dbg!(self.list_nearby_crates(lua, idx, slot))?;
+            let mut nearby = self.list_nearby_crates(lua, idx, slot)?;
             nearby.retain(|nc| nc.group.side == uifo.side);
             if nearby.is_empty() {
                 bail!(
@@ -1345,7 +1346,10 @@ impl Db {
         };
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         cargo.crates.push(crate_def.clone());
-        dbg!(self.delete_group(&SpawnCtx::new(lua)?, &gid))?;
+        self.delete_group(&SpawnCtx::new(lua)?, &gid)?;
+        Trigger::singleton(lua)?
+            .action()?
+            .set_unit_internal_cargo(uifo.unit.name()?, crate_def.weight as i64)?;
         Ok(crate_def)
     }
 }

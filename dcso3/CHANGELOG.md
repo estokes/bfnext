@@ -3,6 +3,8 @@
 - wherever possible transition error handing to anyhow
 - some callback type changes
 - a lot of bugs fixed
+- bind the land module
+- bind world.searchVolume and world.removeJunk
 
 ## 0.0.6
 

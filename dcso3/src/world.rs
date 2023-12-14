@@ -154,4 +154,8 @@ impl<'lua> World<'lua> {
             .t
             .call_function("searchObjects", (category, volume, f, arg))?)
     }
+
+    pub fn remove_junk(&self, volume: SearchVolume) -> Result<i64> {
+        Ok(self.t.call_function("removeJunk", volume)?)
+    }
 }

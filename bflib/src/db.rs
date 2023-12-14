@@ -103,7 +103,7 @@ pub struct SpawnedGroup {
     pub name: String,
     pub template_name: String,
     pub side: Side,
-    pub kind: GroupKind,
+    pub kind: Option<GroupCategory>,
     pub origin: DeployKind,
     pub units: Set<UnitId>,
 }
@@ -118,6 +118,11 @@ pub struct SpawnCtx<'lua> {
     coalition: Coalition<'lua>,
     miz: Miz<'lua>,
     lua: MizLua<'lua>,
+}
+
+pub enum Despawn<'a> {
+    Group(&'a str),
+    Static(&'a str),
 }
 
 impl<'lua> SpawnCtx<'lua> {
@@ -152,7 +157,7 @@ impl<'lua> SpawnCtx<'lua> {
     }
 
     pub fn spawn(&self, template: GroupInfo) -> Result<()> {
-        match dbg!(GroupCategory::from_kind(dbg!(template.category))) {
+        match GroupCategory::from_kind(template.category) {
             None => {
                 // static objects are not fed to addStaticObject as groups
                 let unit = template.group.units()?.first()?;
@@ -166,9 +171,17 @@ impl<'lua> SpawnCtx<'lua> {
         Ok(())
     }
 
-    pub fn despawn(&self, name: &str) -> Result<()> {
-        let group = dcso3::group::Group::get_by_name(self.lua, name)?;
-        Ok(group.destroy()?)
+    pub fn despawn(&self, name: Despawn) -> Result<()> {
+        match name {
+            Despawn::Group(name) => {
+                let group = dcso3::group::Group::get_by_name(self.lua, name)?;
+                Ok(group.destroy()?)
+            }
+            Despawn::Static(name) => {
+                let obj = dcso3::static_object::StaticObject::get_by_name(self.lua, name)?;
+                Ok(obj.as_object()?.destroy()?)
+            }
+        }
     }
 }
 
@@ -531,7 +544,6 @@ impl Db {
             spctx,
             idx,
             side,
-            GroupKind::Any,
             &SpawnLoc::AtPos(pos),
             name.template(),
             DeployKind::Objective,
@@ -810,8 +822,12 @@ impl Db {
         spctx: &SpawnCtx,
         group: &SpawnedGroup,
     ) -> Result<()> {
-        let template =
-            spctx.get_template(idx, group.kind, group.side, group.template_name.as_str())?;
+        let template = spctx.get_template(
+            idx,
+            GroupKind::Any,
+            group.side,
+            group.template_name.as_str(),
+        )?;
         template.group.set("lateActivation", false)?;
         template.group.set_name(group.name.clone())?;
         let by_tname: FxHashMap<&str, &SpawnedUnit> = group
@@ -874,12 +890,27 @@ impl Db {
                 self.persisted.troops.remove_cow(gid);
             }
         }
+        let mut units: SmallVec<[String; 16]> = smallvec![];
         for uid in &group.units {
             if let Some(unit) = self.persisted.units.remove_cow(uid) {
                 self.persisted.units_by_name.remove_cow(&unit.name);
+                units.push(unit.name);
             }
         }
-        spctx.despawn(&*group.name)
+        self.ephemeral.dirty = true;
+        match group.kind {
+            None => {
+                // it's a static, we have to get it's units
+                for unit in &units {
+                    spctx.despawn(Despawn::Static(&*unit))?
+                }
+            }
+            Some(_) => {
+                // it's a normal group
+                spctx.despawn(Despawn::Group(&*group.name))?
+            }
+        }
+        Ok(())
     }
 
     /// add the units to the db, but don't actually spawn them
@@ -888,13 +919,13 @@ impl Db {
         spctx: &'lua SpawnCtx<'lua>,
         idx: &MizIndex,
         side: Side,
-        kind: GroupKind,
         location: &SpawnLoc,
         template_name: &str,
         origin: DeployKind,
     ) -> Result<(GroupId, GroupInfo<'lua>)> {
         let template_name = String::from(template_name);
-        let template = spctx.get_template(idx, kind, side, template_name.as_str())?;
+        let template = spctx.get_template(idx, GroupKind::Any, side, template_name.as_str())?;
+        let kind = GroupCategory::from_kind(template.category);
         let pos = match location {
             SpawnLoc::AtPos(pos) => *pos,
             SpawnLoc::AtTrigger { name, offset } => {
@@ -965,14 +996,13 @@ impl Db {
         lua: MizLua,
         idx: &MizIndex,
         side: Side,
-        kind: GroupKind,
         location: &SpawnLoc,
         template_name: &str,
         origin: DeployKind,
     ) -> Result<GroupId> {
         let spctx = SpawnCtx::new(lua)?;
         let (gid, template) =
-            self.init_template(&spctx, idx, side, kind, location, template_name, origin)?;
+            self.init_template(&spctx, idx, side, location, template_name, origin)?;
         self.ephemeral.dirty = true;
         spctx.spawn(template)?;
         Ok(gid)
@@ -1229,7 +1259,6 @@ impl Db {
             lua,
             idx,
             player.side,
-            GroupKind::Any,
             &spawnpos,
             &template,
             DeployKind::Crate(crate_cfg.clone()),
@@ -1281,13 +1310,13 @@ impl Db {
         slot: &SlotId,
     ) -> Result<Crate> {
         let miz = Miz::singleton(lua)?;
-        let uid = slot
+        let uid = dbg!(slot
             .as_unit_id()
-            .ok_or_else(|| anyhow!("player is in jtac"))?;
-        let uifo = miz
+            .ok_or_else(|| anyhow!("player is in jtac")))?;
+        let uifo = dbg!(miz
             .get_unit(idx, &uid)?
-            .ok_or_else(|| anyhow!("unknown slot"))?;
-        let vehicle = Vehicle(uifo.unit.typ()?);
+            .ok_or_else(|| anyhow!("unknown slot")))?;
+        let vehicle = Vehicle(dbg!(uifo.unit.typ())?);
         let cargo_capacity = self
             .ephemeral
             .cfg
@@ -1301,7 +1330,7 @@ impl Db {
             bail!("you already have a full load onboard")
         }
         let (gid, crate_def) = {
-            let mut nearby = self.list_nearby_crates(lua, idx, slot)?;
+            let mut nearby = dbg!(self.list_nearby_crates(lua, idx, slot))?;
             nearby.retain(|nc| nc.group.side == uifo.side);
             if nearby.is_empty() {
                 bail!(
@@ -1316,7 +1345,7 @@ impl Db {
         };
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         cargo.crates.push(crate_def.clone());
-        self.delete_group(&SpawnCtx::new(lua)?, &gid)?;
+        dbg!(self.delete_group(&SpawnCtx::new(lua)?, &gid))?;
         Ok(crate_def)
     }
 }

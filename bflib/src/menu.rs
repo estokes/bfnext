@@ -90,7 +90,7 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
         let mut msg = CompactString::new("");
         for nc in nearby {
             msg.push_str(&format_compact!(
-                "{} crate, bearing {}, {}M away",
+                "{} crate, bearing {}, {} meters away",
                 nc.crate_def.name,
                 nc.heading as u32,
                 nc.distance as u32

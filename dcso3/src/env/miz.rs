@@ -4,7 +4,6 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use fxhash::FxHashMap;
-use log::debug;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::hash_map::Entry, ops::Deref};
@@ -377,15 +376,12 @@ impl<'lua> Miz<'lua> {
             .iter()
             .find_map(|(_, idx)| idx.groups.get(id))
             .map(|ifo| {
-                debug!("looking up {:?}", ifo);
-                let res = self.raw_get_path(&ifo.path).map(|group| GroupInfo {
+                self.raw_get_path(&ifo.path).map(|group| GroupInfo {
                     side: ifo.side,
                     country: ifo.country,
                     category: ifo.category,
                     group,
-                });
-                debug!("res {:?}", res);
-                res
+                })
             })
             .transpose()
     }

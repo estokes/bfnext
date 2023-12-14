@@ -87,7 +87,7 @@ pub struct Troop {
     pub weight: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CargoConfig {
     /// How many troop slots does this vehicle have

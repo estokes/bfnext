@@ -1,5 +1,5 @@
 extern crate nalgebra as na;
-use crate::cfg::{Cfg, Crate, Deployable, Troop};
+use crate::cfg::{CargoConfig, Cfg, Crate, Deployable, Troop};
 use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
@@ -7,7 +7,7 @@ use dcso3::{
     atomic_id,
     coalition::{Coalition, Side},
     cvt_err,
-    env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
+    env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp, UnitInfo},
     err,
     group::GroupCategory,
     net::{SlotId, SlotIdKind, Ucid},
@@ -25,7 +25,7 @@ use std::{
     collections::{btree_map, hash_map::Entry, BTreeMap},
     fs::{self, File},
     path::{Path, PathBuf},
-    str::FromStr,
+    str::FromStr, 
 };
 
 type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
@@ -70,8 +70,8 @@ pub enum DeployKind {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cargo {
-    troops: SmallVec<[Troop; 1]>,
-    crates: SmallVec<[Crate; 1]>,
+    pub troops: SmallVec<[Troop; 1]>,
+    pub crates: SmallVec<[Crate; 1]>,
 }
 
 impl Cargo {
@@ -1304,26 +1304,45 @@ impl Db {
         Ok(res)
     }
 
+    pub fn list_cargo(&self, slot: &SlotId) -> Option<&Cargo> {
+        self.ephemeral.cargo.get(slot)
+    }
+
+    pub fn unit_from_slot<'a>(&self, miz: &'a Miz, idx: &MizIndex, slot: &SlotId) -> Result<UnitInfo<'a>> {
+        let uid = slot
+            .as_unit_id()
+            .ok_or_else(|| anyhow!("player is in jtac"))?;
+        miz
+            .get_unit(idx, &uid)?
+            .ok_or_else(|| anyhow!("unknown slot"))
+    }
+
+    pub fn cargo_capacity(&self, unit: &dcso3::env::miz::Unit) -> Result<CargoConfig> {
+        let vehicle = Vehicle(unit.typ()?);
+        let cargo_capacity = self
+            .ephemeral
+            .cfg
+            .cargo
+            .get(&vehicle)
+            .ok_or_else(|| anyhow!("{:?} can't carry cargo", vehicle))
+            .map(|c| *c)?;
+        Ok(cargo_capacity)
+    }
+
     pub fn load_nearby_crate(
         &mut self,
         lua: MizLua,
         idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<Crate> {
-        let miz = Miz::singleton(lua)?;
-        let uid = slot
-            .as_unit_id()
-            .ok_or_else(|| anyhow!("player is in jtac"))?;
-        let uifo = miz
-            .get_unit(idx, &uid)?
-            .ok_or_else(|| anyhow!("unknown slot"))?;
-        let vehicle = Vehicle(uifo.unit.typ()?);
-        let cargo_capacity = self
-            .ephemeral
-            .cfg
-            .cargo
-            .get(&vehicle)
-            .ok_or_else(|| anyhow!("{:?} can't carry cargo", vehicle))?;
+        let (cargo_capacity, side, unit_name) = {
+            let miz = Miz::singleton(lua)?;
+            let uifo = self.unit_from_slot(&miz, idx, slot)?;
+            let side = uifo.side;
+            let unit_name = uifo.unit.name()?;
+            let cargo_capacity = self.cargo_capacity(&uifo.unit)?;
+            (cargo_capacity, side, unit_name)
+        };
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
         if cargo_capacity.crate_slots as usize <= cargo.num_crates()
             || cargo_capacity.total_slots as usize <= cargo.num_total()
@@ -1332,7 +1351,7 @@ impl Db {
         }
         let (gid, crate_def) = {
             let mut nearby = self.list_nearby_crates(lua, idx, slot)?;
-            nearby.retain(|nc| nc.group.side == uifo.side);
+            nearby.retain(|nc| nc.group.side == side);
             if nearby.is_empty() {
                 bail!(
                     "no friendly crates within {} meters",
@@ -1349,7 +1368,7 @@ impl Db {
         self.delete_group(&SpawnCtx::new(lua)?, &gid)?;
         Trigger::singleton(lua)?
             .action()?
-            .set_unit_internal_cargo(uifo.unit.name()?, crate_def.weight as i64)?;
+            .set_unit_internal_cargo(unit_name, crate_def.weight as i64)?;
         Ok(crate_def)
     }
 }

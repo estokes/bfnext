@@ -1,4 +1,4 @@
-use crate::{cfg::Cfg, Context};
+use crate::{cfg::Cfg, Context, db::Cargo};
 use anyhow::{anyhow, bail, Result};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -81,6 +81,33 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     unimplemented!()
 }
 
+pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
+    let act = Trigger::singleton(lua)?.action()?;
+    let miz = Miz::singleton(lua)?;
+    let ctx = unsafe { Context::get_mut() };
+    let slot = slot_for_group(lua, ctx, &gid)?;
+    let cargo = Cargo::default();
+    let cargo = ctx.db.list_cargo(&slot).unwrap_or(&cargo);
+    let uinfo = ctx.db.unit_from_slot(&miz, &ctx.idx, &slot)?;
+    let capacity = ctx.db.cargo_capacity(&uinfo.unit)?;
+    let mut msg = CompactString::new("current cargo\n--------------\n");
+    msg.push_str(&format_compact!("troops: {} of {}\n", cargo.num_troops(), capacity.troop_slots));
+    msg.push_str(&format_compact!("crates: {} of {}\n", cargo.num_crates(), capacity.crate_slots));
+    msg.push_str(&format_compact!("total : {} of {}\n", cargo.num_total(), capacity.total_slots));
+    msg.push_str("--------------\n");
+    let mut total = 0;
+    for cr in &cargo.crates {
+        msg.push_str(&format_compact!("{} crate weighing {} kg\n", cr.name, cr.weight));
+        total += cr.weight
+    }
+    for tr in &cargo.troops {
+        msg.push_str(&format_compact!("{} troop weiging {} kg\n", tr.name, tr.weight));
+        total += tr.weight
+    }
+    msg.push_str(&format_compact!("total cargo weight: {} kg", total as u32));
+    act.out_text_for_group(gid, msg.into(), 15, false)
+}
+
 fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let slot = slot_for_group(lua, ctx, &gid)?;
@@ -149,11 +176,19 @@ fn add_cargo_menu_for_group(
     )?;
     mc.add_command_for_group(
         group,
+        "List Cargo".into(),
+        Some(root.clone()),
+        list_current_cargo,
+        group,
+    )?;
+    mc.add_command_for_group(
+        group,
         "Destroy Nearby Crate".into(),
         Some(root.clone()),
         destroy_nearby_crate,
         group,
     )?;
+    let root = mc.add_submenu_for_group(group, "Crates".into(), None)?;
     let mut created_menus: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
     for dep in cfg.deployables.get(side).unwrap_or(&vec![]) {
         let root = dep

@@ -368,8 +368,7 @@ impl Persisted {
 #[derive(Debug, Default)]
 struct DeployableIndex {
     deployables_by_name: FxHashMap<String, Deployable>,
-    // set of crate names -> deployable name
-    deployables_by_crates: BTreeMap<Set<String>, String>,
+    deployables_by_crates: FxHashMap<String, String>,
     crates_by_name: FxHashMap<String, Crate>,
 }
 
@@ -395,13 +394,12 @@ impl Ephemeral {
                     Entry::Occupied(_) => bail!("deployable with duplicate name {name}"),
                     Entry::Vacant(e) => e.insert(dep.clone()),
                 };
-                let crates: Set<String> = dep.crates.iter().map(|c| c.name.clone()).collect();
-                match idx.deployables_by_crates.entry(crates.clone()) {
-                    btree_map::Entry::Occupied(_) => {
-                        bail!("different deployables take the same crate(s) {:?}", crates)
-                    }
-                    btree_map::Entry::Vacant(e) => e.insert(name.clone()),
-                };
+                for cr in dep.crates.iter() {
+                    match idx.deployables_by_crates.entry(cr.name.clone()) {
+                        Entry::Occupied(_) => bail!("multiple deployables use crate {}", cr.name),
+                        Entry::Vacant(e) => e.insert(name.clone()),
+                    };
+                }
                 for c in dep.crates.iter() {
                     match idx.crates_by_name.entry(c.name.clone()) {
                         Entry::Occupied(_) => bail!("duplicate crate name {}", c.name),
@@ -1353,6 +1351,45 @@ impl Db {
                bail!("too close to friendly logistics");
            }
     */
+    pub fn unpakistan(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
+        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let nearby = self
+            .list_nearby_crates(lua, idx, slot)?
+            .into_iter()
+            .map(|nc| (nc.group.id, nc.crate_def.clone()))
+            .collect::<SmallVec<[(GroupId, Crate); 2]>>();
+        let didx = or_msg!(
+            self.ephemeral.deployable_idx.get(&side),
+            "your side can't deploy anything"
+        );
+        let mut candidates: FxHashMap<String, FxHashMap<String, Vec<GroupId>>> =
+            FxHashMap::default();
+        for (gid, cr) in &nearby {
+            if let Some(dep) = didx.deployables_by_crates.get(&cr.name) {
+                candidates
+                    .entry(dep.clone())
+                    .or_default()
+                    .entry(cr.name.clone())
+                    .or_default()
+                    .push(*gid);
+            }
+        }
+        candidates.retain(|dep, have| {
+            let spec = &didx.deployables_by_name[dep];
+            for req in &spec.crates {
+                match have.get_mut(&req.name) {
+                    Some(ids) if ids.len() >= req.required as usize => {
+                        while ids.len() > req.required as usize {
+                            ids.pop();
+                        }
+                    },
+                    Some(_) | None => return false,
+                }
+            }
+            true
+        });
+        unimplemented!()
+    }
 
     pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {
         let cargo = self.ephemeral.cargo.get(slot);

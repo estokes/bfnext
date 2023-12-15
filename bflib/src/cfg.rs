@@ -688,7 +688,7 @@ impl Default for Cfg {
     fn default() -> Self {
         Self {
             repair_time: 1800,
-            logistics_exclusion: 4000,
+            logistics_exclusion: 10000,
             crate_load_distance: 50,
             side_switches: Some(1),
             default_lives: FxHashMap::from_iter([

@@ -43,7 +43,7 @@ impl<'lua> Object<'lua> {
     }
 
     pub fn get_velocity(&self) -> Result<LuaVec3> {
-        Ok(self.t.call_method("getPosition", ())?)
+        Ok(self.t.call_method("getVelocity", ())?)
     }
 
     pub fn in_air(&self) -> Result<bool> {

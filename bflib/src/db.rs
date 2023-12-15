@@ -1341,6 +1341,18 @@ impl Db {
             .map(|c| *c)?;
         Ok(cargo_capacity)
     }
+    /*
+           let too_close = self.persisted.objectives.into_iter().any(|(_, obj)| {
+               obj.owner == side && {
+                   let dist = na::distance(&obj.pos.into(), &point.into());
+                   let excl_dist = self.ephemeral.cfg.logistics_exclusion as f64;
+                   dist <= excl_dist
+               }
+           });
+           if too_close {
+               bail!("too close to friendly logistics");
+           }
+    */
 
     pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {
         let cargo = self.ephemeral.cargo.get(slot);
@@ -1354,17 +1366,7 @@ impl Db {
         let point = Vector2::new(pos.p.x, pos.p.z);
         let ground_alt = Land::singleton(lua)?.get_height(LuaVec2(point))?;
         let agl = pos.p.y - ground_alt;
-        let speed = dbg!(unit.as_object()?.get_velocity()?.0.magnitude());
-        let too_close = self.persisted.objectives.into_iter().any(|(_, obj)| {
-            obj.owner == side && {
-                let dist = na::distance(&obj.pos.into(), &point.into());
-                let excl_dist = self.ephemeral.cfg.logistics_exclusion as f64;
-                dist <= excl_dist
-            }
-        });
-        if too_close {
-            bail!("too close to friendly logistics");
-        }
+        let speed = unit.as_object()?.get_velocity()?.0.magnitude();
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let crate_cfg = cargo.crates.pop().unwrap();
         let weight = cargo.weight();

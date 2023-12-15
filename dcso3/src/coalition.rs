@@ -9,7 +9,6 @@ use super::{
 };
 use crate::{simple_enum, wrapped_table, LuaEnv, MizLua, Sequence};
 use anyhow::{bail, Result};
-use log::debug;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{ops::Deref, str::FromStr};
@@ -66,9 +65,7 @@ impl<'lua> Coalition<'lua> {
         country: Country,
         data: env::miz::Unit<'lua>,
     ) -> Result<StaticObject<'lua>> {
-        let res = self.t.call_function("addStaticObject", (country, data));
-        debug!("addStaticObject returned {:?}", res);
-        Ok(res?)
+        Ok(self.t.call_function("addStaticObject", (country, data))?)
     }
 
     pub fn get_groups(&self, side: Side) -> Result<Sequence<'lua, Group<'lua>>> {

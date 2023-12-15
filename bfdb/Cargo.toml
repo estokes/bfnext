@@ -11,9 +11,9 @@ mlua = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_derive = { workspace = true }
-netidx = { workspace = true }
-netidx-core = { workspace = true }
-netidx-derive = { workspace = true }
+#netidx = { workspace = true }
+#netidx-core = { workspace = true }
+#netidx-derive = { workspace = true }
 compact_str = { workspace = true }
 bytes = { workspace = true }
 fxhash = { workspace = true }

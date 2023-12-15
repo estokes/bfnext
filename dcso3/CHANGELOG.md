@@ -1,3 +1,7 @@
+## 0.0.9
+
+- fix get_velocity was calling getPosition
+
 ## 0.0.8
 
 - fix lifetimes on some returned objects were not as long as they should have been

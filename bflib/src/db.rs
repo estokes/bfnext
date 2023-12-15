@@ -10,10 +10,11 @@ use dcso3::{
     env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp, UnitInfo},
     err,
     group::GroupCategory,
+    land::Land,
     net::{SlotId, SlotIdKind, Ucid},
     trigger::Trigger,
     unit::Unit,
-    DeepClone, LuaEnv, MizLua, Position3, String, Vector2, land::Land, LuaVec2,
+    DeepClone, LuaEnv, LuaVec2, MizLua, Position3, String, Vector2,
 };
 use fxhash::FxHashMap;
 use log::debug;
@@ -85,6 +86,13 @@ impl Cargo {
 
     pub fn num_total(&self) -> usize {
         self.num_crates() + self.num_troops()
+    }
+
+    pub fn weight(&self) -> i64 {
+        let cr = self.crates.iter().fold(0, |acc, cr| acc + cr.weight as i64);
+        self.troops
+            .iter()
+            .fold(cr, |acc, tr| acc + tr.weight as i64)
     }
 }
 
@@ -1313,7 +1321,12 @@ impl Db {
         Unit::get_by_name(lua, &*uifo.unit.name()?)
     }
 
-    pub fn slot_instance_pos(&self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Position3> {
+    pub fn slot_instance_pos(
+        &self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<Position3> {
         let unit = self.slot_instance_unit(lua, idx, slot)?;
         unit.as_object()?.get_position()
     }
@@ -1329,12 +1342,13 @@ impl Db {
         Ok(cargo_capacity)
     }
 
-    pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
+    pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {
         let cargo = self.ephemeral.cargo.get(slot);
         if cargo.map(|c| c.crates.is_empty()).unwrap_or(true) {
             bail!("no crates onboard")
         }
         let unit = self.slot_instance_unit(lua, idx, slot)?;
+        let unit_name = unit.as_object()?.get_name()?;
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.as_object()?.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
@@ -1353,6 +1367,7 @@ impl Db {
         }
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let crate_cfg = cargo.crates.pop().unwrap();
+        let weight = cargo.weight();
         if speed > crate_cfg.max_drop_speed as f64 {
             bail!("you are going too fast to unload your cargo")
         }
@@ -1362,9 +1377,12 @@ impl Db {
         let template = self.ephemeral.cfg.crate_template[&side].clone();
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
-        let dk = DeployKind::Crate(crate_cfg);
+        let dk = DeployKind::Crate(crate_cfg.clone());
         self.spawn_template_as_new(lua, idx, side, &spawnpos, &template, dk)?;
-        Ok(())
+        Trigger::singleton(lua)?
+            .action()?
+            .set_unit_internal_cargo(unit_name, weight)?;
+        Ok(crate_cfg)
     }
 
     pub fn load_nearby_crate(
@@ -1402,10 +1420,11 @@ impl Db {
         };
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         cargo.crates.push(crate_def.clone());
+        let weight = cargo.weight();
         self.delete_group(&SpawnCtx::new(lua)?, &gid)?;
         Trigger::singleton(lua)?
             .action()?
-            .set_unit_internal_cargo(unit_name, crate_def.weight as i64)?;
+            .set_unit_internal_cargo(unit_name, weight as i64)?;
         Ok(crate_def)
     }
 }

@@ -78,7 +78,19 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 }
 
 fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+    let act = Trigger::singleton(lua)?.action()?;
+    let ctx = unsafe { Context::get_mut() };
+    let slot = slot_for_group(lua, ctx, &gid)?;
+    match ctx.db.unload_crate(lua, &ctx.idx, &slot) {
+        Ok(cr) => {
+            let msg = format_compact!("{} crate unloaded", cr.name);
+            act.out_text_for_group(gid, msg.into(), 10, false)
+        }
+        Err(e) => {
+            let msg = format_compact!("{}", e);
+            act.out_text_for_group(gid, msg.into(), 10, false)
+        }
+    }
 }
 
 pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {

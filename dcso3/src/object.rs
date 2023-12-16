@@ -1,9 +1,79 @@
-use super::{as_tbl, cvt_err, unit::Unit, weapon::Weapon, Position3, String, LuaVec3};
-use crate::{simple_enum, wrapped_table};
-use anyhow::Result;
+use super::{as_tbl, cvt_err, unit::Unit, weapon::Weapon, LuaVec3, Position3, String};
+use crate::{check_implements, simple_enum, wrapped_table, LuaEnv, MizLua};
+use anyhow::{anyhow, bail, Result};
+use core::fmt;
 use mlua::{prelude::*, Value};
-use serde_derive::{Serialize, Deserialize};
-use std::ops::Deref;
+use serde_derive::{Deserialize, Serialize};
+use std::{hash::Hash, marker::PhantomData, ops::Deref};
+
+#[derive(Clone, Serialize)]
+pub struct DcsOid<T> {
+    pub(crate) id: u64,
+    pub(crate) class: String,
+    t: PhantomData<T>,
+}
+
+impl<T> DcsOid<T> {
+    pub fn erased(&self) -> DcsOid<ClassObject> {
+        DcsOid {
+            id: self.id,
+            class: self.class.clone(),
+            t: PhantomData,
+        }
+    }
+
+    pub fn check_implements(&self, lua: MizLua, class: &str) -> Result<()> {
+        let m = lua.inner().globals().raw_get(&**self.class)?;
+        if !check_implements(&m, class) {
+            bail!("{:?} is does not implement {class}", self)
+        }
+        Ok(())
+    }
+}
+
+impl<T> fmt::Debug for DcsOid<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{ id: {}, class: {} }}", self.id, self.class)
+    }
+}
+
+impl<T> Hash for DcsOid<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state)
+    }
+}
+
+impl<T> PartialEq for DcsOid<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id.eq(&other.id)
+    }
+}
+
+impl<T> Eq for DcsOid<T> {}
+
+impl<T> PartialOrd for DcsOid<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.partial_cmp(&other.id)
+    }
+}
+
+impl<T> Ord for DcsOid<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+pub struct ClassObject;
+
+pub trait DcsObject<'lua>: Sized {
+    type Class;
+
+    fn object_id(&self) -> Result<DcsOid<Self::Class>>;
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self>;
+    fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self>;
+    fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self>;
+    fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self>;
+}
 
 simple_enum!(ObjectCategory, u8, [
     Void => 0,
@@ -56,5 +126,54 @@ impl<'lua> Object<'lua> {
 
     pub fn as_weapon(&self) -> Result<Weapon<'lua>> {
         Ok(Weapon::from_lua(Value::Table(self.t.clone()), self.lua)?)
+    }
+}
+
+impl<'lua> DcsObject<'lua> for Object<'lua> {
+    type Class = ClassObject;
+
+    fn object_id(&self) -> Result<DcsOid<Self::Class>> {
+        let id = self.t.raw_get("id_")?;
+        let m = self
+            .t
+            .get_metatable()
+            .ok_or_else(|| anyhow!("object with no metatable"))?;
+        let class = m.raw_get("className_")?;
+        Ok(DcsOid {
+            id,
+            class,
+            t: PhantomData,
+        })
+    }
+
+    fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self> {
+        let t = lua.inner().create_table()?;
+        t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
+        t.raw_set("id_", id.id)?;
+        Ok(Object {
+            t,
+            lua: lua.inner(),
+        })
+    }
+
+    fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(lua, "Object")?;
+        let id = DcsOid {
+            id: id.id,
+            class: id.class.clone(),
+            t: PhantomData,
+        };
+        Self::get_instance(lua, &id)
+    }
+
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
+        self.t.raw_set("id_", id.id)?;
+        Ok(self)
+    }
+
+    fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(MizLua(self.lua), "Object")?;
+        self.t.raw_set("id_", id.id)?;
+        Ok(self)
     }
 }

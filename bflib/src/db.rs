@@ -66,7 +66,7 @@ pub enum DeployKind {
     Objective,
     Deployed(Deployable),
     Troop(Troop),
-    Crate(Crate),
+    Crate(ObjectiveId, Crate),
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -173,8 +173,9 @@ impl<'lua> SpawnCtx<'lua> {
                 self.coalition.add_static_object(template.country, unit)?;
             }
             Some(category) => {
-                self.coalition
-                    .add_group(template.country, category, template.group)?;
+                dbg!(self
+                    .coalition
+                    .add_group(template.country, category, template.group))?;
             }
         }
         Ok(())
@@ -887,7 +888,7 @@ impl Db {
             .map(|m| m.remove_cow(gid));
         match &group.origin {
             DeployKind::Objective => (),
-            DeployKind::Crate(_) => {
+            DeployKind::Crate(_, _) => {
                 self.persisted.crates.remove_cow(gid);
             }
             DeployKind::Deployed(_) => {
@@ -979,7 +980,7 @@ impl Db {
         }
         match &spawned.origin {
             DeployKind::Objective => (),
-            DeployKind::Crate(_) => {
+            DeployKind::Crate(_, _) => {
                 self.persisted.crates.insert_cow(gid);
             }
             DeployKind::Deployed(_) => {
@@ -1224,15 +1225,19 @@ impl Db {
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let pos = self.slot_instance_pos(lua, idx, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
-        let obj = self.persisted.objectives.into_iter().find_map(|(_, obj)| {
-            if obj.owner == side
-                && obj.logi() > 0
-                && na::distance(&obj.pos.into(), &point.into()) <= obj.radius
-            {
-                return Some(obj);
-            }
-            None
-        });
+        let (oid, obj) = self
+            .persisted
+            .objectives
+            .into_iter()
+            .find_map(|(oid, obj)| {
+                if obj.owner == side
+                    && obj.logi() > 0
+                    && na::distance(&obj.pos.into(), &point.into()) <= obj.radius
+                {
+                    return Some((oid, obj));
+                }
+                None
+            });
         if let None = &obj {
             bail!("not near friendly logistics");
         }
@@ -1247,7 +1252,7 @@ impl Db {
         let template = self.ephemeral.cfg.crate_template[&side].clone();
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
-        let dk = DeployKind::Crate(crate_cfg.clone());
+        let dk = DeployKind::Crate(oid, crate_cfg.clone());
         self.spawn_template_as_new(lua, idx, side, &spawnpos, &template, dk)?;
         Ok(())
     }
@@ -1265,7 +1270,7 @@ impl Db {
         for gid in &self.persisted.crates {
             let group = &self.persisted.groups[gid];
             let crate_def = match &group.origin {
-                DeployKind::Crate(crt) => crt,
+                DeployKind::Crate(_, crt) => crt,
                 DeployKind::Deployed(_) | DeployKind::Troop(_) | DeployKind::Objective => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
@@ -1339,18 +1344,7 @@ impl Db {
             .map(|c| *c)?;
         Ok(cargo_capacity)
     }
-    /*
-           let too_close = self.persisted.objectives.into_iter().any(|(_, obj)| {
-               obj.owner == side && {
-                   let dist = na::distance(&obj.pos.into(), &point.into());
-                   let excl_dist = self.ephemeral.cfg.logistics_exclusion as f64;
-                   dist <= excl_dist
-               }
-           });
-           if too_close {
-               bail!("too close to friendly logistics");
-           }
-    */
+
     pub fn unpakistan(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let nearby = self
@@ -1374,6 +1368,7 @@ impl Db {
                     .push(*gid);
             }
         }
+        let mut reasons = CompactString::new();
         candidates.retain(|dep, have| {
             let spec = &didx.deployables_by_name[dep];
             for req in &spec.crates {
@@ -1382,12 +1377,52 @@ impl Db {
                         while ids.len() > req.required as usize {
                             ids.pop();
                         }
-                    },
-                    Some(_) | None => return false,
+                    }
+                    Some(_) | None => {
+                        reasons
+                            .push_str(format_compact!("can't spawn {dep} missing {}\n", req.name));
+                        return false;
+                    }
                 }
             }
             true
         });
+        let (dep, have) = match candidates.drain().next() {
+            Some((dep, have)) => (dep, have),
+            None => bail!(reasons),
+        };
+        let too_close = self.persisted.objectives.into_iter().any(|(oid, obj)| {
+            let mut check = false;
+            for gid in have.iter().flat_map(|(_, gids)| gids.iter()) {
+                if let DeployKind::Crate(source, _) = &self.persisted.groups[gid].origin {
+                    check |= oid == source;
+                }
+            }
+            check |= obj.owner == side;
+            check && {
+                let dist = na::distance(&obj.pos.into(), &point.into());
+                let excl_dist = self.ephemeral.cfg.logistics_exclusion as f64;
+                dist <= excl_dist
+            }
+        });
+        if too_close {
+            bail!("too close to friendly logistics or crate origin");
+        }
+        let spctx = SpawnCtx::new(lua)?;
+        let mut pos_by_typ = FxHashMap::default();
+        for gid in have.iter().flat_map(|(_, gids)| gids.iter()) {
+            let group = &self.persisted.groups[gid];
+            if let DeployKind::Crate(_, spec) = &group.origin {
+                if let Some(typ) = spec.pos_unit.as_ref() {
+                    let uid = group.units.iter().next().unwrap();
+                    let unit = Unit::get_by_name(lua, &*self.persisted.units[&uid].name)?;
+                    let pos = unit.as_object()?.get_point();
+                    pos_by_typ.insert(typ.clone(), Vector2::new(pos.x, pos.z));
+                }
+            }
+            self.delete_group(&spctx, gid)?
+        }
+
         unimplemented!()
     }
 

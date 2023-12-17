@@ -267,7 +267,7 @@ impl<'lua> Action<'lua> {
 
     pub fn out_text_for_unit(
         &self,
-        unit: GroupId,
+        unit: UnitId,
         text: String,
         display_time: i64,
         clear_view: bool,

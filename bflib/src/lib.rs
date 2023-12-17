@@ -20,7 +20,7 @@ use dcso3::{
     timer::Timer,
     unit::Unit,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, Vector2,
+    HooksLua, LuaEnv, MizLua, String, Vector2, trigger::Trigger,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
@@ -351,6 +351,11 @@ fn get_unit_ground_pos(lua: MizLua, name: &str) -> Result<Vector2> {
     Ok(Vector2::from(na::Vector2::new(pos.0.x, pos.0.z)))
 }
 
+fn message_life_returned(lua: MizLua, slot: &SlotId) -> Result<()> {
+    let uid = slot.as_unit_id().ok_or_else(|| anyhow!("not a unit"))?;
+    Trigger::singleton(lua)?.action()?.out_text_for_unit(uid, "life returned".into(), 10, false)
+}
+
 fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     let db = &mut ctx.db;
     ctx.recently_landed.retain(|slot, (name, landed_ts)| {
@@ -359,7 +364,13 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
                 Ok(pos) => pos,
                 Err(_) => return false,
             };
-            !db.land(slot.clone(), pos)
+            let life_returned = !db.land(slot.clone(), pos);
+            if life_returned {
+                if let Err(e) = message_life_returned(lua, slot) {
+                    error!("failed to send life returned message to {:?} {}", slot, e);
+                }
+            }
+            life_returned
         } else {
             true
         }

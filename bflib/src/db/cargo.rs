@@ -336,20 +336,29 @@ impl Db {
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let (oid, crate_cfg) = cargo.crates.pop().unwrap();
         let weight = cargo.weight();
+        debug!("drop speed {speed}, drop height {agl}");
         if speed > crate_cfg.max_drop_speed as f64 {
+            cargo.crates.push((oid, crate_cfg));
             bail!("you are going too fast to unload your cargo")
         }
         if agl > crate_cfg.max_drop_height_agl as f64 {
+            cargo.crates.push((oid, crate_cfg));
             bail!("you are too high to unload your cargo")
         }
-        let template = self.ephemeral.cfg.crate_template[&side].clone();
+        Trigger::singleton(lua)?
+            .action()?
+            .set_unit_internal_cargo(unit_name, weight)?;
+        let template = self
+            .ephemeral
+            .cfg
+            .crate_template
+            .get(&side)
+            .ok_or_else(|| anyhow!("missing crate template for {:?}", side))?
+            .clone();
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
         self.spawn_template_as_new(lua, idx, side, spawnpos, &template, dk)?;
-        Trigger::singleton(lua)?
-            .action()?
-            .set_unit_internal_cargo(unit_name, weight)?;
         Ok(crate_cfg)
     }
 

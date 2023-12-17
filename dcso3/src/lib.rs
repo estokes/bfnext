@@ -1090,3 +1090,12 @@ pub fn value_to_json(
         }
     }
 }
+
+pub fn centroid2d(points: impl IntoIterator<Item = Vector2>) -> Vector2 {
+    let (n, sum) = points
+        .into_iter()
+        .fold((0, Vector2::new(0., 0.)), |(n, c), p| {
+            (n + 1, Vector2::new(c.x + p.x, c.y + p.y))
+        });
+    sum / n
+}

@@ -1,10 +1,10 @@
 extern crate nalgebra as na;
-use crate::cfg::{CargoConfig, Cfg, Crate, Deployable, Troop};
+use crate::cfg::{CargoConfig, Cfg, Crate, Deployable, LimitEnforceTyp, Troop};
 use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
-    atomic_id,
+    atomic_id, centroid2d,
     coalition::{Coalition, Side},
     cvt_err,
     env::miz::{Group, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone, TriggerZoneTyp, UnitInfo},
@@ -23,7 +23,7 @@ use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
     borrow::Borrow,
-    collections::{btree_map, hash_map::Entry, BTreeMap},
+    collections::{hash_map::Entry, HashMap},
     fs::{self, File},
     path::{Path, PathBuf},
     str::FromStr,
@@ -57,6 +57,7 @@ pub enum SlotAuth {
 pub struct NearbyCrate<'a> {
     pub group: &'a SpawnedGroup,
     pub crate_def: &'a Crate,
+    pub pos: Vector2,
     pub heading: f64,
     pub distance: f64,
 }
@@ -72,7 +73,7 @@ pub enum DeployKind {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cargo {
     pub troops: SmallVec<[Troop; 1]>,
-    pub crates: SmallVec<[Crate; 1]>,
+    pub crates: SmallVec<[(ObjectiveId, Crate); 1]>,
 }
 
 impl Cargo {
@@ -120,6 +121,7 @@ pub struct SpawnedGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpawnLoc {
     AtPos(Vector2),
+    AtPosWithComponents(Vector2, FxHashMap<String, Vector2>),
     AtTrigger { name: String, offset: Vector2 },
 }
 
@@ -934,17 +936,38 @@ impl Db {
         let template_name = String::from(template_name);
         let template = spctx.get_template(idx, GroupKind::Any, side, template_name.as_str())?;
         let kind = GroupCategory::from_kind(template.category);
-        let pos = match location {
-            SpawnLoc::AtPos(pos) => *pos,
-            SpawnLoc::AtTrigger { name, offset } => {
-                spctx.get_trigger_zone(idx, name.as_str())?.pos()? + offset
-            }
+        let (pos, pos_by_typ) = match location {
+            SpawnLoc::AtPos(pos) => (*pos, None),
+            SpawnLoc::AtPosWithComponents(pos, tbl) => (pos, Some(tbl)),
+            SpawnLoc::AtTrigger { name, offset } => (
+                spctx.get_trigger_zone(idx, name.as_str())?.pos()? + offset,
+                None,
+            ),
         };
         let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}-{}", template_name, gid));
         template.group.set("lateActivation", false)?;
         template.group.raw_remove("groupId")?;
         let orig_group_pos = template.group.pos()?;
+        let orig_pos_by_typ: FxHashMap<String, Vector2> = match &pos_by_typ {
+            None => FxHashMap::default(),
+            Some(pos_by_typ) => {
+                let mut tbl = FxHashMap::default();
+                for unit in template.group.units()? {
+                    let unit = unit?;
+                    let pos = unit.pos()?;
+                    let typ = unit.typ()?;
+                    if pos_by_typ.contains_key(&*typ) {
+                        let (n, v) = tbl
+                            .entry(typ.clone())
+                            .or_insert_with(|| (0, Vector2::new(0., 0.)));
+                        v += pos;
+                        n += 1;
+                    }
+                }
+                tbl.into_iter().map(|(n, v)| v / n).collect()
+            }
+        };
         template.group.set_pos(pos)?;
         template.group.set_name(group_name.clone())?;
         let mut spawned = SpawnedGroup {
@@ -961,8 +984,16 @@ impl Db {
             let unit = unit?;
             let template_name = unit.name()?;
             let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
+            let unit_typ = unit.typ()?;
+            let orig_group_pos = match orig_pos_by_typ.get(&unit_typ) {
+                None => orig_group_pos,
+                Some(pos) => *pos,
+            };
             let unit_pos_offset = orig_group_pos - unit.pos()?;
-            let pos = pos + unit_pos_offset;
+            let pos = match pos_by_typ.get(&unit_typ) {
+                None => pos + unit_pos_offset,
+                Some(pos) => pos + unit_pos_offset,
+            };
             unit.raw_remove("unitId")?;
             unit.set_pos(pos)?;
             unit.set_name(unit_name.clone())?;
@@ -1284,6 +1315,7 @@ impl Db {
                     res.push(NearbyCrate {
                         group,
                         crate_def,
+                        pos: unit.pos,
                         heading,
                         distance,
                     })
@@ -1345,27 +1377,54 @@ impl Db {
         Ok(cargo_capacity)
     }
 
+    pub fn number_deployed(&self, name: &str) -> (usize, Option<GroupId>) {
+        let mut n = 0;
+        let mut oldest = None;
+        for gid in &self.persisted.deployed {
+            if let DeployKind::Deployed(d) = &self.persisted.groups[gid].origin {
+                if let Some(d_name) = d.path.last().as_ref() {
+                    if &*d_name == name {
+                        if oldest.is_none() {
+                            oldest = Some(gid);
+                        }
+                        n += 1;
+                    }
+                }
+            }
+        }
+        (n, oldest)
+    }
+
     pub fn unpakistan(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
+        #[derive(Clone, Copy)]
+        struct Cifo {
+            pos: Vector2,
+            group: GroupId,
+            crate_def: Crate,
+        }
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let nearby = self
             .list_nearby_crates(lua, idx, slot)?
             .into_iter()
-            .map(|nc| (nc.group.id, nc.crate_def.clone()))
-            .collect::<SmallVec<[(GroupId, Crate); 2]>>();
+            .map(|nc| Cifo {
+                pos: nc.pos,
+                group: nc.group.id,
+                crate_def: nc.crate_def.clone(),
+            })
+            .collect::<SmallVec<[Cifo; 2]>>();
         let didx = or_msg!(
             self.ephemeral.deployable_idx.get(&side),
             "your side can't deploy anything"
         );
-        let mut candidates: FxHashMap<String, FxHashMap<String, Vec<GroupId>>> =
-            FxHashMap::default();
-        for (gid, cr) in &nearby {
-            if let Some(dep) = didx.deployables_by_crates.get(&cr.name) {
+        let mut candidates: FxHashMap<String, FxHashMap<String, Vec<Cifo>>> = FxHashMap::default();
+        for cr in &nearby {
+            if let Some(dep) = didx.deployables_by_crates.get(&cr.crate_def.name) {
                 candidates
                     .entry(dep.clone())
                     .or_default()
-                    .entry(cr.name.clone())
+                    .entry(cr.crate_def.name.clone())
                     .or_default()
-                    .push(*gid);
+                    .push(cr);
             }
         }
         let mut reasons = CompactString::new();
@@ -1408,22 +1467,40 @@ impl Db {
         if too_close {
             bail!("too close to friendly logistics or crate origin");
         }
+        let centroid = centroid2d(have.iter().flat_map(|_, c| c.iter()).map(|c| c.pos));
         let spctx = SpawnCtx::new(lua)?;
+        let spec = &didx.deployables_by_name[&dep];
+        let (n, oldest) = self.number_deployed(&*dep);
+        if n >= spec.limit {
+            match spec.limit_enforce {
+                LimitEnforceTyp::DenyCrate => {
+                    bail!("the max number of {:?} are already deployed", dep)
+                }
+                LimitEnforceTyp::DeleteOldest => {
+                    if let Some(gid) = oldest {
+                        self.delete_group(&spctx, oldest)?
+                    }
+                }
+            }
+        }
         let mut pos_by_typ = FxHashMap::default();
         for gid in have.iter().flat_map(|(_, gids)| gids.iter()) {
             let group = &self.persisted.groups[gid];
             if let DeployKind::Crate(_, spec) = &group.origin {
                 if let Some(typ) = spec.pos_unit.as_ref() {
                     let uid = group.units.iter().next().unwrap();
-                    let unit = Unit::get_by_name(lua, &*self.persisted.units[&uid].name)?;
-                    let pos = unit.as_object()?.get_point();
-                    pos_by_typ.insert(typ.clone(), Vector2::new(pos.x, pos.z));
+                    pos_by_typ.insert(typ.clone(), self.persisted.units[&uid].pos);
                 }
             }
             self.delete_group(&spctx, gid)?
         }
-
-        unimplemented!()
+        let spawnloc = if pos_by_typ.is_empty() {
+            SpawnLoc::AtPos(centroid)
+        } else {
+            SpawnLoc::AtPosWithComponents(centroid, pos_by_typ)
+        };
+        let origin = DeployKind::Deployed(spec.clone());
+        self.spawn_template_as_new(lua, idx, side, &spawnloc, &*spec.template, origin)
     }
 
     pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {
@@ -1440,7 +1517,7 @@ impl Db {
         let agl = pos.p.y - ground_alt;
         let speed = unit.as_object()?.get_velocity()?.0.magnitude();
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
-        let crate_cfg = cargo.crates.pop().unwrap();
+        let (oid, crate_cfg) = cargo.crates.pop().unwrap();
         let weight = cargo.weight();
         if speed > crate_cfg.max_drop_speed as f64 {
             bail!("you are going too fast to unload your cargo")
@@ -1451,7 +1528,7 @@ impl Db {
         let template = self.ephemeral.cfg.crate_template[&side].clone();
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
-        let dk = DeployKind::Crate(crate_cfg.clone());
+        let dk = DeployKind::Crate(oid, crate_cfg.clone());
         self.spawn_template_as_new(lua, idx, side, &spawnpos, &template, dk)?;
         Trigger::singleton(lua)?
             .action()?

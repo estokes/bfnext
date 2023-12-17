@@ -1,4 +1,4 @@
-use crate::{cfg::Cfg, Context, db::Cargo};
+use crate::{cfg::Cfg, db::Cargo, Context};
 use anyhow::{anyhow, bail, Result};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -41,7 +41,7 @@ impl<'lua> FromLua<'lua> for SpawnCrateArg {
     }
 }
 
-fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<SlotId> {
+fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, SlotId)> {
     let miz = Miz::singleton(lua)?;
     let group = miz
         .get_group(&ctx.idx, gid)?
@@ -54,16 +54,33 @@ fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<SlotId> {
         )
     }
     let unit = units.first()?;
-    Ok(SlotId::from(unit.id()?))
+    Ok((group.side, SlotId::from(unit.id()?)))
 }
 
 fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+    let ctx = unsafe { Context::get_mut() };
+    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let act = Trigger::singleton(lua)?.action()?;
+    match ctx.db.unpakistan(lua, &ctx.idx, &slot) {
+        Ok((name, _)) => {
+            let player = ctx
+                .db
+                .player_in_slot(&slot)
+                .and_then(|ucid| ctx.db.get_player(ucid).map(|p| p.name().clone()))
+                .unwrap_or_default();
+            let msg = format_compact!("{} unpacked a {}", player, name);
+            act.out_text_for_coalition(side, msg.into(), 10, false)
+        }
+        Err(e) => {
+            let msg = format_compact!("{}", e);
+            act.out_text_for_group(gid, msg.into(), 10, false)
+        }
+    }
 }
 
 fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let slot = slot_for_group(lua, ctx, &gid)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     let act = Trigger::singleton(lua)?.action()?;
     match ctx.db.load_nearby_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
@@ -80,7 +97,7 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let act = Trigger::singleton(lua)?.action()?;
     let ctx = unsafe { Context::get_mut() };
-    let slot = slot_for_group(lua, ctx, &gid)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     match ctx.db.unload_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
             let msg = format_compact!("{} crate unloaded", cr.name);
@@ -96,23 +113,43 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
     let act = Trigger::singleton(lua)?.action()?;
     let ctx = unsafe { Context::get_mut() };
-    let slot = slot_for_group(lua, ctx, &gid)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     let cargo = Cargo::default();
     let cargo = ctx.db.list_cargo(&slot).unwrap_or(&cargo);
     let uinfo = ctx.db.slot_miz_unit(lua, &ctx.idx, &slot)?;
     let capacity = ctx.db.cargo_capacity(&uinfo.unit)?;
     let mut msg = CompactString::new("Current Cargo\n----------------------------\n");
-    msg.push_str(&format_compact!("troops: {} of {}\n", cargo.num_troops(), capacity.troop_slots));
-    msg.push_str(&format_compact!("crates: {} of {}\n", cargo.num_crates(), capacity.crate_slots));
-    msg.push_str(&format_compact!("total : {} of {}\n", cargo.num_total(), capacity.total_slots));
+    msg.push_str(&format_compact!(
+        "troops: {} of {}\n",
+        cargo.num_troops(),
+        capacity.troop_slots
+    ));
+    msg.push_str(&format_compact!(
+        "crates: {} of {}\n",
+        cargo.num_crates(),
+        capacity.crate_slots
+    ));
+    msg.push_str(&format_compact!(
+        "total : {} of {}\n",
+        cargo.num_total(),
+        capacity.total_slots
+    ));
     msg.push_str("----------------------------\n");
     let mut total = 0;
-    for cr in &cargo.crates {
-        msg.push_str(&format_compact!("{} crate weighing {} kg\n", cr.name, cr.weight));
+    for (_, cr) in &cargo.crates {
+        msg.push_str(&format_compact!(
+            "{} crate weighing {} kg\n",
+            cr.name,
+            cr.weight
+        ));
         total += cr.weight
     }
     for tr in &cargo.troops {
-        msg.push_str(&format_compact!("{} troop weiging {} kg\n", tr.name, tr.weight));
+        msg.push_str(&format_compact!(
+            "{} troop weiging {} kg\n",
+            tr.name,
+            tr.weight
+        ));
         total += tr.weight
     }
     if total > 0 {
@@ -124,7 +161,7 @@ pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let slot = slot_for_group(lua, ctx, &gid)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     let nearby = ctx.db.list_nearby_crates(lua, &ctx.idx, &slot)?;
     let act = Trigger::singleton(lua)?.action()?;
     if nearby.len() > 0 {
@@ -149,7 +186,7 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn spawn_crate(lua: MizLua, arg: SpawnCrateArg) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let slot = slot_for_group(lua, ctx, &arg.group)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &arg.group)?;
     ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.crate_name)
 }
 

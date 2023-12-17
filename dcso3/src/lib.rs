@@ -1097,5 +1097,5 @@ pub fn centroid2d(points: impl IntoIterator<Item = Vector2>) -> Vector2 {
         .fold((0, Vector2::new(0., 0.)), |(n, c), p| {
             (n + 1, Vector2::new(c.x + p.x, c.y + p.y))
         });
-    sum / n
+    sum / (n as f64)
 }

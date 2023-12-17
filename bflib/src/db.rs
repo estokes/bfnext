@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 use crate::cfg::{CargoConfig, Cfg, Crate, Deployable, LimitEnforceTyp, Troop};
 use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
-use compact_str::format_compact;
+use compact_str::{format_compact, CompactString};
 use dcso3::{
     atomic_id, centroid2d,
     coalition::{Coalition, Side},
@@ -23,7 +23,7 @@ use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
     borrow::Borrow,
-    collections::{hash_map::Entry, HashMap},
+    collections::hash_map::Entry,
     fs::{self, File},
     path::{Path, PathBuf},
     str::FromStr,
@@ -56,6 +56,7 @@ pub enum SlotAuth {
 #[derive(Debug, Clone, Copy)]
 pub struct NearbyCrate<'a> {
     pub group: &'a SpawnedGroup,
+    pub origin: ObjectiveId,
     pub crate_def: &'a Crate,
     pub pos: Vector2,
     pub heading: f64,
@@ -90,7 +91,10 @@ impl Cargo {
     }
 
     pub fn weight(&self) -> i64 {
-        let cr = self.crates.iter().fold(0, |acc, cr| acc + cr.weight as i64);
+        let cr = self
+            .crates
+            .iter()
+            .fold(0, |acc, (_, cr)| acc + cr.weight as i64);
         self.troops
             .iter()
             .fold(cr, |acc, tr| acc + tr.weight as i64)
@@ -175,9 +179,8 @@ impl<'lua> SpawnCtx<'lua> {
                 self.coalition.add_static_object(template.country, unit)?;
             }
             Some(category) => {
-                dbg!(self
-                    .coalition
-                    .add_group(template.country, category, template.group))?;
+                self.coalition
+                    .add_group(template.country, category, template.group)?;
             }
         }
         Ok(())
@@ -333,6 +336,12 @@ pub struct Player {
     lives: Map<LifeType, (DateTime<Utc>, u8)>,
     #[serde(skip)]
     current_slot: Option<SlotId>,
+}
+
+impl Player {
+    pub fn name(&self) -> &String {
+        &self.name
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -554,7 +563,7 @@ impl Db {
             spctx,
             idx,
             side,
-            &SpawnLoc::AtPos(pos),
+            SpawnLoc::AtPos(pos),
             name.template(),
             DeployKind::Objective,
         )?;
@@ -826,6 +835,10 @@ impl Db {
             .and_then(|uid| self.get_unit(uid))
     }
 
+    pub fn get_player(&self, ucid: &Ucid) -> Option<&Player> {
+        self.persisted.players.get(ucid)
+    }
+
     pub fn respawn_group<'lua>(
         &self,
         idx: &MizIndex,
@@ -929,7 +942,7 @@ impl Db {
         spctx: &'lua SpawnCtx<'lua>,
         idx: &MizIndex,
         side: Side,
-        location: &SpawnLoc,
+        location: SpawnLoc,
         template_name: &str,
         origin: DeployKind,
     ) -> Result<(GroupId, GroupInfo<'lua>)> {
@@ -937,11 +950,11 @@ impl Db {
         let template = spctx.get_template(idx, GroupKind::Any, side, template_name.as_str())?;
         let kind = GroupCategory::from_kind(template.category);
         let (pos, pos_by_typ) = match location {
-            SpawnLoc::AtPos(pos) => (*pos, None),
-            SpawnLoc::AtPosWithComponents(pos, tbl) => (pos, Some(tbl)),
+            SpawnLoc::AtPos(pos) => (pos, FxHashMap::default()),
+            SpawnLoc::AtPosWithComponents(pos, tbl) => (pos, tbl),
             SpawnLoc::AtTrigger { name, offset } => (
                 spctx.get_trigger_zone(idx, name.as_str())?.pos()? + offset,
-                None,
+                FxHashMap::default(),
             ),
         };
         let gid = GroupId::new();
@@ -949,24 +962,25 @@ impl Db {
         template.group.set("lateActivation", false)?;
         template.group.raw_remove("groupId")?;
         let orig_group_pos = template.group.pos()?;
-        let orig_pos_by_typ: FxHashMap<String, Vector2> = match &pos_by_typ {
-            None => FxHashMap::default(),
-            Some(pos_by_typ) => {
-                let mut tbl = FxHashMap::default();
-                for unit in template.group.units()? {
-                    let unit = unit?;
-                    let pos = unit.pos()?;
-                    let typ = unit.typ()?;
-                    if pos_by_typ.contains_key(&*typ) {
-                        let (n, v) = tbl
-                            .entry(typ.clone())
-                            .or_insert_with(|| (0, Vector2::new(0., 0.)));
-                        v += pos;
-                        n += 1;
-                    }
+        let orig_pos_by_typ: FxHashMap<String, Vector2> = if pos_by_typ.is_empty() {
+            FxHashMap::default()
+        } else {
+            let mut tbl = FxHashMap::default();
+            for unit in template.group.units()? {
+                let unit = unit?;
+                let pos = unit.pos()?;
+                let typ = unit.typ()?;
+                if pos_by_typ.contains_key(&**typ) {
+                    let (n, v) = tbl
+                        .entry(typ.clone())
+                        .or_insert_with(|| (0, Vector2::new(0., 0.)));
+                    *v += pos;
+                    *n += 1;
                 }
-                tbl.into_iter().map(|(n, v)| v / n).collect()
             }
+            tbl.into_iter()
+                .map(|(k, (n, v))| (k, v / (n as f64)))
+                .collect()
         };
         template.group.set_pos(pos)?;
         template.group.set_name(group_name.clone())?;
@@ -1035,7 +1049,7 @@ impl Db {
         lua: MizLua,
         idx: &MizIndex,
         side: Side,
-        location: &SpawnLoc,
+        location: SpawnLoc,
         template_name: &str,
         origin: DeployKind,
     ) -> Result<GroupId> {
@@ -1256,7 +1270,7 @@ impl Db {
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let pos = self.slot_instance_pos(lua, idx, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
-        let (oid, obj) = self
+        let obj = self
             .persisted
             .objectives
             .into_iter()
@@ -1269,9 +1283,10 @@ impl Db {
                 }
                 None
             });
-        if let None = &obj {
-            bail!("not near friendly logistics");
-        }
+        let oid = match obj {
+            Some((oid, _)) => *oid,
+            None => bail!("not near friendly logistics"),
+        };
         let crate_cfg = or_msg!(
             self.ephemeral
                 .deployable_idx
@@ -1284,7 +1299,7 @@ impl Db {
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
-        self.spawn_template_as_new(lua, idx, side, &spawnpos, &template, dk)?;
+        self.spawn_template_as_new(lua, idx, side, spawnpos, &template, dk)?;
         Ok(())
     }
 
@@ -1300,8 +1315,8 @@ impl Db {
         let mut res: SmallVec<[NearbyCrate; 2]> = smallvec![];
         for gid in &self.persisted.crates {
             let group = &self.persisted.groups[gid];
-            let crate_def = match &group.origin {
-                DeployKind::Crate(_, crt) => crt,
+            let (oid, crate_def) = match &group.origin {
+                DeployKind::Crate(oid, crt) => (oid, crt),
                 DeployKind::Deployed(_) | DeployKind::Troop(_) | DeployKind::Objective => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
@@ -1314,6 +1329,7 @@ impl Db {
                     let heading = v.y.atan2(v.x) * (180. / std::f64::consts::PI);
                     res.push(NearbyCrate {
                         group,
+                        origin: *oid,
                         crate_def,
                         pos: unit.pos,
                         heading,
@@ -1382,10 +1398,10 @@ impl Db {
         let mut oldest = None;
         for gid in &self.persisted.deployed {
             if let DeployKind::Deployed(d) = &self.persisted.groups[gid].origin {
-                if let Some(d_name) = d.path.last().as_ref() {
-                    if &*d_name == name {
+                if let Some(d_name) = d.path.last() {
+                    if d_name.as_str() == name {
                         if oldest.is_none() {
-                            oldest = Some(gid);
+                            oldest = Some(*gid);
                         }
                         n += 1;
                     }
@@ -1395,8 +1411,13 @@ impl Db {
         (n, oldest)
     }
 
-    pub fn unpakistan(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
-        #[derive(Clone, Copy)]
+    pub fn unpakistan(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<(String, GroupId)> {
+        #[derive(Clone)]
         struct Cifo {
             pos: Vector2,
             group: GroupId,
@@ -1417,7 +1438,7 @@ impl Db {
             "your side can't deploy anything"
         );
         let mut candidates: FxHashMap<String, FxHashMap<String, Vec<Cifo>>> = FxHashMap::default();
-        for cr in &nearby {
+        for cr in nearby {
             if let Some(dep) = didx.deployables_by_crates.get(&cr.crate_def.name) {
                 candidates
                     .entry(dep.clone())
@@ -1427,7 +1448,7 @@ impl Db {
                     .push(cr);
             }
         }
-        let mut reasons = CompactString::new();
+        let mut reasons = CompactString::new("");
         candidates.retain(|dep, have| {
             let spec = &didx.deployables_by_name[dep];
             for req in &spec.crates {
@@ -1439,7 +1460,7 @@ impl Db {
                     }
                     Some(_) | None => {
                         reasons
-                            .push_str(format_compact!("can't spawn {dep} missing {}\n", req.name));
+                            .push_str(&format_compact!("can't spawn {dep} missing {}\n", req.name));
                         return false;
                     }
                 }
@@ -1450,16 +1471,17 @@ impl Db {
             Some((dep, have)) => (dep, have),
             None => bail!(reasons),
         };
+        let centroid = centroid2d(have.iter().flat_map(|(_, c)| c.iter()).map(|c| c.pos));
         let too_close = self.persisted.objectives.into_iter().any(|(oid, obj)| {
             let mut check = false;
-            for gid in have.iter().flat_map(|(_, gids)| gids.iter()) {
-                if let DeployKind::Crate(source, _) = &self.persisted.groups[gid].origin {
+            for cr in have.iter().flat_map(|(_, c)| c.iter()) {
+                if let DeployKind::Crate(source, _) = &self.persisted.groups[&cr.group].origin {
                     check |= oid == source;
                 }
             }
             check |= obj.owner == side;
             check && {
-                let dist = na::distance(&obj.pos.into(), &point.into());
+                let dist = na::distance(&obj.pos.into(), &centroid.into());
                 let excl_dist = self.ephemeral.cfg.logistics_exclusion as f64;
                 dist <= excl_dist
             }
@@ -1467,32 +1489,31 @@ impl Db {
         if too_close {
             bail!("too close to friendly logistics or crate origin");
         }
-        let centroid = centroid2d(have.iter().flat_map(|_, c| c.iter()).map(|c| c.pos));
         let spctx = SpawnCtx::new(lua)?;
-        let spec = &didx.deployables_by_name[&dep];
+        let spec = didx.deployables_by_name[&dep].clone();
         let (n, oldest) = self.number_deployed(&*dep);
-        if n >= spec.limit {
+        if n >= spec.limit as usize {
             match spec.limit_enforce {
                 LimitEnforceTyp::DenyCrate => {
                     bail!("the max number of {:?} are already deployed", dep)
                 }
                 LimitEnforceTyp::DeleteOldest => {
                     if let Some(gid) = oldest {
-                        self.delete_group(&spctx, oldest)?
+                        self.delete_group(&spctx, &gid)?
                     }
                 }
             }
         }
         let mut pos_by_typ = FxHashMap::default();
-        for gid in have.iter().flat_map(|(_, gids)| gids.iter()) {
-            let group = &self.persisted.groups[gid];
+        for cr in have.iter().flat_map(|(_, cr)| cr.iter()) {
+            let group = &self.persisted.groups[&cr.group];
             if let DeployKind::Crate(_, spec) = &group.origin {
                 if let Some(typ) = spec.pos_unit.as_ref() {
-                    let uid = group.units.iter().next().unwrap();
+                    let uid = group.units.into_iter().next().unwrap();
                     pos_by_typ.insert(typ.clone(), self.persisted.units[&uid].pos);
                 }
             }
-            self.delete_group(&spctx, gid)?
+            self.delete_group(&spctx, &cr.group)?
         }
         let spawnloc = if pos_by_typ.is_empty() {
             SpawnLoc::AtPos(centroid)
@@ -1500,7 +1521,8 @@ impl Db {
             SpawnLoc::AtPosWithComponents(centroid, pos_by_typ)
         };
         let origin = DeployKind::Deployed(spec.clone());
-        self.spawn_template_as_new(lua, idx, side, &spawnloc, &*spec.template, origin)
+        let gid = self.spawn_template_as_new(lua, idx, side, spawnloc, &*spec.template, origin)?;
+        Ok((dep, gid))
     }
 
     pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {
@@ -1529,7 +1551,7 @@ impl Db {
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
-        self.spawn_template_as_new(lua, idx, side, &spawnpos, &template, dk)?;
+        self.spawn_template_as_new(lua, idx, side, spawnpos, &template, dk)?;
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, weight)?;
@@ -1555,7 +1577,7 @@ impl Db {
         {
             bail!("you already have a full load onboard")
         }
-        let (gid, crate_def) = {
+        let (gid, oid, crate_def) = {
             let mut nearby = self.list_nearby_crates(lua, idx, slot)?;
             nearby.retain(|nc| nc.group.side == side);
             if nearby.is_empty() {
@@ -1567,10 +1589,11 @@ impl Db {
             let the_crate = nearby.first().unwrap();
             let gid = the_crate.group.id;
             let crate_def = the_crate.crate_def.clone();
-            (gid, crate_def)
+            let oid = the_crate.origin;
+            (gid, oid, crate_def)
         };
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
-        cargo.crates.push(crate_def.clone());
+        cargo.crates.push((oid, crate_def.clone()));
         let weight = cargo.weight();
         self.delete_group(&SpawnCtx::new(lua)?, &gid)?;
         Trigger::singleton(lua)?

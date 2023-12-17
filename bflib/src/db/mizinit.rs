@@ -176,7 +176,7 @@ impl Db {
     pub fn init(lua: MizLua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> Result<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
-        t.ephemeral.set_cfg(cfg)?;
+        t.ephemeral.set_cfg(miz, idx, cfg)?;
         // first init all the objectives
         for zone in miz.triggers()? {
             let zone = zone?;

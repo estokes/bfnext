@@ -493,7 +493,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
         ctx.db = Db::init(lua, cfg, &ctx.idx, &Miz::singleton(lua)?)?;
     } else {
         debug!("saved state exists, loading it");
-        ctx.db = Db::load(&path)?;
+        ctx.db = Db::load(&Miz::singleton(lua)?, &ctx.idx, &path)?;
     }
     debug!("spawning units");
     ctx.respawn_groups(lua)?;

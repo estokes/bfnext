@@ -325,11 +325,14 @@ struct Ephemeral {
 }
 
 impl Ephemeral {
-    // CR estokes: Check for deployables depending on a missing template
-    fn set_cfg(&mut self, cfg: Cfg) -> Result<()> {
+    fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, cfg: Cfg) -> Result<()> {
+        for (side, template) in cfg.crate_template.iter() {
+            miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?;
+        }
         for (side, deployables) in cfg.deployables.iter() {
             let idx = self.deployable_idx.entry(*side).or_default();
             for dep in deployables.iter() {
+                miz.get_group_by_name(mizidx, GroupKind::Any, *side, &dep.template)?;
                 let name = match dep.path.last() {
                     None => bail!("deployable with empty path {:?}", dep),
                     Some(name) => name,
@@ -368,7 +371,7 @@ impl Db {
         &self.ephemeral.cfg
     }
 
-    pub fn load(path: &Path) -> Result<Self> {
+    pub fn load(miz: &Miz, idx: &MizIndex, path: &Path) -> Result<Self> {
         let file = File::open(&path)
             .map_err(|e| anyhow!("failed to open save file {:?}, {:?}", path, e))?;
         let persisted: Persisted = serde_json::from_reader(file)
@@ -377,7 +380,7 @@ impl Db {
             persisted,
             ephemeral: Ephemeral::default(),
         };
-        db.ephemeral.set_cfg(Cfg::load(path)?)?;
+        db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?)?;
         Ok(db)
     }
 
@@ -409,7 +412,7 @@ impl Db {
     pub fn unit_by_name(&self, name: &str) -> Result<&SpawnedUnit> {
         unit_by_name!(self, name)
     }
-    
+
     pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {
         self.ephemeral.players_by_slot.get(&slot)
     }

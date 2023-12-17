@@ -46,11 +46,12 @@ impl ChatQ {
 
     fn process(&mut self, net: &Net) {
         for (to, msg) in self.0.drain(..) {
+            debug!("server sending chat message to {:?} msg: {}", to, msg);
             match to {
                 None => if let Err(e) = net.send_chat(msg, true) {
                     error!("could not send chat message {:?}", e)
                 }
-                Some(id) => if let Err(e) = net.send_chat_to(msg, id, None) {
+                Some(id) => if let Err(e) = net.send_chat_to(msg, id, Some(PlayerId::from(1))) {
                     error!("could not send chat message {:?}", e)
                 }
             }
@@ -399,14 +400,14 @@ fn lives(db: &Db, ucid: &Ucid) -> Result<CompactString> {
     let now = Utc::now();
     for (typ, (n, _)) in &cfg.default_lives {
         match lives.get(typ) {
-            None => msg.push_str(&format_compact!("{typ} {n}/{n}\r\n")),
+            None => msg.push_str(&format_compact!("{typ} {n}/{n}\n")),
             Some((reset, cur)) => {
-                let reset = now - reset;
+                let reset = *reset - now;
                 let hrs = reset.num_hours();
                 let min = reset.num_minutes() - hrs * 60;
                 let sec = reset.num_seconds() - hrs * 3600 - min * 60;
                 msg.push_str(&format_compact!(
-                    "{typ} {cur}/{n} resetting in {:02}:{:02}:{:02}\r\n",
+                    "{typ} {cur}/{n} resetting in {:02}:{:02}:{:02}\n",
                     hrs,
                     min,
                     sec
@@ -422,7 +423,7 @@ fn message_life_returned(db: &Db, lua: MizLua, slot: &SlotId) -> Result<()> {
     let ucid = db
         .player_in_slot(slot)
         .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?;
-    let mut msg = CompactString::new("life returned\r\n");
+    let mut msg = CompactString::new("life returned\n");
     if let Ok(lives) = lives(db, ucid) {
         msg.push_str(&lives)
     }

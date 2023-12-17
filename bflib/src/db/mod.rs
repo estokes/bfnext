@@ -269,6 +269,10 @@ impl Player {
     pub fn name(&self) -> &String {
         &self.name
     }
+
+    pub fn lives(&self) -> &Map<LifeType, (DateTime<Utc>, u8)> {
+        &self.lives
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -405,8 +409,12 @@ impl Db {
     pub fn unit_by_name(&self, name: &str) -> Result<&SpawnedUnit> {
         unit_by_name!(self, name)
     }
+    
+    pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {
+        self.ephemeral.players_by_slot.get(&slot)
+    }
 
-    pub fn get_player(&self, ucid: &Ucid) -> Option<&Player> {
+    pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
         self.persisted.players.get(ucid)
     }
 

@@ -66,7 +66,7 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
             let player = ctx
                 .db
                 .player_in_slot(&slot)
-                .and_then(|ucid| ctx.db.get_player(ucid).map(|p| p.name().clone()))
+                .and_then(|ucid| ctx.db.player(ucid).map(|p| p.name().clone()))
                 .unwrap_or_default();
             let msg = format_compact!("{} unpacked a {}", player, name);
             act.out_text_for_coalition(side, msg.into(), 10, false)

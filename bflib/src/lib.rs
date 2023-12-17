@@ -8,7 +8,7 @@ extern crate nalgebra as na;
 use crate::{cfg::Cfg, db::player::SlotAuth};
 use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
-use compact_str::format_compact;
+use compact_str::{format_compact, CompactString};
 use db::{Db, UnitId};
 use dcso3::{
     coalition::Side,
@@ -18,9 +18,10 @@ use dcso3::{
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
+    trigger::Trigger,
     unit::Unit,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, Vector2, trigger::Trigger,
+    HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
@@ -351,9 +352,46 @@ fn get_unit_ground_pos(lua: MizLua, name: &str) -> Result<Vector2> {
     Ok(Vector2::from(na::Vector2::new(pos.0.x, pos.0.z)))
 }
 
-fn message_life_returned(lua: MizLua, slot: &SlotId) -> Result<()> {
+fn lives(db: &Db, ucid: &Ucid) -> Result<CompactString> {
+    let player = db
+        .player(ucid)
+        .ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
+    let cfg = db.cfg();
+    let lives = player.lives();
+    let mut msg = CompactString::new("");
+    let now = Utc::now();
+    for (typ, (n, _)) in &cfg.default_lives {
+        match lives.get(typ) {
+            None => msg.push_str(&format_compact!("{typ} {n}/{n}\n")),
+            Some((reset, cur)) => {
+                let reset = now - reset;
+                let hrs = reset.num_hours();
+                let min = reset.num_minutes() - hrs * 60;
+                let sec = reset.num_seconds() - hrs * 3600 - min * 60;
+                msg.push_str(&format_compact!(
+                    "{typ} {cur}/{n} resetting in {:02}:{:02}:{:02}\n",
+                    hrs,
+                    min,
+                    sec
+                ));
+            }
+        }
+    }
+    Ok(msg)
+}
+
+fn message_life_returned(db: &Db, lua: MizLua, slot: &SlotId) -> Result<()> {
     let uid = slot.as_unit_id().ok_or_else(|| anyhow!("not a unit"))?;
-    Trigger::singleton(lua)?.action()?.out_text_for_unit(uid, "life returned".into(), 10, false)
+    let ucid = db
+        .player_in_slot(slot)
+        .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?;
+    let mut msg = CompactString::new("life returned\n");
+    if let Ok(lives) = lives(db, ucid) {
+        msg.push_str(&lives)
+    }
+    Trigger::singleton(lua)?
+        .action()?
+        .out_text_for_unit(uid, msg.into(), 10, false)
 }
 
 fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
@@ -366,7 +404,7 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
             };
             let life_returned = !db.land(slot.clone(), pos);
             if life_returned {
-                if let Err(e) = message_life_returned(lua, slot) {
+                if let Err(e) = message_life_returned(db, lua, slot) {
                     error!("failed to send life returned message to {:?} {}", slot, e);
                 }
             }

@@ -7,7 +7,7 @@ use std::{
     borrow::Borrow,
     fs::File,
     io,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}, fmt,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -38,6 +38,19 @@ pub enum LifeType {
     Logistics,
     Attack,
     Recon,
+}
+
+impl fmt::Display for LifeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Standard => "standard",
+            Self::Intercept => "intercept",
+            Self::Logistics => "logistics",
+            Self::Attack => "attack",
+            Self::Recon => "recon"
+        };
+        write!(f, "{s}")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

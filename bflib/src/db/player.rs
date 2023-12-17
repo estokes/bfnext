@@ -15,10 +15,6 @@ pub enum SlotAuth {
 }
 
 impl Db {
-    pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {
-        self.ephemeral.players_by_slot.get(&slot)
-    }
-
     pub fn takeoff(&mut self, time: DateTime<Utc>, slot: SlotId) {
         let objective = match self
             .persisted

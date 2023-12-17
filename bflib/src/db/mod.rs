@@ -327,12 +327,14 @@ struct Ephemeral {
 impl Ephemeral {
     fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, cfg: Cfg) -> Result<()> {
         for (side, template) in cfg.crate_template.iter() {
-            miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?;
+            miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?
+                .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
         }
         for (side, deployables) in cfg.deployables.iter() {
             let idx = self.deployable_idx.entry(*side).or_default();
             for dep in deployables.iter() {
-                miz.get_group_by_name(mizidx, GroupKind::Any, *side, &dep.template)?;
+                miz.get_group_by_name(mizidx, GroupKind::Any, *side, &dep.template)?
+                    .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
                 let name = match dep.path.last() {
                     None => bail!("deployable with empty path {:?}", dep),
                     Some(name) => name,

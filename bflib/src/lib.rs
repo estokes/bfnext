@@ -36,6 +36,28 @@ struct PlayerInfo {
     ucid: Ucid,
 }
 
+#[derive(Debug, Clone, Default)]
+struct ChatQ(Vec<(Option<PlayerId>, String)>);
+
+impl ChatQ {
+    fn send<S: Into<String>>(&mut self, to: Option<PlayerId>, msg: S) {
+        self.0.push((to, msg.into()))
+    }
+
+    fn process(&mut self, net: &Net) {
+        for (to, msg) in self.0.drain(..) {
+            match to {
+                None => if let Err(e) = net.send_chat(msg, true) {
+                    error!("could not send chat message {:?}", e)
+                }
+                Some(id) => if let Err(e) = net.send_chat_to(msg, id, None) {
+                    error!("could not send chat message {:?}", e)
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct Context {
     idx: env::miz::MizIndex,
@@ -46,6 +68,7 @@ struct Context {
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
     recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
     force_to_spectators: FxHashSet<PlayerId>,
+    pending_messages: ChatQ,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -135,7 +158,6 @@ fn on_player_try_connect(
 }
 
 fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
-    let net = Net::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     let side = if msg.eq_ignore_ascii_case("blue") {
@@ -151,11 +173,11 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     {
         Ok(()) => {
             let msg = String::from(format_compact!("Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!", side));
-            net.send_chat_to(msg, id, None)?;
-            net.send_chat(
-                String::from(format_compact!("{} has joined {:?} team", ifo.name, side)),
-                true,
-            )?
+            ctx.pending_messages.send(Some(id), msg);
+            ctx.pending_messages.send(
+                None,
+                format_compact!("{} has joined {:?} team", ifo.name, side),
+            );
         }
         Err((side_switches, orig_side)) => {
             let msg = String::from(match side_switches {
@@ -164,14 +186,13 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
                 Some(1) => format_compact!("You are already on {:?} team. You may sitch sides 1 time by typing -switch {:?}.", orig_side, side),
                 Some(n) => format_compact!("You are already on {:?} team. You may switch sides {n} times. Type -switch {:?}.", orig_side, side),
             });
-            net.send_chat_to(msg, id, None)?
+            ctx.pending_messages.send(Some(id), msg);
         }
     }
     Ok(String::from(""))
 }
 
 fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
-    let net = Net::singleton(lua)?;
     let ctx = unsafe { Context::get_mut() };
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     let side = if msg.eq_ignore_ascii_case("-switch blue") {
@@ -184,11 +205,22 @@ fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String>
     match ctx.db.sideswitch_player(&ifo.ucid, side) {
         Ok(()) => {
             let msg = String::from(format_compact!("{} has switched to {:?}", ifo.name, side));
-            net.send_chat(msg, true)?
+            ctx.pending_messages.send(None, msg);
         }
-        Err(e) => net.send_chat_to(String::from(e), id, None)?,
+        Err(e) => ctx.pending_messages.send(Some(id), e),
     }
     Ok(String::from(""))
+}
+
+fn lives_command(id: PlayerId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let ifo = ctx
+        .info_by_player_id
+        .get(&id)
+        .ok_or_else(|| anyhow!("missing info for player {:?}", id))?;
+    let msg = lives(&ctx.db, &ifo.ucid)?;
+    ctx.pending_messages.send(Some(id), msg);
+    Ok(())
 }
 
 fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
@@ -201,20 +233,10 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
     } else if msg.eq_ignore_ascii_case("-switch blue") || msg.eq_ignore_ascii_case("-switch red") {
         sideswitch_player(lua, id, msg)
     } else if msg.eq_ignore_ascii_case("-lives") {
-        let ctx = unsafe { Context::get_mut() };
-        match ctx.info_by_player_id.get(&id) {
-            Some(ifo) => match lives(&ctx.db, &ifo.ucid) {
-                Ok(msg) => Ok(msg.into()),
-                Err(e) => {
-                    error!("getting player lives {:?} {:?}", ifo, e);
-                    Ok("".into())
-                }
-            }
-            None => {
-                error!("no player {:?}", id);
-                Ok("".into())
-            }
+        if let Err(e) = lives_command(id) {
+            error!("lives command failed for player {:?} {:?}", id, e);
         }
+        Ok("".into())
     } else {
         Ok(msg)
     }
@@ -237,7 +259,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
                 side,
                 side
             ));
-            Net::singleton(lua)?.send_chat_to(msg, id, None)?;
+            ctx.pending_messages.send(Some(id), msg);
             Ok(false)
         }
         SlotAuth::ObjectiveNotOwned => {
@@ -249,7 +271,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
                 "{:?} does not own the objective associated with this slot",
                 side
             ));
-            Net::singleton(lua)?.send_chat_to(msg, id, None)?;
+            ctx.pending_messages.send(Some(id), msg);
             Ok(false)
         }
         SlotAuth::Yes => Ok(true),
@@ -377,14 +399,14 @@ fn lives(db: &Db, ucid: &Ucid) -> Result<CompactString> {
     let now = Utc::now();
     for (typ, (n, _)) in &cfg.default_lives {
         match lives.get(typ) {
-            None => msg.push_str(&format_compact!("{typ} {n}/{n}\n")),
+            None => msg.push_str(&format_compact!("{typ} {n}/{n}\r\n")),
             Some((reset, cur)) => {
                 let reset = now - reset;
                 let hrs = reset.num_hours();
                 let min = reset.num_minutes() - hrs * 60;
                 let sec = reset.num_seconds() - hrs * 3600 - min * 60;
                 msg.push_str(&format_compact!(
-                    "{typ} {cur}/{n} resetting in {:02}:{:02}:{:02}\n",
+                    "{typ} {cur}/{n} resetting in {:02}:{:02}:{:02}\r\n",
                     hrs,
                     min,
                     sec
@@ -400,7 +422,7 @@ fn message_life_returned(db: &Db, lua: MizLua, slot: &SlotId) -> Result<()> {
     let ucid = db
         .player_in_slot(slot)
         .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?;
-    let mut msg = CompactString::new("life returned\n");
+    let mut msg = CompactString::new("life returned\r\n");
     if let Ok(lives) = lives(db, ucid) {
         msg.push_str(&lives)
     }
@@ -459,6 +481,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
             for id in ctx.force_to_spectators.drain() {
                 net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
             }
+            ctx.pending_messages.process(&net);
             Ok(Some(now + 1.))
         }
     })?;

@@ -732,7 +732,7 @@ impl Default for Cfg {
         Self {
             repair_time: 1800,
             logistics_exclusion: 10000,
-            crate_load_distance: 50,
+            crate_load_distance: 100,
             side_switches: Some(1),
             default_lives: FxHashMap::from_iter([
                 (LifeType::Standard, (3, 21600)),

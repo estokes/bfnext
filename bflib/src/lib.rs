@@ -200,6 +200,21 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         register_player(lua, id, msg)
     } else if msg.eq_ignore_ascii_case("-switch blue") || msg.eq_ignore_ascii_case("-switch red") {
         sideswitch_player(lua, id, msg)
+    } else if msg.eq_ignore_ascii_case("-lives") {
+        let ctx = unsafe { Context::get_mut() };
+        match ctx.info_by_player_id.get(&id) {
+            Some(ifo) => match lives(&ctx.db, &ifo.ucid) {
+                Ok(msg) => Ok(msg.into()),
+                Err(e) => {
+                    error!("getting player lives {:?} {:?}", ifo, e);
+                    Ok("".into())
+                }
+            }
+            None => {
+                error!("no player {:?}", id);
+                Ok("".into())
+            }
+        }
     } else {
         Ok(msg)
     }

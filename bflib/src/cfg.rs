@@ -1,14 +1,44 @@
-use crate::db::{LifeType, Vehicle};
 use dcso3::{coalition::Side, err, String};
 use fxhash::FxHashMap;
 use log::error;
 use mlua::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use std::{
+    borrow::Borrow,
     fs::File,
     io,
     path::{Path, PathBuf},
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Vehicle(String);
+
+impl<'a> From<&'a str> for Vehicle {
+    fn from(value: &'a str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<String> for Vehicle {
+    fn from(value: String) -> Self {
+        Vehicle(value)
+    }
+}
+
+impl Borrow<str> for Vehicle {
+    fn borrow(&self) -> &str {
+        &*self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+pub enum LifeType {
+    Standard,
+    Intercept,
+    Logistics,
+    Attack,
+    Recon,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PersistTyp {

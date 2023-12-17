@@ -1,4 +1,4 @@
-use crate::{cfg::Cfg, db::Cargo, Context};
+use crate::{cfg::Cfg, db::cargo::Cargo, Context};
 use anyhow::{anyhow, bail, Result};
 use compact_str::{format_compact, CompactString};
 use dcso3::{

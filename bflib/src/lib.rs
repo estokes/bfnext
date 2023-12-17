@@ -2,8 +2,10 @@ pub mod bg;
 pub mod cfg;
 pub mod db;
 pub mod menu;
+pub mod spawnctx;
 
 extern crate nalgebra as na;
+use crate::{cfg::Cfg, db::player::SlotAuth};
 use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
@@ -23,10 +25,9 @@ use dcso3::{
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
 use mlua::prelude::*;
+use spawnctx::SpawnCtx;
 use std::path::PathBuf;
 use tokio::sync::mpsc::UnboundedSender;
-
-use crate::{cfg::Cfg, db::SlotAuth};
 
 #[derive(Debug)]
 struct PlayerInfo {
@@ -86,7 +87,7 @@ impl Context {
     }
 
     fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
-        let spctx = db::SpawnCtx::new(lua)?;
+        let spctx = SpawnCtx::new(lua)?;
         for (_, group) in self.db.groups() {
             self.db.respawn_group(&self.idx, &spctx, group)?
         }
@@ -268,7 +269,7 @@ fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
                 let name = unit.as_object()?.get_name()?;
-                if let Some(su) = ctx.db.get_unit_by_name(name.as_str()) {
+                if let Ok(su) = ctx.db.unit_by_name(name.as_str()) {
                     let uid = su.id;
                     let oid: i64 = unit.get_object_id()?;
                     ctx.units_by_obj_id.insert(oid, uid);
@@ -279,7 +280,9 @@ fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.get_object_id()?;
                 if let Some(uid) = ctx.units_by_obj_id.remove(&id) {
-                    ctx.db.unit_dead(uid, true, Utc::now());
+                    if let Err(e) = ctx.db.unit_dead(uid, true, Utc::now()) {
+                        error!("unit dead failed for {:?} {:?}", unit, e);
+                    }
                 }
                 let slot = SlotId::from(unit.id()?);
                 ctx.recently_landed.remove(&slot);

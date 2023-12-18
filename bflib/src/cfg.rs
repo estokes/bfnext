@@ -504,7 +504,7 @@ fn default_red_deployables() -> Vec<Deployable> {
         },
         Deployable {
             path: vec!["Ground Units".into(), "M109".into()],
-            template: "DEPM109".into(),
+            template: "DEPM109R".into(),
             persist: PersistTyp::Forever,
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
@@ -521,7 +521,7 @@ fn default_red_deployables() -> Vec<Deployable> {
         },
         Deployable {
             path: vec!["FARP".into()],
-            template: "DEPFARP".into(),
+            template: "DEPFARPR".into(),
             persist: PersistTyp::Forever,
             limit: 4,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
@@ -685,7 +685,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
         },
         Deployable {
             path: vec!["Ground Units".into(), "M109".into()],
-            template: "DEPM109".into(),
+            template: "DEPM109B".into(),
             persist: PersistTyp::Forever,
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
@@ -702,7 +702,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
         },
         Deployable {
             path: vec!["FARP".into()],
-            template: "DEPFARP".into(),
+            template: "DEPFARPB".into(),
             persist: PersistTyp::Forever,
             limit: 4,
             limit_enforce: LimitEnforceTyp::DeleteOldest,

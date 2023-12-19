@@ -129,7 +129,6 @@ impl Db {
             .players_by_slot
             .iter()
             .filter_map(|(sl, ucid)| {
-                dbg!((sl, ucid));
                 let side = self.persisted.players[ucid].side;
                 let pos = self
                     .slot_instance_unit(lua, idx, sl)

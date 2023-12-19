@@ -130,9 +130,10 @@ impl Db {
             Some(player) => player,
             None => return SlotAuth::NotRegistered(slot_side),
         };
-        player.current_slot = None;
-        self.ephemeral.players_by_slot.remove(&slot);
-        self.ephemeral.cargo.remove(&slot);
+        if let Some(slot) = player.current_slot.take() {
+            self.ephemeral.players_by_slot.remove(&slot);
+            self.ephemeral.cargo.remove(&slot);
+        }
         if slot.is_spectator() {
             return SlotAuth::Yes;
         }

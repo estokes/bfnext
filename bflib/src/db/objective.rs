@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};
 use fxhash::FxHashMap;
-use log::debug;
+use log::{debug, error};
 use smallvec::{smallvec, SmallVec};
 
 impl Db {
@@ -128,15 +128,25 @@ impl Db {
             .ephemeral
             .players_by_slot
             .iter()
-            .map(|(sl, ucid)| {
+            .filter_map(|(sl, ucid)| {
+                dbg!((sl, ucid));
                 let side = self.persisted.players[ucid].side;
                 let pos = self
                     .slot_instance_unit(lua, idx, sl)
                     .and_then(|u| u.as_object()?.get_point())
-                    .map(|v| Vector2::new(v.x, v.z))?;
-                Ok((side, pos))
+                    .map(|v| Vector2::new(v.x, v.z));
+                match pos {
+                    Ok(pos) => Some((side, pos)),
+                    Err(e) => {
+                        error!(
+                            "failed to get position of player {:?} {:?} {:?}",
+                            sl, ucid, e
+                        );
+                        None
+                    }
+                }
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Vec<_>>();
         let cfg = self.cfg();
         let mut to_spawn: SmallVec<[ObjectiveId; 8]> = smallvec![];
         let mut to_cull: SmallVec<[ObjectiveId; 8]> = smallvec![];

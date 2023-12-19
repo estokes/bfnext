@@ -13,7 +13,7 @@ use smallvec::{smallvec, SmallVec};
 #[derive(Debug, Clone, Copy)]
 pub enum SlotAuth {
     Yes,
-    ObjectiveNotOwned,
+    ObjectiveNotOwned(Side),
     NoLives,
     NotRegistered(Side),
 }
@@ -137,7 +137,7 @@ impl Db {
             return SlotAuth::Yes;
         }
         if slot_side != player.side {
-            return SlotAuth::ObjectiveNotOwned;
+            return SlotAuth::ObjectiveNotOwned(player.side);
         }
         match slot.classify() {
             SlotIdKind::ArtilleryCommander
@@ -155,10 +155,10 @@ impl Db {
                     .and_then(|id| self.persisted.objectives.get(id))
                 {
                     Some(o) if o.owner != Side::Neutral => o,
-                    Some(_) | None => return SlotAuth::ObjectiveNotOwned,
+                    Some(_) | None => return SlotAuth::ObjectiveNotOwned(player.side),
                 };
                 if objective.owner != player.side {
-                    return SlotAuth::ObjectiveNotOwned;
+                    return SlotAuth::ObjectiveNotOwned(player.side);
                 }
                 let life_type = &self.ephemeral.cfg.life_types[&objective.slots[&slot]];
                 macro_rules! yes {

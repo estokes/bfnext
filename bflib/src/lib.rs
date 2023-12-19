@@ -360,12 +360,8 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
     let (side, slot) = net.get_slot(id)?;
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
-        SlotAuth::NoLives => {
-            info!("player {}{:?} has no lives", ifo.name, ifo.ucid);
-            Ok(false)
-        }
+        SlotAuth::NoLives => Ok(false),
         SlotAuth::NotRegistered(side) => {
-            info!("player {}{:?} isn't registered", ifo.name, ifo.ucid);
             let msg = String::from(format_compact!(
                 "You must join {:?} to use this slot. Type {:?} in chat.",
                 side,
@@ -374,11 +370,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
             ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
-        SlotAuth::ObjectiveNotOwned => {
-            info!(
-                "player {}{:?} coalition does not own the objective",
-                ifo.name, ifo.ucid
-            );
+        SlotAuth::ObjectiveNotOwned(side) => {
             let msg = String::from(format_compact!(
                 "{:?} does not own the objective associated with this slot",
                 side

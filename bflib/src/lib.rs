@@ -25,7 +25,7 @@ use dcso3::{
     trigger::{Action, Trigger},
     unit::Unit,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, Vector2, Time,
+    HooksLua, LuaEnv, MizLua, String, Vector2, 
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
@@ -580,7 +580,7 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     }
 }
 
-fn run_timed_events(lua: MizLua, now: Time, path: &PathBuf) -> Result<Option<Time>> {
+fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, ts) {
@@ -603,7 +603,7 @@ fn run_timed_events(lua: MizLua, now: Time, path: &PathBuf) -> Result<Option<Tim
         ctx.last_cull = ts;
         ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?
     }
-    Ok(Some(now + 1.))
+    Ok(())
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
@@ -621,7 +621,12 @@ fn init_miz(lua: MizLua) -> Result<()> {
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
-        move |lua, _, now| run_timed_events(lua, now, &path)
+        move |lua, _, now| {
+            if let Err(e) = run_timed_events(lua, &path) {
+                error!("failed to run timed events {:?}", e)
+            }
+            Ok(Some(now + 1.))
+        }
     })?;
     debug!("spawning");
     if !path.exists() {

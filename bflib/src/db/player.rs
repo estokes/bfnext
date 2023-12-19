@@ -133,7 +133,7 @@ impl Db {
         player.current_slot = None;
         self.ephemeral.players_by_slot.remove(&slot);
         self.ephemeral.cargo.remove(&slot);
-        if slot_side == Side::Neutral && slot == SlotId::spectator() {
+        if slot.is_spectator() {
             return SlotAuth::Yes;
         }
         if slot_side != player.side {

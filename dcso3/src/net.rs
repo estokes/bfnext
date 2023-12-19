@@ -80,6 +80,10 @@ impl SlotId {
         self.0.starts_with("instructor_")
     }
 
+    pub fn is_spectator(&self) -> bool {
+        dbg!(self.0.as_str()) == "0"
+    }
+
     pub fn spectator() -> SlotId {
         Self(String::from("0"))
     }

@@ -436,6 +436,16 @@ impl Db {
         for gid in &self.persisted.deployed {
             self.spawn_group(idx, spctx, &self.persisted.groups[gid])?
         }
+        for (_, obj) in &self.persisted.objectives {
+            if let Some(groups) = obj.groups.get(&obj.owner) {
+                for (_, gid) in groups {
+                    let group = group!(self, gid)?;
+                    if group.class.is_logi() {
+                        self.spawn_group(idx, spctx, group)?
+                    }
+                }
+            }
+        }
         Ok(())
     }
 

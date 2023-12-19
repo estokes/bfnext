@@ -326,6 +326,7 @@ impl Db {
             bail!("no crates onboard")
         }
         let unit = self.slot_instance_unit(lua, idx, slot)?;
+        let in_air = unit.as_object()?.in_air()?;
         let unit_name = unit.as_object()?.get_name()?;
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.as_object()?.get_position()?;
@@ -337,11 +338,11 @@ impl Db {
         let (oid, crate_cfg) = cargo.crates.pop().unwrap();
         let weight = cargo.weight();
         debug!("drop speed {speed}, drop height {agl}");
-        if speed > crate_cfg.max_drop_speed as f64 {
+        if in_air && speed > crate_cfg.max_drop_speed as f64 {
             cargo.crates.push((oid, crate_cfg));
             bail!("you are going too fast to unload your cargo")
         }
-        if agl > crate_cfg.max_drop_height_agl as f64 {
+        if in_air && agl > crate_cfg.max_drop_height_agl as f64 {
             cargo.crates.push((oid, crate_cfg));
             bail!("you are too high to unload your cargo")
         }

@@ -19,34 +19,40 @@ pub enum SlotAuth {
 }
 
 impl Db {
-    pub fn takeoff(&mut self, time: DateTime<Utc>, slot: SlotId) {
-        let objective = match self
+    pub fn takeoff(&mut self, time: DateTime<Utc>, slot: SlotId, position: Vector2) -> Result<bool> {
+        let objective = self
             .persisted
             .objectives_by_slot
             .get(&slot)
             .and_then(|id| self.persisted.objectives.get(&id))
-        {
-            Some(objective) => objective,
-            None => return,
-        };
-        let player = match self
+            .ok_or_else(|| anyhow!("could not find objective for slot {:?}", slot))?;
+        let player = self
             .ephemeral
             .players_by_slot
             .get(&slot)
             .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
-        {
-            Some(player) => player,
-            None => return,
-        };
+            .ok_or_else(|| anyhow!("could not find player in slot {:?}", slot))?;
         let life_type = self.ephemeral.cfg.life_types[&objective.slots[&slot]];
         let (_, player_lives) = player.lives.get_or_insert_cow(life_type, || {
             (time, self.ephemeral.cfg.default_lives[&life_type].0)
         });
-        if *player_lives > 0 {
-            // paranoia
-            *player_lives -= 1;
+        let is_on_owned_objective = self
+            .persisted
+            .objectives
+            .into_iter()
+            .fold(false, |res, (_, obj)| {
+                res || (obj.owner == player.side && obj.is_in_circle(position))
+            });
+        if is_on_owned_objective {
+            if *player_lives > 0 {
+                // paranoia
+                *player_lives -= 1;
+            }
+            self.ephemeral.dirty = true;
+            Ok(true)
+        } else {
+            Ok(false)
         }
-        self.ephemeral.dirty = true;
     }
 
     pub fn land(&mut self, slot: SlotId, position: Vector2) -> bool {

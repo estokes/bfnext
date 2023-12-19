@@ -388,9 +388,14 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.id()?);
                 let ctx = unsafe { Context::get_mut() };
-                ctx.db.takeoff(Utc::now(), slot.clone());
-                if let Err(e) = message_life(ctx, lua, &slot, "life taken\n") {
-                    error!("could not display life taken message {:?}", e)
+                let pos = unit.as_object()?.get_point()?;
+                match ctx.db.takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z)) {
+                    Err(e) => error!("could not process takeoff, {:?}", e),
+                    Ok(took_life) => if took_life {
+                        if let Err(e) = message_life(ctx, lua, &slot, "life taken\n") {
+                            error!("could not display life taken message {:?}", e)
+                        }
+                    }
                 }
                 ctx.recently_landed.remove(&slot);
             }
@@ -503,11 +508,11 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
                 Ok(pos) => pos,
                 Err(_) => return false,
             };
-            let life_returned = !db.land(slot.clone(), pos);
+            let life_returned = db.land(slot.clone(), pos);
             if life_returned {
                 returned.push(slot.clone());
             }
-            life_returned
+            !life_returned
         } else {
             true
         }

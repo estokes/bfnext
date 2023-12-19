@@ -57,7 +57,7 @@ impl<'lua> FromLua<'lua> for ShootingEnd<'lua> {
 pub struct WeaponUse<'lua> {
     pub time: Time,
     pub initiator: Unit<'lua>,
-    pub target: Object<'lua>,
+    pub target: Option<Object<'lua>>,
     pub weapon_name: String,
 }
 

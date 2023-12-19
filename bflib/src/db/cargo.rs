@@ -102,7 +102,7 @@ impl Db {
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
-        self.spawn_template_as_new(lua, idx, side, spawnpos, &template, dk)?;
+        self.add_and_queue_group(&SpawnCtx::new(lua)?, idx, side, spawnpos, &template, dk)?;
         Ok(())
     }
 
@@ -145,15 +145,27 @@ impl Db {
         Ok(res)
     }
 
-    pub fn destroy_nearby_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
+    pub fn destroy_nearby_crate(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<()> {
         let nearby = self.list_nearby_crates(lua, idx, slot)?;
-        let closest = nearby.into_iter().next().ok_or_else(|| anyhow!("no nearby crates"))?;
+        let closest = nearby
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("no nearby crates"))?;
         let gid = closest.group.id;
-        self.delete_group(&SpawnCtx::new(lua)?, &gid)
+        self.delete_group(&gid)
     }
 
     pub fn list_cargo(&self, slot: &SlotId) -> Option<&Cargo> {
         self.ephemeral.cargo.get(slot)
+    }
+
+    pub fn is_player_deployed(&self, gid: &GroupId) -> bool {
+        self.persisted.deployed.contains(gid)
     }
 
     pub fn cargo_capacity(&self, unit: &dcso3::env::miz::Unit) -> Result<CargoConfig> {
@@ -290,7 +302,7 @@ impl Db {
                 }
                 LimitEnforceTyp::DeleteOldest => {
                     if let Some(gid) = oldest {
-                        self.delete_group(&spctx, &gid)?
+                        self.delete_group(&gid)?
                     }
                 }
             }
@@ -310,7 +322,7 @@ impl Db {
                     *num_by_typ.entry(typ.clone()).or_default() += 1;
                 }
             }
-            self.delete_group(&spctx, &cr.group)?
+            self.delete_group(&cr.group)?
         }
         for (typ, pos) in pos_by_typ.iter_mut() {
             if let Some(n) = num_by_typ.get(typ) {
@@ -323,7 +335,8 @@ impl Db {
             SpawnLoc::AtPosWithComponents(centroid, pos_by_typ)
         };
         let origin = DeployKind::Deployed(spec.clone());
-        let gid = self.spawn_template_as_new(lua, idx, side, spawnloc, &*spec.template, origin)?;
+        let spctx = SpawnCtx::new(lua)?;
+        let gid = self.add_and_queue_group(&spctx, idx, side, spawnloc, &*spec.template, origin)?;
         Ok((dep, gid))
     }
 
@@ -366,7 +379,8 @@ impl Db {
         let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
         let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
-        self.spawn_template_as_new(lua, idx, side, spawnpos, &template, dk)?;
+        let spctx = SpawnCtx::new(lua)?;
+        self.add_and_queue_group(&spctx, idx, side, spawnpos, &template, dk)?;
         Ok(crate_cfg)
     }
 
@@ -407,7 +421,7 @@ impl Db {
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         cargo.crates.push((oid, crate_def.clone()));
         let weight = cargo.weight();
-        self.delete_group(&SpawnCtx::new(lua)?, &gid)?;
+        self.delete_group(&gid)?;
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, weight as i64)?;

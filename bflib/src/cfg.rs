@@ -5,9 +5,10 @@ use mlua::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
+    fmt,
     fs::File,
     io,
-    path::{Path, PathBuf}, fmt,
+    path::{Path, PathBuf},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -47,7 +48,7 @@ impl fmt::Display for LifeType {
             Self::Intercept => "intercept",
             Self::Logistics => "logistics",
             Self::Attack => "attack",
-            Self::Recon => "recon"
+            Self::Recon => "recon",
         };
         write!(f, "{s}")
     }
@@ -155,13 +156,15 @@ pub struct CargoConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {
-    /// how often, in seconds, a base will repair if it has
-    /// full logistics
+    /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
-    /// how far must you fly from an objective to deploy deployables
+    /// how far must you fly from an objective to deploy deployables (Meters)
     pub logistics_exclusion: u32,
-    /// how far in meters can a crate be from the player and still be
-    /// unpackable and loadable
+    /// an objective will cull it's units if there are no enemy units
+    /// within this distance (Meters)
+    pub unit_cull_distance: u32,
+    /// how far can a crate be from the player and still be
+    /// unpackable and loadable (Meters)
     pub crate_load_distance: u32,
     /// how many times a user may switch sides in a given round,
     /// or None for unlimited side switches
@@ -732,6 +735,7 @@ impl Default for Cfg {
         Self {
             repair_time: 1800,
             logistics_exclusion: 10000,
+            unit_cull_distance: 70000,
             crate_load_distance: 100,
             side_switches: Some(1),
             default_lives: FxHashMap::from_iter([

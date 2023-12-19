@@ -183,9 +183,8 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
 fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
-    let act = Trigger::singleton(lua)?.action()?;
     if let Err(e) = ctx.db.destroy_nearby_crate(lua, &ctx.idx, &slot) {
-        act.out_text_for_group(gid, format_compact!("{}", e).into(), 10, false)?
+        ctx.pending_messages.panel_to_group(10, false, gid, format_compact!("{}", e))
     }
     Ok(())
 }

@@ -1,9 +1,11 @@
-use anyhow::{Result, anyhow};
-use dcso3::{coalition::Side, env::miz::MizIndex, MizLua};
-use log::debug;
-use crate::{group, unit, objective, objective_mut, spawnctx::SpawnCtx};
-use super::{Db, Objective, ObjGroupClass, ObjectiveId, Set, GroupId, Map, UnitId};
+use super::{Db, GroupId, ObjGroupClass, Objective, ObjectiveId};
+use crate::{db::SpawnedGroup, group, objective, objective_mut, spawnctx::{SpawnCtx, Despawn}, unit};
+use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
+use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};
+use fxhash::FxHashMap;
+use log::debug;
+use smallvec::{smallvec, SmallVec};
 
 impl Db {
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
@@ -16,7 +18,7 @@ impl Db {
                 let mut logi_alive = 0;
                 for (_, gid) in groups {
                     let group = group!(self, gid)?;
-                    let logi = match ObjGroupClass::from(group.template_name.as_str()) {
+                    let logi = match &group.class {
                         ObjGroupClass::Logi => true,
                         _ => false,
                     };
@@ -40,7 +42,11 @@ impl Db {
             .unwrap_or(Ok((100, 100)))
     }
 
-    pub(super) fn update_objective_status(&mut self, oid: &ObjectiveId, now: DateTime<Utc>) -> Result<()> {
+    pub(super) fn update_objective_status(
+        &mut self,
+        oid: &ObjectiveId,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
         let obj = objective!(self, oid)?;
         let (health, logi) = self.compute_objective_status(obj)?;
         let obj = objective_mut!(self, oid)?;
@@ -67,23 +73,24 @@ impl Db {
             .get(&oid)
             .ok_or_else(|| anyhow!("no such objective {:?}", oid))?;
         if let Some(groups) = obj.groups.get(&obj.owner) {
-            let damaged_by_class: Map<ObjGroupClass, Set<GroupId>> = groups.into_iter().fold(
-                Ok(Map::new()),
-                |m: Result<Map<ObjGroupClass, Set<GroupId>>>, (name, id)| {
-                    let mut m = m?;
-                    let class = ObjGroupClass::from(name.template());
-                    let mut damaged = false;
-                    for uid in &group!(self, id)?.units {
-                        damaged |= unit!(self, uid)?.dead;
-                    }
-                    if damaged {
-                        m.get_or_default_cow(class).insert_cow(*id);
-                        Ok(m)
-                    } else {
-                        Ok(m)
-                    }
-                },
-            )?;
+            let mut damaged_by_class: FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>> =
+                groups.into_iter().fold(
+                    Ok(FxHashMap::default()),
+                    |m: Result<FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>>>, (name, id)| {
+                        let mut m = m?;
+                        let class = ObjGroupClass::from(name.template());
+                        let mut damaged = 0;
+                        for uid in &group!(self, id)?.units {
+                            damaged += if unit!(self, uid)?.dead { 1 } else { 0 };
+                        }
+                        if damaged > 0 {
+                            m.entry(class).or_default().push((*id, damaged));
+                            Ok(m)
+                        } else {
+                            Ok(m)
+                        }
+                    },
+                )?;
             for class in [
                 ObjGroupClass::Logi,
                 ObjGroupClass::Sr,
@@ -92,17 +99,89 @@ impl Db {
                 ObjGroupClass::Armor,
                 ObjGroupClass::Other,
             ] {
-                if let Some(groups) = damaged_by_class.get(&class) {
-                    for gid in groups {
-                        let group = &self.persisted.groups[gid];
+                if let Some(groups) = damaged_by_class.get_mut(&class) {
+                    groups.sort_by_key(|(_, d)| *d); // pick the most damaged group
+                    if let Some((gid, _)) = groups.pop() {
+                        let group = &self.persisted.groups[&gid];
                         for uid in &group.units {
                             self.persisted.units[uid].dead = false;
                         }
-                        self.respawn_group(idx, spctx, group)?;
+                        if class == ObjGroupClass::Logi || obj.spawned {
+                            self.spawn_group(idx, spctx, group)?;
+                        }
                         self.update_objective_status(&oid, now)?;
                         self.ephemeral.dirty = true;
                         return Ok(());
                     }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn cull_or_respawn_objectives(&mut self, lua: MizLua, idx: &MizIndex) -> Result<()> {
+        let players = self
+            .ephemeral
+            .players_by_slot
+            .iter()
+            .map(|(sl, ucid)| {
+                let side = self.persisted.players[ucid].side;
+                let pos = self
+                    .slot_instance_unit(lua, idx, sl)
+                    .and_then(|u| u.as_object()?.get_point())
+                    .map(|v| Vector2::new(v.x, v.z))?;
+                Ok((side, pos))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let cfg = self.cfg();
+        let mut to_spawn: SmallVec<[ObjectiveId; 8]> = smallvec![];
+        let mut to_cull: SmallVec<[ObjectiveId; 8]> = smallvec![];
+        for (oid, obj) in &self.persisted.objectives {
+            match obj.owner {
+                Side::Blue | Side::Red => (),
+                Side::Neutral => continue,
+            }
+            let mut spawn = false;
+            for (side, pos) in &players {
+                if obj.owner != *side
+                    && na::distance(&obj.pos.into(), &(*pos).into())
+                        <= cfg.unit_cull_distance as f64
+                {
+                    spawn = true;
+                    break;
+                }
+            }
+            if !obj.spawned && spawn {
+                to_spawn.push(*oid);
+            } else if obj.spawned && !spawn {
+                to_cull.push(*oid);
+            }
+        }
+        for oid in to_spawn {
+            let obj = objective_mut!(self, oid)?;
+            obj.spawned = true;
+            for (_name, gid) in &obj.groups[&obj.owner] {
+                if !group!(self, gid)?.class.is_logi() {
+                    self.ephemeral.spawnq.push_back(*gid);
+                }
+            }
+        }
+        for oid in to_cull {
+            let obj = objective_mut!(self, oid)?;
+            obj.spawned = false;
+            for (_name, gid) in &obj.groups[&obj.owner] {
+                let group = group!(self, gid)?;
+                if !group.class.is_logi() {
+                    match group.kind {
+                        Some(_) => self.ephemeral.despawnq.push_back(Despawn::Group(group.name.clone())),
+                        None => {
+                            for uid in &group.units {
+                                let unit = unit!(self, uid)?;
+                                self.ephemeral.despawnq.push_back(Despawn::Static(unit.name.clone()))
+                            }
+                        },
+                    }
+                    
                 }
             }
         }
@@ -140,16 +219,4 @@ impl Db {
         }
         Ok(())
     }
-
-    pub fn unit_dead(&mut self, id: UnitId, dead: bool, now: DateTime<Utc>) -> Result<()> {
-        if let Some(unit) = self.persisted.units.get_mut_cow(&id) {
-            unit.dead = dead;
-            if let Some(oid) = self.persisted.objectives_by_group.get(&unit.group).copied() {
-                self.update_objective_status(&oid, now)?
-            }
-        }
-        self.ephemeral.dirty = true;
-        Ok(())
-    }
-
 }

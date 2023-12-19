@@ -1,8 +1,9 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use dcso3::{
     coalition::{Coalition, Side},
     env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
-    MizLua, String, Vector2, DeepClone, LuaEnv, group::GroupCategory,
+    group::GroupCategory,
+    DeepClone, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
@@ -20,9 +21,10 @@ pub struct SpawnCtx<'lua> {
     lua: MizLua<'lua>,
 }
 
-pub enum Despawn<'a> {
-    Group(&'a str),
-    Static(&'a str),
+#[derive(Debug, Clone)]
+pub enum Despawn {
+    Group(String),
+    Static(String),
 }
 
 impl<'lua> SpawnCtx<'lua> {
@@ -47,6 +49,19 @@ impl<'lua> SpawnCtx<'lua> {
             .ok_or_else(|| anyhow!("no such template {template_name}"))?;
         template.group = template.group.deep_clone(self.lua.inner())?;
         Ok(template)
+    }
+
+    /// get at template that you pinky promise not to modify
+    pub fn get_template_ref(
+        &self,
+        idx: &MizIndex,
+        kind: GroupKind,
+        side: Side,
+        template_name: &str,
+    ) -> Result<GroupInfo> {
+        self.miz
+            .get_group_by_name(idx, kind, side, template_name)?
+            .ok_or_else(|| anyhow!("no such template {template_name}"))
     }
 
     pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> Result<TriggerZone> {
@@ -74,11 +89,11 @@ impl<'lua> SpawnCtx<'lua> {
     pub fn despawn(&self, name: Despawn) -> Result<()> {
         match name {
             Despawn::Group(name) => {
-                let group = dcso3::group::Group::get_by_name(self.lua, name)?;
+                let group = dcso3::group::Group::get_by_name(self.lua, &*name)?;
                 Ok(group.destroy()?)
             }
             Despawn::Static(name) => {
-                let obj = dcso3::static_object::StaticObject::get_by_name(self.lua, name)?;
+                let obj = dcso3::static_object::StaticObject::get_by_name(self.lua, &*name)?;
                 Ok(obj.as_object()?.destroy()?)
             }
         }

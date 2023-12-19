@@ -224,10 +224,7 @@ impl Context {
 
     fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
-        for (_, group) in self.db.groups() {
-            self.db.respawn_group(&self.idx, &spctx, group)?
-        }
-        Ok(())
+        self.db.respawn_after_load(&self.idx, &spctx)
     }
 }
 

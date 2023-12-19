@@ -11,7 +11,7 @@ use dcso3::{
     atomic_id,
     coalition::Side,
     cvt_err,
-    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, UnitInfo},
+    env::miz::{GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
     net::{SlotId, Ucid},
     unit::Unit,
@@ -22,7 +22,8 @@ use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
-    collections::hash_map::Entry,
+    cmp::max,
+    collections::{hash_map::Entry, VecDeque},
     fs::{self, File},
     path::{Path, PathBuf},
     str::FromStr,
@@ -147,6 +148,7 @@ pub struct SpawnedGroup {
     pub template_name: String,
     pub side: Side,
     pub kind: Option<GroupCategory>,
+    pub class: ObjGroupClass,
     pub origin: DeployKind,
     pub units: Set<UnitId>,
 }
@@ -159,7 +161,7 @@ pub enum ObjectiveKind {
     Samsite,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ObjGroupClass {
     Logi,
     Aaa,
@@ -167,6 +169,15 @@ pub enum ObjGroupClass {
     Sr,
     Armor,
     Other,
+}
+
+impl ObjGroupClass {
+    pub fn is_logi(&self) -> bool {
+        match self {
+            Self::Logi => true,
+            Self::Aaa | Self::Lr | Self::Sr | Self::Armor | Self::Other => false
+        }
+    }
 }
 
 impl From<&str> for ObjGroupClass {
@@ -225,7 +236,6 @@ impl ObjGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     id: ObjectiveId,
-    spawned: bool,
     trigger_name: String,
     name: String,
     pos: Vector2,
@@ -237,6 +247,8 @@ pub struct Objective {
     health: u8,
     logi: u8,
     last_change_ts: DateTime<Utc>,
+    #[serde(skip)]
+    spawned: bool,
 }
 
 impl Objective {
@@ -322,6 +334,8 @@ struct Ephemeral {
     players_by_slot: FxHashMap<SlotId, Ucid>,
     cargo: FxHashMap<SlotId, Cargo>,
     deployable_idx: FxHashMap<Side, DeployableIndex>,
+    spawnq: VecDeque<GroupId>,
+    despawnq: VecDeque<Despawn>,
 }
 
 impl Ephemeral {
@@ -395,6 +409,13 @@ impl Db {
         }
     }
 
+    pub fn respawn_after_load(&self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
+        for gid in &self.persisted.deployed {
+            self.spawn_group(idx, spctx, &self.persisted.groups[gid])?
+        }
+        Ok(())
+    }
+
     pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
         self.persisted.groups.into_iter()
     }
@@ -423,7 +444,7 @@ impl Db {
         self.persisted.players.get(ucid)
     }
 
-    pub fn respawn_group<'lua>(
+    fn spawn_group<'lua>(
         &self,
         idx: &MizIndex,
         spctx: &SpawnCtx,
@@ -458,6 +479,7 @@ impl Db {
                 match by_tname.get(unit.name()?.as_str()) {
                     None => units.remove(i)?,
                     Some(su) => {
+                        unit.raw_remove("unitId")?;
                         template.group.set_pos(su.pos)?;
                         unit.set_pos(su.pos)?;
                         unit.set_name(su.name.clone())?;
@@ -474,7 +496,27 @@ impl Db {
         }
     }
 
-    pub fn delete_group<'lua>(&mut self, spctx: &'lua SpawnCtx<'lua>, gid: &GroupId) -> Result<()> {
+    pub fn process_spawn_queue(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
+        let dlen = self.ephemeral.despawnq.len();
+        let slen = self.ephemeral.spawnq.len();
+        if dlen > 0 {
+            for i in 0..max(2, dlen >> 2) {
+                if let Some(name) = self.ephemeral.despawnq.pop_front() {
+                    spctx.despawn(name)?
+                }
+            }
+        } else if slen > 0 {
+            for i in 0..max(2, slen >> 2) {
+                if let Some(gid) = self.ephemeral.spawnq.pop_front() {
+                    self.spawn_group(idx, spctx, &self.persisted.groups[&gid])?
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn delete_group<'lua>(&mut self, gid: &GroupId) -> Result<()> {
+        self.ephemeral.spawnq.retain(|id| id != gid);
         let group = self
             .persisted
             .groups
@@ -509,19 +551,23 @@ impl Db {
             None => {
                 // it's a static, we have to get it's units
                 for unit in &units {
-                    spctx.despawn(Despawn::Static(&*unit))?
+                    self.ephemeral
+                        .despawnq
+                        .push_back(Despawn::Static(unit.clone()));
                 }
             }
             Some(_) => {
                 // it's a normal group
-                spctx.despawn(Despawn::Group(&*group.name))?
+                self.ephemeral
+                    .despawnq
+                    .push_back(Despawn::Group(group.name.clone()));
             }
         }
         Ok(())
     }
 
     /// add the units to the db, but don't actually spawn them
-    fn init_template<'lua>(
+    fn add_group<'lua>(
         &mut self,
         spctx: &'lua SpawnCtx<'lua>,
         idx: &MizIndex,
@@ -529,9 +575,9 @@ impl Db {
         location: SpawnLoc,
         template_name: &str,
         origin: DeployKind,
-    ) -> Result<(GroupId, GroupInfo<'lua>)> {
+    ) -> Result<GroupId> {
         let template_name = String::from(template_name);
-        let template = spctx.get_template(idx, GroupKind::Any, side, template_name.as_str())?;
+        let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let kind = GroupCategory::from_kind(template.category);
         let (pos, pos_by_typ) = match location {
             SpawnLoc::AtPos(pos) => (pos, FxHashMap::default()),
@@ -543,8 +589,6 @@ impl Db {
         };
         let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}-{}", template_name, gid));
-        template.group.set("lateActivation", false)?;
-        template.group.raw_remove("groupId")?;
         let orig_group_pos = template.group.pos()?;
         let orig_pos_by_typ: FxHashMap<String, Vector2> = if pos_by_typ.is_empty() {
             FxHashMap::default()
@@ -566,8 +610,6 @@ impl Db {
                 .map(|(k, (n, v))| (k, v / (n as f64)))
                 .collect()
         };
-        template.group.set_pos(pos)?;
-        template.group.set_name(group_name.clone())?;
         let mut spawned = SpawnedGroup {
             id: gid,
             name: group_name.clone(),
@@ -575,6 +617,7 @@ impl Db {
             side,
             kind,
             origin,
+            class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),
         };
         for unit in template.group.units()? {
@@ -592,9 +635,6 @@ impl Db {
                 None => pos + unit_pos_offset,
                 Some(pos) => pos + unit_pos_offset,
             };
-            unit.raw_remove("unitId")?;
-            unit.set_pos(pos)?;
-            unit.set_name(unit_name.clone())?;
             let spawned_unit = SpawnedUnit {
                 id: uid,
                 group: gid,
@@ -625,24 +665,49 @@ impl Db {
             .groups_by_side
             .get_or_default_cow(side)
             .insert_cow(gid);
-        Ok((gid, template))
+        self.ephemeral.dirty = true;
+        Ok(gid)
     }
 
-    pub fn spawn_template_as_new<'lua>(
+    pub fn add_and_queue_group<'lua>(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
         location: SpawnLoc,
         template_name: &str,
         origin: DeployKind,
     ) -> Result<GroupId> {
-        let spctx = SpawnCtx::new(lua)?;
-        let (gid, template) =
-            self.init_template(&spctx, idx, side, location, template_name, origin)?;
-        self.ephemeral.dirty = true;
-        spctx.spawn(template)?;
+        let gid = self.add_group(&spctx, idx, side, location, template_name, origin)?;
+        self.ephemeral.spawnq.push_back(gid);
         Ok(gid)
+    }
+
+    pub fn unit_dead(
+        &mut self,
+        id: UnitId,
+        dead: bool,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        if let Some(unit) = self.persisted.units.get_mut_cow(&id) {
+            unit.dead = dead;
+            let gid = unit.group;
+            if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
+                self.update_objective_status(&oid, now)?
+            }
+            if self.persisted.deployed.contains(&gid) {
+                let group = &mut self.persisted.groups[&gid];
+                let mut dead = true;
+                for uid in &group.units {
+                    dead &= self.persisted.units[uid].dead
+                }
+                if dead {
+                    self.delete_group(&gid)?
+                }
+            }
+        }
+        self.ephemeral.dirty = true;
+        Ok(())
     }
 
     pub fn slot_miz_unit<'lua>(

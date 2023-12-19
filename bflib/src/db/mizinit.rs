@@ -115,7 +115,7 @@ impl Db {
                 }
             }
         };
-        let (gid, _) = self.init_template(
+        let gid = self.add_group(
             spctx,
             idx,
             side,

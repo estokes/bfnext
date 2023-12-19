@@ -145,6 +145,13 @@ impl Db {
         Ok(res)
     }
 
+    pub fn destroy_nearby_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<()> {
+        let nearby = self.list_nearby_crates(lua, idx, slot)?;
+        let closest = nearby.into_iter().next().ok_or_else(|| anyhow!("no nearby crates"))?;
+        let gid = closest.group.id;
+        self.delete_group(&SpawnCtx::new(lua)?, &gid)
+    }
+
     pub fn list_cargo(&self, slot: &SlotId) -> Option<&Cargo> {
         self.ephemeral.cargo.get(slot)
     }

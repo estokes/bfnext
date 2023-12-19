@@ -60,7 +60,6 @@ fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, Sl
 fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &gid)?;
-    let act = Trigger::singleton(lua)?.action()?;
     match ctx.db.unpakistan(lua, &ctx.idx, &slot) {
         Ok((name, _)) => {
             let player = ctx
@@ -69,49 +68,49 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
                 .and_then(|ucid| ctx.db.player(ucid).map(|p| p.name().clone()))
                 .unwrap_or_default();
             let msg = format_compact!("{} unpacked a {}", player, name);
-            act.out_text_for_coalition(side, msg.into(), 10, false)
+            ctx.pending_messages.panel_to_side(10, false, side, msg);
         }
         Err(e) => {
             let msg = format_compact!("{}", e);
-            act.out_text_for_group(gid, msg.into(), 10, false)
+            ctx.pending_messages.panel_to_group(10, false, gid, msg)
         }
     }
+    Ok(())
 }
 
 fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
-    let act = Trigger::singleton(lua)?.action()?;
     match ctx.db.load_nearby_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
             let msg = format_compact!("{} crate loaded", cr.name);
-            act.out_text_for_group(gid, msg.into(), 10, false)
+            ctx.pending_messages.panel_to_group(10, false, gid, msg)
         }
         Err(e) => {
             let msg = format_compact!("crate could not be loaded: {}", e);
-            act.out_text_for_group(gid, msg.into(), 10, false)
+            ctx.pending_messages.panel_to_group(10, false, gid, msg)
         }
     }
+    Ok(())
 }
 
 fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
-    let act = Trigger::singleton(lua)?.action()?;
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     match ctx.db.unload_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
             let msg = format_compact!("{} crate unloaded", cr.name);
-            act.out_text_for_group(gid, msg.into(), 10, false)
+            ctx.pending_messages.panel_to_group(10, false, gid, msg)
         }
         Err(e) => {
             let msg = format_compact!("{}", e);
-            act.out_text_for_group(gid, msg.into(), 10, false)
+            ctx.pending_messages.panel_to_group(10, false, gid, msg)
         }
     }
+    Ok(())
 }
 
 pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
-    let act = Trigger::singleton(lua)?.action()?;
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     let cargo = Cargo::default();
@@ -156,14 +155,14 @@ pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
         msg.push_str("----------------------------\n");
     }
     msg.push_str(&format_compact!("total cargo weight: {} kg", total as u32));
-    act.out_text_for_group(gid, msg.into(), 15, false)
+    ctx.pending_messages.panel_to_group(15, false, gid, msg);
+    Ok(())
 }
 
 fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     let nearby = ctx.db.list_nearby_crates(lua, &ctx.idx, &slot)?;
-    let act = Trigger::singleton(lua)?.action()?;
     if nearby.len() > 0 {
         let mut msg = CompactString::new("");
         for nc in nearby {
@@ -174,14 +173,21 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
                 nc.distance as u32
             ));
         }
-        act.out_text_for_group(gid, msg.into(), 10, false)
+        ctx.pending_messages.panel_to_group(10, false, gid, msg)
     } else {
-        act.out_text_for_group(gid, "No nearby crates".into(), 10, false)
+        ctx.pending_messages.panel_to_group(10, false, gid, "No nearby crates")
     }
+    Ok(())
 }
 
 fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+    let ctx = unsafe { Context::get_mut() };
+    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let act = Trigger::singleton(lua)?.action()?;
+    if let Err(e) = ctx.db.destroy_nearby_crate(lua, &ctx.idx, &slot) {
+        act.out_text_for_group(gid, format_compact!("{}", e).into(), 10, false)?
+    }
+    Ok(())
 }
 
 fn spawn_crate(lua: MizLua, arg: SpawnCrateArg) -> Result<()> {

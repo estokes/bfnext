@@ -30,7 +30,7 @@ use dcso3::{
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
 use mlua::prelude::*;
-use smallvec::{SmallVec, smallvec};
+use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
 use std::path::PathBuf;
 use tokio::sync::mpsc::UnboundedSender;
@@ -74,6 +74,68 @@ impl MsgQ {
             typ,
             text: text.into(),
         })
+    }
+
+    fn panel_to_all<S: Into<String>>(&mut self, display_time: i64, clear_view: bool, text: S) {
+        self.send(
+            MsgTyp::Panel {
+                to: PanelDest::All,
+                display_time,
+                clear_view,
+            },
+            text,
+        )
+    }
+
+    fn panel_to_side<S: Into<String>>(
+        &mut self,
+        display_time: i64,
+        clear_view: bool,
+        side: Side,
+        text: S,
+    ) {
+        self.send(
+            MsgTyp::Panel {
+                to: PanelDest::Side(side),
+                display_time,
+                clear_view,
+            },
+            text,
+        )
+    }
+
+    fn panel_to_group<S: Into<String>>(
+        &mut self,
+        display_time: i64,
+        clear_view: bool,
+        group: GroupId,
+        text: S,
+    ) {
+        self.send(
+            MsgTyp::Panel {
+                to: PanelDest::Group(group),
+                display_time,
+                clear_view,
+            },
+            text,
+        )
+    }
+
+    fn panel_to_unit<S: Into<String>>(
+        &mut self,
+        display_time: i64,
+        clear_view: bool,
+        unit: UnitId,
+        text: S,
+    ) {
+        self.send(
+            MsgTyp::Panel {
+                to: PanelDest::Unit(unit),
+                display_time,
+                clear_view,
+            },
+            text,
+        )
     }
 
     fn process(&mut self, net: &Net, act: &Action) {
@@ -389,11 +451,16 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 let slot = SlotId::from(unit.id()?);
                 let ctx = unsafe { Context::get_mut() };
                 let pos = unit.as_object()?.get_point()?;
-                match ctx.db.takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z)) {
+                match ctx
+                    .db
+                    .takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z))
+                {
                     Err(e) => error!("could not process takeoff, {:?}", e),
-                    Ok(took_life) => if took_life {
-                        if let Err(e) = message_life(ctx, lua, &slot, "life taken\n") {
-                            error!("could not display life taken message {:?}", e)
+                    Ok(took_life) => {
+                        if took_life {
+                            if let Err(e) = message_life(ctx, lua, &slot, "life taken\n") {
+                                error!("could not display life taken message {:?}", e)
+                            }
                         }
                     }
                 }
@@ -488,20 +555,13 @@ fn message_life(ctx: &mut Context, lua: MizLua, slot: &SlotId, msg: &str) -> Res
     if let Ok(lives) = lives(&mut ctx.db, &ucid) {
         msg.push_str(&lives)
     }
-    ctx.pending_messages.send(
-        MsgTyp::Panel {
-            to: PanelDest::Unit(uid),
-            display_time: 10,
-            clear_view: false,
-        },
-        msg,
-    );
+    ctx.pending_messages.panel_to_unit(10, false, uid, msg);
     Ok(())
 }
 
 fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     let db = &mut ctx.db;
-    let mut returned: SmallVec::<[SlotId; 4]> = smallvec![];
+    let mut returned: SmallVec<[SlotId; 4]> = smallvec![];
     ctx.recently_landed.retain(|slot, (name, landed_ts)| {
         if ts - *landed_ts >= Duration::seconds(10) {
             let pos = match get_unit_ground_pos(lua, &**name) {

@@ -81,7 +81,7 @@ impl SlotId {
     }
 
     pub fn is_spectator(&self) -> bool {
-        dbg!(self.0.as_str()) == "0"
+        self.0.as_str() == "0" || self.0.as_str() == ""
     }
 
     pub fn spectator() -> SlotId {
@@ -144,7 +144,8 @@ impl<'lua> Net<'lua> {
         player: PlayerId,
         from_id: Option<PlayerId>,
     ) -> Result<()> {
-        Ok(self.t
+        Ok(self
+            .t
             .call_function("send_chat_to", (message, player, from_id))?)
     }
 
@@ -181,7 +182,9 @@ impl<'lua> Net<'lua> {
     }
 
     pub fn force_player_slot(&self, id: PlayerId, side: Side, slot: SlotId) -> Result<()> {
-        Ok(self.t.call_function("force_player_slot", (id, side, slot))?)
+        Ok(self
+            .t
+            .call_function("force_player_slot", (id, side, slot))?)
     }
 
     pub fn lua2json<T: IntoLua<'lua>>(&self, v: T) -> Result<String> {

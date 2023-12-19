@@ -597,11 +597,11 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     ctx.pending_messages.process(&net, &act);
     let spctx = SpawnCtx::new(lua)?;
-    ctx.db.process_spawn_queue(&ctx.idx, &spctx)?;
+    dbg!(ctx.db.process_spawn_queue(&ctx.idx, &spctx))?;
     let cull_freq = Duration::seconds(ctx.db.cfg().unit_cull_freq as i64);
     if ts - ctx.last_cull > cull_freq {
         ctx.last_cull = ts;
-        ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?
+        dbg!(ctx.db.cull_or_respawn_objectives(lua, &ctx.idx))?
     }
     Ok(())
 }

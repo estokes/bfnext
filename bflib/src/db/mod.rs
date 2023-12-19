@@ -175,7 +175,7 @@ impl ObjGroupClass {
     pub fn is_logi(&self) -> bool {
         match self {
             Self::Logi => true,
-            Self::Aaa | Self::Lr | Self::Sr | Self::Armor | Self::Other => false
+            Self::Aaa | Self::Lr | Self::Sr | Self::Armor | Self::Other => false,
         }
     }
 }
@@ -183,17 +183,30 @@ impl ObjGroupClass {
 impl From<&str> for ObjGroupClass {
     fn from(value: &str) -> Self {
         match value {
-            "BLOGI" | "RLOGI" | "NLOGI" => ObjGroupClass::Logi,
+            "BLOGI" | "RLOGI" | "NLOGI" | "LOGI" => ObjGroupClass::Logi,
             s => {
-                if s.starts_with("BAAA") || s.starts_with("RAAA") || s.starts_with("NAAA") {
+                if s.starts_with("BAAA")
+                    || s.starts_with("RAAA")
+                    || s.starts_with("NAAA")
+                    || s.starts_with("AAA")
+                {
                     ObjGroupClass::Aaa
-                } else if s.starts_with("BLR") || s.starts_with("RLR") || s.starts_with("NLR") {
+                } else if s.starts_with("BLR")
+                    || s.starts_with("RLR")
+                    || s.starts_with("NLR")
+                    || s.starts_with("LR")
+                {
                     ObjGroupClass::Lr
-                } else if s.starts_with("BSR") || s.starts_with("RSR") || s.starts_with("NSR") {
+                } else if s.starts_with("BSR")
+                    || s.starts_with("RSR")
+                    || s.starts_with("NSR")
+                    || s.starts_with("SR")
+                {
                     ObjGroupClass::Sr
                 } else if s.starts_with("BARMOR")
                     || s.starts_with("RARMOR")
                     || s.starts_with("NARMOR")
+                    || s.starts_with("ARMOR")
                 {
                     ObjGroupClass::Armor
                 } else {
@@ -225,10 +238,20 @@ impl<'lua> FromLua<'lua> for ObjGroup {
 }
 
 impl ObjGroup {
-    fn template(&self) -> &str {
-        match self.0.rsplit_once("-") {
+    fn template(&self, side: Side) -> String {
+        let s = match self.0.rsplit_once("-") {
             Some((l, _)) => l,
             None => self.0.as_str(),
+        };
+        if s.starts_with("R") || s.starts_with("G") || s.starts_with("N") {
+            s.into()
+        } else {
+            let pfx = match side {
+                Side::Red => "R",
+                Side::Blue => "B",
+                Side::Neutral => "N"
+            };
+            format_compact!("{}{}", pfx, s).into()
         }
     }
 }
@@ -683,12 +706,7 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn unit_dead(
-        &mut self,
-        id: UnitId,
-        dead: bool,
-        now: DateTime<Utc>,
-    ) -> Result<()> {
+    pub fn unit_dead(&mut self, id: UnitId, dead: bool, now: DateTime<Utc>) -> Result<()> {
         if let Some(unit) = self.persisted.units.get_mut_cow(&id) {
             unit.dead = dead;
             let gid = unit.group;

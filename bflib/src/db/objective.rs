@@ -1,5 +1,9 @@
 use super::{Db, GroupId, ObjGroupClass, Objective, ObjectiveId};
-use crate::{group, objective, objective_mut, spawnctx::{SpawnCtx, Despawn}, unit};
+use crate::{
+    group, objective, objective_mut,
+    spawnctx::{Despawn, SpawnCtx},
+    unit,
+};
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};
@@ -76,15 +80,15 @@ impl Db {
             let mut damaged_by_class: FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>> =
                 groups.into_iter().fold(
                     Ok(FxHashMap::default()),
-                    |m: Result<FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>>>, (name, id)| {
+                    |m: Result<FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>>>, (_, id)| {
                         let mut m = m?;
-                        let class = ObjGroupClass::from(name.template());
+                        let group = group!(self, id)?;
                         let mut damaged = 0;
-                        for uid in &group!(self, id)?.units {
+                        for uid in &group.units {
                             damaged += if unit!(self, uid)?.dead { 1 } else { 0 };
                         }
                         if damaged > 0 {
-                            m.entry(class).or_default().push((*id, damaged));
+                            m.entry(group.class).or_default().push((*id, damaged));
                             Ok(m)
                         } else {
                             Ok(m)
@@ -173,15 +177,19 @@ impl Db {
                 let group = group!(self, gid)?;
                 if !group.class.is_logi() {
                     match group.kind {
-                        Some(_) => self.ephemeral.despawnq.push_back(Despawn::Group(group.name.clone())),
+                        Some(_) => self
+                            .ephemeral
+                            .despawnq
+                            .push_back(Despawn::Group(group.name.clone())),
                         None => {
                             for uid in &group.units {
                                 let unit = unit!(self, uid)?;
-                                self.ephemeral.despawnq.push_back(Despawn::Static(unit.name.clone()))
+                                self.ephemeral
+                                    .despawnq
+                                    .push_back(Despawn::Static(unit.name.clone()))
                             }
-                        },
+                        }
                     }
-                    
                 }
             }
         }

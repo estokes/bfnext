@@ -120,7 +120,7 @@ impl Db {
             idx,
             side,
             SpawnLoc::AtPos(pos),
-            name.template(),
+            name.template(side).as_str(),
             DeployKind::Objective,
         )?;
         self.persisted.objectives[&obj]

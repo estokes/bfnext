@@ -163,6 +163,8 @@ pub struct Cfg {
     /// an objective will cull it's units if there are no enemy units
     /// within this distance (Meters)
     pub unit_cull_distance: u32,
+    /// how often to check whether we need to cull or respawn units (Seconds)
+    pub unit_cull_freq: u32,
     /// how far can a crate be from the player and still be
     /// unpackable and loadable (Meters)
     pub crate_load_distance: u32,
@@ -736,6 +738,7 @@ impl Default for Cfg {
             repair_time: 1800,
             logistics_exclusion: 10000,
             unit_cull_distance: 70000,
+            unit_cull_freq: 10,
             crate_load_distance: 100,
             side_switches: Some(1),
             default_lives: FxHashMap::from_iter([

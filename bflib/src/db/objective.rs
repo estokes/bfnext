@@ -1,5 +1,5 @@
 use super::{Db, GroupId, ObjGroupClass, Objective, ObjectiveId};
-use crate::{db::SpawnedGroup, group, objective, objective_mut, spawnctx::{SpawnCtx, Despawn}, unit};
+use crate::{group, objective, objective_mut, spawnctx::{SpawnCtx, Despawn}, unit};
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};

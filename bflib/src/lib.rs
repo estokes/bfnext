@@ -25,7 +25,7 @@ use dcso3::{
     trigger::{Action, Trigger},
     unit::Unit,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, Vector2,
+    HooksLua, LuaEnv, MizLua, String, Vector2, Time,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
@@ -76,6 +76,7 @@ impl MsgQ {
         })
     }
 
+    #[allow(dead_code)]
     fn panel_to_all<S: Into<String>>(&mut self, display_time: i64, clear_view: bool, text: S) {
         self.send(
             MsgTyp::Panel {
@@ -179,8 +180,10 @@ struct Context {
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
     recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
+    airborne: FxHashSet<SlotId>,
     force_to_spectators: FxHashSet<PlayerId>,
     pending_messages: MsgQ,
+    last_cull: DateTime<Utc>,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -401,7 +404,7 @@ fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
     }
 }
 
-fn on_event(lua: MizLua, ev: Event) -> Result<()> {
+fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
     info!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -435,33 +438,37 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 force_player_in_slot_to_spectators(ctx, &slot)
             }
         }
-        Event::Takeoff(e) => {
+        Event::Takeoff(e) | Event::PostponedTakeoff(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.id()?);
                 let ctx = unsafe { Context::get_mut() };
-                let pos = unit.as_object()?.get_point()?;
-                match ctx
-                    .db
-                    .takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z))
-                {
-                    Err(e) => error!("could not process takeoff, {:?}", e),
-                    Ok(took_life) => {
-                        if took_life {
-                            if let Err(e) = message_life(ctx, lua, &slot, "life taken\n") {
-                                error!("could not display life taken message {:?}", e)
+                if ctx.airborne.insert(slot.clone()) {
+                    let pos = unit.as_object()?.get_point()?;
+                    match ctx
+                        .db
+                        .takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z))
+                    {
+                        Err(e) => error!("could not process takeoff, {:?}", e),
+                        Ok(took_life) => {
+                            if took_life {
+                                if let Err(e) = message_life(ctx, &slot, "life taken\n") {
+                                    error!("could not display life taken message {:?}", e)
+                                }
                             }
                         }
                     }
+                    ctx.recently_landed.remove(&slot);
                 }
-                ctx.recently_landed.remove(&slot);
             }
         }
-        Event::Land(e) => {
+        Event::Land(e) | Event::PostponedLand(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.id()?);
-                let name = unit.as_object()?.get_name()?;
                 let ctx = unsafe { Context::get_mut() };
-                ctx.recently_landed.insert(slot, (name, Utc::now()));
+                if ctx.airborne.remove(&slot) {
+                    let name = unit.as_object()?.get_name()?;
+                    ctx.recently_landed.insert(slot, (name, Utc::now()));
+                }
             }
         }
         _ => (),
@@ -533,7 +540,7 @@ fn lives(db: &mut Db, ucid: &Ucid) -> Result<CompactString> {
     Ok(msg)
 }
 
-fn message_life(ctx: &mut Context, lua: MizLua, slot: &SlotId, msg: &str) -> Result<()> {
+fn message_life(ctx: &mut Context, slot: &SlotId, msg: &str) -> Result<()> {
     let uid = slot.as_unit_id().ok_or_else(|| anyhow!("not a unit"))?;
     let ucid = ctx
         .db
@@ -567,10 +574,36 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
         }
     });
     for slot in returned {
-        if let Err(e) = message_life(ctx, lua, &slot, "life returned\n") {
+        if let Err(e) = message_life(ctx, &slot, "life returned\n") {
             error!("failed to send life returned message to {:?} {}", slot, e);
         }
     }
+}
+
+fn run_timed_events(lua: MizLua, now: Time, path: &PathBuf) -> Result<Option<Time>> {
+    let ts = Utc::now();
+    let ctx = unsafe { Context::get_mut() };
+    if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, ts) {
+        error!("error doing repairs {:?}", e)
+    }
+    return_lives(lua, ctx, ts);
+    if let Some(snap) = ctx.db.maybe_snapshot() {
+        ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
+    }
+    let net = Net::singleton(lua)?;
+    let act = Trigger::singleton(lua)?.action()?;
+    for id in ctx.force_to_spectators.drain() {
+        net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
+    }
+    ctx.pending_messages.process(&net, &act);
+    let spctx = SpawnCtx::new(lua)?;
+    ctx.db.process_spawn_queue(&ctx.idx, &spctx)?;
+    let cull_freq = Duration::seconds(ctx.db.cfg().unit_cull_freq as i64);
+    if ts - ctx.last_cull > cull_freq {
+        ctx.last_cull = ts;
+        ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?
+    }
+    Ok(Some(now + 1.))
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
@@ -588,24 +621,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
-        move |lua, _, now| {
-            let ts = Utc::now();
-            let ctx = unsafe { Context::get_mut() };
-            if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, ts) {
-                error!("error doing repairs {:?}", e)
-            }
-            return_lives(lua, ctx, ts);
-            if let Some(snap) = ctx.db.maybe_snapshot() {
-                ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
-            }
-            let net = Net::singleton(lua)?;
-            let act = Trigger::singleton(lua)?.action()?;
-            for id in ctx.force_to_spectators.drain() {
-                net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
-            }
-            ctx.pending_messages.process(&net, &act);
-            Ok(Some(now + 1.))
-        }
+        move |lua, _, now| run_timed_events(lua, now, &path)
     })?;
     debug!("spawning");
     if !path.exists() {

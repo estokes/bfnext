@@ -500,13 +500,13 @@ impl Db {
         let dlen = self.ephemeral.despawnq.len();
         let slen = self.ephemeral.spawnq.len();
         if dlen > 0 {
-            for i in 0..max(2, dlen >> 2) {
+            for _ in 0..max(2, dlen >> 2) {
                 if let Some(name) = self.ephemeral.despawnq.pop_front() {
                     spctx.despawn(name)?
                 }
             }
         } else if slen > 0 {
-            for i in 0..max(2, slen >> 2) {
+            for _ in 0..max(2, slen >> 2) {
                 if let Some(gid) = self.ephemeral.spawnq.pop_front() {
                     self.spawn_group(idx, spctx, &self.persisted.groups[&gid])?
                 }

@@ -288,7 +288,6 @@ impl Db {
         if too_close {
             bail!("too close to friendly logistics or crate origin");
         }
-        let spctx = SpawnCtx::new(lua)?;
         let spec = didx
             .deployables_by_name
             .get(&dep)

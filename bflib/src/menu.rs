@@ -8,7 +8,6 @@ use dcso3::{
     lua_err,
     mission_commands::{GroupSubMenu, MissionCommands},
     net::SlotId,
-    trigger::Trigger,
     MizLua, String,
 };
 use fxhash::FxHashMap;

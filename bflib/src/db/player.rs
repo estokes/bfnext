@@ -126,13 +126,16 @@ impl Db {
         slot: SlotId,
         ucid: &Ucid,
     ) -> SlotAuth {
-        if slot_side == Side::Neutral && slot == SlotId::spectator() {
-            return SlotAuth::Yes;
-        }
         let player = match self.persisted.players.get_mut_cow(ucid) {
             Some(player) => player,
             None => return SlotAuth::NotRegistered(slot_side),
         };
+        player.current_slot = None;
+        self.ephemeral.players_by_slot.remove(&slot);
+        self.ephemeral.cargo.remove(&slot);
+        if slot_side == Side::Neutral && slot == SlotId::spectator() {
+            return SlotAuth::Yes;
+        }
         if slot_side != player.side {
             return SlotAuth::ObjectiveNotOwned;
         }

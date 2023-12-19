@@ -9,16 +9,20 @@ use crate::{cfg::Cfg, db::player::SlotAuth};
 use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::{Db, UnitId};
+use db::Db;
 use dcso3::{
     coalition::Side,
-    env::{self, miz::Miz, Env},
+    env::{
+        self,
+        miz::{GroupId, Miz, UnitId},
+        Env,
+    },
     event::Event,
     hooks::UserHooks,
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
-    trigger::Trigger,
+    trigger::{Action, Trigger},
     unit::Unit,
     world::World,
     HooksLua, LuaEnv, MizLua, String, Vector2,
@@ -26,6 +30,7 @@ use dcso3::{
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
 use mlua::prelude::*;
+use smallvec::{SmallVec, smallvec};
 use spawnctx::SpawnCtx;
 use std::path::PathBuf;
 use tokio::sync::mpsc::UnboundedSender;
@@ -36,24 +41,68 @@ struct PlayerInfo {
     ucid: Ucid,
 }
 
-#[derive(Debug, Clone, Default)]
-struct ChatQ(Vec<(Option<PlayerId>, String)>);
+#[derive(Debug, Clone, Copy)]
+enum PanelDest {
+    All,
+    Side(Side),
+    Group(GroupId),
+    Unit(UnitId),
+}
 
-impl ChatQ {
-    fn send<S: Into<String>>(&mut self, to: Option<PlayerId>, msg: S) {
-        self.0.push((to, msg.into()))
+#[derive(Debug, Clone, Copy)]
+enum MsgTyp {
+    Chat(Option<PlayerId>),
+    Panel {
+        to: PanelDest,
+        display_time: i64,
+        clear_view: bool,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct Msg {
+    typ: MsgTyp,
+    text: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct MsgQ(Vec<Msg>);
+
+impl MsgQ {
+    fn send<S: Into<String>>(&mut self, typ: MsgTyp, text: S) {
+        self.0.push(Msg {
+            typ,
+            text: text.into(),
+        })
     }
 
-    fn process(&mut self, net: &Net) {
-        for (to, msg) in self.0.drain(..) {
-            debug!("server sending chat message to {:?} msg: {}", to, msg);
-            match to {
-                None => if let Err(e) = net.send_chat(msg, true) {
-                    error!("could not send chat message {:?}", e)
-                }
-                Some(id) => if let Err(e) = net.send_chat_to(msg, id, Some(PlayerId::from(1))) {
-                    error!("could not send chat message {:?}", e)
-                }
+    fn process(&mut self, net: &Net, act: &Action) {
+        for msg in self.0.drain(..) {
+            debug!("server sending {:?}", msg);
+            let res = match msg.typ {
+                MsgTyp::Chat(to) => match to {
+                    None => net.send_chat(msg.text, true),
+                    Some(id) => net.send_chat_to(msg.text, id, Some(PlayerId::from(1))),
+                },
+                MsgTyp::Panel {
+                    to,
+                    display_time,
+                    clear_view,
+                } => match to {
+                    PanelDest::All => act.out_text(msg.text, display_time, clear_view),
+                    PanelDest::Group(gid) => {
+                        act.out_text_for_group(gid, msg.text, display_time, clear_view)
+                    }
+                    PanelDest::Side(side) => {
+                        act.out_text_for_coalition(side, msg.text, display_time, clear_view)
+                    }
+                    PanelDest::Unit(uid) => {
+                        act.out_text_for_unit(uid, msg.text, display_time, clear_view)
+                    }
+                },
+            };
+            if let Err(e) = res {
+                error!("could not send message {:?}", e)
             }
         }
     }
@@ -64,12 +113,12 @@ struct Context {
     idx: env::miz::MizIndex,
     db: Db,
     to_background: Option<UnboundedSender<bg::Task>>,
-    units_by_obj_id: FxHashMap<i64, UnitId>,
+    units_by_obj_id: FxHashMap<i64, db::UnitId>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
     recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
     force_to_spectators: FxHashSet<PlayerId>,
-    pending_messages: ChatQ,
+    pending_messages: MsgQ,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -174,9 +223,9 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     {
         Ok(()) => {
             let msg = String::from(format_compact!("Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!", side));
-            ctx.pending_messages.send(Some(id), msg);
+            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
             ctx.pending_messages.send(
-                None,
+                MsgTyp::Chat(None),
                 format_compact!("{} has joined {:?} team", ifo.name, side),
             );
         }
@@ -187,7 +236,7 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
                 Some(1) => format_compact!("You are already on {:?} team. You may sitch sides 1 time by typing -switch {:?}.", orig_side, side),
                 Some(n) => format_compact!("You are already on {:?} team. You may switch sides {n} times. Type -switch {:?}.", orig_side, side),
             });
-            ctx.pending_messages.send(Some(id), msg);
+            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
         }
     }
     Ok(String::from(""))
@@ -206,9 +255,9 @@ fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String>
     match ctx.db.sideswitch_player(&ifo.ucid, side) {
         Ok(()) => {
             let msg = String::from(format_compact!("{} has switched to {:?}", ifo.name, side));
-            ctx.pending_messages.send(None, msg);
+            ctx.pending_messages.send(MsgTyp::Chat(None), msg);
         }
-        Err(e) => ctx.pending_messages.send(Some(id), e),
+        Err(e) => ctx.pending_messages.send(MsgTyp::Chat(Some(id)), e),
     }
     Ok(String::from(""))
 }
@@ -219,8 +268,8 @@ fn lives_command(id: PlayerId) -> Result<()> {
         .info_by_player_id
         .get(&id)
         .ok_or_else(|| anyhow!("missing info for player {:?}", id))?;
-    let msg = lives(&ctx.db, &ifo.ucid)?;
-    ctx.pending_messages.send(Some(id), msg);
+    let msg = lives(&mut ctx.db, &ifo.ucid)?;
+    ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
     Ok(())
 }
 
@@ -260,7 +309,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
                 side,
                 side
             ));
-            ctx.pending_messages.send(Some(id), msg);
+            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
         SlotAuth::ObjectiveNotOwned => {
@@ -272,7 +321,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
                 "{:?} does not own the objective associated with this slot",
                 side
             ));
-            ctx.pending_messages.send(Some(id), msg);
+            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
         SlotAuth::Yes => Ok(true),
@@ -301,7 +350,7 @@ fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
     }
 }
 
-fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
+fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     info!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -340,6 +389,9 @@ fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
                 let slot = SlotId::from(unit.id()?);
                 let ctx = unsafe { Context::get_mut() };
                 ctx.db.takeoff(Utc::now(), slot.clone());
+                if let Err(e) = message_life(ctx, lua, &slot, "life taken\n") {
+                    error!("could not display life taken message {:?}", e)
+                }
                 ctx.recently_landed.remove(&slot);
             }
         }
@@ -390,7 +442,8 @@ fn get_unit_ground_pos(lua: MizLua, name: &str) -> Result<Vector2> {
     Ok(Vector2::from(na::Vector2::new(pos.0.x, pos.0.z)))
 }
 
-fn lives(db: &Db, ucid: &Ucid) -> Result<CompactString> {
+fn lives(db: &mut Db, ucid: &Ucid) -> Result<CompactString> {
+    db.maybe_reset_lives(ucid)?;
     let player = db
         .player(ucid)
         .ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
@@ -398,11 +451,12 @@ fn lives(db: &Db, ucid: &Ucid) -> Result<CompactString> {
     let lives = player.lives();
     let mut msg = CompactString::new("");
     let now = Utc::now();
-    for (typ, (n, _)) in &cfg.default_lives {
+    for (typ, (n, reset_after)) in &cfg.default_lives {
         match lives.get(typ) {
             None => msg.push_str(&format_compact!("{typ} {n}/{n}\n")),
             Some((reset, cur)) => {
-                let reset = *reset - now;
+                let since_reset = now - *reset;
+                let reset = Duration::seconds(*reset_after as i64) - since_reset;
                 let hrs = reset.num_hours();
                 let min = reset.num_minutes() - hrs * 60;
                 let sec = reset.num_seconds() - hrs * 3600 - min * 60;
@@ -418,22 +472,31 @@ fn lives(db: &Db, ucid: &Ucid) -> Result<CompactString> {
     Ok(msg)
 }
 
-fn message_life_returned(db: &Db, lua: MizLua, slot: &SlotId) -> Result<()> {
+fn message_life(ctx: &mut Context, lua: MizLua, slot: &SlotId, msg: &str) -> Result<()> {
     let uid = slot.as_unit_id().ok_or_else(|| anyhow!("not a unit"))?;
-    let ucid = db
+    let ucid = ctx
+        .db
         .player_in_slot(slot)
-        .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?;
-    let mut msg = CompactString::new("life returned\n");
-    if let Ok(lives) = lives(db, ucid) {
+        .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?
+        .clone();
+    let mut msg = CompactString::new(msg);
+    if let Ok(lives) = lives(&mut ctx.db, &ucid) {
         msg.push_str(&lives)
     }
-    Trigger::singleton(lua)?
-        .action()?
-        .out_text_for_unit(uid, msg.into(), 10, false)
+    ctx.pending_messages.send(
+        MsgTyp::Panel {
+            to: PanelDest::Unit(uid),
+            display_time: 10,
+            clear_view: false,
+        },
+        msg,
+    );
+    Ok(())
 }
 
 fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     let db = &mut ctx.db;
+    let mut returned: SmallVec::<[SlotId; 4]> = smallvec![];
     ctx.recently_landed.retain(|slot, (name, landed_ts)| {
         if ts - *landed_ts >= Duration::seconds(10) {
             let pos = match get_unit_ground_pos(lua, &**name) {
@@ -442,15 +505,18 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
             };
             let life_returned = !db.land(slot.clone(), pos);
             if life_returned {
-                if let Err(e) = message_life_returned(db, lua, slot) {
-                    error!("failed to send life returned message to {:?} {}", slot, e);
-                }
+                returned.push(slot.clone());
             }
             life_returned
         } else {
             true
         }
     });
+    for slot in returned {
+        if let Err(e) = message_life(ctx, lua, &slot, "life returned\n") {
+            error!("failed to send life returned message to {:?} {}", slot, e);
+        }
+    }
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
@@ -479,10 +545,11 @@ fn init_miz(lua: MizLua) -> Result<()> {
                 ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
             }
             let net = Net::singleton(lua)?;
+            let act = Trigger::singleton(lua)?.action()?;
             for id in ctx.force_to_spectators.drain() {
                 net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
             }
-            ctx.pending_messages.process(&net);
+            ctx.pending_messages.process(&net, &act);
             Ok(Some(now + 1.))
         }
     })?;

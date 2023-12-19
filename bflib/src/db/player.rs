@@ -1,10 +1,14 @@
+use crate::cfg::LifeType;
+
 use super::{Db, Map, Player};
+use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{
     coalition::Side,
     net::{SlotId, SlotIdKind, Ucid},
-    Vector2, String
+    String, Vector2,
 };
+use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Copy)]
 pub enum SlotAuth {
@@ -86,6 +90,27 @@ impl Db {
         } else {
             false
         }
+    }
+
+    pub fn maybe_reset_lives(&mut self, ucid: &Ucid) -> Result<()> {
+        let now = Utc::now();
+        let mut lt_to_reset: SmallVec<[LifeType; 2]> = smallvec![];
+        let player = self
+            .persisted
+            .players
+            .get_mut_cow(ucid)
+            .ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
+        for (lt, (reset, _n)) in player.lives.into_iter() {
+            let reset_after = Duration::seconds(self.ephemeral.cfg.default_lives[lt].1 as i64);
+            if now - reset >= reset_after {
+                lt_to_reset.push(*lt);
+            }
+        }
+        for lt in lt_to_reset {
+            player.lives.remove_cow(&lt);
+            self.ephemeral.dirty = true;
+        }
+        Ok(())
     }
 
     pub fn try_occupy_slot(

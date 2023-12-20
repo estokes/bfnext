@@ -3,7 +3,9 @@ use dcso3::{
     coalition::{Coalition, Side},
     env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
     group::GroupCategory,
-    DeepClone, LuaEnv, MizLua, String, Vector2,
+    land::Land,
+    world::{SearchVolume, World},
+    DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
@@ -97,5 +99,13 @@ impl<'lua> SpawnCtx<'lua> {
                 Ok(obj.as_object()?.destroy()?)
             }
         }
+    }
+
+    pub fn remove_junk(&self, point: Vector2, radius: f64) -> Result<()> {
+        let alt = Land::singleton(self.lua)?.get_height(LuaVec2(point))?;
+        let point = LuaVec3(Vector3::new(point.x, alt, point.y));
+        let vol = SearchVolume::Sphere { point, radius };
+        World::singleton(self.lua)?.remove_junk(vol)?;
+        Ok(())
     }
 }

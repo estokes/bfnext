@@ -8,7 +8,7 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    atomic_id,
+    atomic_id, centroid2d,
     coalition::Side,
     cvt_err,
     env::miz::{GroupKind, Miz, MizIndex, UnitInfo},
@@ -528,11 +528,13 @@ impl Db {
         )?;
         template.group.set("lateActivation", false)?;
         template.group.set_name(group.name.clone())?;
+        let mut points: SmallVec<[Vector2; 16]> = smallvec![];
         let by_tname: FxHashMap<&str, &SpawnedUnit> = group
             .units
             .into_iter()
             .filter_map(|uid| {
                 self.persisted.units.get(uid).and_then(|u| {
+                    points.push(u.pos);
                     if u.dead {
                         None
                     } else {
@@ -560,6 +562,12 @@ impl Db {
             units.len() > 0
         };
         if alive {
+            let point = centroid2d(points.iter().map(|p| *p));
+            let radius = points
+                .iter()
+                .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
+                .fold(0., |acc, d| if d > acc { d } else { acc });
+            spctx.remove_junk(point, radius.sqrt() * 1.10)?;
             spctx.spawn(template)
         } else {
             Ok(())

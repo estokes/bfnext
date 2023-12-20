@@ -5,7 +5,7 @@ use crate::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     group,
     spawnctx::{SpawnCtx, SpawnLoc},
-    unit,
+    unit, unit_mut,
 };
 use anyhow::{anyhow, bail, Result};
 use compact_str::{format_compact, CompactString};
@@ -92,7 +92,7 @@ impl Db {
             .find_map(|(oid, obj)| {
                 if obj.owner == side
                     && obj.logi() > 0
-                    && na::distance(&obj.pos.into(), &point.into()) <= obj.radius
+                    && na::distance_squared(&obj.pos.into(), &point.into()) <= obj.radius.powi(2)
                 {
                     return Some((oid, obj));
                 }
@@ -279,6 +279,7 @@ impl Db {
         ) -> std::result::Result<FxHashMap<String, (GroupId, Vec<Cifo>)>, CompactString> {
             let mut repairs: FxHashMap<String, (GroupId, Vec<Cifo>)> = FxHashMap::default();
             let mut reasons = CompactString::new("");
+            let max_dist = max_dist.powi(2);
             for cr in nearby {
                 if let Some(dep) = didx.deployables_by_repair.get(&cr.crate_def.name) {
                     let mut group_to_repair = None;
@@ -288,9 +289,11 @@ impl Db {
                             DeployKind::Deployed(d) if d.path.last() == Some(&dep) => {
                                 for uid in &group.units {
                                     let unit_pos = db.persisted.units[uid].pos;
-                                    if na::distance(&unit_pos.into(), &cr.pos.into()) <= max_dist {
+                                    if na::distance_squared(&unit_pos.into(), &cr.pos.into())
+                                        <= max_dist
+                                    {
                                         group_to_repair = Some(*gid);
-                                        break
+                                        break;
                                     }
                                 }
                             }
@@ -301,12 +304,13 @@ impl Db {
                         }
                     }
                     if let Some(gid) = group_to_repair {
-                        let (_, crates) = repairs.entry(dep.clone()).or_insert_with(|| (gid, vec![]));
+                        let (_, crates) =
+                            repairs.entry(dep.clone()).or_insert_with(|| (gid, vec![]));
                         crates.push(cr.clone())
                     }
                 }
             }
-            repairs.retain(|dep, (gid, have)| {
+            repairs.retain(|dep, (_, have)| {
                 let required = have[0].crate_def.required as usize;
                 if have.len() < required {
                     reasons.push_str(&format_compact!("not enough crates to repair {dep}\n"));
@@ -315,7 +319,7 @@ impl Db {
                     while have.len() > required {
                         have.pop();
                     }
-                    true 
+                    true
                 }
             });
             if repairs.is_empty() {
@@ -330,6 +334,7 @@ impl Db {
             centroid: Vector2,
             iter: F,
         ) -> bool {
+            let excl_dist = (db.ephemeral.cfg.logistics_exclusion as f64).powi(2);
             db.persisted.objectives.into_iter().any(|(oid, obj)| {
                 let mut check = false;
                 for cr in iter() {
@@ -344,8 +349,7 @@ impl Db {
                 }
                 check |= obj.owner == side;
                 check && {
-                    let dist = na::distance(&obj.pos.into(), &centroid.into());
-                    let excl_dist = db.ephemeral.cfg.logistics_exclusion as f64;
+                    let dist = na::distance_squared(&obj.pos.into(), &centroid.into());
                     dist <= excl_dist
                 }
             })
@@ -420,17 +424,6 @@ impl Db {
             bail!("no nearby crates")
         }
         match buildable(&nearby, didx) {
-            Err(mut build_reasons) => match repairable(self, &nearby, didx, max_dist) {
-                Err(rep_reasons) => bail!("{build_reasons}\n{rep_reasons}"),
-                Ok(mut candidates) => {
-                    let (dep, (gid, have)) = candidates.drain().next().unwrap();
-                    let centroid = centroid2d(have.iter().map(|c| c.pos));
-                    if too_close(self, side, centroid, || have.iter()) {
-                        bail!("too close to friendly logistics or crate origin")
-                    }
-                    unimplemented!()
-                }
-            },
             Ok(mut candidates) => {
                 let (dep, have) = candidates.drain().next().unwrap();
                 let centroid = centroid2d(have.values().flat_map(|c| c.iter()).map(|c| c.pos));
@@ -448,6 +441,24 @@ impl Db {
                     self.add_and_queue_group(&spctx, idx, side, spawnloc, &*spec.template, origin)?;
                 Ok((Unpakistan::Unpacked, dep, gid))
             }
+            Err(build_reasons) => match repairable(self, &nearby, didx, max_dist) {
+                Err(rep_reasons) => bail!("{build_reasons}\n{rep_reasons}"),
+                Ok(mut candidates) => {
+                    let (dep, (gid, have)) = candidates.drain().next().unwrap();
+                    let centroid = centroid2d(have.iter().map(|c| c.pos));
+                    if too_close(self, side, centroid, || have.iter()) {
+                        bail!("too close to friendly logistics or crate origin")
+                    }
+                    let group = group!(self, gid)?;
+                    for uid in &group.units {
+                        let unit = unit_mut!(self, uid)?;
+                        unit.dead = false;
+                    }
+                    self.ephemeral.dirty = true;
+                    self.ephemeral.spawnq.push_back(gid);
+                    Ok((Unpakistan::Repaired, dep, gid))
+                }
+            },
         }
     }
 

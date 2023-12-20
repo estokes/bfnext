@@ -1,6 +1,8 @@
-use super::{Db, DeployKind, GroupId, ObjectiveId, SpawnedGroup};
+use std::fmt;
+
+use super::{Db, DeployKind, DeployableIndex, GroupId, ObjectiveId, SpawnedGroup};
 use crate::{
-    cfg::{CargoConfig, Crate, LimitEnforceTyp, Troop, Vehicle},
+    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     group,
     spawnctx::{SpawnCtx, SpawnLoc},
     unit,
@@ -8,8 +10,8 @@ use crate::{
 use anyhow::{anyhow, bail, Result};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    centroid2d, env::miz::MizIndex, land::Land, net::SlotId, trigger::Trigger, LuaVec2, MizLua,
-    String, Vector2,
+    centroid2d, coalition::Side, env::miz::MizIndex, land::Land, net::SlotId, trigger::Trigger,
+    LuaVec2, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
 use log::{debug, error};
@@ -24,6 +26,21 @@ pub struct NearbyCrate<'a> {
     pub pos: Vector2,
     pub heading: f64,
     pub distance: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Unpakistan {
+    Unpacked,
+    Repaired,
+}
+
+impl fmt::Display for Unpakistan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unpacked => write!(f, "unpacked"),
+            Self::Repaired => write!(f, "repaired"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -203,14 +220,188 @@ impl Db {
         lua: MizLua,
         idx: &MizIndex,
         slot: &SlotId,
-    ) -> Result<(String, GroupId)> {
+    ) -> Result<(Unpakistan, String, GroupId)> {
         #[derive(Clone)]
         struct Cifo {
             pos: Vector2,
             group: GroupId,
             crate_def: Crate,
         }
+        fn buildable(
+            nearby: &SmallVec<[Cifo; 2]>,
+            didx: &DeployableIndex,
+        ) -> std::result::Result<FxHashMap<String, FxHashMap<String, Vec<Cifo>>>, CompactString>
+        {
+            let mut candidates: FxHashMap<String, FxHashMap<String, Vec<Cifo>>> =
+                FxHashMap::default();
+            let mut reasons = CompactString::new("");
+            for cr in nearby {
+                if let Some(dep) = didx.deployables_by_crates.get(&cr.crate_def.name) {
+                    candidates
+                        .entry(dep.clone())
+                        .or_default()
+                        .entry(cr.crate_def.name.clone())
+                        .or_default()
+                        .push(cr.clone());
+                }
+            }
+            candidates.retain(|dep, have| {
+                let spec = &didx.deployables_by_name[dep];
+                for req in &spec.crates {
+                    match have.get_mut(&req.name) {
+                        Some(ids) if ids.len() >= req.required as usize => {
+                            while ids.len() > req.required as usize {
+                                ids.pop();
+                            }
+                        }
+                        Some(_) | None => {
+                            reasons.push_str(&format_compact!(
+                                "can't spawn {dep} missing {}\n",
+                                req.name
+                            ));
+                            return false;
+                        }
+                    }
+                }
+                true
+            });
+            if candidates.is_empty() {
+                Err(reasons)
+            } else {
+                Ok(candidates)
+            }
+        }
+        fn repairable(
+            db: &Db,
+            nearby: &SmallVec<[Cifo; 2]>,
+            didx: &DeployableIndex,
+            max_dist: f64,
+        ) -> std::result::Result<FxHashMap<String, (GroupId, Vec<Cifo>)>, CompactString> {
+            let mut repairs: FxHashMap<String, (GroupId, Vec<Cifo>)> = FxHashMap::default();
+            let mut reasons = CompactString::new("");
+            for cr in nearby {
+                if let Some(dep) = didx.deployables_by_repair.get(&cr.crate_def.name) {
+                    let mut group_to_repair = None;
+                    for gid in &db.persisted.deployed {
+                        let group = &db.persisted.groups[gid];
+                        match &group.origin {
+                            DeployKind::Deployed(d) if d.path.last() == Some(&dep) => {
+                                for uid in &group.units {
+                                    let unit_pos = db.persisted.units[uid].pos;
+                                    if na::distance(&unit_pos.into(), &cr.pos.into()) <= max_dist {
+                                        group_to_repair = Some(*gid);
+                                        break
+                                    }
+                                }
+                            }
+                            DeployKind::Deployed(_)
+                            | DeployKind::Crate(_, _)
+                            | DeployKind::Objective
+                            | DeployKind::Troop(_) => (),
+                        }
+                    }
+                    if let Some(gid) = group_to_repair {
+                        let (_, crates) = repairs.entry(dep.clone()).or_insert_with(|| (gid, vec![]));
+                        crates.push(cr.clone())
+                    }
+                }
+            }
+            repairs.retain(|dep, (gid, have)| {
+                let required = have[0].crate_def.required as usize;
+                if have.len() < required {
+                    reasons.push_str(&format_compact!("not enough crates to repair {dep}\n"));
+                    false
+                } else {
+                    while have.len() > required {
+                        have.pop();
+                    }
+                    true 
+                }
+            });
+            if repairs.is_empty() {
+                Err(reasons)
+            } else {
+                Ok(repairs)
+            }
+        }
+        fn too_close<'a, I: Iterator<Item = &'a Cifo>, F: Fn() -> I>(
+            db: &Db,
+            side: Side,
+            centroid: Vector2,
+            iter: F,
+        ) -> bool {
+            db.persisted.objectives.into_iter().any(|(oid, obj)| {
+                let mut check = false;
+                for cr in iter() {
+                    match db.persisted.groups.get(&cr.group) {
+                        Some(group) => {
+                            if let DeployKind::Crate(source, _) = &group.origin {
+                                check |= oid == source;
+                            }
+                        }
+                        None => error!("missing group {:?}", cr.group),
+                    }
+                }
+                check |= obj.owner == side;
+                check && {
+                    let dist = na::distance(&obj.pos.into(), &centroid.into());
+                    let excl_dist = db.ephemeral.cfg.logistics_exclusion as f64;
+                    dist <= excl_dist
+                }
+            })
+        }
+        fn compute_positions(
+            db: &mut Db,
+            have: &FxHashMap<String, Vec<Cifo>>,
+            centroid: Vector2,
+        ) -> Result<SpawnLoc> {
+            let mut num_by_typ: FxHashMap<String, usize> = FxHashMap::default();
+            let mut pos_by_typ: FxHashMap<String, Vector2> = FxHashMap::default();
+            for cr in have.iter().flat_map(|(_, cr)| cr.iter()) {
+                let group = &group!(db, cr.group)?;
+                if let DeployKind::Crate(_, spec) = &group.origin {
+                    if let Some(typ) = spec.pos_unit.as_ref() {
+                        let uid = group
+                            .units
+                            .into_iter()
+                            .next()
+                            .ok_or_else(|| anyhow!("{:?} has no units", cr.group))?;
+                        *pos_by_typ.entry(typ.clone()).or_default() += unit!(db, uid)?.pos;
+                        *num_by_typ.entry(typ.clone()).or_default() += 1;
+                    }
+                }
+                db.delete_group(&cr.group)?
+            }
+            for (typ, pos) in pos_by_typ.iter_mut() {
+                if let Some(n) = num_by_typ.get(typ) {
+                    *pos /= *n as f64
+                }
+            }
+            let spawnloc = if pos_by_typ.is_empty() {
+                SpawnLoc::AtPos(centroid)
+            } else {
+                SpawnLoc::AtPosWithComponents(centroid, pos_by_typ)
+            };
+            Ok(spawnloc)
+        }
+        fn enforce_deploy_limits(db: &mut Db, spec: &Deployable, dep: &String) -> Result<()> {
+            let (n, oldest) = db.number_deployed(&**dep)?;
+            if n >= spec.limit as usize {
+                match spec.limit_enforce {
+                    LimitEnforceTyp::DenyCrate => {
+                        bail!("the max number of {:?} are already deployed", dep)
+                    }
+                    LimitEnforceTyp::DeleteOldest => {
+                        if let Some(gid) = oldest {
+                            db.delete_group(&gid)?
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
         let nearby = self
             .list_nearby_crates(lua, idx, slot)?
             .into_iter()
@@ -225,118 +416,39 @@ impl Db {
             .deployable_idx
             .get(&side)
             .ok_or_else(|| anyhow!("{:?} can't deploy anything", side))?;
-        let mut candidates: FxHashMap<String, FxHashMap<String, Vec<Cifo>>> = FxHashMap::default();
-        for cr in nearby {
-            if let Some(dep) = didx.deployables_by_crates.get(&cr.crate_def.name) {
-                candidates
-                    .entry(dep.clone())
-                    .or_default()
-                    .entry(cr.crate_def.name.clone())
-                    .or_default()
-                    .push(cr);
-            }
+        if nearby.is_empty() {
+            bail!("no nearby crates")
         }
-        let mut reasons = CompactString::new("");
-        candidates.retain(|dep, have| {
-            let spec = match didx.deployables_by_name.get(dep) {
-                Some(spec) => spec,
-                None => {
-                    error!("missing deployable {dep}");
-                    return false;
-                }
-            };
-            for req in &spec.crates {
-                match have.get_mut(&req.name) {
-                    Some(ids) if ids.len() >= req.required as usize => {
-                        while ids.len() > req.required as usize {
-                            ids.pop();
-                        }
+        match buildable(&nearby, didx) {
+            Err(mut build_reasons) => match repairable(self, &nearby, didx, max_dist) {
+                Err(rep_reasons) => bail!("{build_reasons}\n{rep_reasons}"),
+                Ok(mut candidates) => {
+                    let (dep, (gid, have)) = candidates.drain().next().unwrap();
+                    let centroid = centroid2d(have.iter().map(|c| c.pos));
+                    if too_close(self, side, centroid, || have.iter()) {
+                        bail!("too close to friendly logistics or crate origin")
                     }
-                    Some(_) | None => {
-                        reasons
-                            .push_str(&format_compact!("can't spawn {dep} missing {}\n", req.name));
-                        return false;
-                    }
+                    unimplemented!()
                 }
-            }
-            true
-        });
-        let (dep, have) = match candidates.drain().next() {
-            Some((dep, have)) => (dep, have),
-            None => bail!(reasons),
-        };
-        let centroid = centroid2d(have.iter().flat_map(|(_, c)| c.iter()).map(|c| c.pos));
-        let too_close = self.persisted.objectives.into_iter().any(|(oid, obj)| {
-            let mut check = false;
-            for cr in have.iter().flat_map(|(_, c)| c.iter()) {
-                match self.persisted.groups.get(&cr.group) {
-                    Some(group) => {
-                        if let DeployKind::Crate(source, _) = &group.origin {
-                            check |= oid == source;
-                        }
-                    }
-                    None => error!("missing group {:?}", cr.group),
+            },
+            Ok(mut candidates) => {
+                let (dep, have) = candidates.drain().next().unwrap();
+                let centroid = centroid2d(have.values().flat_map(|c| c.iter()).map(|c| c.pos));
+                if too_close(self, side, centroid, || {
+                    have.values().flat_map(|c| c.iter())
+                }) {
+                    bail!("too close to friendly logistics or crate origin");
                 }
-            }
-            check |= obj.owner == side;
-            check && {
-                let dist = na::distance(&obj.pos.into(), &centroid.into());
-                let excl_dist = self.ephemeral.cfg.logistics_exclusion as f64;
-                dist <= excl_dist
-            }
-        });
-        if too_close {
-            bail!("too close to friendly logistics or crate origin");
-        }
-        let spec = didx
-            .deployables_by_name
-            .get(&dep)
-            .ok_or_else(|| anyhow!("missing deployable {dep}"))?
-            .clone();
-        let (n, oldest) = self.number_deployed(&*dep)?;
-        if n >= spec.limit as usize {
-            match spec.limit_enforce {
-                LimitEnforceTyp::DenyCrate => {
-                    bail!("the max number of {:?} are already deployed", dep)
-                }
-                LimitEnforceTyp::DeleteOldest => {
-                    if let Some(gid) = oldest {
-                        self.delete_group(&gid)?
-                    }
-                }
+                let spec = didx.deployables_by_name[&dep].clone();
+                enforce_deploy_limits(self, &spec, &dep)?;
+                let spawnloc = compute_positions(self, &have, centroid)?;
+                let origin = DeployKind::Deployed(spec.clone());
+                let spctx = SpawnCtx::new(lua)?;
+                let gid =
+                    self.add_and_queue_group(&spctx, idx, side, spawnloc, &*spec.template, origin)?;
+                Ok((Unpakistan::Unpacked, dep, gid))
             }
         }
-        let mut num_by_typ: FxHashMap<String, usize> = FxHashMap::default();
-        let mut pos_by_typ: FxHashMap<String, Vector2> = FxHashMap::default();
-        for cr in have.iter().flat_map(|(_, cr)| cr.iter()) {
-            let group = &group!(self, cr.group)?;
-            if let DeployKind::Crate(_, spec) = &group.origin {
-                if let Some(typ) = spec.pos_unit.as_ref() {
-                    let uid = group
-                        .units
-                        .into_iter()
-                        .next()
-                        .ok_or_else(|| anyhow!("{:?} has no units", cr.group))?;
-                    *pos_by_typ.entry(typ.clone()).or_default() += unit!(self, uid)?.pos;
-                    *num_by_typ.entry(typ.clone()).or_default() += 1;
-                }
-            }
-            self.delete_group(&cr.group)?
-        }
-        for (typ, pos) in pos_by_typ.iter_mut() {
-            if let Some(n) = num_by_typ.get(typ) {
-                *pos /= *n as f64
-            }
-        }
-        let spawnloc = if pos_by_typ.is_empty() {
-            SpawnLoc::AtPos(centroid)
-        } else {
-            SpawnLoc::AtPosWithComponents(centroid, pos_by_typ)
-        };
-        let origin = DeployKind::Deployed(spec.clone());
-        let spctx = SpawnCtx::new(lua)?;
-        let gid = self.add_and_queue_group(&spctx, idx, side, spawnloc, &*spec.template, origin)?;
-        Ok((dep, gid))
     }
 
     pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {

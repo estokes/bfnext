@@ -166,6 +166,7 @@ pub enum ObjGroupClass {
     Logi,
     Aaa,
     Lr,
+    Mr,
     Sr,
     Armor,
     Other,
@@ -175,7 +176,7 @@ impl ObjGroupClass {
     pub fn is_logi(&self) -> bool {
         match self {
             Self::Logi => true,
-            Self::Aaa | Self::Lr | Self::Sr | Self::Armor | Self::Other => false,
+            Self::Aaa | Self::Lr | Self::Mr | Self::Sr | Self::Armor | Self::Other => false,
         }
     }
 }
@@ -197,6 +198,12 @@ impl From<&str> for ObjGroupClass {
                     || s.starts_with("LR")
                 {
                     ObjGroupClass::Lr
+                } else if s.starts_with("BMR")
+                    || s.starts_with("RMR")
+                    || s.starts_with("NMR")
+                    || s.starts_with("MR")
+                {
+                    ObjGroupClass::Mr
                 } else if s.starts_with("BSR")
                     || s.starts_with("RSR")
                     || s.starts_with("NSR")
@@ -249,7 +256,7 @@ impl ObjGroup {
             let pfx = match side {
                 Side::Red => "R",
                 Side::Blue => "B",
-                Side::Neutral => "N"
+                Side::Neutral => "N",
             };
             format_compact!("{}{}", pfx, s).into()
         }
@@ -347,6 +354,7 @@ impl Persisted {
 struct DeployableIndex {
     deployables_by_name: FxHashMap<String, Deployable>,
     deployables_by_crates: FxHashMap<String, String>,
+    deployables_by_repair: FxHashMap<String, String>,
     crates_by_name: FxHashMap<String, Crate>,
 }
 
@@ -380,10 +388,39 @@ impl Ephemeral {
                     Entry::Occupied(_) => bail!("deployable with duplicate name {name}"),
                     Entry::Vacant(e) => e.insert(dep.clone()),
                 };
+                if let Some(rep) = dep.repair_crate.as_ref() {
+                    match idx.deployables_by_repair.entry(rep.name.clone()) {
+                        Entry::Occupied(_) => {
+                            bail!(
+                                "multiple deployables use the same repair crate {}",
+                                rep.name
+                            )
+                        }
+                        Entry::Vacant(e) => {
+                            if idx.deployables_by_crates.contains_key(&rep.name) {
+                                bail!(
+                                    "deployable {} uses repair crate of {}",
+                                    &idx.deployables_by_crates[&rep.name],
+                                    name
+                                )
+                            }
+                            e.insert(name.clone())
+                        }
+                    };
+                }
                 for cr in dep.crates.iter() {
                     match idx.deployables_by_crates.entry(cr.name.clone()) {
                         Entry::Occupied(_) => bail!("multiple deployables use crate {}", cr.name),
-                        Entry::Vacant(e) => e.insert(name.clone()),
+                        Entry::Vacant(e) => {
+                            if idx.deployables_by_repair.contains_key(&cr.name) {
+                                bail!(
+                                    "deployable repair {} uses crate of {}",
+                                    &idx.deployables_by_repair[&cr.name],
+                                    name
+                                )
+                            }
+                            e.insert(name.clone())
+                        }
                     };
                 }
                 for c in dep.crates.iter() {
@@ -548,7 +585,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn delete_group<'lua>(&mut self, gid: &GroupId) -> Result<()> {
+    pub fn delete_group(&mut self, gid: &GroupId) -> Result<()> {
         self.ephemeral.spawnq.retain(|id| id != gid);
         let group = self
             .persisted

@@ -739,7 +739,7 @@ impl Default for Cfg {
             logistics_exclusion: 10000,
             unit_cull_distance: 70000,
             unit_cull_freq: 10,
-            crate_load_distance: 100,
+            crate_load_distance: 200,
             side_switches: Some(1),
             default_lives: FxHashMap::from_iter([
                 (LifeType::Standard, (3, 21600)),

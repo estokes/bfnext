@@ -99,6 +99,7 @@ impl Db {
                 ObjGroupClass::Logi,
                 ObjGroupClass::Sr,
                 ObjGroupClass::Aaa,
+                ObjGroupClass::Mr,
                 ObjGroupClass::Lr,
                 ObjGroupClass::Armor,
                 ObjGroupClass::Other,

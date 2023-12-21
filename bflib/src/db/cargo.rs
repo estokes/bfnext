@@ -419,7 +419,6 @@ impl Db {
                         *num_by_typ.entry(typ.clone()).or_default() += 1;
                     }
                 }
-                db.delete_group(&cr.group)?
             }
             for (typ, pos) in pos_by_typ.iter_mut() {
                 if let Some(n) = num_by_typ.get(typ) {
@@ -474,6 +473,9 @@ impl Db {
                 let spawnloc = compute_positions(self, &have, centroid)?;
                 let origin = DeployKind::Deployed(spec.clone());
                 let spctx = SpawnCtx::new(lua)?;
+                for cr in have.values().flat_map(|c| c.iter()) {
+                    self.delete_group(&cr.group)?
+                }
                 let gid =
                     self.add_and_queue_group(&spctx, idx, side, spawnloc, &*spec.template, origin)?;
                 Ok((Unpakistan::Unpacked, dep, gid))
@@ -491,8 +493,11 @@ impl Db {
                         let unit = unit_mut!(self, uid)?;
                         unit.dead = false;
                     }
-                    self.ephemeral.dirty = true;
+                    for cr in &have {
+                        self.delete_group(&cr.group)?
+                    }
                     self.ephemeral.spawnq.push_back(gid);
+                    self.ephemeral.dirty = true;
                     Ok((Unpakistan::Repaired, dep, gid))
                 }
             },

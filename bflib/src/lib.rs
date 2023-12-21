@@ -7,6 +7,7 @@ pub mod spawnctx;
 extern crate nalgebra as na;
 use crate::{cfg::Cfg, db::player::SlotAuth};
 use anyhow::{anyhow, bail, Result};
+use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use db::Db;
@@ -25,7 +26,7 @@ use dcso3::{
     trigger::{Action, Trigger},
     unit::Unit,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, Vector2, 
+    HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
@@ -307,6 +308,10 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
 fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     let ctx = unsafe { Context::get_mut() };
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
+    let (_, slot) = Net::singleton(lua)?.get_slot(id)?;
+    if !slot.is_spectator() {
+        bail!("you must be in spectators to switch sides")
+    }
     let side = if msg.eq_ignore_ascii_case("-switch blue") {
         Side::Blue
     } else if msg.eq_ignore_ascii_case("-switch red") {
@@ -330,7 +335,7 @@ fn lives_command(id: PlayerId) -> Result<()> {
         .info_by_player_id
         .get(&id)
         .ok_or_else(|| anyhow!("missing info for player {:?}", id))?;
-    let msg = lives(&mut ctx.db, &ifo.ucid)?;
+    let msg = lives(&mut ctx.db, &ifo.ucid, None)?;
     ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
     Ok(())
 }
@@ -449,11 +454,10 @@ fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
                         .takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z))
                     {
                         Err(e) => error!("could not process takeoff, {:?}", e),
-                        Ok(took_life) => {
-                            if took_life {
-                                if let Err(e) = message_life(ctx, &slot, "life taken\n") {
-                                    error!("could not display life taken message {:?}", e)
-                                }
+                        Ok(None) => (),
+                        Ok(Some(typ)) => {
+                            if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
+                                error!("could not display life taken message {:?}", e)
                             }
                         }
                     }
@@ -510,7 +514,7 @@ fn get_unit_ground_pos(lua: MizLua, name: &str) -> Result<Vector2> {
     Ok(Vector2::from(na::Vector2::new(pos.0.x, pos.0.z)))
 }
 
-fn lives(db: &mut Db, ucid: &Ucid) -> Result<CompactString> {
+fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<CompactString> {
     db.maybe_reset_lives(ucid)?;
     let player = db
         .player(ucid)
@@ -520,27 +524,29 @@ fn lives(db: &mut Db, ucid: &Ucid) -> Result<CompactString> {
     let mut msg = CompactString::new("");
     let now = Utc::now();
     for (typ, (n, reset_after)) in &cfg.default_lives {
-        match lives.get(typ) {
-            None => msg.push_str(&format_compact!("{typ} {n}/{n}\n")),
-            Some((reset, cur)) => {
-                let since_reset = now - *reset;
-                let reset = Duration::seconds(*reset_after as i64) - since_reset;
-                let hrs = reset.num_hours();
-                let min = reset.num_minutes() - hrs * 60;
-                let sec = reset.num_seconds() - hrs * 3600 - min * 60;
-                msg.push_str(&format_compact!(
-                    "{typ} {cur}/{n} resetting in {:02}:{:02}:{:02}\n",
-                    hrs,
-                    min,
-                    sec
-                ));
+        if typfilter.is_none() || Some(*typ) == typfilter {
+            match lives.get(typ) {
+                None => msg.push_str(&format_compact!("{typ} {n}/{n}\n")),
+                Some((reset, cur)) => {
+                    let since_reset = now - *reset;
+                    let reset = Duration::seconds(*reset_after as i64) - since_reset;
+                    let hrs = reset.num_hours();
+                    let min = reset.num_minutes() - hrs * 60;
+                    let sec = reset.num_seconds() - hrs * 3600 - min * 60;
+                    msg.push_str(&format_compact!(
+                        "{typ} {cur}/{n} resetting in {:02}:{:02}:{:02}\n",
+                        hrs,
+                        min,
+                        sec
+                    ));
+                }
             }
         }
     }
     Ok(msg)
 }
 
-fn message_life(ctx: &mut Context, slot: &SlotId, msg: &str) -> Result<()> {
+fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &str) -> Result<()> {
     let uid = slot.as_unit_id().ok_or_else(|| anyhow!("not a unit"))?;
     let ucid = ctx
         .db
@@ -548,7 +554,7 @@ fn message_life(ctx: &mut Context, slot: &SlotId, msg: &str) -> Result<()> {
         .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?
         .clone();
     let mut msg = CompactString::new(msg);
-    if let Ok(lives) = lives(&mut ctx.db, &ucid) {
+    if let Ok(lives) = lives(&mut ctx.db, &ucid, typ) {
         msg.push_str(&lives)
     }
     ctx.pending_messages.panel_to_unit(10, false, uid, msg);
@@ -557,24 +563,22 @@ fn message_life(ctx: &mut Context, slot: &SlotId, msg: &str) -> Result<()> {
 
 fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     let db = &mut ctx.db;
-    let mut returned: SmallVec<[SlotId; 4]> = smallvec![];
+    let mut returned: SmallVec<[(LifeType, SlotId); 4]> = smallvec![];
     ctx.recently_landed.retain(|slot, (name, landed_ts)| {
         if ts - *landed_ts >= Duration::seconds(10) {
             let pos = match get_unit_ground_pos(lua, &**name) {
                 Ok(pos) => pos,
                 Err(_) => return false,
             };
-            let life_returned = db.land(slot.clone(), pos);
-            if life_returned {
-                returned.push(slot.clone());
+            if let Some(typ) = db.land(slot.clone(), pos) {
+                returned.push((typ, slot.clone()));
+                return false;
             }
-            !life_returned
-        } else {
-            true
         }
+        true
     });
-    for slot in returned {
-        if let Err(e) = message_life(ctx, &slot, "life returned\n") {
+    for (typ, slot) in returned {
+        if let Err(e) = message_life(ctx, &slot, Some(typ), "life returned\n") {
             error!("failed to send life returned message to {:?} {}", slot, e);
         }
     }

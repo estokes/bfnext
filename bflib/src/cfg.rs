@@ -166,8 +166,10 @@ pub struct Cfg {
     /// how often to check whether we need to cull or respawn units (Seconds)
     pub unit_cull_freq: u32,
     /// how far can a crate be from the player and still be
-    /// unpackable and loadable (Meters)
+    /// loadable (Meters)
     pub crate_load_distance: u32,
+    /// how far crates apart crates can be and still unpack (Meters)
+    pub crate_spread: u32,
     /// how many times a user may switch sides in a given round,
     /// or None for unlimited side switches
     pub side_switches: Option<u8>,
@@ -739,7 +741,8 @@ impl Default for Cfg {
             logistics_exclusion: 10000,
             unit_cull_distance: 70000,
             unit_cull_freq: 10,
-            crate_load_distance: 200,
+            crate_load_distance: 50,
+            crate_spread: 100,
             side_switches: Some(1),
             default_lives: FxHashMap::from_iter([
                 (LifeType::Standard, (3, 21600)),

@@ -123,16 +123,12 @@ impl Db {
         Ok(())
     }
 
-    pub fn list_nearby_crates<'a>(
+    fn list_crates_near_point<'a>(
         &'a self,
-        lua: MizLua,
-        idx: &MizIndex,
-        slot: &SlotId,
-    ) -> Result<SmallVec<[NearbyCrate<'a>; 2]>> {
-        let pos = self.slot_instance_pos(lua, idx, slot)?;
-        let point = Vector2::new(pos.p.x, pos.p.z);
-        let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
-        let mut res: SmallVec<[NearbyCrate; 2]> = smallvec![];
+        point: Vector2,
+        max_dist: f64,
+    ) -> Result<SmallVec<[NearbyCrate<'a>; 4]>> {
+        let mut res: SmallVec<[NearbyCrate; 4]> = smallvec![];
         for gid in &self.persisted.crates {
             let group = group!(self, gid)?;
             let (oid, crate_def) = match &group.origin {
@@ -160,6 +156,18 @@ impl Db {
         }
         res.sort_by_key(|nc| (nc.distance * 1000.) as u32);
         Ok(res)
+    }
+
+    pub fn list_nearby_crates<'a>(
+        &'a self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<SmallVec<[NearbyCrate<'a>; 4]>> {
+        let pos = self.slot_instance_pos(lua, idx, slot)?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
+        self.list_crates_near_point(point, max_dist)
     }
 
     pub fn destroy_nearby_crate(
@@ -227,8 +235,45 @@ impl Db {
             group: GroupId,
             crate_def: Crate,
         }
+        impl<'a> From<NearbyCrate<'a>> for Cifo {
+            fn from(nc: NearbyCrate<'a>) -> Self {
+                Self {
+                    pos: nc.pos,
+                    group: nc.group.id,
+                    crate_def: nc.crate_def.clone(),
+                }
+            }
+        }
+        fn nearby(
+            db: &Db,
+            lua: MizLua,
+            idx: &MizIndex,
+            slot: &SlotId,
+        ) -> Result<SmallVec<[Cifo; 8]>> {
+            let nearby_player = db
+                .list_nearby_crates(lua, idx, slot)?
+                .into_iter()
+                .map(Cifo::from)
+                .collect::<SmallVec<[Cifo; 8]>>();
+            if nearby_player.is_empty() {
+                Ok(nearby_player)
+            } else {
+                let sp = db.ephemeral.cfg.crate_spread as f64;
+                let mut crates = FxHashMap::default();
+                for cr in &nearby_player {
+                    for cr in db
+                        .list_crates_near_point(cr.pos, sp)?
+                        .into_iter()
+                        .map(Cifo::from)
+                    {
+                        crates.entry(cr.group).or_insert(cr);
+                    }
+                }
+                Ok(crates.into_iter().map(|(_, cr)| cr).collect())
+            }
+        }
         fn buildable(
-            nearby: &SmallVec<[Cifo; 2]>,
+            nearby: &SmallVec<[Cifo; 8]>,
             didx: &DeployableIndex,
         ) -> std::result::Result<FxHashMap<String, FxHashMap<String, Vec<Cifo>>>, CompactString>
         {
@@ -273,7 +318,7 @@ impl Db {
         }
         fn repairable(
             db: &Db,
-            nearby: &SmallVec<[Cifo; 2]>,
+            nearby: &SmallVec<[Cifo; 8]>,
             didx: &DeployableIndex,
             max_dist: f64,
         ) -> std::result::Result<FxHashMap<String, (GroupId, Vec<Cifo>)>, CompactString> {
@@ -406,15 +451,7 @@ impl Db {
         }
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
-        let nearby = self
-            .list_nearby_crates(lua, idx, slot)?
-            .into_iter()
-            .map(|nc| Cifo {
-                pos: nc.pos,
-                group: nc.group.id,
-                crate_def: nc.crate_def.clone(),
-            })
-            .collect::<SmallVec<[Cifo; 2]>>();
+        let nearby = nearby(self, lua, idx, slot)?;
         let didx = self
             .ephemeral
             .deployable_idx

@@ -19,7 +19,12 @@ pub enum SlotAuth {
 }
 
 impl Db {
-    pub fn takeoff(&mut self, time: DateTime<Utc>, slot: SlotId, position: Vector2) -> Result<bool> {
+    pub fn takeoff(
+        &mut self,
+        time: DateTime<Utc>,
+        slot: SlotId,
+        position: Vector2,
+    ) -> Result<Option<LifeType>> {
         let objective = self
             .persisted
             .objectives_by_slot
@@ -49,13 +54,13 @@ impl Db {
                 *player_lives -= 1;
             }
             self.ephemeral.dirty = true;
-            Ok(true)
+            Ok(Some(life_type))
         } else {
-            Ok(false)
+            Ok(None)
         }
     }
 
-    pub fn land(&mut self, slot: SlotId, position: Vector2) -> bool {
+    pub fn land(&mut self, slot: SlotId, position: Vector2) -> Option<LifeType> {
         let objective = match self
             .persisted
             .objectives_by_slot
@@ -63,7 +68,7 @@ impl Db {
             .and_then(|id| self.persisted.objectives.get(&id))
         {
             Some(objective) => objective,
-            None => return true,
+            None => return None,
         };
         let player = match self
             .ephemeral
@@ -72,12 +77,12 @@ impl Db {
             .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
         {
             Some(player) => player,
-            None => return true,
+            None => return None,
         };
         let life_type = self.ephemeral.cfg.life_types[&objective.slots[&slot]];
         let (_, player_lives) = match player.lives.get_mut_cow(&life_type) {
             Some(l) => l,
-            None => return true,
+            None => return None,
         };
         let is_on_owned_objective = self
             .persisted
@@ -92,9 +97,9 @@ impl Db {
                 player.lives.remove_cow(&life_type);
             }
             self.ephemeral.dirty = true;
-            true
+            Some(life_type)
         } else {
-            false
+            None
         }
     }
 

@@ -447,7 +447,8 @@ fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let slot = SlotId::from(unit.id()?);
                 let ctx = unsafe { Context::get_mut() };
-                if ctx.airborne.insert(slot.clone()) {
+                if ctx.airborne.insert(slot.clone()) && ctx.recently_landed.remove(&slot).is_none()
+                {
                     let pos = unit.as_object()?.get_point()?;
                     match ctx
                         .db
@@ -461,7 +462,6 @@ fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
                             }
                         }
                     }
-                    ctx.recently_landed.remove(&slot);
                 }
             }
         }

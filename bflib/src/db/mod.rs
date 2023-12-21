@@ -356,6 +356,7 @@ struct DeployableIndex {
     deployables_by_crates: FxHashMap<String, String>,
     deployables_by_repair: FxHashMap<String, String>,
     crates_by_name: FxHashMap<String, Crate>,
+    squads_by_name: FxHashMap<String, Troop>,
 }
 
 #[derive(Debug, Default)]
@@ -370,65 +371,87 @@ struct Ephemeral {
 }
 
 impl Ephemeral {
+    fn index_deployables_for_side(
+        &mut self,
+        miz: &Miz,
+        mizidx: &MizIndex,
+        side: Side,
+        deployables: &[Deployable],
+    ) -> Result<()> {
+        let idx = self.deployable_idx.entry(side).or_default();
+        for dep in deployables.iter() {
+            miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
+                .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
+            let name = match dep.path.last() {
+                None => bail!("deployable with empty path {:?}", dep),
+                Some(name) => name,
+            };
+            match idx.deployables_by_name.entry(name.clone()) {
+                Entry::Occupied(_) => bail!("deployable with duplicate name {name}"),
+                Entry::Vacant(e) => e.insert(dep.clone()),
+            };
+            if let Some(rep) = dep.repair_crate.as_ref() {
+                match idx.deployables_by_repair.entry(rep.name.clone()) {
+                    Entry::Occupied(_) => {
+                        bail!(
+                            "multiple deployables use the same repair crate {}",
+                            rep.name
+                        )
+                    }
+                    Entry::Vacant(e) => {
+                        if idx.deployables_by_crates.contains_key(&rep.name) {
+                            bail!(
+                                "deployable {} uses repair crate of {}",
+                                &idx.deployables_by_crates[&rep.name],
+                                name
+                            )
+                        }
+                        e.insert(name.clone())
+                    }
+                };
+            }
+            for cr in dep.crates.iter() {
+                match idx.deployables_by_crates.entry(cr.name.clone()) {
+                    Entry::Occupied(_) => bail!("multiple deployables use crate {}", cr.name),
+                    Entry::Vacant(e) => {
+                        if idx.deployables_by_repair.contains_key(&cr.name) {
+                            bail!(
+                                "deployable repair {} uses crate of {}",
+                                &idx.deployables_by_repair[&cr.name],
+                                name
+                            )
+                        }
+                        e.insert(name.clone())
+                    }
+                };
+            }
+            for c in dep.crates.iter().chain(dep.repair_crate.iter()) {
+                match idx.crates_by_name.entry(c.name.clone()) {
+                    Entry::Occupied(_) => bail!("duplicate crate name {}", c.name),
+                    Entry::Vacant(e) => e.insert(c.clone()),
+                };
+            }
+        }
+        Ok(())
+    }
+
     fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, cfg: Cfg) -> Result<()> {
         for (side, template) in cfg.crate_template.iter() {
             miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?
                 .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
         }
         for (side, deployables) in cfg.deployables.iter() {
+            self.index_deployables_for_side(miz, mizidx, *side, deployables)?
+        }
+        for (side, troops) in cfg.troops.iter() {
             let idx = self.deployable_idx.entry(*side).or_default();
-            for dep in deployables.iter() {
-                miz.get_group_by_name(mizidx, GroupKind::Any, *side, &dep.template)?
-                    .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
-                let name = match dep.path.last() {
-                    None => bail!("deployable with empty path {:?}", dep),
-                    Some(name) => name,
+            for troop in troops {
+                miz.get_group_by_name(mizidx, GroupKind::Any, *side, &troop.template)?
+                    .ok_or_else(|| anyhow!("missing troop template {:?} {:?}", side, troop.name))?;
+                match idx.squads_by_name.entry(troop.name.clone()) {
+                    Entry::Occupied(_) => bail!("duplicate squad name {}", troop.name),
+                    Entry::Vacant(e) => e.insert(troop.clone()),
                 };
-                match idx.deployables_by_name.entry(name.clone()) {
-                    Entry::Occupied(_) => bail!("deployable with duplicate name {name}"),
-                    Entry::Vacant(e) => e.insert(dep.clone()),
-                };
-                if let Some(rep) = dep.repair_crate.as_ref() {
-                    match idx.deployables_by_repair.entry(rep.name.clone()) {
-                        Entry::Occupied(_) => {
-                            bail!(
-                                "multiple deployables use the same repair crate {}",
-                                rep.name
-                            )
-                        }
-                        Entry::Vacant(e) => {
-                            if idx.deployables_by_crates.contains_key(&rep.name) {
-                                bail!(
-                                    "deployable {} uses repair crate of {}",
-                                    &idx.deployables_by_crates[&rep.name],
-                                    name
-                                )
-                            }
-                            e.insert(name.clone())
-                        }
-                    };
-                }
-                for cr in dep.crates.iter() {
-                    match idx.deployables_by_crates.entry(cr.name.clone()) {
-                        Entry::Occupied(_) => bail!("multiple deployables use crate {}", cr.name),
-                        Entry::Vacant(e) => {
-                            if idx.deployables_by_repair.contains_key(&cr.name) {
-                                bail!(
-                                    "deployable repair {} uses crate of {}",
-                                    &idx.deployables_by_repair[&cr.name],
-                                    name
-                                )
-                            }
-                            e.insert(name.clone())
-                        }
-                    };
-                }
-                for c in dep.crates.iter().chain(dep.repair_crate.iter()) {
-                    match idx.crates_by_name.entry(c.name.clone()) {
-                        Entry::Occupied(_) => bail!("duplicate crate name {}", c.name),
-                        Entry::Vacant(e) => e.insert(c.clone()),
-                    };
-                }
             }
         }
         self.cfg = cfg;

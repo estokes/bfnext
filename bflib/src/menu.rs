@@ -1,4 +1,8 @@
-use crate::{cfg::Cfg, db::cargo::Cargo, Context};
+use crate::{
+    cfg::Cfg,
+    db::{cargo::Cargo, Db},
+    Context,
+};
 use anyhow::{anyhow, bail, Result};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -16,26 +20,26 @@ use mlua::{prelude::*, Value};
 use std::collections::hash_map::Entry;
 
 #[derive(Debug)]
-struct SpawnCrateArg {
+struct SpawnArg {
     group: GroupId,
-    crate_name: String,
+    name: String,
 }
 
-impl<'lua> IntoLua<'lua> for SpawnCrateArg {
+impl<'lua> IntoLua<'lua> for SpawnArg {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<LuaValue<'lua>> {
         let tbl = lua.create_table()?;
         tbl.raw_set("group", self.group)?;
-        tbl.raw_set("crate_name", self.crate_name)?;
+        tbl.raw_set("crate_name", self.name)?;
         Ok(Value::Table(tbl))
     }
 }
 
-impl<'lua> FromLua<'lua> for SpawnCrateArg {
+impl<'lua> FromLua<'lua> for SpawnArg {
     fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("SpawnCrateArg", None, value).map_err(lua_err)?;
         Ok(Self {
             group: tbl.raw_get("group")?,
-            crate_name: tbl.raw_get("crate_name")?,
+            name: tbl.raw_get("crate_name")?,
         })
     }
 }
@@ -56,16 +60,18 @@ fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, Sl
     Ok((group.side, SlotId::from(unit.id()?)))
 }
 
+fn player_name(db: &Db, slot: &SlotId) -> String {
+    db.player_in_slot(&slot)
+        .and_then(|ucid| db.player(ucid).map(|p| p.name().clone()))
+        .unwrap_or_default()
+}
+
 fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &gid)?;
     match ctx.db.unpakistan(lua, &ctx.idx, &slot) {
         Ok((act, name, _)) => {
-            let player = ctx
-                .db
-                .player_in_slot(&slot)
-                .and_then(|ucid| ctx.db.player(ucid).map(|p| p.name().clone()))
-                .unwrap_or_default();
+            let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} {act} a {name}");
             ctx.pending_messages.panel_to_side(10, false, side, msg);
         }
@@ -190,10 +196,108 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     Ok(())
 }
 
-fn spawn_crate(lua: MizLua, arg: SpawnCrateArg) -> Result<()> {
+fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &arg.group)?;
-    ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.crate_name)
+    ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.name)
+}
+
+fn load_troops(lua: MizLua, arg: SpawnArg) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (side, slot) = slot_for_group(lua, ctx, &arg.group)?;
+    match ctx.db.load_troops(lua, &ctx.idx, &slot, &arg.name) {
+        Ok(tr) => {
+            let player = player_name(&ctx.db, &slot);
+            let msg = format_compact!("{player} loaded {}", tr.name);
+            ctx.pending_messages.panel_to_side(10, false, side, msg)
+        }
+        Err(e) => ctx
+            .pending_messages
+            .panel_to_group(10, false, arg.group, format_compact!("{e}")),
+    }
+    Ok(())
+}
+
+fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    match ctx.db.unload_troops(lua, &ctx.idx, &slot) {
+        Ok((false, tr)) => {
+            let player = player_name(&ctx.db, &slot);
+            let msg = format_compact!("{player} dropped {} into the field", tr.name);
+            ctx.pending_messages.panel_to_side(10, false, side, msg)
+        }
+        Ok((true, _)) => {
+            ctx.pending_messages
+                .panel_to_group(10, false, gid, "troops returned to the base")
+        }
+        Err(e) => ctx
+            .pending_messages
+            .panel_to_group(10, false, gid, format_compact!("{e}")),
+    }
+    Ok(())
+}
+
+fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    match ctx.db.extract_troops(lua, &ctx.idx, &slot) {
+        Ok(tr) => {
+            let player = player_name(&ctx.db, &slot);
+            let msg = format_compact!("{player} extracted {} from the field", tr.name);
+            ctx.pending_messages.panel_to_side(10, false, side, msg)
+        }
+        Err(e) => ctx
+            .pending_messages
+            .panel_to_group(10, false, gid, format_compact!("{e}")),
+    }
+    Ok(())
+}
+
+fn add_troops_menu_for_group(
+    cfg: &Cfg,
+    mc: &MissionCommands,
+    side: &Side,
+    group: GroupId,
+) -> Result<()> {
+    if let Some(squads) = cfg.troops.get(side) {
+        let root = mc.add_submenu_for_group(group, "Troops".into(), None)?;
+        mc.add_command_for_group(
+            group,
+            "Unload".into(),
+            Some(root.clone()),
+            unload_troops,
+            group,
+        )?;
+        mc.add_command_for_group(
+            group,
+            "Extract".into(),
+            Some(root.clone()),
+            extract_troops,
+            group,
+        )?;
+        mc.add_command_for_group(
+            group,
+            "List".into(),
+            Some(root.clone()),
+            list_current_cargo,
+            group,
+        )?;
+        let root = mc.add_submenu_for_group(group, "Squads".into(), Some(root))?;
+        for sq in squads {
+            mc.add_command_for_group(
+                group,
+                format_compact!("Load {} squad", sq.name).into(),
+                Some(root.clone()),
+                load_troops,
+                SpawnArg {
+                    group,
+                    name: sq.name.clone(),
+                },
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn add_cargo_menu_for_group(
@@ -271,9 +375,9 @@ fn add_cargo_menu_for_group(
                 title,
                 Some(root.clone()),
                 spawn_crate,
-                SpawnCrateArg {
+                SpawnArg {
                     group,
-                    crate_name: cr.name.clone(),
+                    name: cr.name.clone(),
                 },
             )?;
         }
@@ -281,24 +385,31 @@ fn add_cargo_menu_for_group(
     Ok(())
 }
 
-fn can_carry_cargo(cfg: &Cfg, group: &Group) -> Result<bool> {
-    Ok(group
-        .units()?
-        .into_iter()
-        .map(|unit| {
-            let unit = unit?;
-            let typ = unit.typ()?;
-            match cfg.cargo.get(&**typ) {
-                None => Ok(false),
-                Some(c) if c.crate_slots > 0 && c.total_slots > 0 => Ok(true),
-                Some(_) => Ok(false),
-            }
-        })
-        .any(|r: Result<bool>| match r {
-            Ok(true) => true,
-            Ok(false) => false,
-            Err(_) => false,
-        }))
+#[derive(Debug, Clone, Copy, Default)]
+struct CarryCap {
+    troops: bool,
+    crates: bool,
+}
+
+impl CarryCap {
+    fn new(cfg: &Cfg, group: &Group) -> Result<CarryCap> {
+        Ok(group
+            .units()?
+            .into_iter()
+            .fold(Ok(Self::default()), |acc: Result<Self>, unit| {
+                let mut acc = acc?;
+                let unit = unit?;
+                let typ = unit.typ()?;
+                match cfg.cargo.get(&**typ) {
+                    None => Ok(acc),
+                    Some(c) => {
+                        acc.troops |= c.troop_slots > 0 && c.total_slots > 0;
+                        acc.crates |= c.crate_slots > 0 && c.total_slots > 0;
+                        Ok(acc)
+                    }
+                }
+            })?)
+    }
 }
 
 pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
@@ -312,14 +423,22 @@ pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
             let country = country?;
             for heli in country.helicopters()? {
                 let heli = heli?;
-                if can_carry_cargo(cfg, &heli)? {
+                let cap = CarryCap::new(cfg, &heli)?;
+                if cap.crates {
                     add_cargo_menu_for_group(cfg, &mc, &side, heli.id()?)?
+                }
+                if cap.troops {
+                    add_troops_menu_for_group(cfg, &mc, &side, heli.id()?)?
                 }
             }
             for plane in country.planes()? {
                 let plane = plane?;
-                if can_carry_cargo(cfg, &plane)? {
+                let cap = CarryCap::new(cfg, &plane)?;
+                if cap.crates {
                     add_cargo_menu_for_group(cfg, &mc, &side, plane.id()?)?
+                }
+                if cap.troops {
+                    add_troops_menu_for_group(cfg, &mc, &side, plane.id()?)?
                 }
             }
         }

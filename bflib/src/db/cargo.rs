@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{Db, DeployKind, DeployableIndex, GroupId, ObjectiveId, SpawnedGroup};
+use super::{Db, DeployKind, DeployableIndex, GroupId, Objective, ObjectiveId, SpawnedGroup};
 use crate::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     group,
@@ -74,17 +74,11 @@ impl Cargo {
 }
 
 impl Db {
-    pub fn spawn_crate(
-        &mut self,
-        lua: MizLua,
-        idx: &MizIndex,
-        slot: &SlotId,
-        name: &str,
-    ) -> Result<()> {
-        debug!("db spawning crate");
-        let side = self.slot_miz_unit(lua, idx, slot)?.side;
-        let pos = self.slot_instance_pos(lua, idx, slot)?;
-        let point = Vector2::new(pos.p.x, pos.p.z);
+    fn point_near_logistics(
+        &self,
+        side: Side,
+        point: Vector2,
+    ) -> Result<(ObjectiveId, &Objective)> {
         let obj = self
             .persisted
             .objectives
@@ -98,10 +92,24 @@ impl Db {
                 }
                 None
             });
-        let oid = match obj {
-            Some((oid, _)) => *oid,
+        match obj {
+            Some((oid, obj)) => Ok((*oid, obj)),
             None => bail!("not near friendly logistics"),
-        };
+        }
+    }
+
+    pub fn spawn_crate(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+        name: &str,
+    ) -> Result<()> {
+        debug!("db spawning crate");
+        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let pos = self.slot_instance_pos(lua, idx, slot)?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        let (oid, _) = self.point_near_logistics(side, point)?;
         let crate_cfg = self
             .ephemeral
             .deployable_idx
@@ -341,7 +349,8 @@ impl Db {
                                         break;
                                     }
                                 }
-                                reasons.push_str(&format_compact!("not close enough to repair {dep}"));
+                                reasons
+                                    .push_str(&format_compact!("not close enough to repair {dep}"));
                             }
                             DeployKind::Deployed(_)
                             | DeployKind::Crate(_, _)
@@ -488,7 +497,7 @@ impl Db {
                     } else {
                         bail!("{build_reasons}\n{rep_reasons}")
                     }
-                },
+                }
                 Ok(mut candidates) => {
                     let (dep, (gid, have)) = candidates.drain().next().unwrap();
                     let centroid = centroid2d(have.iter().map(|c| c.pos));
@@ -555,19 +564,26 @@ impl Db {
         Ok(crate_cfg)
     }
 
+    pub fn unit_cargo_cfg(
+        &self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<(CargoConfig, Side, String)> {
+        let uifo = self.slot_miz_unit(lua, idx, slot)?;
+        let side = uifo.side;
+        let unit_name = uifo.unit.name()?;
+        let cargo_capacity = self.cargo_capacity(&uifo.unit)?;
+        Ok((cargo_capacity, side, unit_name))
+    }
+
     pub fn load_nearby_crate(
         &mut self,
         lua: MizLua,
         idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<Crate> {
-        let (cargo_capacity, side, unit_name) = {
-            let uifo = self.slot_miz_unit(lua, idx, slot)?;
-            let side = uifo.side;
-            let unit_name = uifo.unit.name()?;
-            let cargo_capacity = self.cargo_capacity(&uifo.unit)?;
-            (cargo_capacity, side, unit_name)
-        };
+        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
         if cargo_capacity.crate_slots as usize <= cargo.num_crates()
             || cargo_capacity.total_slots as usize <= cargo.num_total()
@@ -597,5 +613,114 @@ impl Db {
             .action()?
             .set_unit_internal_cargo(unit_name, weight as i64)?;
         Ok(crate_def)
+    }
+
+    pub fn load_troops(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+        name: &str,
+    ) -> Result<Troop> {
+        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
+        let pos = self.slot_instance_pos(lua, idx, slot)?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        let _ = self.point_near_logistics(side, point)?;
+        let troop_cfg = self
+            .ephemeral
+            .deployable_idx
+            .get(&side)
+            .and_then(|idx| idx.squads_by_name.get(name))
+            .ok_or_else(|| anyhow!("no such squad {name}"))?
+            .clone();
+        let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
+        if cargo_capacity.troop_slots as usize <= cargo.num_troops()
+            || cargo_capacity.total_slots as usize <= cargo.num_total()
+        {
+            bail!("you already have a full load onboard")
+        }
+        cargo.troops.push(troop_cfg.clone());
+        Trigger::singleton(lua)?
+            .action()?
+            .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;
+        Ok(troop_cfg)
+    }
+
+    pub fn unload_troops(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<(bool, Troop)> {
+        let cargo = self.ephemeral.cargo.get(slot);
+        if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
+            bail!("no troops onboard")
+        }
+        let unit = self.slot_instance_unit(lua, idx, slot)?;
+        if unit.as_object()?.in_air()? {
+            bail!("you must land to unload troops")
+        }
+        let unit_name = unit.as_object()?.get_name()?;
+        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let point = unit.as_object()?.get_point()?;
+        let point = Vector2::new(point.x, point.z);
+        let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
+        let troop_cfg = cargo.troops.pop().unwrap();
+        let weight = cargo.weight();
+        Trigger::singleton(lua)?
+            .action()?
+            .set_unit_internal_cargo(unit_name, weight)?;
+        if self.point_near_logistics(side, point).is_ok() {
+            Ok((true, troop_cfg))
+        } else {
+            let spawnpos = SpawnLoc::AtPos(point);
+            let dk = DeployKind::Troop(troop_cfg.clone());
+            let spctx = SpawnCtx::new(lua)?;
+            self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk)?;
+            Ok((false, troop_cfg))
+        }
+    }
+
+    pub fn extract_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {
+        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
+        let pos = self.slot_instance_pos(lua, idx, slot)?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        let (gid, troop_cfg) = {
+            let max_dist = (self.cfg().crate_load_distance as f64).powi(2);
+            self.persisted
+                .troops
+                .into_iter()
+                .filter_map(|gid| self.persisted.groups.get(gid).map(|g| (*gid, g)))
+                .find_map(|(gid, g)| {
+                    if let DeployKind::Troop(troop_cfg) = &g.origin {
+                        if g.side == side {
+                            let in_range = g
+                                .units
+                                .into_iter()
+                                .filter_map(|uid| self.persisted.units.get(uid))
+                                .any(|u| {
+                                    na::distance_squared(&u.pos.into(), &point.into()) <= max_dist
+                                });
+                            if in_range {
+                                return Some((gid, troop_cfg.clone()));
+                            }
+                        }
+                    }
+                    None
+                })
+                .ok_or_else(|| anyhow!("no troops in range"))?
+        };
+        let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
+        if cargo_capacity.troop_slots as usize <= cargo.num_troops()
+            || cargo_capacity.total_slots as usize <= cargo.num_total()
+        {
+            bail!("you already have a full load onboard")
+        }
+        cargo.troops.push(troop_cfg.clone());
+        Trigger::singleton(lua)?
+            .action()?
+            .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;
+        self.delete_group(&gid)?;
+        Ok(troop_cfg)
     }
 }

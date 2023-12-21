@@ -341,6 +341,7 @@ impl Db {
                                         break;
                                     }
                                 }
+                                reasons.push_str(&format_compact!("not close enough to repair {dep}"));
                             }
                             DeployKind::Deployed(_)
                             | DeployKind::Crate(_, _)
@@ -481,7 +482,13 @@ impl Db {
                 Ok((Unpakistan::Unpacked, dep, gid))
             }
             Err(build_reasons) => match repairable(self, &nearby, didx, max_dist) {
-                Err(rep_reasons) => bail!("{build_reasons}\n{rep_reasons}"),
+                Err(rep_reasons) => {
+                    if build_reasons.is_empty() {
+                        bail!(rep_reasons)
+                    } else {
+                        bail!("{build_reasons}\n{rep_reasons}")
+                    }
+                },
                 Ok(mut candidates) => {
                     let (dep, (gid, have)) = candidates.drain().next().unwrap();
                     let centroid = centroid2d(have.iter().map(|c| c.pos));

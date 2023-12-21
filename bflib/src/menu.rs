@@ -174,7 +174,8 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
         }
         ctx.pending_messages.panel_to_group(10, false, gid, msg)
     } else {
-        ctx.pending_messages.panel_to_group(10, false, gid, "No nearby crates")
+        ctx.pending_messages
+            .panel_to_group(10, false, gid, "No nearby crates")
     }
     Ok(())
 }
@@ -183,7 +184,8 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     if let Err(e) = ctx.db.destroy_nearby_crate(lua, &ctx.idx, &slot) {
-        ctx.pending_messages.panel_to_group(10, false, gid, format_compact!("{}", e))
+        ctx.pending_messages
+            .panel_to_group(10, false, gid, format_compact!("{}", e))
     }
     Ok(())
 }
@@ -258,7 +260,7 @@ fn add_cargo_menu_for_group(
                         .clone()),
                 }
             })?;
-        for cr in dep.crates.iter() {
+        for cr in dep.crates.iter().chain(dep.repair_crate.iter()) {
             let title = if cr.required > 1 {
                 String::from(format_compact!("{}({})", cr.name, cr.required))
             } else {

@@ -310,7 +310,7 @@ fn default_blue_troops() -> Vec<Troop> {
         },
         Troop {
             name: "Stinger".into(),
-            template: "BSTINGERROOP".into(),
+            template: "BSTINGERTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: false,
             jtac: false,

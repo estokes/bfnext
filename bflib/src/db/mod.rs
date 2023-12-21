@@ -423,7 +423,7 @@ impl Ephemeral {
                         }
                     };
                 }
-                for c in dep.crates.iter() {
+                for c in dep.crates.iter().chain(dep.repair_crate.iter()) {
                     match idx.crates_by_name.entry(c.name.clone()) {
                         Entry::Occupied(_) => bail!("duplicate crate name {}", c.name),
                         Entry::Vacant(e) => e.insert(c.clone()),

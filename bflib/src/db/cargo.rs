@@ -662,8 +662,8 @@ impl Db {
         }
         let unit_name = unit.as_object()?.get_name()?;
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
-        let point = unit.as_object()?.get_point()?;
-        let point = Vector2::new(point.x, point.z);
+        let pos = unit.as_object()?.get_position()?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let troop_cfg = cargo.troops.pop().unwrap();
         let weight = cargo.weight();
@@ -673,7 +673,8 @@ impl Db {
         if self.point_near_logistics(side, point).is_ok() {
             Ok((true, troop_cfg))
         } else {
-            let spawnpos = SpawnLoc::AtPos(point);
+            let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
+            let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
             let dk = DeployKind::Troop(troop_cfg.clone());
             let spctx = SpawnCtx::new(lua)?;
             self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk)?;

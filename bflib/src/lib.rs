@@ -599,7 +599,6 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     for id in ctx.force_to_spectators.drain() {
         net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
     }
-    ctx.pending_messages.process(&net, &act);
     let spctx = SpawnCtx::new(lua)?;
     ctx.db.process_spawn_queue(&ctx.idx, &spctx)?;
     let cull_freq = Duration::seconds(ctx.db.cfg().unit_cull_freq as i64);
@@ -607,6 +606,18 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         ctx.last_cull = ts;
         ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?
     }
+    for (side, oid) in ctx.db.check_capture()? {
+        let m = format_compact!(
+            "our forces have captured {}",
+            ctx.db.objective(&oid)?.name()
+        );
+        ctx.pending_messages.panel_to_side(10, false, side, m);
+    }
+    for oid in ctx.db.capturable_objectives() {
+        let m = format_compact!("{} is now capturable", ctx.db.objective(&oid)?.name());
+        ctx.pending_messages.panel_to_all(30, false, m);
+    }
+    ctx.pending_messages.process(&net, &act);
     Ok(())
 }
 

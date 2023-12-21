@@ -1,4 +1,4 @@
-use super::{Db, GroupId, ObjGroupClass, Objective, ObjectiveId};
+use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId};
 use crate::{
     group, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx},
@@ -10,6 +10,7 @@ use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};
 use fxhash::FxHashMap;
 use log::{debug, error};
 use smallvec::{smallvec, SmallVec};
+use std::cmp::max;
 
 impl Db {
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
@@ -236,5 +237,76 @@ impl Db {
             self.repair_objective(idx, &spctx, oid, now)?
         }
         Ok(())
+    }
+
+    pub fn capturable_objectives(&self) -> SmallVec<[ObjectiveId; 1]> {
+        let mut cap = smallvec![];
+        for (oid, obj) in &self.persisted.objectives {
+            if obj.captureable() {
+                cap.push(*oid)
+            }
+        }
+        cap
+    }
+
+    pub fn check_capture(&mut self) -> Result<SmallVec<[(Side, ObjectiveId); 1]>> {
+        let mut captured: FxHashMap<ObjectiveId, Vec<(Side, GroupId)>> = FxHashMap::default();
+        for (oid, obj) in &self.persisted.objectives {
+            if obj.captureable() {
+                let r2 = obj.radius.powi(2);
+                for gid in &self.persisted.troops {
+                    let group = &self.persisted.groups[gid];
+                    match &group.origin {
+                        DeployKind::Troop(tr) if tr.can_capture => {
+                            let in_range = group
+                                .units
+                                .into_iter()
+                                .filter_map(|uid| self.persisted.units.get(uid))
+                                .any(|u| {
+                                    na::distance_squared(&u.pos.into(), &obj.pos.into()) <= r2
+                                });
+                            if in_range {
+                                captured.entry(*oid).or_default().push((group.side, *gid));
+                            }
+                        }
+                        DeployKind::Crate(_, _)
+                        | DeployKind::Deployed(_)
+                        | DeployKind::Objective
+                        | DeployKind::Troop(_) => (),
+                    }
+                }
+            }
+        }
+        let mut actually_captured = smallvec![];
+        for (oid, gids) in captured {
+            let (side, _) = gids.first().unwrap();
+            let captured = gids.iter().all(|(s, _)| side == s);
+            if captured {
+                let obj = &mut self.persisted.objectives[&oid];
+                obj.owner = *side;
+                actually_captured.push((*side, oid));
+                for (_name, gid) in &obj.groups[&side] {
+                    let group = &mut self.persisted.groups[gid];
+                    if group.class.is_logi() {
+                        let mut to_repair = max(2, group.units.len() >> 8);
+                        for uid in &group.units {
+                            let unit = &mut self.persisted.units[uid];
+                            if to_repair > 0 {
+                                to_repair -= 1;
+                                unit.dead = false;
+                            } else {
+                                unit.dead = true;
+                            }
+                        }
+                        self.ephemeral.spawnq.push_back(*gid);
+                        break;
+                    }
+                }
+                for (_, gid) in gids {
+                    self.delete_group(&gid)?
+                }
+            }
+        }
+        Ok(actually_captured)
     }
 }

@@ -285,15 +285,21 @@ impl Objective {
     pub fn is_in_circle(&self, pos: Vector2) -> bool {
         na::distance(&self.pos.into(), &pos.into()) <= self.radius
     }
-}
 
-impl Objective {
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
     pub fn health(&self) -> u8 {
         self.health
     }
 
     pub fn logi(&self) -> u8 {
         self.logi
+    }
+
+    pub fn captureable(&self) -> bool {
+        self.logi == 0
     }
 }
 
@@ -521,6 +527,10 @@ impl Db {
 
     pub fn group(&self, id: &GroupId) -> Result<&SpawnedGroup> {
         group!(self, id)
+    }
+
+    pub fn objective(&self, id: &ObjectiveId) -> Result<&Objective> {
+        objective!(self, id)
     }
 
     pub fn group_by_name(&self, name: &str) -> Result<&SpawnedGroup> {

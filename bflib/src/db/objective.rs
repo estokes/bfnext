@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};
 use fxhash::FxHashMap;
-use log::{debug, error, info};
+use log::{debug, info};
 use smallvec::{smallvec, SmallVec};
 use std::cmp::max;
 

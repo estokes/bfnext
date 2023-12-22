@@ -36,6 +36,14 @@ impl Side {
             Side::Neutral => "neutrals",
         }
     }
+
+    pub fn opposite(&self) -> Side {
+        match self {
+            Self::Blue => Self::Red,
+            Self::Red => Self::Blue,
+            Self::Neutral => Self::Neutral
+        }
+    }
 }
 
 simple_enum!(Service, u8, [Atc => 0, Awacs => 1, Fac => 3, Tanker => 2]);

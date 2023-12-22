@@ -182,7 +182,7 @@ struct Context {
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
     recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
     airborne: FxHashSet<SlotId>,
-    captureable: FxHashSet<ObjectiveId>,
+    captureable: FxHashMap<ObjectiveId, usize>,
     force_to_spectators: FxHashSet<PlayerId>,
     pending_messages: MsgQ,
     last_cull: DateTime<Utc>,
@@ -585,6 +585,42 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     }
 }
 
+fn advise_captureable(ctx: &mut Context) -> Result<()> {
+    let cur_cap = ctx.db.capturable_objectives();
+    for oid in &cur_cap {
+        let dur = ctx.captureable.entry(*oid).or_default();
+        *dur += 1;
+        if *dur == 10 {
+            let m = format_compact!("{} is now capturable", ctx.db.objective(oid)?.name());
+            ctx.pending_messages.panel_to_all(30, false, m);
+        }
+    }
+    ctx.captureable.retain(|oid, _| cur_cap.contains(oid));
+    Ok(())
+}
+
+fn advise_captured(ctx: &mut Context) -> Result<()> {
+    for (side, oid) in ctx.db.check_capture()? {
+        let name = ctx.db.objective(&oid)?.name();
+        let m = format_compact!("our forces have captured {}", name);
+        ctx.pending_messages.panel_to_side(15, false, side, m);
+        let m = format_compact!("we have lost {}", name);
+        ctx.pending_messages
+            .panel_to_side(15, false, side.opposite(), m);
+        ctx.captureable.remove(&oid);
+    }
+    Ok(())
+}
+
+fn cull_or_spawn_units(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
+    let cull_freq = Duration::seconds(ctx.db.cfg().unit_cull_freq as i64);
+    if ts - ctx.last_cull > cull_freq {
+        ctx.last_cull = ts;
+        ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?
+    }
+    Ok(())
+}
+
 fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
@@ -600,27 +636,11 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     for id in ctx.force_to_spectators.drain() {
         net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
     }
+    cull_or_spawn_units(lua, ctx, ts)?;
     let spctx = SpawnCtx::new(lua)?;
     ctx.db.process_spawn_queue(&ctx.idx, &spctx)?;
-    let cull_freq = Duration::seconds(ctx.db.cfg().unit_cull_freq as i64);
-    if ts - ctx.last_cull > cull_freq {
-        ctx.last_cull = ts;
-        ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?
-    }
-    for (side, oid) in ctx.db.check_capture()? {
-        let m = format_compact!(
-            "our forces have captured {}",
-            ctx.db.objective(&oid)?.name()
-        );
-        ctx.pending_messages.panel_to_side(10, false, side, m);
-        ctx.captureable.remove(&oid);
-    }
-    for oid in ctx.db.capturable_objectives() {
-        if ctx.captureable.insert(oid) {
-            let m = format_compact!("{} is now capturable", ctx.db.objective(&oid)?.name());
-            ctx.pending_messages.panel_to_all(30, false, m);
-        }
-    }
+    advise_captured(ctx)?;
+    advise_captureable(ctx)?;
     ctx.pending_messages.process(&net, &act);
     Ok(())
 }

@@ -216,11 +216,14 @@ impl Db {
     ) -> Result<()> {
         let obj = objective_mut!(self, oid)?;
         let mut to_repair = None;
+        let current_logi = obj.logi as f64 / 100.;
         for (_name, gid) in maybe!(&obj.groups, &side, "side group")? {
             let group = group_mut!(self, gid)?;
             if group.class.is_logi() {
                 if to_repair.is_none() {
-                    to_repair = Some(max(1, group.units.len() >> 2));
+                    let len = group.units.len();
+                    let cur = (current_logi * len as f64).ceil() as usize;
+                    to_repair = Some(cur + max(1, len >> 2));
                 }
                 if let Some(to_repair) = to_repair.as_mut() {
                     for uid in &group.units {

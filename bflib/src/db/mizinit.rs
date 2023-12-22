@@ -97,19 +97,19 @@ impl Db {
         idx: &MizIndex,
         _miz: &Miz,
         zone: TriggerZone,
+        side: Side,
         name: &str,
     ) -> Result<()> {
         let name = name.parse::<ObjGroup>()?;
         let pos = zone.pos()?;
-        let (obj, side) = {
+        let obj = {
             let mut iter = self.persisted.objectives.into_iter();
             loop {
                 match iter.next() {
                     None => bail!("group {:?} isn't associated with an objective", name),
                     Some((id, obj)) => {
-                        // this is inefficent; look into an orthographic database
-                        if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
-                            break (*id, obj.owner);
+                        if na::distance_squared(&pos.into(), &obj.pos.into()) <= obj.radius.powi(2) {
+                            break *id;
                         }
                     }
                 }
@@ -177,7 +177,6 @@ impl Db {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
         t.ephemeral.set_cfg(miz, idx, cfg)?;
-        // first init all the objectives
         for zone in miz.triggers()? {
             let zone = zone?;
             let name = zone.name()?;
@@ -185,24 +184,23 @@ impl Db {
                 t.init_objective(zone, name)?
             }
         }
-        // now associate groups with objectives
-        for zone in miz.triggers()? {
-            let zone = zone?;
-            let name = zone.name()?;
-            if let Some(name) = name.strip_prefix("G") {
-                t.init_objective_group(&spctx, idx, miz, zone, name)?
-            } else if name.starts_with("T") || name.starts_with("O") {
-                () // ignored
-            } else {
-                bail!("invalid trigger zone type code {name}, expected O, G, or T prefix")
-            }
-        }
-        // now associate slots with objectives
-        for coa in [
-            miz.coalition(Side::Blue)?,
-            miz.coalition(Side::Red)?,
-            miz.coalition(Side::Neutral)?,
+        for side in [
+            Side::Blue,
+            Side::Red,
+            Side::Neutral,
         ] {
+            let coa = miz.coalition(side)?;
+            for zone in miz.triggers()? {
+                let zone = zone?;
+                let name = zone.name()?;
+                if let Some(name) = name.strip_prefix("G") {
+                    t.init_objective_group(&spctx, idx, miz, zone, side, name)?
+                } else if name.starts_with("T") || name.starts_with("O") {
+                    () // ignored
+                } else {
+                    bail!("invalid trigger zone type code {name}, expected O, G, or T prefix")
+                }
+            }
             for country in coa.countries()? {
                 let country = country?;
                 for plane in country.planes()? {

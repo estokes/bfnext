@@ -70,9 +70,9 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &gid)?;
     match ctx.db.unpakistan(lua, &ctx.idx, &slot) {
-        Ok((act, name, _)) => {
+        Ok(unpakistan) => {
             let player = player_name(&ctx.db, &slot);
-            let msg = format_compact!("{player} {act} a {name}");
+            let msg = format_compact!("{player} {unpakistan}");
             ctx.pending_messages.panel_to_side(10, false, side, msg);
         }
         Err(e) => {

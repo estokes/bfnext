@@ -160,8 +160,14 @@ pub struct CargoConfig {
 pub struct Cfg {
     /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
-    /// how far must you fly from an objective to deploy deployables (Meters)
+    /// The base repair crate
+    pub repair_crate: FxHashMap<Side, Crate>,
+    /// how far must you fly from an objective to spawn deployables
+    /// without penalty (Meters)
     pub logistics_exclusion: u32,
+    /// how long you have to wait to unpack when inside the logistics exclusion zone of
+    /// an objective. None, you can't ever unpack there. (Seconds)
+    pub inside_logistics_unpack_delay: Option<u32>,
     /// an objective will cull it's units if there are no enemy units
     /// within this distance (Meters)
     pub unit_cull_distance: u32,
@@ -730,7 +736,32 @@ impl Default for Cfg {
     fn default() -> Self {
         Self {
             repair_time: 1800,
+            repair_crate: FxHashMap::from_iter([
+                (
+                    Side::Blue,
+                    Crate {
+                        name: "Repair Crate".into(),
+                        weight: 1500,
+                        required: 1,
+                        pos_unit: None,
+                        max_drop_height_agl: 10,
+                        max_drop_speed: 50,
+                    },
+                ),
+                (
+                    Side::Red,
+                    Crate {
+                        name: "Repair Crate".into(),
+                        weight: 2000,
+                        required: 1,
+                        pos_unit: None,
+                        max_drop_height_agl: 10,
+                        max_drop_speed: 50,
+                    },
+                ),
+            ]),
             logistics_exclusion: 10000,
+            inside_logistics_unpack_delay: Some(900),
             unit_cull_distance: 70000,
             unit_cull_freq: 10,
             crate_load_distance: 50,

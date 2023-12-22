@@ -208,6 +208,37 @@ impl Db {
         Ok(())
     }
 
+    pub fn repair_one_logi_step(
+        &mut self,
+        side: Side,
+        now: DateTime<Utc>,
+        oid: ObjectiveId,
+    ) -> Result<()> {
+        let obj = objective_mut!(self, oid)?;
+        let mut to_repair = None;
+        for (_name, gid) in maybe!(&obj.groups, &side, "side group")? {
+            let group = group_mut!(self, gid)?;
+            if group.class.is_logi() {
+                if to_repair.is_none() {
+                    to_repair = Some(max(1, group.units.len() >> 2));
+                }
+                if let Some(to_repair) = to_repair.as_mut() {
+                    for uid in &group.units {
+                        let unit = unit_mut!(self, uid)?;
+                        if *to_repair > 0 {
+                            *to_repair -= 1;
+                            unit.dead = false;
+                        } else {
+                            unit.dead = true;
+                        }
+                    }
+                    self.ephemeral.spawnq.push_back(*gid);
+                }
+            }
+        }
+        self.update_objective_status(&oid, now)
+    }
+
     pub fn maybe_do_repairs(
         &mut self,
         lua: MizLua,
@@ -289,28 +320,7 @@ impl Db {
                 let obj = objective_mut!(self, &oid)?;
                 obj.owner = *side;
                 actually_captured.push((*side, oid));
-                let mut to_repair = None;
-                for (_name, gid) in maybe!(&obj.groups, &side, "side group")? {
-                    let group = group_mut!(self, gid)?;
-                    if group.class.is_logi() {
-                        if to_repair.is_none() {
-                            to_repair = Some(max(2, group.units.len() >> 2));
-                        }
-                        if let Some(to_repair) = to_repair.as_mut() {
-                            for uid in &group.units {
-                                let unit = unit_mut!(self, uid)?;
-                                if *to_repair > 0 {
-                                    *to_repair -= 1;
-                                    unit.dead = false;
-                                } else {
-                                    unit.dead = true;
-                                }
-                            }
-                            self.ephemeral.spawnq.push_back(*gid);
-                        }
-                    }
-                }
-                self.update_objective_status(&oid, now)?;
+                self.repair_one_logi_step(*side, now, oid)?;
                 for (_, gid) in gids {
                     self.delete_group(&gid)?
                 }

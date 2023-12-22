@@ -1,8 +1,8 @@
 use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId};
 use crate::{
-    group, maybe, objective, objective_mut,
+    group, group_mut, maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx},
-    unit, unit_mut, group_mut,
+    unit, unit_mut,
 };
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
@@ -10,6 +10,7 @@ use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};
 use fxhash::FxHashMap;
 use log::{debug, info};
 use smallvec::{smallvec, SmallVec};
+use std::cmp::max;
 
 impl Db {
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
@@ -249,7 +250,10 @@ impl Db {
         cap
     }
 
-    pub fn check_capture(&mut self, now: DateTime<Utc>) -> Result<SmallVec<[(Side, ObjectiveId); 1]>> {
+    pub fn check_capture(
+        &mut self,
+        now: DateTime<Utc>,
+    ) -> Result<SmallVec<[(Side, ObjectiveId); 1]>> {
         let mut captured: FxHashMap<ObjectiveId, Vec<(Side, GroupId)>> = FxHashMap::default();
         for (oid, obj) in &self.persisted.objectives {
             if obj.captureable() {
@@ -285,20 +289,25 @@ impl Db {
                 let obj = objective_mut!(self, &oid)?;
                 obj.owner = *side;
                 actually_captured.push((*side, oid));
-                let mut to_repair = 2;
+                let mut to_repair = None;
                 for (_name, gid) in maybe!(&obj.groups, &side, "side group")? {
                     let group = group_mut!(self, gid)?;
                     if group.class.is_logi() {
-                        for uid in &group.units {
-                            let unit = unit_mut!(self, uid)?;
-                            if to_repair > 0 {
-                                to_repair -= 1;
-                                unit.dead = false;
-                            } else {
-                                unit.dead = true;
-                            }
+                        if to_repair.is_none() {
+                            to_repair = Some(max(2, group.units.len() >> 2));
                         }
-                        self.ephemeral.spawnq.push_back(*gid);
+                        if let Some(to_repair) = to_repair.as_mut() {
+                            for uid in &group.units {
+                                let unit = unit_mut!(self, uid)?;
+                                if *to_repair > 0 {
+                                    *to_repair -= 1;
+                                    unit.dead = false;
+                                } else {
+                                    unit.dead = true;
+                                }
+                            }
+                            self.ephemeral.spawnq.push_back(*gid);
+                        }
                     }
                 }
                 self.update_objective_status(&oid, now)?;

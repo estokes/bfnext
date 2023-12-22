@@ -10,7 +10,7 @@ use anyhow::{anyhow, bail, Result};
 use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::Db;
+use db::{Db, ObjectiveId};
 use dcso3::{
     coalition::Side,
     env::{
@@ -182,6 +182,7 @@ struct Context {
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
     recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
     airborne: FxHashSet<SlotId>,
+    captureable: FxHashSet<ObjectiveId>,
     force_to_spectators: FxHashSet<PlayerId>,
     pending_messages: MsgQ,
     last_cull: DateTime<Utc>,
@@ -612,10 +613,13 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
             ctx.db.objective(&oid)?.name()
         );
         ctx.pending_messages.panel_to_side(10, false, side, m);
+        ctx.captureable.remove(&oid);
     }
     for oid in ctx.db.capturable_objectives() {
-        let m = format_compact!("{} is now capturable", ctx.db.objective(&oid)?.name());
-        ctx.pending_messages.panel_to_all(30, false, m);
+        if ctx.captureable.insert(oid) {
+            let m = format_compact!("{} is now capturable", ctx.db.objective(&oid)?.name());
+            ctx.pending_messages.panel_to_all(30, false, m);
+        }
     }
     ctx.pending_messages.process(&net, &act);
     Ok(())

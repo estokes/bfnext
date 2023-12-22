@@ -1,10 +1,9 @@
 use crate::{
     cfg::{Cfg, Vehicle},
-    spawnctx::{SpawnCtx, SpawnLoc},
+    spawnctx::{SpawnCtx, SpawnLoc}, objective_mut,
 };
-
 use super::{Db, DeployKind, Map, ObjGroup, Objective, ObjectiveId, ObjectiveKind};
-use anyhow::{bail, Result};
+use anyhow::{bail, anyhow, Result};
 use chrono::prelude::*;
 use dcso3::{
     coalition::Side,
@@ -108,7 +107,8 @@ impl Db {
                 match iter.next() {
                     None => bail!("group {:?} isn't associated with an objective", name),
                     Some((id, obj)) => {
-                        if na::distance_squared(&pos.into(), &obj.pos.into()) <= obj.radius.powi(2) {
+                        if na::distance_squared(&pos.into(), &obj.pos.into()) <= obj.radius.powi(2)
+                        {
                             break *id;
                         }
                     }
@@ -123,7 +123,7 @@ impl Db {
             name.template(side).as_str(),
             DeployKind::Objective,
         )?;
-        self.persisted.objectives[&obj]
+        objective_mut!(self, obj)?
             .groups
             .get_or_default_cow(side)
             .insert_cow(name.clone(), gid);
@@ -166,7 +166,7 @@ impl Db {
             self.persisted
                 .objectives_by_slot
                 .insert_cow(id.clone(), obj);
-            self.persisted.objectives[&obj]
+            objective_mut!(self, obj)?
                 .slots
                 .insert_cow(id, vehicle);
         }
@@ -184,11 +184,7 @@ impl Db {
                 t.init_objective(zone, name)?
             }
         }
-        for side in [
-            Side::Blue,
-            Side::Red,
-            Side::Neutral,
-        ] {
+        for side in [Side::Blue, Side::Red, Side::Neutral] {
             let coa = miz.coalition(side)?;
             for zone in miz.triggers()? {
                 let zone = zone?;

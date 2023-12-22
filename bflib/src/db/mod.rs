@@ -42,6 +42,22 @@ atomic_id!(UnitId);
 atomic_id!(ObjectiveId);
 
 #[macro_export]
+macro_rules! maybe {
+    ($t:expr, $id:expr, $name:expr) => {
+        $t.get(&$id)
+            .ok_or_else(|| anyhow!("no such {} {:?}", $name, $id))
+    };
+}
+
+#[macro_export]
+macro_rules! maybe_mut {
+    ($t:expr, $id:expr, $name:expr) => {
+        $t.get_mut(&$id)
+            .ok_or_else(|| anyhow!("no such {} {:?}", $name, $id))
+    };
+}
+
+#[macro_export]
 macro_rules! unit {
     ($t:expr, $id:expr) => {
         $t.persisted
@@ -500,13 +516,13 @@ impl Db {
 
     pub fn respawn_after_load(&self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
         for gid in &self.persisted.deployed {
-            self.spawn_group(idx, spctx, &self.persisted.groups[gid])?
+            self.spawn_group(idx, spctx, group!(self, gid)?)?
         }
         for gid in &self.persisted.crates {
-            self.spawn_group(idx, spctx, &self.persisted.groups[gid])?
+            self.spawn_group(idx, spctx, group!(self, gid)?)?
         }
         for gid in &self.persisted.troops {
-            self.spawn_group(idx, spctx, &self.persisted.groups[gid])?
+            self.spawn_group(idx, spctx, group!(self, gid)?)?
         }
         for (_, obj) in &self.persisted.objectives {
             if let Some(groups) = obj.groups.get(&obj.owner) {
@@ -625,7 +641,7 @@ impl Db {
         } else if slen > 0 {
             for _ in 0..max(2, slen >> 2) {
                 if let Some(gid) = self.ephemeral.spawnq.pop_front() {
-                    self.spawn_group(idx, spctx, &self.persisted.groups[&gid])?
+                    self.spawn_group(idx, spctx, group!(self, gid)?)?
                 }
             }
         }
@@ -808,10 +824,10 @@ impl Db {
                 self.update_objective_status(&oid, now)?
             }
             if self.persisted.deployed.contains(&gid) {
-                let group = &mut self.persisted.groups[&gid];
+                let group = group_mut!(self, gid)?;
                 let mut dead = true;
                 for uid in &group.units {
-                    dead &= self.persisted.units[uid].dead
+                    dead &= unit!(self, uid)?.dead
                 }
                 if dead {
                     self.delete_group(&gid)?

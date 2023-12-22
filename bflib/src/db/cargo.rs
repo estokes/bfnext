@@ -5,7 +5,7 @@ use crate::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     group,
     spawnctx::{SpawnCtx, SpawnLoc},
-    unit, unit_mut,
+    unit, unit_mut, maybe,
 };
 use anyhow::{anyhow, bail, Result};
 use compact_str::{format_compact, CompactString};
@@ -478,7 +478,7 @@ impl Db {
                 }) {
                     bail!("too close to friendly logistics or crate origin");
                 }
-                let spec = didx.deployables_by_name[&dep].clone();
+                let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
                 enforce_deploy_limits(self, &spec, &dep)?;
                 let spawnloc = compute_positions(self, &have, centroid)?;
                 let origin = DeployKind::Deployed(spec.clone());

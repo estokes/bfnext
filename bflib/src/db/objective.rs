@@ -1,8 +1,8 @@
 use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId};
 use crate::{
-    group, objective, objective_mut,
+    group, maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx},
-    unit,
+    unit, unit_mut, group_mut,
 };
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
@@ -108,9 +108,9 @@ impl Db {
                 if let Some(groups) = damaged_by_class.get_mut(&class) {
                     groups.sort_by_key(|(_, d)| *d); // pick the most damaged group
                     if let Some((gid, _)) = groups.pop() {
-                        let group = &self.persisted.groups[&gid];
+                        let group = group!(self, gid)?;
                         for uid in &group.units {
-                            self.persisted.units[uid].dead = false;
+                            unit_mut!(self, uid)?.dead = false;
                         }
                         if class == ObjGroupClass::Logi || obj.spawned {
                             self.spawn_group(idx, spctx, group)?;
@@ -175,7 +175,7 @@ impl Db {
         for oid in to_spawn {
             let obj = objective_mut!(self, oid)?;
             obj.spawned = true;
-            for (_name, gid) in &obj.groups[&obj.owner] {
+            for (_name, gid) in maybe!(&obj.groups, obj.owner, "side group")? {
                 if !group!(self, gid)?.class.is_logi() {
                     self.ephemeral.spawnq.push_back(*gid);
                 }
@@ -184,7 +184,7 @@ impl Db {
         for oid in to_cull {
             let obj = objective_mut!(self, oid)?;
             obj.spawned = false;
-            for (_name, gid) in &obj.groups[&obj.owner] {
+            for (_name, gid) in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
                 if !group.class.is_logi() {
                     match group.kind {
@@ -255,7 +255,7 @@ impl Db {
             if obj.captureable() {
                 let r2 = obj.radius.powi(2);
                 for gid in &self.persisted.troops {
-                    let group = &self.persisted.groups[gid];
+                    let group = group!(self, gid)?;
                     match &group.origin {
                         DeployKind::Troop(tr) if tr.can_capture => {
                             let in_range = group
@@ -282,15 +282,15 @@ impl Db {
             let (side, _) = gids.first().unwrap();
             let captured = gids.iter().all(|(s, _)| side == s);
             if captured {
-                let obj = &mut self.persisted.objectives[&oid];
+                let obj = objective_mut!(self, &oid)?;
                 obj.owner = *side;
                 actually_captured.push((*side, oid));
-                for (_name, gid) in &obj.groups[&side] {
-                    let group = &mut self.persisted.groups[gid];
+                for (_name, gid) in maybe!(&obj.groups, &side, "side group")? {
+                    let group = group_mut!(self, gid)?;
                     if group.class.is_logi() {
                         let mut to_repair = max(2, group.units.len() >> 8);
                         for uid in &group.units {
-                            let unit = &mut self.persisted.units[uid];
+                            let unit = unit_mut!(self, uid)?;
                             if to_repair > 0 {
                                 to_repair -= 1;
                                 unit.dead = false;

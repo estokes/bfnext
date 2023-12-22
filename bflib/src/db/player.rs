@@ -1,6 +1,5 @@
-use crate::cfg::LifeType;
-
 use super::{Db, Map, Player};
+use crate::{cfg::LifeType, maybe};
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{
@@ -37,7 +36,8 @@ impl Db {
             .get(&slot)
             .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
             .ok_or_else(|| anyhow!("could not find player in slot {:?}", slot))?;
-        let life_type = self.ephemeral.cfg.life_types[&objective.slots[&slot]];
+        let vehicle = maybe!(objective.slots, slot, "slot")?;
+        let life_type = *maybe!(self.ephemeral.cfg.life_types, *vehicle, "life type")?;
         let (_, player_lives) = player.lives.get_or_insert_cow(life_type, || {
             (time, self.ephemeral.cfg.default_lives[&life_type].0)
         });
@@ -112,7 +112,9 @@ impl Db {
             .get_mut_cow(ucid)
             .ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
         for (lt, (reset, _n)) in player.lives.into_iter() {
-            let reset_after = Duration::seconds(self.ephemeral.cfg.default_lives[lt].1 as i64);
+            let reset_after = Duration::seconds(
+                maybe!(self.ephemeral.cfg.default_lives, lt, "default life")?.1 as i64,
+            );
             if now - reset >= reset_after {
                 lt_to_reset.push(*lt);
             }

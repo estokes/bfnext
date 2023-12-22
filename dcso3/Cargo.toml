@@ -1,6 +1,6 @@
 [package]
 name = "dcso3"
-version = "0.0.9"
+version = "0.0.10"
 edition = "2021"
 authors = ["Eric Stokes <eestokes@pm.me>"]
 license = "MIT"
@@ -9,8 +9,8 @@ homepage = "https://github.com/estokes/bfnext"
 repository = "https://github.com/estokes/bfnext"
 documentation = "https://docs.rs/dcso3"
 readme = "README.md"
-keywords = ["network", "networking", "distributed", "kerberos"]
-categories = ["network-programming"]
+keywords = ["DCS", "gamedev"]
+categories = ["api-bindings", "game-development"]
 
 [dependencies]
 mlua = { workspace = true }

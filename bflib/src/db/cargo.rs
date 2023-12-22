@@ -41,7 +41,7 @@ impl fmt::Display for Unpakistan {
         match self {
             Self::Unpacked(unit, _) => write!(f, "unpacked a {unit}"),
             Self::Repaired(unit, _) => write!(f, "repaired a {unit}"),
-            Self::RepairedBase(base, logi) => write!(f, "repaired logistics at {base} to {logi}"),
+            Self::RepairedBase(base, logi) => write!(f, "repaired logistics at {base} to %{logi}"),
         }
     }
 }

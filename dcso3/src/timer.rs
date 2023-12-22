@@ -1,6 +1,5 @@
-use crate::{as_tbl, cvt_err, wrapped_table, LuaEnv, MizLua, Time};
+use crate::{as_tbl, cvt_err, wrap_f, wrapped_table, LuaEnv, MizLua, Time};
 use anyhow::Result;
-use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -47,15 +46,11 @@ impl<'lua> Timer<'lua> {
         F: Fn(MizLua, T, Time) -> Result<Option<Time>> + 'static,
         T: IntoLua<'lua> + FromLua<'lua>,
     {
-        let f =
-            self.lua
-                .create_function(move |lua, (arg, time)| match f(MizLua(lua), arg, time) {
-                    Ok(r) => Ok(r),
-                    Err(e) => {
-                        error!("error in scheduled function: {:?}", e);
-                        Ok(None)
-                    }
-                })?;
+        let f = self
+            .lua
+            .create_function(move |lua, (arg, time): (T, Time)| {
+                wrap_f("scheduled function", MizLua(lua), |lua| f(lua, arg, time))
+            })?;
         Ok(self.t.call_function("scheduleFunction", (f, arg, when))?)
     }
 

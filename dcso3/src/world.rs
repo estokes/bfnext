@@ -1,13 +1,13 @@
-use super::{as_tbl, event::Event, unit::Unit, String};
+use super::{as_tbl, event::Event, unit::Unit, wrap_f, String};
 use crate::{
     airbase::Airbase,
     atomic_id,
     object::{Object, ObjectCategory},
-    wrap_bool, wrapped_table, LuaEnv, LuaVec3, MizLua, Position3, Sequence,
+    wrapped_table, LuaEnv, LuaVec3, MizLua, Position3, Sequence,
 };
 use anyhow::Result;
 use compact_str::format_compact;
-use log::{error, warn};
+use log::warn;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -99,17 +99,11 @@ impl<'lua> World<'lua> {
             self.lua
                 .create_function(move |lua, (_, ev): (Value, Value)| {
                     match Event::from_lua(ev, lua) {
+                        Ok(ev) => wrap_f("event handler", MizLua(lua), |lua| f(lua, ev)),
                         Err(e) => {
                             warn!("error translating event: {:?}", e);
                             Ok(())
                         }
-                        Ok(ev) => match f(MizLua(lua), ev) {
-                            Ok(()) => Ok(()),
-                            Err(e) => {
-                                error!("error in event handler: {:?}", e);
-                                Ok(())
-                            }
-                        },
                     }
                 })?,
         )?;
@@ -141,15 +135,17 @@ impl<'lua> World<'lua> {
         category: ObjectCategory,
         volume: SearchVolume,
         f: F,
-        arg: Option<T>,
+        arg: T,
     ) -> Result<()>
     where
         T: IntoLua<'lua> + FromLua<'lua>,
-        F: Fn(MizLua, Object<'lua>, Option<T>) -> Result<bool> + 'static,
+        F: Fn(MizLua, Object<'lua>, T) -> Result<bool> + 'static,
     {
-        let f = self.lua.create_function(move |lua, (o, arg)| {
-            wrap_bool("searchObjects", f(MizLua(lua), o, arg))
-        })?;
+        let f = self
+            .lua
+            .create_function(move |lua, (o, arg): (Object, T)| {
+                wrap_f("searchObjects", MizLua(lua), |lua| f(lua, o, arg))
+            })?;
         Ok(self
             .t
             .call_function("searchObjects", (category, volume, f, arg))?)

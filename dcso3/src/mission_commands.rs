@@ -1,5 +1,8 @@
-use crate::{as_tbl, coalition::Side, env::miz::GroupId, wrap_unit, wrapped_table, LuaEnv, MizLua, String};
+use crate::{
+    as_tbl, coalition::Side, env::miz::GroupId, wrap_f, wrapped_table, LuaEnv, MizLua, String,
+};
 use anyhow::Result;
+use compact_str::format_compact;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -83,9 +86,10 @@ impl<'lua> MissionCommands<'lua> {
         F: Fn(MizLua, A) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
-        let f = self
-            .lua
-            .create_function(move |lua, arg| wrap_unit("command", f(MizLua(lua), arg)))?;
+        let msg = format_compact!("command {:?},{name}", parent);
+        let f = self.lua.create_function(move |lua, arg: A| {
+            wrap_f(msg.as_str(), MizLua(lua), |lua| f(lua, arg))
+        })?;
         Ok(self.call_function("addCommand", (name, parent, f, arg))?)
     }
 
@@ -118,9 +122,10 @@ impl<'lua> MissionCommands<'lua> {
         F: Fn(MizLua, A) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
-        let f = self
-            .lua
-            .create_function(move |lua, arg| wrap_unit("coa command", f(MizLua(lua), arg)))?;
+        let msg = format_compact!("coa cmd {:?},{name}", parent);
+        let f = self.lua.create_function(move |lua, arg: A| {
+            wrap_f(msg.as_str(), MizLua(lua), |lua| f(lua, arg))
+        })?;
         Ok(self.call_function("addCommandForCoalition", (side, name, parent, f, arg))?)
     }
 
@@ -153,9 +158,10 @@ impl<'lua> MissionCommands<'lua> {
         F: Fn(MizLua, A) -> Result<()> + 'static,
         A: IntoLua<'lua> + FromLua<'lua>,
     {
-        let f = self
-            .lua
-            .create_function(move |lua, arg| wrap_unit("group command", f(MizLua(lua), arg)))?;
+        let msg = format_compact!("grp cmd {:?}, {name}", parent);
+        let f = self.lua.create_function(move |lua, arg: A| {
+            wrap_f(msg.as_str(), MizLua(lua), |lua| f(lua, arg))
+        })?;
         Ok(self.call_function("addCommandForGroup", (group, name, parent, f, arg))?)
     }
 

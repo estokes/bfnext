@@ -6,10 +6,12 @@ use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
+    backtrace::Backtrace,
     borrow::Borrow,
     collections::hash_map::Entry,
     marker::PhantomData,
     ops::{Add, AddAssign, Deref, DerefMut, Sub},
+    panic::{self, AssertUnwindSafe},
 };
 
 pub mod airbase;
@@ -218,22 +220,27 @@ impl<'lua> IntoLua<'lua> for Color {
     }
 }
 
-pub fn wrap_unit(name: &str, res: Result<()>) -> LuaResult<()> {
-    match res {
-        Ok(()) => Ok(()),
+pub fn wrap_f<'lua, L: LuaEnv<'lua>, R: Default, F: FnOnce(L) -> Result<R>>(
+    name: &str,
+    lua: L,
+    f: F,
+) -> LuaResult<R> {
+    let r = panic::catch_unwind(AssertUnwindSafe(|| wrap(name, f(lua))));
+    match r {
+        Ok(r) => r,
         Err(e) => {
-            error!("{}: {:?}", name, e);
-            Ok(())
+            error!("{} panicked {:?} {}", name, e, Backtrace::capture());
+            Ok(R::default())
         }
     }
 }
 
-pub fn wrap_bool(name: &str, res: Result<bool>) -> LuaResult<bool> {
+pub fn wrap<'lua, R: Default>(name: &str, res: Result<R>) -> LuaResult<R> {
     match res {
-        Ok(b) => Ok(b),
+        Ok(r) => Ok(r),
         Err(e) => {
             error!("{}: {:?}", name, e);
-            Ok(false)
+            Ok(R::default())
         }
     }
 }
@@ -278,11 +285,11 @@ where
     let exports = lua.create_table()?;
     exports.set(
         "initHooks",
-        lua.create_function(move |lua, _: ()| wrap_unit("init_hooks", init_hooks(HooksLua(lua))))?,
+        lua.create_function(move |lua, _: ()| wrap_f("init_hooks", HooksLua(lua), &init_hooks))?,
     )?;
     exports.set(
         "initMiz",
-        lua.create_function(move |lua, _: ()| wrap_unit("init_miz", init_miz(MizLua(lua))))?,
+        lua.create_function(move |lua, _: ()| wrap_f("init_miz", MizLua(lua), &init_miz))?,
     )?;
     Ok(exports)
 }

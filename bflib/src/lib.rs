@@ -599,8 +599,8 @@ fn advise_captureable(ctx: &mut Context) -> Result<()> {
     Ok(())
 }
 
-fn advise_captured(ctx: &mut Context) -> Result<()> {
-    for (side, oid) in ctx.db.check_capture()? {
+fn advise_captured(ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
+    for (side, oid) in ctx.db.check_capture(ts)? {
         let name = ctx.db.objective(&oid)?.name();
         let m = format_compact!("our forces have captured {}", name);
         ctx.pending_messages.panel_to_side(15, false, side, m);
@@ -639,7 +639,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     cull_or_spawn_units(lua, ctx, ts)?;
     let spctx = SpawnCtx::new(lua)?;
     ctx.db.process_spawn_queue(&ctx.idx, &spctx)?;
-    advise_captured(ctx)?;
+    advise_captured(ctx, ts)?;
     advise_captureable(ctx)?;
     ctx.pending_messages.process(&net, &act);
     Ok(())

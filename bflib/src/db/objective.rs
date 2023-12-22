@@ -10,7 +10,6 @@ use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};
 use fxhash::FxHashMap;
 use log::{debug, info};
 use smallvec::{smallvec, SmallVec};
-use std::cmp::max;
 
 impl Db {
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
@@ -58,9 +57,10 @@ impl Db {
         obj.health = health;
         obj.logi = logi;
         obj.last_change_ts = now;
-        if obj.health == 0 {
+        if obj.logi == 0 {
             obj.owner = Side::Neutral;
         }
+        self.ephemeral.dirty = true;
         debug!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
         Ok(())
     }
@@ -249,7 +249,7 @@ impl Db {
         cap
     }
 
-    pub fn check_capture(&mut self) -> Result<SmallVec<[(Side, ObjectiveId); 1]>> {
+    pub fn check_capture(&mut self, now: DateTime<Utc>) -> Result<SmallVec<[(Side, ObjectiveId); 1]>> {
         let mut captured: FxHashMap<ObjectiveId, Vec<(Side, GroupId)>> = FxHashMap::default();
         for (oid, obj) in &self.persisted.objectives {
             if obj.captureable() {
@@ -285,10 +285,10 @@ impl Db {
                 let obj = objective_mut!(self, &oid)?;
                 obj.owner = *side;
                 actually_captured.push((*side, oid));
+                let mut to_repair = 2;
                 for (_name, gid) in maybe!(&obj.groups, &side, "side group")? {
                     let group = group_mut!(self, gid)?;
                     if group.class.is_logi() {
-                        let mut to_repair = max(2, group.units.len() >> 8);
                         for uid in &group.units {
                             let unit = unit_mut!(self, uid)?;
                             if to_repair > 0 {
@@ -299,12 +299,13 @@ impl Db {
                             }
                         }
                         self.ephemeral.spawnq.push_back(*gid);
-                        break;
                     }
                 }
+                self.update_objective_status(&oid, now)?;
                 for (_, gid) in gids {
                     self.delete_group(&gid)?
                 }
+                self.ephemeral.dirty = true;
             }
         }
         Ok(actually_captured)

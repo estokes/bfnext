@@ -115,9 +115,7 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     Ok(())
 }
 
-pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
+pub(super) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId) -> Result<()> {
     let cargo = Cargo::default();
     let cargo = ctx.db.list_cargo(&slot).unwrap_or(&cargo);
     let uinfo = ctx.db.slot_miz_unit(lua, &ctx.idx, &slot)?;
@@ -160,8 +158,15 @@ pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
         msg.push_str("----------------------------\n");
     }
     msg.push_str(&format_compact!("total cargo weight: {} kg", total as u32));
-    ctx.pending_messages.panel_to_group(15, false, gid, msg);
+    ctx.pending_messages
+        .panel_to_unit(15, false, slot.as_unit_id().unwrap(), msg);
     Ok(())
+}
+
+pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
+    list_cargo_for_slot(lua, ctx, &slot)
 }
 
 fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {

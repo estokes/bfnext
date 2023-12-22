@@ -410,7 +410,7 @@ fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
     }
 }
 
-fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
+fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     info!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -461,6 +461,7 @@ fn on_event(_lua: MizLua, ev: Event) -> Result<()> {
                             if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
                                 error!("could not display life taken message {:?}", e)
                             }
+                            let _ = menu::list_cargo_for_slot(lua, ctx, &slot);
                         }
                     }
                 }

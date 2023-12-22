@@ -395,14 +395,14 @@ impl Db {
                 Ok(repairs)
             }
         }
-        fn too_close<'a, I: Iterator<Item = &'a Cifo>, F: Fn() -> I, D: Fn(&Objective) -> f64>(
+        fn too_close<'a, I: Iterator<Item = &'a Cifo>, F: Fn() -> I>(
             db: &Db,
             side: Side,
             centroid: Vector2,
-            excl_dist_sq: D,
             iter: F,
-        ) -> Option<ObjectiveId> {
-            db.persisted.objectives.into_iter().find_map(|(oid, obj)| {
+        ) -> bool {
+            let excl_dist_sq = (db.ephemeral.cfg.logistics_exclusion as f64).powi(2);
+            db.persisted.objectives.into_iter().any(|(oid, obj)| {
                 let mut check = false;
                 for cr in iter() {
                     match db.persisted.groups.get(&cr.group) {
@@ -415,9 +415,33 @@ impl Db {
                     }
                 }
                 check |= obj.owner == side;
-                if check && {
+                check && {
                     let dist = na::distance_squared(&obj.pos.into(), &centroid.into());
-                    dist <= excl_dist_sq(obj)
+                    dist <= excl_dist_sq
+                }
+            })
+        }
+        fn close_enough_to_repair<'a, I: Iterator<Item = &'a Cifo>, F: Fn() -> I>(
+            db: &Db,
+            side: Side,
+            centroid: Vector2,
+            iter: F,
+        ) -> Option<ObjectiveId> {
+            db.persisted.objectives.into_iter().find_map(|(oid, obj)| {
+                let mut is_origin = false;
+                for cr in iter() {
+                    match db.persisted.groups.get(&cr.group) {
+                        Some(group) => {
+                            if let DeployKind::Crate(source, _) = &group.origin {
+                                is_origin |= oid == source;
+                            }
+                        }
+                        None => error!("missing group {:?}", cr.group),
+                    }
+                }
+                if obj.owner == side && !is_origin && {
+                    let dist = na::distance_squared(&obj.pos.into(), &centroid.into());
+                    dist <= obj.radius.powi(2)
                 } {
                     Some(*oid)
                 } else {
@@ -474,7 +498,6 @@ impl Db {
             }
             Ok(())
         }
-        let excl_dist_sq = (self.ephemeral.cfg.logistics_exclusion as f64).powi(2);
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
         let nearby = nearby(self, lua, idx, slot)?;
@@ -490,13 +513,9 @@ impl Db {
         let base_repairs = base_repairable(self, side, &nearby);
         if !base_repairs.is_empty() {
             let centroid = centroid2d(base_repairs.iter().map(|(_, c)| c.pos));
-            let oid = too_close(
-                self,
-                side.opposite(),
-                centroid,
-                |obj| obj.radius.powi(2),
-                || base_repairs.iter().map(|(_, c)| c),
-            );
+            let oid = close_enough_to_repair(self, side, centroid, || {
+                base_repairs.iter().map(|(_, c)| c)
+            });
             if let Some(oid) = oid {
                 let obj = objective!(self, oid)?;
                 if obj.logi == 100 {
@@ -516,15 +535,9 @@ impl Db {
             Ok(mut candidates) => {
                 let (dep, have) = candidates.drain().next().unwrap();
                 let centroid = centroid2d(have.values().flat_map(|c| c.iter()).map(|c| c.pos));
-                if too_close(
-                    self,
-                    side,
-                    centroid,
-                    |_| excl_dist_sq,
-                    || have.values().flat_map(|c| c.iter()),
-                )
-                .is_some()
-                {
+                if too_close(self, side, centroid, || {
+                    have.values().flat_map(|c| c.iter())
+                }) {
                     reasons
                         .push("too close to friendly logistics or crate origin to unpack".into());
                 } else {
@@ -553,7 +566,7 @@ impl Db {
             Ok(mut candidates) => {
                 let (dep, (gid, have)) = candidates.drain().next().unwrap();
                 let centroid = centroid2d(have.iter().map(|c| c.pos));
-                if too_close(self, side, centroid, |_| excl_dist_sq, || have.iter()).is_some() {
+                if too_close(self, side, centroid, || have.iter()) {
                     reasons.push("too close to friendly logistics or crate origin to repair".into())
                 } else {
                     let group = group!(self, gid)?;

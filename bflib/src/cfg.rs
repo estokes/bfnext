@@ -740,7 +740,7 @@ impl Default for Cfg {
                 (
                     Side::Blue,
                     Crate {
-                        name: "Repair Crate".into(),
+                        name: "Logistics Repair".into(),
                         weight: 1500,
                         required: 1,
                         pos_unit: None,
@@ -751,7 +751,7 @@ impl Default for Cfg {
                 (
                     Side::Red,
                     Crate {
-                        name: "Repair Crate".into(),
+                        name: "Logistics Repair".into(),
                         weight: 2000,
                         required: 1,
                         pos_unit: None,

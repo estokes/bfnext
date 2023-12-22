@@ -350,6 +350,17 @@ fn add_cargo_menu_for_group(
         group,
     )?;
     let root = mc.add_submenu_for_group(group, "Crates".into(), None)?;
+    let rep = &cfg.repair_crate[side];
+    mc.add_command_for_group(
+        group,
+        rep.name.clone(),
+        Some(root.clone()),
+        spawn_crate,
+        SpawnArg {
+            group,
+            name: rep.name.clone(),
+        },
+    )?;
     let mut created_menus: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
     for dep in cfg.deployables.get(side).unwrap_or(&vec![]) {
         let root = dep

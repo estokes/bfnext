@@ -398,9 +398,12 @@ impl Ephemeral {
         miz: &Miz,
         mizidx: &MizIndex,
         side: Side,
+        repair_crate: Crate,
         deployables: &[Deployable],
     ) -> Result<()> {
         let idx = self.deployable_idx.entry(side).or_default();
+        idx.crates_by_name
+            .insert(repair_crate.name.clone(), repair_crate);
         for dep in deployables.iter() {
             miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
                 .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
@@ -463,7 +466,8 @@ impl Ephemeral {
                 .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
         }
         for (side, deployables) in cfg.deployables.iter() {
-            self.index_deployables_for_side(miz, mizidx, *side, deployables)?
+            let repair_crate = maybe!(cfg.repair_crate, side, "side repair crate")?.clone();
+            self.index_deployables_for_side(miz, mizidx, *side, repair_crate, deployables)?
         }
         for (side, troops) in cfg.troops.iter() {
             let idx = self.deployable_idx.entry(*side).or_default();

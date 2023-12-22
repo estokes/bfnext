@@ -223,7 +223,7 @@ impl Db {
                 if to_repair.is_none() {
                     let len = group.units.len();
                     let cur = (current_logi * len as f64).ceil() as usize;
-                    to_repair = Some(cur + max(1, len >> 2));
+                    to_repair = Some(cur + max(1, len >> 1));
                 }
                 if let Some(to_repair) = to_repair.as_mut() {
                     for uid in &group.units {

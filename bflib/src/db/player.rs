@@ -135,7 +135,12 @@ impl Db {
     ) -> SlotAuth {
         let player = match self.persisted.players.get_mut_cow(ucid) {
             Some(player) => player,
-            None => return SlotAuth::NotRegistered(slot_side),
+            None => {
+                if slot.is_spectator() {
+                    return SlotAuth::Yes;
+                }
+                return SlotAuth::NotRegistered(slot_side)
+            },
         };
         if let Some(slot) = player.current_slot.take() {
             self.ephemeral.players_by_slot.remove(&slot);

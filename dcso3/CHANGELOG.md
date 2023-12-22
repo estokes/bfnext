@@ -1,3 +1,7 @@
+## 0.0.10
+
+- fix cargo category and keywords
+
 ## 0.0.9
 
 - fix get_velocity was calling getPosition

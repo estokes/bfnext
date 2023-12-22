@@ -1,6 +1,8 @@
 ## 0.0.9
 
 - fix get_velocity was calling getPosition
+- catch panics in all callbacks
+- fix order of args in on_player_try_connect
 
 ## 0.0.8
 

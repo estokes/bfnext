@@ -184,7 +184,7 @@ impl Db {
                     let threat_dist = (cfg.threatened_distance[typ] as f64).powi(2);
                     let ppos = Vector2::new(pos.x, pos.z);
                     let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
-                    if dbg!(dist) <= dbg!(cull_distance) {
+                    if dist <= cull_distance {
                         spawn = true;
                     }
                     if dist <= threat_dist && land.is_visible(pos3, *pos)? {

@@ -339,7 +339,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             crates: vec![
                 Crate {
                     name: "Kub Launcher".into(),
-                    weight: 3000,
+                    weight: 2000,
                     required: 2,
                     pos_unit: Some("Kub 2P25 ln".into()),
                     max_drop_height_agl: 10,
@@ -347,7 +347,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 },
                 Crate {
                     name: "Kub Radar".into(),
-                    weight: 1000,
+                    weight: 2000,
                     required: 1,
                     pos_unit: Some("Kub 1S91 str".into()),
                     max_drop_height_agl: 10,
@@ -356,7 +356,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             ],
             repair_crate: Some(Crate {
                 name: "Kub Repair".into(),
-                weight: 3000,
+                weight: 2000,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,
@@ -373,7 +373,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             crates: vec![
                 Crate {
                     name: "SA11 Launcher".into(),
-                    weight: 3000,
+                    weight: 2000,
                     required: 2,
                     pos_unit: Some("SA-11 Buk LN 9A310M1".into()),
                     max_drop_height_agl: 10,
@@ -398,7 +398,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             ],
             repair_crate: Some(Crate {
                 name: "Buk Repair".into(),
-                weight: 3000,
+                weight: 2000,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,
@@ -414,8 +414,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "SA15 Tor".into(),
-                weight: 6000,
-                required: 1,
+                weight: 2000,
+                required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -431,8 +431,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "SA8 Osa".into(),
-                weight: 6000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -448,7 +448,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "ZU23 Emplacement".into(),
-                weight: 1500,
+                weight: 1000,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,
@@ -461,12 +461,12 @@ fn default_red_deployables() -> Vec<Deployable> {
             path: vec!["AAA".into(), "Shilka".into()],
             template: "DEPSHILKA".into(),
             persist: PersistTyp::Forever,
-            limit: 6,
+            limit: 4,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Shilka Crate".into(),
-                weight: 6000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -482,8 +482,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Tunguska Crate".into(),
-                weight: 6000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -499,8 +499,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "SA13 Strela Crate".into(),
-                weight: 6000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -516,8 +516,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "MSTA Crate".into(),
-                weight: 20000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -533,8 +533,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "T72 Crate".into(),
-                weight: 30000,
-                required: 1,
+                weight: 2000,
+                required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -550,8 +550,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "BMP3 Crate".into(),
-                weight: 20000,
-                required: 1,
+                weight: 2000,
+                required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -567,7 +567,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "FARP Crate".into(),
-                weight: 4000,
+                weight: 2000,
                 required: 8,
                 pos_unit: None,
                 max_drop_height_agl: 10,
@@ -575,7 +575,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: Some(Crate {
                 name: "FARP Repair".into(),
-                weight: 4000,
+                weight: 2000,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,
@@ -596,8 +596,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Roland".into(),
-                weight: 1000,
-                required: 2,
+                weight: 2000,
+                required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -614,7 +614,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             crates: vec![
                 Crate {
                     name: "Hawk Launcher".into(),
-                    weight: 1000,
+                    weight: 2000,
                     required: 1,
                     pos_unit: Some("Hawk ln".into()),
                     max_drop_height_agl: 10,
@@ -622,7 +622,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 },
                 Crate {
                     name: "Hawk Search Radar".into(),
-                    weight: 1000,
+                    weight: 2000,
                     required: 1,
                     pos_unit: Some("Hawk sr".into()),
                     max_drop_height_agl: 10,
@@ -630,7 +630,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 },
                 Crate {
                     name: "Hawk Track Radar".into(),
-                    weight: 1000,
+                    weight: 2000,
                     required: 1,
                     pos_unit: Some("Hawk tr".into()),
                     max_drop_height_agl: 10,
@@ -638,7 +638,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 },
                 Crate {
                     name: "Hawk CC".into(),
-                    weight: 1000,
+                    weight: 2000,
                     required: 1,
                     pos_unit: Some("Hawk pcp".into()),
                     max_drop_height_agl: 10,
@@ -647,7 +647,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             ],
             repair_crate: Some(Crate {
                 name: "Hawk Repair".into(),
-                weight: 1200,
+                weight: 2000,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,
@@ -663,8 +663,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Avenger Crate".into(),
-                weight: 6000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -680,8 +680,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Linebacker Crate".into(),
-                weight: 6000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -697,8 +697,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Flakpanzergepard Crate".into(),
-                weight: 8000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -714,8 +714,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Vulkan Crate".into(),
-                weight: 6000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -731,8 +731,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Firtina Crate".into(),
-                weight: 20000,
-                required: 1,
+                weight: 2000,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -748,8 +748,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Bradley Crate".into(),
-                weight: 20000,
-                required: 1,
+                weight: 2000,
+                required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -765,8 +765,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Leopard Crate".into(),
-                weight: 30000,
-                required: 1,
+                weight: 2000,
+                required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -782,7 +782,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "FARP Crate".into(),
-                weight: 4000,
+                weight: 2000,
                 required: 8,
                 pos_unit: None,
                 max_drop_height_agl: 10,
@@ -790,7 +790,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: Some(Crate {
                 name: "FARP Repair".into(),
-                weight: 4000,
+                weight: 2000,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,

@@ -697,7 +697,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "M109 Crate".into(),
-                weight: 1000,
+                weight: 20000,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,

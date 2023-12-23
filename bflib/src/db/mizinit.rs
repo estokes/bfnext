@@ -1,9 +1,10 @@
+use super::{Db, DeployKind, Map, ObjGroup, Objective, ObjectiveId, ObjectiveKind};
 use crate::{
     cfg::{Cfg, Vehicle},
-    spawnctx::{SpawnCtx, SpawnLoc}, objective_mut,
+    objective_mut,
+    spawnctx::{SpawnCtx, SpawnLoc},
 };
-use super::{Db, DeployKind, Map, ObjGroup, Objective, ObjectiveId, ObjectiveKind};
-use anyhow::{bail, anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use dcso3::{
     coalition::Side,
@@ -151,6 +152,13 @@ impl Db {
                 }
             };
             let vehicle = Vehicle::from(unit.typ()?);
+            match self.ephemeral.cfg.threatened_distance.get(&vehicle) {
+                Some(_) => (),
+                None => bail!(
+                    "vehicle {:?} doesn't have a configured theatened distance",
+                    vehicle
+                ),
+            }
             match self.ephemeral.cfg.life_types.get(&vehicle) {
                 None => bail!("vehicle {:?} doesn't have a configured life type", vehicle),
                 Some(typ) => match self.ephemeral.cfg.default_lives.get(&typ) {
@@ -167,9 +175,7 @@ impl Db {
             self.persisted
                 .objectives_by_slot
                 .insert_cow(id.clone(), obj);
-            objective_mut!(self, obj)?
-                .slots
-                .insert_cow(id, vehicle);
+            objective_mut!(self, obj)?.slots.insert_cow(id, vehicle);
         }
         Ok(())
     }

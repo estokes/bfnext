@@ -165,14 +165,15 @@ pub struct Cfg {
     /// how far must you fly from an objective to spawn deployables
     /// without penalty (Meters)
     pub logistics_exclusion: u32,
-    /// how long you have to wait to unpack when inside the logistics exclusion zone of
-    /// an objective. None, you can't ever unpack there. (Seconds)
-    pub inside_logistics_unpack_delay: Option<u32>,
     /// an objective will cull it's units if there are no enemy units
     /// within this distance (Meters)
     pub unit_cull_distance: u32,
     /// how often to check whether we need to cull or respawn units (Seconds)
     pub unit_cull_freq: u32,
+    /// how close various kinds of enemy units can be (with LOS) for an objective
+    /// to be considered threatened. Threatened objectives can't spawn deployables
+    /// within the exclusion zone. (Meters) 
+    pub threatened_distance: FxHashMap<Vehicle, u32>,
     /// how far can a crate be from the player and still be
     /// loadable (Meters)
     pub crate_load_distance: u32,
@@ -761,9 +762,47 @@ impl Default for Cfg {
                 ),
             ]),
             logistics_exclusion: 10000,
-            inside_logistics_unpack_delay: Some(900),
             unit_cull_distance: 70000,
             unit_cull_freq: 10,
+            threatened_distance: FxHashMap::from_iter([
+                ("FA-18C_hornet".into(), 36000),
+                ("F-14A-135-GR".into(), 21600),
+                ("F-14B".into(), 21600),
+                ("F-15C".into(), 36000),
+                ("F-15ESE".into(), 36000),
+                ("MiG-29S".into(), 21600),
+                ("M-2000C".into(), 21600),
+                ("F-16C_50".into(), 36000),
+                ("MiG-29A".into(), 21600),
+                ("Su-27".into(), 21600),
+                ("AH-64D_BLK_II".into(), 14400),
+                ("Mi-24P".into(), 14400),
+                ("Ka-50_3".into(), 14400),
+                ("A-10C".into(), 21600),
+                ("A-10A".into(), 21600),
+                ("Su-25".into(), 21600),
+                ("Su-25T".into(), 21600),
+                ("AJS37".into(), 36000),
+                ("Ka-50".into(), 14400),
+                ("AV8BNA".into(), 36000),
+                ("A-10C_2".into(), 14400),
+                ("JF-17".into(), 36000),
+                ("SA342L".into(), 9000),
+                ("UH-1H".into(), 9000),
+                ("Mi-8MT".into(), 9000),
+                ("SA342M".into(), 9000),
+                ("L-39C".into(), 9000),
+                ("L-39ZA".into(), 9000),
+                ("TF-51D".into(), 0),
+                ("Yak-52".into(), 0),
+                ("C-101CC".into(), 9000),
+                ("MB-339A".into(), 9000),
+                ("F-5E-3".into(), 14400),
+                ("MiG-21Bis".into(), 14400),
+                ("MiG-19P".into(), 9000),
+                ("Mirage-F1EE".into(), 14400),
+                ("Mirage-F1CE".into(), 14400),
+            ]),
             crate_load_distance: 50,
             crate_spread: 250,
             side_switches: Some(1),

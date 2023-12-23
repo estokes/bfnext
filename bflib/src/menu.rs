@@ -227,14 +227,10 @@ fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &gid)?;
     match ctx.db.unload_troops(lua, &ctx.idx, &slot) {
-        Ok((false, tr)) => {
+        Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
-            let msg = format_compact!("{player} dropped {} into the field", tr.name);
+            let msg = format_compact!("{player} dropped {} troops into the field", tr.name);
             ctx.pending_messages.panel_to_side(10, false, side, msg)
-        }
-        Ok((true, _)) => {
-            ctx.pending_messages
-                .panel_to_group(10, false, gid, "troops returned to the base")
         }
         Err(e) => ctx
             .pending_messages
@@ -249,7 +245,23 @@ fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
     match ctx.db.extract_troops(lua, &ctx.idx, &slot) {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
-            let msg = format_compact!("{player} extracted {} from the field", tr.name);
+            let msg = format_compact!("{player} extracted {} troops from the field", tr.name);
+            ctx.pending_messages.panel_to_side(10, false, side, msg)
+        }
+        Err(e) => ctx
+            .pending_messages
+            .panel_to_group(10, false, gid, format_compact!("{e}")),
+    }
+    Ok(())
+}
+
+fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    match ctx.db.return_troops(lua, &ctx.idx, &slot) {
+        Ok(tr) => {
+            let player = player_name(&ctx.db, &slot);
+            let msg = format_compact!("{player} returned {} troops", tr.name);
             ctx.pending_messages.panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
@@ -286,6 +298,13 @@ fn add_troops_menu_for_group(
             "List".into(),
             Some(root.clone()),
             list_current_cargo,
+            group,
+        )?;
+        mc.add_command_for_group(
+            group,
+            "Return".into(),
+            Some(root.clone()),
+            return_troops,
             group,
         )?;
         let root = mc.add_submenu_for_group(group, "Squads".into(), Some(root))?;

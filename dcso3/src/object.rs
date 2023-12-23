@@ -100,8 +100,16 @@ impl<'lua> Object<'lua> {
         Ok(self.t.call_method("getDesc", ())?)
     }
 
+    pub fn has_attribute(&self, attr: String) -> Result<bool> {
+        Ok(self.t.call_method("hasAttribute", attr)?)
+    }
+
     pub fn get_name(&self) -> Result<String> {
         Ok(self.t.call_method("getName", ())?)
+    }
+
+    pub fn get_type_name(&self) -> Result<String> {
+        Ok(self.t.call_method("getTypeName", ())?)
     }
 
     pub fn get_point(&self) -> Result<LuaVec3> {
@@ -118,6 +126,10 @@ impl<'lua> Object<'lua> {
 
     pub fn in_air(&self) -> Result<bool> {
         Ok(self.t.call_method("inAir", ())?)
+    }
+
+    pub fn is_exist(&self) -> Result<bool> {
+        Ok(self.t.call_method("isExist", ())?)
     }
 
     pub fn as_unit(&self) -> Result<Unit<'lua>> {

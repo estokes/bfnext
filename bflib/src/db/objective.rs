@@ -1,12 +1,15 @@
 use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId};
 use crate::{
+    cfg::Vehicle,
     group, group_mut, maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx},
     unit, unit_mut,
 };
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
-use dcso3::{coalition::Side, env::miz::MizIndex, MizLua, Vector2};
+use dcso3::{
+    coalition::Side, env::miz::MizIndex, land::Land, LuaVec2, LuaVec3, MizLua, Vector2, Vector3,
+};
 use fxhash::FxHashMap;
 use log::{debug, info};
 use smallvec::{smallvec, SmallVec};
@@ -126,19 +129,26 @@ impl Db {
         Ok(())
     }
 
-    pub fn cull_or_respawn_objectives(&mut self, lua: MizLua, idx: &MizIndex) -> Result<()> {
+    pub fn cull_or_respawn_objectives(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+    ) -> Result<SmallVec<[ObjectiveId; 4]>> {
+        let land = Land::singleton(lua)?;
         let players = self
             .ephemeral
             .players_by_slot
             .iter()
             .filter_map(|(sl, ucid)| {
                 let side = self.persisted.players[ucid].side;
-                let pos = self
-                    .slot_instance_unit(lua, idx, sl)
-                    .and_then(|u| u.as_object()?.get_point())
-                    .map(|v| Vector2::new(v.x, v.z));
-                match pos {
-                    Ok(pos) => Some((side, pos)),
+                let pos_typ = self.slot_instance_unit(lua, idx, sl).and_then(|u| {
+                    let o = u.as_object()?;
+                    let pos = o.get_point()?;
+                    let typ = o.get_type_name()?;
+                    Ok((pos, Vehicle::from(typ)))
+                });
+                match pos_typ {
+                    Ok((pos, typ)) => Some((side, pos, typ)),
                     Err(e) => {
                         info!(
                             "failed to get position of player {:?} {:?} {:?}",
@@ -150,28 +160,60 @@ impl Db {
             })
             .collect::<Vec<_>>();
         let cfg = self.cfg();
+        let cull_distance = cfg.unit_cull_distance.pow(2) as f64;
         let mut to_spawn: SmallVec<[ObjectiveId; 8]> = smallvec![];
         let mut to_cull: SmallVec<[ObjectiveId; 8]> = smallvec![];
+        let mut threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
+        let mut not_threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
         for (oid, obj) in &self.persisted.objectives {
             match obj.owner {
                 Side::Blue | Side::Red => (),
-                Side::Neutral => continue,
-            }
-            let mut spawn = false;
-            for (side, pos) in &players {
-                if obj.owner != *side
-                    && na::distance(&obj.pos.into(), &(*pos).into())
-                        <= cfg.unit_cull_distance as f64
-                {
-                    spawn = true;
-                    break;
+                Side::Neutral => {
+                    threatened.push(*oid);
+                    continue;
                 }
+            }
+            let pos3 = {
+                let alt = land.get_height(LuaVec2(obj.pos))?;
+                LuaVec3(Vector3::new(obj.pos.x, alt, obj.pos.y))
+            };
+            let mut spawn = false;
+            let mut is_threatened = false;
+            for (side, pos, typ) in &players {
+                if obj.owner != *side {
+                    let threat_dist = cfg.threatened_distance[typ].pow(2) as f64;
+                    let ppos = Vector2::new(pos.x, pos.z);
+                    let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
+                    if dist <= cull_distance {
+                        spawn = true;
+                    }
+                    if dist <= threat_dist && land.is_visible(pos3, *pos)? {
+                        is_threatened = true;
+                    }
+                }
+            }
+            if is_threatened {
+                threatened.push(*oid);
+            } else {
+                not_threatened.push(*oid);
             }
             if !obj.spawned && spawn {
                 to_spawn.push(*oid);
             } else if obj.spawned && !spawn {
                 to_cull.push(*oid);
             }
+        }
+        let mut became_threatened: SmallVec<[ObjectiveId; 4]> = smallvec![];
+        for oid in &threatened {
+            let obj = objective_mut!(self, oid)?;
+            if !obj.threatened {
+                became_threatened.push(*oid);
+            }
+            obj.threatened = true;
+        }
+        for oid in &not_threatened {
+            let obj = objective_mut!(self, oid)?;
+            obj.threatened = false;
         }
         for oid in to_spawn {
             let obj = objective_mut!(self, oid)?;
@@ -205,7 +247,7 @@ impl Db {
                 }
             }
         }
-        Ok(())
+        Ok(became_threatened)
     }
 
     pub fn repair_one_logi_step(

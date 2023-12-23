@@ -1,5 +1,3 @@
-use std::fmt;
-
 use super::{Db, DeployKind, DeployableIndex, GroupId, Objective, ObjectiveId, SpawnedGroup};
 use crate::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
@@ -18,6 +16,7 @@ use fxhash::FxHashMap;
 use log::{debug, error};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
+use std::fmt;
 
 #[derive(Debug, Clone, Copy)]
 pub struct NearbyCrate<'a> {
@@ -234,6 +233,22 @@ impl Db {
         Ok((n, oldest))
     }
 
+    pub fn number_troops_deployed(&self, name: &str) -> Result<(usize, Option<GroupId>)> {
+        let mut n = 0;
+        let mut oldest = None;
+        for gid in &self.persisted.troops {
+            if let DeployKind::Troop(tr) = &group!(self, gid)?.origin {
+                if name == tr.name.as_str() {
+                    if oldest.is_none() {
+                        oldest = Some(*gid);
+                    }
+                    n += 1;
+                }
+            }
+        }
+        Ok((n, oldest))
+    }
+
     pub fn unpakistan(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Unpakistan> {
         #[derive(Clone)]
         struct Cifo {
@@ -415,7 +430,7 @@ impl Db {
                     }
                 }
                 check |= obj.owner == side;
-                check && {
+                check && obj.threatened && {
                     let dist = na::distance_squared(&obj.pos.into(), &centroid.into());
                     dist <= excl_dist_sq
                 }
@@ -535,11 +550,11 @@ impl Db {
             Ok(mut candidates) => {
                 let (dep, have) = candidates.drain().next().unwrap();
                 let centroid = centroid2d(have.values().flat_map(|c| c.iter()).map(|c| c.pos));
-                if too_close(self, side, centroid, || {
+                let too_close = too_close(self, side, centroid, || {
                     have.values().flat_map(|c| c.iter())
-                }) {
-                    reasons
-                        .push("too close to friendly logistics or crate origin to unpack".into());
+                });
+                if too_close {
+                    reasons.push("can't unpack that here while enemies are close".into());
                 } else {
                     let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
                     enforce_deploy_limits(self, &spec, &dep)?;
@@ -567,7 +582,7 @@ impl Db {
                 let (dep, (gid, have)) = candidates.drain().next().unwrap();
                 let centroid = centroid2d(have.iter().map(|c| c.pos));
                 if too_close(self, side, centroid, || have.iter()) {
-                    reasons.push("too close to friendly logistics or crate origin to repair".into())
+                    reasons.push("can't repair that here while enemies are close".into())
                 } else {
                     let group = group!(self, gid)?;
                     for uid in &group.units {
@@ -709,25 +724,35 @@ impl Db {
             .and_then(|idx| idx.squads_by_name.get(name))
             .ok_or_else(|| anyhow!("no such squad {name}"))?
             .clone();
+        let (n, oldest) = self.number_troops_deployed(name)?;
+        let to_delete = if n < troop_cfg.limit as usize {
+            None
+        } else {
+            match troop_cfg.limit_enforce {
+                LimitEnforceTyp::DeleteOldest => oldest,
+                LimitEnforceTyp::DenyCrate => {
+                    bail!("the maximum number of {} troops are already deployed", name)
+                }
+            }
+        };
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
         if cargo_capacity.troop_slots as usize <= cargo.num_troops()
             || cargo_capacity.total_slots as usize <= cargo.num_total()
         {
             bail!("you already have a full load onboard")
         }
+        let weight = cargo.weight();
         cargo.troops.push(troop_cfg.clone());
         Trigger::singleton(lua)?
             .action()?
-            .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;
+            .set_unit_internal_cargo(unit_name, weight as i64)?;
+        if let Some(gid) = to_delete {
+            self.delete_group(&gid)?
+        }
         Ok(troop_cfg)
     }
 
-    pub fn unload_troops(
-        &mut self,
-        lua: MizLua,
-        idx: &MizIndex,
-        slot: &SlotId,
-    ) -> Result<(bool, Troop)> {
+    pub fn unload_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {
         let cargo = self.ephemeral.cargo.get(slot);
         if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
             bail!("no troops onboard")
@@ -740,22 +765,47 @@ impl Db {
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.as_object()?.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
+        match self.point_near_logistics(side, point) {
+            Ok((_, obj)) if obj.threatened => {
+                bail!("you can't deploy troops here while enemies are near")
+            }
+            Ok(_) | Err(_) => (),
+        }
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let troop_cfg = cargo.troops.pop().unwrap();
-        let weight = cargo.weight();
         Trigger::singleton(lua)?
             .action()?
-            .set_unit_internal_cargo(unit_name, weight)?;
-        if self.point_near_logistics(side, point).is_ok() {
-            Ok((true, troop_cfg))
-        } else {
-            let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
-            let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
-            let dk = DeployKind::Troop(troop_cfg.clone());
-            let spctx = SpawnCtx::new(lua)?;
-            self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk)?;
-            Ok((false, troop_cfg))
+            .set_unit_internal_cargo(unit_name, cargo.weight())?;
+        let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
+        let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
+        let dk = DeployKind::Troop(troop_cfg.clone());
+        let spctx = SpawnCtx::new(lua)?;
+        self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk)?;
+        Ok(troop_cfg)
+    }
+
+    pub fn return_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {
+        let cargo = self.ephemeral.cargo.get(slot);
+        if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
+            bail!("no troops onboard")
         }
+        let unit = self.slot_instance_unit(lua, idx, slot)?;
+        if unit.as_object()?.in_air()? {
+            bail!("you must land to return your troops")
+        }
+        let unit_name = unit.as_object()?.get_name()?;
+        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let pos = unit.as_object()?.get_position()?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        if self.point_near_logistics(side, point).is_err() {
+            bail!("you are not close enough to friendly logistics to return troops")
+        }
+        let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
+        let troop_cfg = cargo.troops.pop().unwrap();
+        Trigger::singleton(lua)?
+            .action()?
+            .set_unit_internal_cargo(unit_name, cargo.weight())?;
+        Ok(troop_cfg)
     }
 
     pub fn extract_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {

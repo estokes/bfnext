@@ -295,6 +295,8 @@ pub struct Objective {
     last_change_ts: DateTime<Utc>,
     #[serde(skip)]
     spawned: bool,
+    #[serde(skip)]
+    threatened: bool,
 }
 
 impl Objective {
@@ -316,6 +318,10 @@ impl Objective {
 
     pub fn captureable(&self) -> bool {
         self.logi == 0
+    }
+
+    pub fn owner(&self) -> Side {
+        self.owner
     }
 }
 

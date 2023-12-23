@@ -617,7 +617,16 @@ fn cull_or_spawn_units(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Res
     let cull_freq = Duration::seconds(ctx.db.cfg().unit_cull_freq as i64);
     if ts - ctx.last_cull > cull_freq {
         ctx.last_cull = ts;
-        ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?
+        let threatened = ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?;
+        for oid in threatened {
+            let obj = ctx.db.objective(&oid)?;
+            ctx.pending_messages.panel_to_side(
+                10,
+                false,
+                obj.owner(),
+                format_compact!("enemies spotted near {}", obj.name()),
+            )
+        }
     }
     Ok(())
 }

@@ -68,6 +68,7 @@ impl Db {
         let obj = Objective {
             id,
             spawned: false,
+            threatened: false,
             trigger_name: zone.name()?,
             pos,
             radius,

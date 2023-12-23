@@ -173,6 +173,8 @@ pub struct Cfg {
     /// to be considered threatened. Threatened objectives can't spawn deployables
     /// within the exclusion zone. (Meters) 
     pub threatened_distance: FxHashMap<Vehicle, u32>,
+    /// how long before threatened is removed if no enemy can be seen
+    pub threatened_cooldown: u32,
     /// how far can a crate be from the player and still be
     /// loadable (Meters)
     pub crate_load_distance: u32,
@@ -870,6 +872,7 @@ impl Default for Cfg {
                 ("Mirage-F1EE".into(), 14400),
                 ("Mirage-F1CE".into(), 14400),
             ]),
+            threatened_cooldown: 300,
             crate_load_distance: 50,
             crate_spread: 250,
             side_switches: Some(1),

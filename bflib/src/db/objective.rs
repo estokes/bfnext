@@ -133,7 +133,8 @@ impl Db {
         &mut self,
         lua: MizLua,
         idx: &MizIndex,
-    ) -> Result<SmallVec<[ObjectiveId; 4]>> {
+    ) -> Result<(SmallVec<[ObjectiveId; 4]>, SmallVec<[ObjectiveId; 4]>)> {
+        let now = Utc::now();
         let land = Land::singleton(lua)?;
         let players = self
             .ephemeral
@@ -204,16 +205,24 @@ impl Db {
             }
         }
         let mut became_threatened: SmallVec<[ObjectiveId; 4]> = smallvec![];
+        let mut became_clear: SmallVec<[ObjectiveId; 4]> = smallvec![];
         for oid in &threatened {
             let obj = objective_mut!(self, oid)?;
             if !obj.threatened {
                 became_threatened.push(*oid);
             }
             obj.threatened = true;
+            obj.last_threatened_ts = now;
         }
+        let cooldown = Duration::seconds(self.ephemeral.cfg.threatened_cooldown as i64);
         for oid in &not_threatened {
             let obj = objective_mut!(self, oid)?;
-            obj.threatened = false;
+            if now - obj.last_threatened_ts >= cooldown {
+                if obj.threatened {
+                    became_clear.push(*oid);
+                }
+                obj.threatened = false;
+            }
         }
         for oid in to_spawn {
             let obj = objective_mut!(self, oid)?;
@@ -247,7 +256,7 @@ impl Db {
                 }
             }
         }
-        Ok(became_threatened)
+        Ok((became_threatened, became_clear))
     }
 
     pub fn repair_one_logi_step(

@@ -81,6 +81,7 @@ impl Db {
             health: 0,
             logi: 0,
             last_change_ts: Utc::now(),
+            last_threatened_ts: Utc::now(),
         };
         self.persisted.objectives.insert_cow(id, obj);
         self.persisted.objectives_by_name.insert_cow(name, id);

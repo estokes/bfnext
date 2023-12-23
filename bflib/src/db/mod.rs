@@ -293,11 +293,14 @@ pub struct Objective {
     groups: Map<Side, Map<ObjGroup, GroupId>>,
     health: u8,
     logi: u8,
-    last_change_ts: DateTime<Utc>,
     #[serde(skip)]
     spawned: bool,
     #[serde(skip)]
     threatened: bool,
+    #[serde(skip)]
+    last_threatened_ts: DateTime<Utc>,
+    #[serde(skip)]
+    last_change_ts: DateTime<Utc>,
 }
 
 impl Objective {

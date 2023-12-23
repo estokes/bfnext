@@ -115,9 +115,8 @@ pub struct Deployable {
     pub crates: Vec<Crate>,
     /// Can the damaged deployable be repaired, and if so, by which crate.
     pub repair_crate: Option<Crate>,
-    /// Does this deployable provide logistics services, if so, what is it's
-    /// exclusion zone size
-    pub logistics: Option<u32>,
+    /// Does this deployable provide logistics services
+    pub logistics: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -362,7 +361,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA 11 Buk".into()],
@@ -404,7 +403,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA15 Tor".into()],
@@ -421,7 +420,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA8 Osa".into()],
@@ -438,7 +437,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["AAA".into(), "ZU23 Emplacement".into()],
@@ -455,7 +454,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["AAA".into(), "Shilka".into()],
@@ -472,7 +471,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["AAA".into(), "Tunguska".into()],
@@ -489,7 +488,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "SA13 Strela".into()],
@@ -506,7 +505,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Ground Units".into(), "SPH 2S19 Msta 152MM".into()],
@@ -523,7 +522,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Ground Units".into(), "T72".into()],
@@ -540,7 +539,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Ground Units".into(), "BMP3".into()],
@@ -557,7 +556,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -581,7 +580,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: Some(2000),
+            logistics: true,
         },
     ]
 }
@@ -596,14 +595,14 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Roland".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "Hawk System".into()],
@@ -614,7 +613,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             crates: vec![
                 Crate {
                     name: "Hawk Launcher".into(),
-                    weight: 2000,
+                    weight: 1500,
                     required: 1,
                     pos_unit: Some("Hawk ln".into()),
                     max_drop_height_agl: 10,
@@ -622,7 +621,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 },
                 Crate {
                     name: "Hawk Search Radar".into(),
-                    weight: 2000,
+                    weight: 1500,
                     required: 1,
                     pos_unit: Some("Hawk sr".into()),
                     max_drop_height_agl: 10,
@@ -630,7 +629,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 },
                 Crate {
                     name: "Hawk Track Radar".into(),
-                    weight: 2000,
+                    weight: 1500,
                     required: 1,
                     pos_unit: Some("Hawk tr".into()),
                     max_drop_height_agl: 10,
@@ -638,7 +637,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 },
                 Crate {
                     name: "Hawk CC".into(),
-                    weight: 2000,
+                    weight: 1500,
                     required: 1,
                     pos_unit: Some("Hawk pcp".into()),
                     max_drop_height_agl: 10,
@@ -647,13 +646,13 @@ fn default_blue_deployables() -> Vec<Deployable> {
             ],
             repair_crate: Some(Crate {
                 name: "Hawk Repair".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Avenger".into()],
@@ -663,14 +662,14 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Avenger Crate".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Linebacker".into()],
@@ -680,14 +679,14 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Linebacker Crate".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["AAA".into(), "Flakpanzergepard".into()],
@@ -697,14 +696,14 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Flakpanzergepard Crate".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["AAA".into(), "Vulkan".into()],
@@ -714,14 +713,14 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Vulkan Crate".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Ground Units".into(), "Firtina 155MM".into()],
@@ -731,14 +730,14 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Firtina Crate".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Ground Units".into(), "M2A2 Bradley".into()],
@@ -748,14 +747,14 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Bradley Crate".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["Ground Units".into(), "2A6M Leopard".into()],
@@ -765,14 +764,14 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Leopard Crate".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: None,
+            logistics: false,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -782,7 +781,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "FARP Crate".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 8,
                 pos_unit: None,
                 max_drop_height_agl: 10,
@@ -790,13 +789,13 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: Some(Crate {
                 name: "FARP Repair".into(),
-                weight: 2000,
+                weight: 1500,
                 required: 1,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: Some(2000),
+            logistics: true,
         },
     ]
 }

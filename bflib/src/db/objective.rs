@@ -160,7 +160,7 @@ impl Db {
             })
             .collect::<Vec<_>>();
         let cfg = self.cfg();
-        let cull_distance = cfg.unit_cull_distance.pow(2) as f64;
+        let cull_distance = (cfg.unit_cull_distance as f64).powi(2);
         let mut to_spawn: SmallVec<[ObjectiveId; 8]> = smallvec![];
         let mut to_cull: SmallVec<[ObjectiveId; 8]> = smallvec![];
         let mut threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
@@ -181,10 +181,10 @@ impl Db {
             let mut is_threatened = false;
             for (side, pos, typ) in &players {
                 if obj.owner != *side {
-                    let threat_dist = cfg.threatened_distance[typ].pow(2) as f64;
+                    let threat_dist = (cfg.threatened_distance[typ] as f64).powi(2);
                     let ppos = Vector2::new(pos.x, pos.z);
                     let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
-                    if dist <= cull_distance {
+                    if dbg!(dist) <= dbg!(cull_distance) {
                         spawn = true;
                     }
                     if dist <= threat_dist && land.is_visible(pos3, *pos)? {
@@ -198,9 +198,9 @@ impl Db {
                 not_threatened.push(*oid);
             }
             if !obj.spawned && spawn {
-                to_spawn.push(*oid);
+                to_spawn.push(dbg!(*oid));
             } else if obj.spawned && !spawn {
-                to_cull.push(*oid);
+                to_cull.push(dbg!(*oid));
             }
         }
         let mut became_threatened: SmallVec<[ObjectiveId; 4]> = smallvec![];

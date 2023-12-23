@@ -175,6 +175,7 @@ pub enum ObjectiveKind {
     Fob,
     Fuelbase,
     Samsite,
+    Farp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -301,7 +302,7 @@ pub struct Objective {
 
 impl Objective {
     pub fn is_in_circle(&self, pos: Vector2) -> bool {
-        na::distance(&self.pos.into(), &pos.into()) <= self.radius
+        na::distance_squared(&self.pos.into(), &pos.into()) <= self.radius.powi(2)
     }
 
     pub fn name(&self) -> &str {

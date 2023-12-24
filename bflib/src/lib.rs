@@ -257,8 +257,8 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
 fn on_player_try_connect(
     _: HooksLua,
     addr: String,
-    ucid: Ucid,
     name: String,
+    ucid: Ucid,
     id: PlayerId,
 ) -> Result<bool> {
     info!(

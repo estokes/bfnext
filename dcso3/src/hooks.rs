@@ -268,12 +268,12 @@ impl<'lua> UserHooks<'lua> {
     /// f(addr, ucid, name, id)
     pub fn on_player_try_connect<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, String, Ucid, String, PlayerId) -> Result<bool> + 'static,
+        F: Fn(HooksLua, String, String, Ucid, PlayerId) -> Result<bool> + 'static,
     {
         self.on_player_try_connect = Some(self.lua.create_function(
-            move |lua, (addr, ucid, name, id): (String, Ucid, String, PlayerId)| {
+            move |lua, (addr, name, ucid, id): (String, String, Ucid, PlayerId)| {
                 wrap_f("on_player_try_connect", HooksLua(lua), |lua| {
-                    f(lua, addr, ucid, name, id)
+                    f(lua, addr, name, ucid, id)
                 })
             },
         )?);

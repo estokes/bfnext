@@ -56,19 +56,13 @@ impl Db {
         now: DateTime<Utc>,
     ) -> Result<()> {
         let obj = objective!(self, oid)?;
-        if obj.owner != Side::Neutral {
-            let (health, logi) = self.compute_objective_status(obj)?;
-            let obj = objective_mut!(self, oid)?;
-            obj.health = health;
-            obj.logi = logi;
-            obj.last_change_ts = now;
-            if obj.logi == 0 {
-                obj.owner = Side::Neutral;
-                obj.health = 0;
-            }
-            self.ephemeral.dirty = true;
-            debug!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
-        }
+        let (health, logi) = self.compute_objective_status(obj)?;
+        let obj = objective_mut!(self, oid)?;
+        obj.health = health;
+        obj.logi = logi;
+        obj.last_change_ts = now;
+        self.ephemeral.dirty = true;
+        debug!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
         Ok(())
     }
 
@@ -84,9 +78,6 @@ impl Db {
             .objectives
             .get(&oid)
             .ok_or_else(|| anyhow!("no such objective {:?}", oid))?;
-        if obj.owner == Side::Neutral {
-            return Ok(())
-        }
         if let Some(groups) = obj.groups.get(&obj.owner) {
             let mut damaged_by_class: FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>> =
                 groups.into_iter().fold(
@@ -173,13 +164,6 @@ impl Db {
         let mut threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
         let mut not_threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
         for (oid, obj) in &self.persisted.objectives {
-            match obj.owner {
-                Side::Blue | Side::Red => (),
-                Side::Neutral => {
-                    threatened.push(*oid);
-                    continue;
-                }
-            }
             let pos3 = {
                 let alt = land.get_height(LuaVec2(obj.pos))?;
                 LuaVec3(Vector3::new(obj.pos.x, alt, obj.pos.y))
@@ -311,9 +295,6 @@ impl Db {
             .objectives
             .into_iter()
             .filter_map(|(oid, obj)| {
-                if obj.owner == Side::Neutral {
-                    return None
-                }
                 let logi = obj.logi as f32 / 100.;
                 let repair_time = self.ephemeral.cfg.repair_time as f32 / logi;
                 if repair_time < i64::MAX as f32 {

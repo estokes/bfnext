@@ -367,6 +367,11 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
     let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::NoLives => Ok(false),
+        SlotAuth::ObjectiveHasNoLogistics => {
+            let msg = format_compact!("Objective is capturable");
+            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
+            Ok(false)
+        }
         SlotAuth::NotRegistered(side) => {
             let msg = String::from(format_compact!(
                 "You must join {:?} to use this slot. Type {:?} in chat.",

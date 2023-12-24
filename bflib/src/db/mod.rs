@@ -321,7 +321,7 @@ impl Objective {
     }
 
     pub fn captureable(&self) -> bool {
-        self.logi == 0 || self.owner == Side::Neutral
+        self.logi == 0
     }
 
     pub fn owner(&self) -> Side {

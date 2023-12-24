@@ -13,6 +13,7 @@ use smallvec::{smallvec, SmallVec};
 pub enum SlotAuth {
     Yes,
     ObjectiveNotOwned(Side),
+    ObjectiveHasNoLogistics,
     NoLives,
     NotRegistered(Side),
 }
@@ -172,6 +173,9 @@ impl Db {
                 };
                 if objective.owner != player.side {
                     return SlotAuth::ObjectiveNotOwned(player.side);
+                }
+                if objective.captureable() {
+                    return SlotAuth::ObjectiveHasNoLogistics;
                 }
                 let life_type = &self.ephemeral.cfg.life_types[&objective.slots[&slot]];
                 macro_rules! yes {

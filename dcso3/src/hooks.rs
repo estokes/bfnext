@@ -273,7 +273,7 @@ impl<'lua> UserHooks<'lua> {
         self.on_player_try_connect = Some(self.lua.create_function(
             move |lua, (addr, ucid, name, id): (String, Ucid, String, PlayerId)| {
                 wrap_f("on_player_try_connect", HooksLua(lua), |lua| {
-                    f(lua, addr, ucid.clone(), name, id)
+                    f(lua, addr, ucid, name, id)
                 })
             },
         )?);

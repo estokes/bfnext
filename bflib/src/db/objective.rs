@@ -64,6 +64,7 @@ impl Db {
             obj.last_change_ts = now;
             if obj.logi == 0 {
                 obj.owner = Side::Neutral;
+                obj.health = 0;
             }
             self.ephemeral.dirty = true;
             debug!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);

@@ -10,7 +10,7 @@ use dcso3::{
     coalition::Side,
     env::miz::{Group, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     net::SlotId,
-    MizLua, String,
+    MizLua, String, Vector2,
 };
 
 impl Db {
@@ -122,7 +122,11 @@ impl Db {
             spctx,
             idx,
             side,
-            SpawnLoc::AtPos(pos),
+            SpawnLoc::AtPos {
+                pos,
+                offset_direction: Vector2::default(),
+                group_heading: 0.,
+            },
             name.template(side).as_str(),
             DeployKind::Objective,
         )?;

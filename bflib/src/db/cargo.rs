@@ -9,8 +9,8 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    centroid2d, coalition::Side, env::miz::MizIndex, land::Land, net::SlotId, trigger::Trigger,
-    LuaVec2, MizLua, String, Vector2,
+    centroid2d, coalition::Side, env::miz::MizIndex, land::Land, net::SlotId, radians_to_degrees,
+    trigger::Trigger, LuaVec2, MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
 use log::{debug, error};
@@ -111,6 +111,7 @@ impl Db {
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let pos = self.slot_instance_pos(lua, idx, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
+        let dir = Vector2::new(pos.x.0.x, pos.x.0.z);
         let (oid, _) = self.point_near_logistics(side, point)?;
         let crate_cfg = self
             .ephemeral
@@ -126,8 +127,11 @@ impl Db {
             .get(&side)
             .ok_or_else(|| anyhow!("missing crate template for {:?} side", side))?
             .clone();
-        let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
-        let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
+        let spawnpos = SpawnLoc::AtPos {
+            pos: point,
+            offset_direction: dir,
+            group_heading: radians_to_degrees(dir.x.atan2(dir.y)),
+        };
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
         self.add_and_queue_group(&SpawnCtx::new(lua)?, idx, side, spawnpos, &template, dk)?;
         Ok(())
@@ -152,7 +156,7 @@ impl Db {
                 let distance = na::distance(&point.into(), &unit.pos.into());
                 if distance <= max_dist {
                     let v = unit.pos - point;
-                    let heading = v.y.atan2(v.x) * (180. / std::f64::consts::PI);
+                    let heading = radians_to_degrees(v.y.atan2(v.x));
                     res.push(NearbyCrate {
                         group,
                         origin: *oid,
@@ -468,6 +472,7 @@ impl Db {
             db: &mut Db,
             have: &FxHashMap<String, Vec<Cifo>>,
             centroid: Vector2,
+            group_heading: f64,
         ) -> Result<SpawnLoc> {
             let mut num_by_typ: FxHashMap<String, usize> = FxHashMap::default();
             let mut pos_by_typ: FxHashMap<String, Vector2> = FxHashMap::default();
@@ -491,9 +496,17 @@ impl Db {
                 }
             }
             let spawnloc = if pos_by_typ.is_empty() {
-                SpawnLoc::AtPos(centroid)
+                SpawnLoc::AtPos {
+                    pos: centroid,
+                    offset_direction: Vector2::default(),
+                    group_heading,
+                }
             } else {
-                SpawnLoc::AtPosWithComponents(centroid, pos_by_typ)
+                SpawnLoc::AtPosWithComponents {
+                    pos: centroid,
+                    group_heading,
+                    component_pos: pos_by_typ,
+                }
             };
             Ok(spawnloc)
         }
@@ -558,7 +571,13 @@ impl Db {
                 } else {
                     let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
                     enforce_deploy_limits(self, &spec, &dep)?;
-                    let spawnloc = compute_positions(self, &have, centroid)?;
+                    let pos = self.slot_instance_pos(lua, idx, slot)?;
+                    let spawnloc = compute_positions(
+                        self,
+                        &have,
+                        centroid,
+                        radians_to_degrees(pos.x.x.atan2(pos.x.z)),
+                    )?;
                     let origin = DeployKind::Deployed(spec.clone());
                     let spctx = SpawnCtx::new(lua)?;
                     for cr in have.values().flat_map(|c| c.iter()) {
@@ -647,8 +666,11 @@ impl Db {
             .get(&side)
             .ok_or_else(|| anyhow!("missing crate template for {:?}", side))?
             .clone();
-        let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
-        let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
+        let spawnpos = SpawnLoc::AtPos {
+            pos: point,
+            offset_direction: Vector2::new(pos.x.x, pos.x.z),
+            group_heading: radians_to_degrees(pos.x.x.atan2(pos.x.z)),
+        };
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;
         self.add_and_queue_group(&spctx, idx, side, spawnpos, &template, dk)?;
@@ -776,8 +798,11 @@ impl Db {
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
-        let spawnpos = 20. * pos.x.0 + pos.p.0; // spawn it 20 meters in front of the player
-        let spawnpos = SpawnLoc::AtPos(Vector2::new(spawnpos.x, spawnpos.z));
+        let spawnpos = SpawnLoc::AtPos {
+            pos: point,
+            offset_direction: Vector2::new(pos.x.x, pos.x.z),
+            group_heading: radians_to_degrees(pos.x.x.atan2(pos.x.z)),
+        };
         let dk = DeployKind::Troop(troop_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;
         self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk)?;

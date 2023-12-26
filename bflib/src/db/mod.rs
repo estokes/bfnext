@@ -14,6 +14,7 @@ use dcso3::{
     env::miz::{GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
     net::{SlotId, Ucid},
+    rotate2d,
     unit::Unit,
     MizLua, Position3, String, Vector2,
 };
@@ -726,17 +727,45 @@ impl Db {
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let kind = GroupCategory::from_kind(template.category);
-        let (pos, pos_by_typ) = match location {
-            SpawnLoc::AtPos(pos) => (pos, FxHashMap::default()),
-            SpawnLoc::AtPosWithComponents(pos, tbl) => (pos, tbl),
-            SpawnLoc::AtTrigger { name, offset } => (
-                spctx.get_trigger_zone(idx, name.as_str())?.pos()? + offset,
+        let (pos, offset, heading, pos_by_typ) = match location {
+            SpawnLoc::AtPos {
+                pos,
+                offset_direction,
+                group_heading,
+            } => (pos, offset_direction, group_heading, FxHashMap::default()),
+            SpawnLoc::AtPosWithComponents {
+                pos,
+                group_heading,
+                component_pos,
+            } => (pos, Vector2::default(), group_heading, component_pos),
+            SpawnLoc::AtTrigger {
+                name,
+                group_heading,
+            } => (
+                spctx.get_trigger_zone(idx, name.as_str())?.pos()?,
+                Vector2::default(),
+                group_heading,
                 FxHashMap::default(),
             ),
         };
         let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}-{}", template_name, gid));
-        let orig_group_pos = template.group.pos()?;
+        let mut positions = template
+            .group
+            .units()?
+            .into_iter()
+            .map(|u| Ok(u?.pos()?))
+            .collect::<Result<Vec<_>>>()?;
+        let orig_group_pos = centroid2d(positions.iter().map(|p| *p));
+        let group_radius = positions.iter().fold(0., |acc, p| {
+            let d = na::distance(&(*p).into(), &orig_group_pos.into());
+            if d > acc {
+                d
+            } else {
+                acc
+            }
+        });
+        let offset = (group_radius + 10.) * offset;
         let orig_pos_by_typ: FxHashMap<String, Vector2> = if pos_by_typ.is_empty() {
             FxHashMap::default()
         } else {
@@ -757,6 +786,22 @@ impl Db {
                 .map(|(k, (n, v))| (k, v / (n as f64)))
                 .collect()
         };
+        positions.clear();
+        for unit in template.group.units()? {
+            let unit = unit?;
+            let typ = unit.typ()?;
+            let orig_group_pos = match orig_pos_by_typ.get(&typ) {
+                None => orig_group_pos,
+                Some(pos) => *pos,
+            };
+            let unit_pos_offset = orig_group_pos - unit.pos()?;
+            let pos = match pos_by_typ.get(&typ) {
+                None => pos + unit_pos_offset + offset,
+                Some(pos) => pos + unit_pos_offset + offset,
+            };
+            positions.push(pos);
+        }
+        rotate2d(heading, &mut positions);
         let mut spawned = SpawnedGroup {
             id: gid,
             name: group_name.clone(),
@@ -767,27 +812,17 @@ impl Db {
             class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),
         };
-        for unit in template.group.units()? {
+        for (i, unit) in template.group.units()?.into_iter().enumerate() {
             let uid = UnitId::new();
             let unit = unit?;
             let template_name = unit.name()?;
             let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
-            let unit_typ = unit.typ()?;
-            let orig_group_pos = match orig_pos_by_typ.get(&unit_typ) {
-                None => orig_group_pos,
-                Some(pos) => *pos,
-            };
-            let unit_pos_offset = orig_group_pos - unit.pos()?;
-            let pos = match pos_by_typ.get(&unit_typ) {
-                None => pos + unit_pos_offset,
-                Some(pos) => pos + unit_pos_offset,
-            };
             let spawned_unit = SpawnedUnit {
                 id: uid,
                 group: gid,
                 name: unit_name.clone(),
                 template_name,
-                pos,
+                pos: positions[i],
                 dead: false,
             };
             spawned.units.insert_cow(uid);

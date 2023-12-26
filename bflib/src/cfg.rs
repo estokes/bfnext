@@ -99,6 +99,15 @@ pub struct Crate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct DeployableLogistics {
+    pub pad_template: String,
+    pub ammo_template: String,
+    pub fuel_template: String,
+    pub barracks_template: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Deployable {
     /// The full menu path of the deployable in the menu
     pub path: Vec<String>,
@@ -116,7 +125,7 @@ pub struct Deployable {
     /// Can the damaged deployable be repaired, and if so, by which crate.
     pub repair_crate: Option<Crate>,
     /// Does this deployable provide logistics services
-    pub logistics: bool,
+    pub logistics: Option<DeployableLogistics>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,7 +180,7 @@ pub struct Cfg {
     pub unit_cull_freq: u32,
     /// how close various kinds of enemy units can be (with LOS) for an objective
     /// to be considered threatened. Threatened objectives can't spawn deployables
-    /// within the exclusion zone. (Meters) 
+    /// within the exclusion zone. (Meters)
     pub threatened_distance: FxHashMap<Vehicle, u32>,
     /// how long before threatened is removed if no enemy can be seen
     pub threatened_cooldown: u32,
@@ -363,7 +372,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA 11 Buk".into()],
@@ -405,7 +414,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA15 Tor".into()],
@@ -422,7 +431,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA8 Osa".into()],
@@ -439,7 +448,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "ZU23 Emplacement".into()],
@@ -456,7 +465,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Shilka".into()],
@@ -473,7 +482,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Tunguska".into()],
@@ -490,7 +499,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "SA13 Strela".into()],
@@ -507,7 +516,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "SPH 2S19 Msta 152MM".into()],
@@ -524,7 +533,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "T72".into()],
@@ -541,7 +550,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "BMP3".into()],
@@ -558,7 +567,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -582,7 +591,12 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: true,
+            logistics: Some(DeployableLogistics {
+                pad_template: "DEPFARPRPAD".into(),
+                ammo_template: "DEPFARPRAMMO".into(),
+                fuel_template: "DEPFARPRFUEL".into(),
+                barracks_template: "DEPFARPRTENT".into(),
+            }),
         },
     ]
 }
@@ -604,7 +618,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "Hawk System".into()],
@@ -654,7 +668,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Avenger".into()],
@@ -671,7 +685,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Linebacker".into()],
@@ -688,7 +702,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Flakpanzergepard".into()],
@@ -705,7 +719,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Vulkan".into()],
@@ -722,7 +736,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "Firtina 155MM".into()],
@@ -739,7 +753,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "M2A2 Bradley".into()],
@@ -756,7 +770,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "2A6M Leopard".into()],
@@ -773,7 +787,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 350,
             }],
             repair_crate: None,
-            logistics: false,
+            logistics: None,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -797,7 +811,12 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
             }),
-            logistics: true,
+            logistics: Some(DeployableLogistics {
+                pad_template: "DEPFARPBPAD".into(),
+                ammo_template: "DEPFARPBAMMO".into(),
+                fuel_template: "DEPFARPBFUEL".into(),
+                barracks_template: "DEPFARPBTENT".into(),
+            }),
         },
     ]
 }

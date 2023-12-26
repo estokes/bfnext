@@ -1106,3 +1106,36 @@ pub fn centroid2d(points: impl IntoIterator<Item = Vector2>) -> Vector2 {
         });
     sum / (n as f64)
 }
+
+/// Rotate a collection of points in 2d space around their center point
+/// keeping the relative orientations of the points constant. The angle
+/// is in radians.
+pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
+    let centroid = centroid2d(points.into_iter().map(|p| *p));
+    let sin = angle.sin();
+    let cos = angle.cos();
+    for p in points {
+        *p -= centroid;
+        let x = p.x;
+        let y = p.y;
+        p.x = x*cos - y*sin;
+        p.y = x*sin + y*cos;
+        *p += centroid
+    }
+}
+
+/// Same as rotate2d, but construct and return a vec containing the rotated points
+/// in the same order as the they appear in the input slice.
+pub fn rotate2d_vec(angle: f64, points: &[Vector2]) -> Vec<Vector2> {
+    let mut points = Vec::from_iter(points.into_iter().map(|p| *p));
+    rotate2d(angle, &mut points);
+    points
+}
+
+pub fn radians_to_degrees(radians: f64) -> f64 {
+    radians * (180. / std::f64::consts::PI)
+}
+
+pub fn degrees_to_radians(degrees: f64) -> f64 {
+    degrees * (std::f64::consts::PI / 180.)
+}

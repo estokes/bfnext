@@ -12,9 +12,28 @@ use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpawnLoc {
-    AtPos(Vector2),
-    AtPosWithComponents(Vector2, FxHashMap<String, Vector2>),
-    AtTrigger { name: String, offset: Vector2 },
+    AtPos {
+        // the position of the player. the group will be offset in the
+        // direction offset_direction from this point by the group radius + 10 meters
+        pos: Vector2,
+        // this should be a unit vector pointing in the direction
+        // you want to offset the group
+        offset_direction: Vector2,
+        // rotate the group to this heading in radians
+        group_heading: f64,
+    },
+    AtPosWithComponents {
+        pos: Vector2,
+        // the position of sub components of the group by unit type
+        component_pos: FxHashMap<String, Vector2>,
+        // rotate the group to this heading in radians
+        group_heading: f64,
+    },
+    AtTrigger {
+        name: String,
+        // rotate the group to this heading in radians
+        group_heading: f64,
+    },
 }
 
 pub struct SpawnCtx<'lua> {

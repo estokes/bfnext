@@ -16,7 +16,7 @@ use dcso3::{
     net::{SlotId, Ucid},
     rotate2d,
     unit::Unit,
-    MizLua, Position3, String, Vector2, radians_to_degrees,
+    MizLua, Position3, String, Vector2,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};

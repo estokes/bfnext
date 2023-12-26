@@ -626,7 +626,7 @@ impl Db {
                         unit.raw_remove("unitId")?;
                         template.group.set_pos(su.pos)?;
                         unit.set_pos(su.pos)?;
-                        unit.set_heading(dbg!(su.heading))?;
+                        unit.set_heading(su.heading)?;
                         unit.set_name(su.name.clone())?;
                         i += 1;
                     }
@@ -730,7 +730,7 @@ impl Db {
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let kind = GroupCategory::from_kind(template.category);
-        let (pos, offset, heading, pos_by_typ) = match dbg!(location) {
+        let (pos, offset, heading, pos_by_typ) = match location {
             SpawnLoc::AtPos {
                 pos,
                 offset_direction,

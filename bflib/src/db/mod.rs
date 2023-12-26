@@ -626,7 +626,7 @@ impl Db {
                         unit.raw_remove("unitId")?;
                         template.group.set_pos(su.pos)?;
                         unit.set_pos(su.pos)?;
-                        unit.set_heading(su.heading)?;
+                        unit.set_heading(dbg!(su.heading))?;
                         unit.set_name(su.name.clone())?;
                         i += 1;
                     }
@@ -815,7 +815,6 @@ impl Db {
             class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),
         };
-        let heading_deg = radians_to_degrees(heading);
         for (i, unit) in template.group.units()?.into_iter().enumerate() {
             let uid = UnitId::new();
             let unit = unit?;
@@ -827,7 +826,7 @@ impl Db {
                 name: unit_name.clone(),
                 template_name,
                 pos: positions[i],
-                heading: heading_deg,
+                heading,
                 dead: false,
             };
             spawned.units.insert_cow(uid);

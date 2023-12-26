@@ -758,7 +758,7 @@ impl Db {
             .units()?
             .into_iter()
             .map(|u| Ok(u?.pos()?))
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<VecDeque<_>>>()?;
         let orig_group_pos = centroid2d(positions.iter().map(|p| *p));
         let group_radius = positions.iter().fold(0., |acc, p| {
             let d = na::distance(&(*p).into(), &orig_group_pos.into());
@@ -790,6 +790,7 @@ impl Db {
                 .collect()
         };
         positions.clear();
+        let mut final_position_by_type: FxHashMap<String, VecDeque<Vector2>> = FxHashMap::default();
         for unit in template.group.units()? {
             let unit = unit?;
             let typ = unit.typ()?;
@@ -798,13 +799,18 @@ impl Db {
                 Some(pos) => *pos,
             };
             let unit_pos_offset = orig_group_pos - unit.pos()?;
-            let pos = match pos_by_typ.get(&typ) {
-                None => pos + unit_pos_offset + offset,
-                Some(pos) => pos + unit_pos_offset + offset,
-            };
-            positions.push(pos);
+            match pos_by_typ.get(&typ) {
+                None => positions.push_back(pos + unit_pos_offset + offset),
+                Some(pos) => final_position_by_type
+                    .entry(typ.clone())
+                    .or_default()
+                    .push_back(pos + unit_pos_offset + offset),
+            }
         }
-        rotate2d(heading, &mut positions);
+        rotate2d(heading, positions.make_contiguous());
+        for positions in final_position_by_type.values_mut() {
+            rotate2d(heading, positions.make_contiguous());
+        }
         let mut spawned = SpawnedGroup {
             id: gid,
             name: group_name.clone(),
@@ -815,17 +821,22 @@ impl Db {
             class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),
         };
-        for (i, unit) in template.group.units()?.into_iter().enumerate() {
+        for unit in template.group.units()?.into_iter() {
             let uid = UnitId::new();
             let unit = unit?;
+            let typ = unit.typ()?;
             let template_name = unit.name()?;
             let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
+            let pos = match final_position_by_type.get_mut(&typ) {
+                None => positions.pop_front().unwrap(),
+                Some(positions) => positions.pop_front().unwrap()
+            };
             let spawned_unit = SpawnedUnit {
                 id: uid,
                 group: gid,
                 name: unit_name.clone(),
                 template_name,
-                pos: positions[i],
+                pos,
                 heading,
                 dead: false,
             };

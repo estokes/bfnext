@@ -130,7 +130,7 @@ impl Db {
         let spawnpos = SpawnLoc::AtPos {
             pos: point,
             offset_direction: dir,
-            group_heading: radians_to_degrees(dir.x.atan2(dir.y)),
+            group_heading: dir.y.atan2(dir.x),
         };
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
         self.add_and_queue_group(&SpawnCtx::new(lua)?, idx, side, spawnpos, &template, dk)?;
@@ -576,7 +576,7 @@ impl Db {
                         self,
                         &have,
                         centroid,
-                        radians_to_degrees(pos.x.x.atan2(pos.x.z)),
+                        pos.x.z.atan2(pos.x.x),
                     )?;
                     let origin = DeployKind::Deployed(spec.clone());
                     let spctx = SpawnCtx::new(lua)?;
@@ -669,7 +669,7 @@ impl Db {
         let spawnpos = SpawnLoc::AtPos {
             pos: point,
             offset_direction: Vector2::new(pos.x.x, pos.x.z),
-            group_heading: radians_to_degrees(pos.x.x.atan2(pos.x.z)),
+            group_heading: pos.x.z.atan2(pos.x.x),
         };
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;
@@ -801,7 +801,7 @@ impl Db {
         let spawnpos = SpawnLoc::AtPos {
             pos: point,
             offset_direction: Vector2::new(pos.x.x, pos.x.z),
-            group_heading: radians_to_degrees(pos.x.x.atan2(pos.x.z)),
+            group_heading: pos.x.z.atan2(pos.x.x),
         };
         let dk = DeployKind::Troop(troop_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;

@@ -16,7 +16,7 @@ use dcso3::{
     net::{SlotId, Ucid},
     rotate2d,
     unit::Unit,
-    MizLua, Position3, String, Vector2,
+    MizLua, Position3, String, Vector2, radians_to_degrees,
 };
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
@@ -155,6 +155,7 @@ pub struct SpawnedUnit {
     pub group: GroupId,
     pub template_name: String,
     pub pos: Vector2,
+    pub heading: f64,
     pub dead: bool,
 }
 
@@ -597,6 +598,7 @@ impl Db {
             group.template_name.as_str(),
         )?;
         template.group.set("lateActivation", false)?;
+        template.group.set("hidden", false)?;
         template.group.set_name(group.name.clone())?;
         let mut points: SmallVec<[Vector2; 16]> = smallvec![];
         let by_tname: FxHashMap<&str, &SpawnedUnit> = group
@@ -624,6 +626,7 @@ impl Db {
                         unit.raw_remove("unitId")?;
                         template.group.set_pos(su.pos)?;
                         unit.set_pos(su.pos)?;
+                        unit.set_heading(su.heading)?;
                         unit.set_name(su.name.clone())?;
                         i += 1;
                     }
@@ -727,7 +730,7 @@ impl Db {
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let kind = GroupCategory::from_kind(template.category);
-        let (pos, offset, heading, pos_by_typ) = match location {
+        let (pos, offset, heading, pos_by_typ) = match dbg!(location) {
             SpawnLoc::AtPos {
                 pos,
                 offset_direction,
@@ -812,6 +815,7 @@ impl Db {
             class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),
         };
+        let heading_deg = radians_to_degrees(heading);
         for (i, unit) in template.group.units()?.into_iter().enumerate() {
             let uid = UnitId::new();
             let unit = unit?;
@@ -823,6 +827,7 @@ impl Db {
                 name: unit_name.clone(),
                 template_name,
                 pos: positions[i],
+                heading: heading_deg,
                 dead: false,
             };
             spawned.units.insert_cow(uid);

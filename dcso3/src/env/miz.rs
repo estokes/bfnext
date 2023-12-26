@@ -89,6 +89,14 @@ impl<'lua> Unit<'lua> {
         Ok(())
     }
 
+    pub fn heading(&self) -> Result<f64> {
+        Ok(self.raw_get("heading")?)
+    }
+
+    pub fn set_heading(&self, h: f64) -> Result<()> {
+        Ok(self.raw_set("heading", h)?)
+    }
+
     pub fn typ(&self) -> Result<String> {
         Ok(self.raw_get("type")?)
     }

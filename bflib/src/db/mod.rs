@@ -11,7 +11,7 @@ use dcso3::{
     atomic_id, centroid2d,
     coalition::Side,
     cvt_err,
-    env::miz::{GroupKind, Miz, MizIndex, UnitInfo},
+    env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
     net::{SlotId, Ucid},
     rotate2d,
@@ -727,90 +727,115 @@ impl Db {
         template_name: &str,
         origin: DeployKind,
     ) -> Result<GroupId> {
-        let template_name = String::from(template_name);
-        let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
-        let kind = GroupCategory::from_kind(template.category);
-        let (pos, offset, heading, pos_by_typ) = match location {
-            SpawnLoc::AtPos {
-                pos,
-                offset_direction,
-                group_heading,
-            } => (pos, offset_direction, group_heading, FxHashMap::default()),
-            SpawnLoc::AtPosWithComponents {
-                pos,
-                group_heading,
-                component_pos,
-            } => (pos, Vector2::default(), group_heading, component_pos),
-            SpawnLoc::AtTrigger {
-                name,
-                group_heading,
-            } => (
-                spctx.get_trigger_zone(idx, name.as_str())?.pos()?,
-                Vector2::default(),
-                group_heading,
-                FxHashMap::default(),
-            ),
-        };
-        let gid = GroupId::new();
-        let group_name = String::from(format_compact!("{}-{}", template_name, gid));
-        let mut positions = template
-            .group
-            .units()?
-            .into_iter()
-            .map(|u| Ok(u?.pos()?))
-            .collect::<Result<VecDeque<_>>>()?;
-        let orig_group_pos = centroid2d(positions.iter().map(|p| *p));
-        let group_radius = positions.iter().fold(0., |acc, p| {
-            let d = na::distance(&(*p).into(), &orig_group_pos.into());
-            if d > acc {
-                d
-            } else {
-                acc
-            }
-        });
-        let offset = (group_radius + 10.) * offset;
-        let orig_pos_by_typ: FxHashMap<String, Vector2> = if pos_by_typ.is_empty() {
-            FxHashMap::default()
-        } else {
-            let mut tbl = FxHashMap::default();
-            for unit in template.group.units()? {
-                let unit = unit?;
-                let pos = unit.pos()?;
-                let typ = unit.typ()?;
-                if pos_by_typ.contains_key(&**typ) {
-                    let (n, v) = tbl
-                        .entry(typ.clone())
-                        .or_insert_with(|| (0, Vector2::new(0., 0.)));
-                    *v += pos;
-                    *n += 1;
+        fn distance<'a, F: Fn(f64, f64) -> f64>(
+            pos: Vector2,
+            cmp: F,
+            positions: impl IntoIterator<Item = &'a Vector2>,
+        ) -> f64 {
+            positions
+                .into_iter()
+                .fold(0., |acc, p| {
+                    let d = na::distance_squared(&(*p).into(), &pos.into());
+                    cmp(acc, d)
+                })
+                .sqrt()
+        }
+        fn compute_unit_positions(
+            spctx: &SpawnCtx,
+            idx: &MizIndex,
+            location: SpawnLoc,
+            template: &Group,
+        ) -> Result<(VecDeque<Vector2>, FxHashMap<String, VecDeque<Vector2>>, f64)> {
+            let mut positions = template
+                .units()?
+                .into_iter()
+                .map(|u| Ok(u?.pos()?))
+                .collect::<Result<VecDeque<_>>>()?;
+            let group_center = centroid2d(positions.iter().map(|p| *p));
+            match location {
+                SpawnLoc::AtTrigger {
+                    name,
+                    group_heading,
+                } => {
+                    let pos = spctx.get_trigger_zone(idx, name.as_str())?.pos()?;
+                    for p in positions.iter_mut() {
+                        *p = *p - group_center + pos;
+                    }
+                    rotate2d(group_heading, positions.make_contiguous());
+                    Ok((positions, FxHashMap::default(), group_heading))
+                }
+                SpawnLoc::AtPos {
+                    pos,
+                    offset_direction,
+                    group_heading,
+                } => {
+                    let radius = distance(group_center, f64::max, positions.iter());
+                    for p in positions.iter_mut() {
+                        *p = *p - group_center + pos;
+                    }
+                    rotate2d(group_heading, positions.make_contiguous());
+                    let offset_magnitude = 20. - distance(pos, f64::min, positions.iter());
+                    for p in positions.iter_mut() {
+                        *p = *p + offset_magnitude * offset_direction
+                    }
+                    Ok((positions, FxHashMap::default(), group_heading))
+                }
+                SpawnLoc::AtPosWithComponents {
+                    pos,
+                    group_heading,
+                    component_pos,
+                } => {
+                    let center_by_typ: FxHashMap<String, Vector2> = {
+                        let mut tbl = FxHashMap::default();
+                        for unit in template.units()? {
+                            let unit = unit?;
+                            let pos = unit.pos()?;
+                            let typ = unit.typ()?;
+                            if component_pos.contains_key(&**typ) {
+                                let (n, v) = tbl
+                                    .entry(typ.clone())
+                                    .or_insert_with(|| (0, Vector2::new(0., 0.)));
+                                *v += pos;
+                                *n += 1;
+                            }
+                        }
+                        tbl.into_iter()
+                            .map(|(k, (n, v))| (k, v / (n as f64)))
+                            .collect()
+                    };
+                    let mut final_position_by_type: FxHashMap<String, VecDeque<Vector2>> =
+                        FxHashMap::default();
+                    positions.clear();
+                    for unit in template.units()? {
+                        let unit = unit?;
+                        let typ = unit.typ()?;
+                        let group_center = match center_by_typ.get(&typ) {
+                            None => group_center,
+                            Some(pos) => *pos,
+                        };
+                        match component_pos.get(&typ) {
+                            None => positions.push_back(unit.pos()? - group_center + pos),
+                            Some(pos) => final_position_by_type
+                                .entry(typ.clone())
+                                .or_default()
+                                .push_back(unit.pos()? - group_center + *pos),
+                        }
+                    }
+                    rotate2d(group_heading, positions.make_contiguous());
+                    for positions in final_position_by_type.values_mut() {
+                        rotate2d(group_heading, positions.make_contiguous());
+                    }
+                    Ok((positions, final_position_by_type, group_heading))
                 }
             }
-            tbl.into_iter()
-                .map(|(k, (n, v))| (k, v / (n as f64)))
-                .collect()
-        };
-        positions.clear();
-        let mut final_position_by_type: FxHashMap<String, VecDeque<Vector2>> = FxHashMap::default();
-        for unit in template.group.units()? {
-            let unit = unit?;
-            let typ = unit.typ()?;
-            let orig_group_pos = match orig_pos_by_typ.get(&typ) {
-                None => orig_group_pos,
-                Some(pos) => *pos,
-            };
-            let unit_pos_offset = orig_group_pos - unit.pos()?;
-            match pos_by_typ.get(&typ) {
-                None => positions.push_back(pos + unit_pos_offset + offset),
-                Some(pos) => final_position_by_type
-                    .entry(typ.clone())
-                    .or_default()
-                    .push_back(pos + unit_pos_offset + offset),
-            }
         }
-        rotate2d(heading, positions.make_contiguous());
-        for positions in final_position_by_type.values_mut() {
-            rotate2d(heading, positions.make_contiguous());
-        }
+        let template_name = String::from(template_name);
+        let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
+        let (mut positions, mut positions_by_typ, heading) =
+            compute_unit_positions(&spctx, idx, location, &template.group)?;
+        let kind = GroupCategory::from_kind(template.category);
+        let gid = GroupId::new();
+        let group_name = String::from(format_compact!("{}-{}", template_name, gid));
         let mut spawned = SpawnedGroup {
             id: gid,
             name: group_name.clone(),
@@ -827,9 +852,9 @@ impl Db {
             let typ = unit.typ()?;
             let template_name = unit.name()?;
             let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
-            let pos = match final_position_by_type.get_mut(&typ) {
+            let pos = match positions_by_typ.get_mut(&typ) {
                 None => positions.pop_front().unwrap(),
-                Some(positions) => positions.pop_front().unwrap()
+                Some(positions) => positions.pop_front().unwrap(),
             };
             let spawned_unit = SpawnedUnit {
                 id: uid,

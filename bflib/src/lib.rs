@@ -658,13 +658,23 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
     for id in ctx.force_to_spectators.drain() {
-        net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
+        if let Err(e) = net.force_player_slot(id, Side::Neutral, SlotId::spectator()) {
+            error!("error forcing player {id} to spectators {e}");
+        }
     }
-    cull_or_spawn_units(lua, ctx, ts)?;
+    if let Err(e) = cull_or_spawn_units(lua, ctx, ts) {
+        error!("error culling units {e}")
+    }
     let spctx = SpawnCtx::new(lua)?;
-    ctx.db.process_spawn_queue(ts, &ctx.idx, &spctx)?;
-    advise_captured(ctx, ts)?;
-    advise_captureable(ctx)?;
+    if let Err(e) = ctx.db.process_spawn_queue(ts, &ctx.idx, &spctx) {
+        error!("error processing spawn queue {e}")
+    }
+    if let Err(e) = advise_captured(ctx, ts) {
+        error!("error advise captured {e}")
+    }
+    if let Err(e) = advise_captureable(ctx) {
+        error!("error advise capturable {e}")
+    }
     ctx.pending_messages.process(&net, &act);
     Ok(())
 }

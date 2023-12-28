@@ -132,7 +132,7 @@ pub struct AtPlace<'lua> {
     pub time: Time,
     pub initiator: Object<'lua>,
     pub place: Option<Object<'lua>>,
-    pub subplace: i64,
+    pub subplace: Option<i64>,
 }
 
 impl<'lua> FromLua<'lua> for AtPlace<'lua> {

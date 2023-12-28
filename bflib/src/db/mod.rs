@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 use self::cargo::Cargo;
 use crate::{
-    cfg::{Cfg, Crate, Deployable, LifeType, Troop, Vehicle},
+    cfg::{Cfg, Crate, Deployable, DeployableLogistics, LifeType, Troop, Vehicle},
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Result};
@@ -18,13 +18,13 @@ use dcso3::{
     unit::Unit,
     MizLua, Position3, String, Vector2,
 };
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
     cmp::max,
-    collections::{hash_map::Entry, VecDeque},
+    collections::{hash_map::Entry, BTreeMap, VecDeque},
     fs::{self, File},
     path::{Path, PathBuf},
     str::FromStr,
@@ -171,13 +171,12 @@ pub struct SpawnedGroup {
     pub units: Set<UnitId>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectiveKind {
     Airbase,
     Fob,
-    Fuelbase,
-    Samsite,
-    Farp,
+    Logistics,
+    Farp(Deployable),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -285,7 +284,7 @@ impl ObjGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     id: ObjectiveId,
-    trigger_name: String,
+    //trigger_name: String,
     name: String,
     pos: Vector2,
     radius: f64,
@@ -360,6 +359,7 @@ pub struct Persisted {
     units_by_name: Map<String, UnitId>,
     groups_by_side: Map<Side, Set<GroupId>>,
     deployed: Set<GroupId>,
+    farps: Set<ObjectiveId>,
     crates: Set<GroupId>,
     troops: Set<GroupId>,
     objectives: Map<ObjectiveId, Objective>,
@@ -400,6 +400,7 @@ struct Ephemeral {
     players_by_slot: FxHashMap<SlotId, Ucid>,
     cargo: FxHashMap<SlotId, Cargo>,
     deployable_idx: FxHashMap<Side, DeployableIndex>,
+    delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 1]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<Despawn>,
 }
@@ -467,6 +468,29 @@ impl Ephemeral {
                     Entry::Occupied(_) => bail!("duplicate crate name {}", c.name),
                     Entry::Vacant(e) => e.insert(c.clone()),
                 };
+            }
+            if let Some(DeployableLogistics {
+                pad_template,
+                ammo_template,
+                fuel_template,
+                barracks_template,
+            }) = &dep.logistics
+            {
+                let mut names = FxHashSet::default();
+                for name in [
+                    &dep.template,
+                    &ammo_template,
+                    &pad_template,
+                    &fuel_template,
+                    &barracks_template,
+                ] {
+                    if !name.starts_with("R") && !name.starts_with("B") && !name.starts_with("N") {
+                        bail!("deployables with logistics must use templates starting with R, B, or N")
+                    }
+                    if !names.insert(name) {
+                        bail!("deployables with logistics must use unique templates for each part {name} is reused")
+                    }
+                }
             }
         }
         Ok(())
@@ -756,12 +780,18 @@ impl Db {
                 .into_iter()
                 .map(|u| Ok(u?.pos()?))
                 .collect::<Result<VecDeque<_>>>()?;
-            let group_center = centroid2d(positions.iter().map(|p| *p));
             match location {
+                SpawnLoc::AtPosWithCenter { pos, center } => {
+                    for p in positions.iter_mut() {
+                        *p = *p - center + pos;
+                    }
+                    Ok((positions, FxHashMap::default(), 0.))
+                }
                 SpawnLoc::AtTrigger {
                     name,
                     group_heading,
                 } => {
+                    let group_center = centroid2d(positions.iter().map(|p| *p));
                     let pos = spctx.get_trigger_zone(idx, name.as_str())?.pos()?;
                     for p in positions.iter_mut() {
                         *p = *p - group_center + pos;
@@ -774,6 +804,7 @@ impl Db {
                     offset_direction,
                     group_heading,
                 } => {
+                    let group_center = centroid2d(positions.iter().map(|p| *p));
                     let radius = distance(group_center, f64::max, positions.iter());
                     for p in positions.iter_mut() {
                         *p = *p - group_center + pos + radius * offset_direction;
@@ -790,6 +821,7 @@ impl Db {
                     group_heading,
                     component_pos,
                 } => {
+                    let group_center = centroid2d(positions.iter().map(|p| *p));
                     let center_by_typ: FxHashMap<String, Vector2> = {
                         let mut tbl = FxHashMap::default();
                         for unit in template.units()? {
@@ -904,9 +936,13 @@ impl Db {
         location: SpawnLoc,
         template_name: &str,
         origin: DeployKind,
+        delay: Option<DateTime<Utc>>,
     ) -> Result<GroupId> {
         let gid = self.add_group(&spctx, idx, side, location, template_name, origin)?;
-        self.ephemeral.spawnq.push_back(gid);
+        match delay {
+            None => self.ephemeral.spawnq.push_back(gid),
+            Some(at) => self.ephemeral.delayspawnq.entry(at).or_default().push(gid),
+        }
         Ok(gid)
     }
 

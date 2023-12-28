@@ -14,10 +14,10 @@ pub struct LLPos {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MGRSPos {
-    utm_zone: String,
-    mgrs_digraph: String,
-    easting: f64,
-    northing: f64,
+    pub utm_zone: String,
+    pub mgrs_digraph: String,
+    pub easting: f64,
+    pub northing: f64,
 }
 
 impl<'lua> FromLua<'lua> for MGRSPos {

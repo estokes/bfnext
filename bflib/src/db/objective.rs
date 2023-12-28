@@ -1,14 +1,20 @@
 use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId};
 use crate::{
-    cfg::Vehicle,
+    cfg::{Deployable, DeployableLogistics, Vehicle},
+    db::{Map, ObjGroup, ObjectiveKind},
     group, group_mut, maybe, objective, objective_mut,
-    spawnctx::{Despawn, SpawnCtx},
+    spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
+use compact_str::format_compact;
 use dcso3::{
-    coalition::Side, env::miz::MizIndex, land::Land, LuaVec2, LuaVec3, MizLua, Vector2, Vector3,
+    centroid2d,
+    coalition::Side,
+    env::miz::{GroupKind, MizIndex},
+    land::Land,
+    LuaVec2, LuaVec3, MizLua, Vector2, Vector3, coord::Coord, String
 };
 use fxhash::FxHashMap;
 use log::{debug, info};
@@ -50,19 +56,141 @@ impl Db {
             .unwrap_or(Ok((100, 100)))
     }
 
+    pub(super) fn delete_objective(&mut self, oid: &ObjectiveId) -> Result<()> {
+        let obj = self.persisted.objectives.remove_cow(oid).unwrap();
+        self.persisted.objectives_by_name.remove_cow(&obj.name);
+        for (_, groups) in &obj.groups {
+            for (_, gid) in groups {
+                self.persisted.objectives_by_group.remove_cow(gid);
+                self.delete_group(gid)?;
+            }
+        }
+        for (slot, _) in &obj.slots {
+            self.persisted.objectives_by_slot.remove_cow(slot);
+        }
+        self.persisted.farps.remove_cow(oid);
+        Ok(())
+    }
+
+    pub(super) fn add_farp(
+        &mut self,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        side: Side,
+        pos: Vector2,
+        spec: &Deployable,
+        parts: &DeployableLogistics,
+    ) -> Result<ObjectiveId> {
+        let now = Utc::now();
+        let DeployableLogistics {
+            pad_template,
+            ammo_template,
+            fuel_template,
+            barracks_template,
+        } = parts;
+        let location = {
+            let mut points: SmallVec<[Vector2; 16]> = smallvec![];
+            let core = spctx.get_template_ref(idx, GroupKind::Any, side, &spec.template)?;
+            let ammo = spctx.get_template_ref(idx, GroupKind::Any, side, &ammo_template)?;
+            let fuel = spctx.get_template_ref(idx, GroupKind::Any, side, &fuel_template)?;
+            let barracks = spctx.get_template_ref(idx, GroupKind::Any, side, &barracks_template)?;
+            let pad = spctx.get_template_ref(idx, GroupKind::Any, side, &pad_template)?;
+            for unit in core
+                .group
+                .units()?
+                .into_iter()
+                .chain(ammo.group.units()?.into_iter())
+                .chain(fuel.group.units()?.into_iter())
+                .chain(barracks.group.units()?.into_iter())
+                .chain(pad.group.units()?.into_iter())
+            {
+                let unit = unit?;
+                points.push(unit.pos()?)
+            }
+            let center = centroid2d(points);
+            SpawnLoc::AtPosWithCenter { pos, center }
+        };
+        let mut groups: Map<ObjGroup, GroupId> = Map::new();
+        for name in [
+            &spec.template,
+            &ammo_template,
+            &fuel_template,
+            &barracks_template,
+            &pad_template,
+        ] {
+            let gid = self.add_and_queue_group(
+                spctx,
+                idx,
+                side,
+                location.clone(),
+                &name,
+                DeployKind::Objective,
+                Some(now + Duration::seconds(60))
+            )?;
+            groups.insert_cow(ObjGroup(name.clone()), gid);
+        }
+        let name = {
+            let coord = Coord::singleton(spctx.lua())?;
+            let pos = coord.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
+            let mgrs = coord.ll_to_mgrs(pos.latitude, pos.longitude)?;
+            let mut n = 0;
+            loop {
+                let name = String::from(format_compact!("farp {} {n}", mgrs.utm_zone)); 
+                if self.persisted.objectives_by_name.get(&name).is_none() {
+                    break name
+                } else {
+                    n += 1
+                }
+            }
+        };
+        let obj = Objective {
+            id: ObjectiveId::new(),
+            name: name.clone(),
+            groups: Map::from_iter([(side, groups)]),
+            kind: ObjectiveKind::Farp(spec.clone()),
+            pos,
+            radius: 2000.,
+            owner: side,
+            slots: Map::new(),
+            health: 100,
+            logi: 100,
+            spawned: true,
+            threatened: true,
+            last_threatened_ts: now,
+            last_change_ts: now,
+        };
+        let oid = obj.id;
+        for (_, groups) in &obj.groups {
+            for (_, gid) in groups {
+                self.persisted.objectives_by_group.insert_cow(*gid, oid);
+            }
+        }
+        self.persisted.objectives.insert_cow(oid, obj);
+        self.persisted.objectives_by_name.insert_cow(name, oid);
+        Ok(oid)
+    }
+
     pub(super) fn update_objective_status(
         &mut self,
         oid: &ObjectiveId,
         now: DateTime<Utc>,
     ) -> Result<()> {
-        let obj = objective!(self, oid)?;
-        let (health, logi) = self.compute_objective_status(obj)?;
-        let obj = objective_mut!(self, oid)?;
-        obj.health = health;
-        obj.logi = logi;
-        obj.last_change_ts = now;
+        let (kind, health, logi) = {
+            let obj = objective!(self, oid)?;
+            let (health, logi) = self.compute_objective_status(obj)?;
+            let obj = objective_mut!(self, oid)?;
+            obj.health = health;
+            obj.logi = logi;
+            obj.last_change_ts = now;
+            (obj.kind.clone(), health, logi)
+        };
+        if let ObjectiveKind::Farp(_) = &kind {
+            if logi == 0 {
+                self.delete_objective(oid)?;
+            }
+        }
         self.ephemeral.dirty = true;
-        debug!("objective {oid} health: {}, logi: {}", obj.health, obj.logi);
+        debug!("objective {oid} health: {}, logi: {}", health, logi);
         Ok(())
     }
 

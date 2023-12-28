@@ -13,25 +13,34 @@ use serde_derive::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpawnLoc {
     AtPos {
-        // the position of the player. the group will be offset in the
-        // direction offset_direction from this point by the group radius + 10 meters
+        /// the position of the player. the group will be offset in the
+        /// direction offset_direction from this point by the group radius + 10 meters
         pos: Vector2,
-        // this should be a unit vector pointing in the direction
-        // you want to offset the group
+        /// this should be a unit vector pointing in the direction
+        /// you want to offset the group
         offset_direction: Vector2,
-        // rotate the group to this heading in radians
+        /// rotate the group to this heading in radians
         group_heading: f64,
     },
     AtPosWithComponents {
         pos: Vector2,
-        // the position of sub components of the group by unit type
+        /// the position of sub components of the group by unit type
         component_pos: FxHashMap<String, Vector2>,
-        // rotate the group to this heading in radians
+        /// rotate the group to this heading in radians
         group_heading: f64,
+    },
+    /// spawn the group as a direct translation from an original (provided) center
+    /// to a new center. This is useful if you have statics, or multiple groups, 
+    /// and you want their relative positions to be preserved
+    AtPosWithCenter {
+        /// pos is the new center position of the group
+        pos: Vector2,
+        /// center is the original center of the group
+        center: Vector2,
     },
     AtTrigger {
         name: String,
-        // rotate the group to this heading in radians
+        /// rotate the group to this heading in radians
         group_heading: f64,
     },
 }
@@ -55,6 +64,10 @@ impl<'lua> SpawnCtx<'lua> {
             miz: Miz::singleton(lua)?,
             lua,
         })
+    }
+
+    pub fn lua(&self) -> MizLua<'lua> {
+        self.lua
     }
 
     pub fn get_template(

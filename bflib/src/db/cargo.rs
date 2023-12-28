@@ -1,4 +1,6 @@
-use super::{Db, DeployKind, DeployableIndex, GroupId, Objective, ObjectiveId, SpawnedGroup};
+use super::{
+    Db, DeployKind, DeployableIndex, GroupId, Objective, ObjectiveId, ObjectiveKind, SpawnedGroup,
+};
 use crate::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     group, maybe, objective,
@@ -31,14 +33,22 @@ pub struct NearbyCrate<'a> {
 #[derive(Debug, Clone)]
 pub enum Unpakistan {
     Unpacked(String, GroupId),
+    UnpackedFarp(String, ObjectiveId),
     Repaired(String, GroupId),
     RepairedBase(String, u8),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Oldest {
+    Group(GroupId),
+    Objective(ObjectiveId),
 }
 
 impl fmt::Display for Unpakistan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unpacked(unit, _) => write!(f, "unpacked a {unit}"),
+            Self::UnpackedFarp(loc, _) => write!(f, "unpacked a farp at {loc}, units will spawn in 60 seconds get clear"),
             Self::Repaired(unit, _) => write!(f, "repaired a {unit}"),
             Self::RepairedBase(base, logi) => write!(f, "repaired logistics at {base} to %{logi}"),
         }
@@ -133,7 +143,15 @@ impl Db {
             group_heading: dir.y.atan2(dir.x),
         };
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
-        self.add_and_queue_group(&SpawnCtx::new(lua)?, idx, side, spawnpos, &template, dk)?;
+        self.add_and_queue_group(
+            &SpawnCtx::new(lua)?,
+            idx,
+            side,
+            spawnpos,
+            &template,
+            dk,
+            None,
+        )?;
         Ok(())
     }
 
@@ -219,15 +237,29 @@ impl Db {
         Ok(cargo_capacity)
     }
 
-    pub fn number_deployed(&self, name: &str) -> Result<(usize, Option<GroupId>)> {
+    pub fn number_deployed(&self, side: Side, name: &str) -> Result<(usize, Option<Oldest>)> {
         let mut n = 0;
         let mut oldest = None;
         for gid in &self.persisted.deployed {
-            if let DeployKind::Deployed(d) = &group!(self, gid)?.origin {
+            let group = &group!(self, gid)?;
+            if let DeployKind::Deployed(d) = &group.origin {
                 if let Some(d_name) = d.path.last() {
-                    if d_name.as_str() == name {
+                    if group.side == side && d_name.as_str() == name {
                         if oldest.is_none() {
-                            oldest = Some(*gid);
+                            oldest = Some(Oldest::Group(*gid));
+                        }
+                        n += 1;
+                    }
+                }
+            }
+        }
+        for oid in &self.persisted.farps {
+            let obj = objective!(self, oid)?;
+            if let ObjectiveKind::Farp(d) = &obj.kind {
+                if let Some(d_name) = d.path.last() {
+                    if obj.owner == side && d_name.as_str() == name {
+                        if oldest.is_none() {
+                            oldest = Some(Oldest::Objective(*oid));
                         }
                         n += 1;
                     }
@@ -237,12 +269,17 @@ impl Db {
         Ok((n, oldest))
     }
 
-    pub fn number_troops_deployed(&self, name: &str) -> Result<(usize, Option<GroupId>)> {
+    pub fn number_troops_deployed(
+        &self,
+        side: Side,
+        name: &str,
+    ) -> Result<(usize, Option<GroupId>)> {
         let mut n = 0;
         let mut oldest = None;
         for gid in &self.persisted.troops {
-            if let DeployKind::Troop(tr) = &group!(self, gid)?.origin {
-                if name == tr.name.as_str() {
+            let group = group!(self, gid)?;
+            if let DeployKind::Troop(tr) = &group.origin {
+                if group.side == side && name == tr.name.as_str() {
                     if oldest.is_none() {
                         oldest = Some(*gid);
                     }
@@ -418,6 +455,7 @@ impl Db {
             db: &Db,
             side: Side,
             centroid: Vector2,
+            logistics: bool,
             iter: F,
         ) -> bool {
             let excl_dist_sq = (db.ephemeral.cfg.logistics_exclusion as f64).powi(2);
@@ -433,8 +471,8 @@ impl Db {
                         None => error!("missing group {:?}", cr.group),
                     }
                 }
-                check |= obj.owner == side;
-                check && obj.threatened && {
+                check |= logistics || obj.owner == side;
+                check && (logistics || obj.threatened) && {
                     let dist = na::distance_squared(&obj.pos.into(), &centroid.into());
                     dist <= excl_dist_sq
                 }
@@ -510,18 +548,23 @@ impl Db {
             };
             Ok(spawnloc)
         }
-        fn enforce_deploy_limits(db: &mut Db, spec: &Deployable, dep: &String) -> Result<()> {
-            let (n, oldest) = db.number_deployed(&**dep)?;
+        fn enforce_deploy_limits(
+            db: &mut Db,
+            side: Side,
+            spec: &Deployable,
+            dep: &String,
+        ) -> Result<()> {
+            let (n, oldest) = db.number_deployed(side, &**dep)?;
             if n >= spec.limit as usize {
                 match spec.limit_enforce {
                     LimitEnforceTyp::DenyCrate => {
                         bail!("the max number of {:?} are already deployed", dep)
                     }
-                    LimitEnforceTyp::DeleteOldest => {
-                        if let Some(gid) = oldest {
-                            db.delete_group(&gid)?
-                        }
-                    }
+                    LimitEnforceTyp::DeleteOldest => match oldest {
+                        Some(Oldest::Group(gid)) => db.delete_group(&gid)?,
+                        Some(Oldest::Objective(oid)) => db.delete_objective(&oid)?,
+                        None => (),
+                    },
                 }
             }
             Ok(())
@@ -562,36 +605,45 @@ impl Db {
             Err(mut build_reasons) => reasons.append(&mut build_reasons),
             Ok(mut candidates) => {
                 let (dep, have) = candidates.drain().next().unwrap();
+                let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
                 let centroid = centroid2d(have.values().flat_map(|c| c.iter()).map(|c| c.pos));
-                let too_close = too_close(self, side, centroid, || {
+                let too_close = too_close(self, side, centroid, spec.logistics.is_some(), || {
                     have.values().flat_map(|c| c.iter())
                 });
                 if too_close {
-                    reasons.push("can't unpack that here while enemies are close".into());
+                    if spec.logistics.is_none() {
+                        reasons.push("can't unpack that here while enemies are close".into());
+                    } else {
+                        reasons.push("can't unpack that here".into())
+                    }
                 } else {
-                    let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
-                    enforce_deploy_limits(self, &spec, &dep)?;
-                    let pos = self.slot_instance_pos(lua, idx, slot)?;
-                    let spawnloc = compute_positions(
-                        self,
-                        &have,
-                        centroid,
-                        pos.x.z.atan2(pos.x.x),
-                    )?;
-                    let origin = DeployKind::Deployed(spec.clone());
                     let spctx = SpawnCtx::new(lua)?;
+                    enforce_deploy_limits(self, side, &spec, &dep)?;
                     for cr in have.values().flat_map(|c| c.iter()) {
                         self.delete_group(&cr.group)?
                     }
-                    let gid = self.add_and_queue_group(
-                        &spctx,
-                        idx,
-                        side,
-                        spawnloc,
-                        &*spec.template,
-                        origin,
-                    )?;
-                    return Ok(Unpakistan::Unpacked(dep, gid));
+                    match &spec.logistics {
+                        Some(parts) => {
+                            let oid = self.add_farp(&spctx, idx, side, centroid, &spec, parts)?;
+                            return Ok(Unpakistan::UnpackedFarp(dep, oid))
+                        }
+                        None => {
+                            let pos = self.slot_instance_pos(lua, idx, slot)?;
+                            let spawnloc =
+                                compute_positions(self, &have, centroid, pos.x.z.atan2(pos.x.x))?;
+                            let origin = DeployKind::Deployed(spec.clone());
+                            let gid = self.add_and_queue_group(
+                                &spctx,
+                                idx,
+                                side,
+                                spawnloc,
+                                &*spec.template,
+                                origin,
+                                None,
+                            )?;
+                            return Ok(Unpakistan::Unpacked(dep, gid));
+                        }
+                    }
                 }
             }
         }
@@ -600,7 +652,7 @@ impl Db {
             Ok(mut candidates) => {
                 let (dep, (gid, have)) = candidates.drain().next().unwrap();
                 let centroid = centroid2d(have.iter().map(|c| c.pos));
-                if too_close(self, side, centroid, || have.iter()) {
+                if too_close(self, side, centroid, false, || have.iter()) {
                     reasons.push("can't repair that here while enemies are close".into())
                 } else {
                     let group = group!(self, gid)?;
@@ -673,7 +725,7 @@ impl Db {
         };
         let dk = DeployKind::Crate(oid, crate_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;
-        self.add_and_queue_group(&spctx, idx, side, spawnpos, &template, dk)?;
+        self.add_and_queue_group(&spctx, idx, side, spawnpos, &template, dk, None)?;
         Ok(crate_cfg)
     }
 
@@ -746,7 +798,7 @@ impl Db {
             .and_then(|idx| idx.squads_by_name.get(name))
             .ok_or_else(|| anyhow!("no such squad {name}"))?
             .clone();
-        let (n, oldest) = self.number_troops_deployed(name)?;
+        let (n, oldest) = self.number_troops_deployed(side, name)?;
         let to_delete = if n < troop_cfg.limit as usize {
             None
         } else {
@@ -805,7 +857,7 @@ impl Db {
         };
         let dk = DeployKind::Troop(troop_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;
-        self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk)?;
+        self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk, None)?;
         Ok(troop_cfg)
     }
 

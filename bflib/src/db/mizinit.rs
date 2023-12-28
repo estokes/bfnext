@@ -51,14 +51,11 @@ impl Db {
         } else if let Some(name) = name.strip_prefix("FO") {
             let (side, name) = side_and_name(name)?;
             (ObjectiveKind::Fob, side, name)
-        } else if let Some(name) = name.strip_prefix("FB") {
+        } else if let Some(name) = name.strip_prefix("LO") {
             let (side, name) = side_and_name(name)?;
-            (ObjectiveKind::Fuelbase, side, name)
-        } else if let Some(name) = name.strip_prefix("SA") {
-            let (side, name) = side_and_name(name)?;
-            (ObjectiveKind::Samsite, side, name)
+            (ObjectiveKind::Logistics, side, name)
         } else {
-            bail!("invalid objective type for {name}, expected AB, FO, FB, or SA prefix")
+            bail!("invalid objective type for {name}, expected AB, FO, of LO")
         };
         let id = ObjectiveId::new();
         let radius = match zone.typ()? {
@@ -70,7 +67,7 @@ impl Db {
             id,
             spawned: false,
             threatened: false,
-            trigger_name: zone.name()?,
+            // trigger_name: zone.name()?,
             pos,
             radius,
             name: name.clone(),

@@ -11,8 +11,14 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    centroid2d, coalition::Side, env::miz::MizIndex, land::Land, net::SlotId, radians_to_degrees,
-    trigger::Trigger, LuaVec2, MizLua, String, Vector2,
+    centroid2d,
+    coalition::Side,
+    env::miz::MizIndex,
+    land::Land,
+    net::{SlotId, Ucid},
+    radians_to_degrees,
+    trigger::Trigger,
+    LuaVec2, MizLua, Position3, String, Vector2,
 };
 use fxhash::FxHashMap;
 use log::{debug, error};
@@ -88,6 +94,43 @@ impl Cargo {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct SlotStats {
+    pub name: String,
+    pub side: Side,
+    pub agl: f64,
+    pub speed: f64,
+    pub in_air: bool,
+    pub pos: Position3,
+    pub point: Vector2,
+    pub ucid: Ucid,
+}
+
+impl SlotStats {
+    pub fn get(db: &Db, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Self> {
+        let ucid = maybe!(db.ephemeral.players_by_slot, slot, "no such player")?.clone();
+        let unit = db.slot_instance_unit(lua, idx, slot)?;
+        let in_air = unit.as_object()?.in_air()?;
+        let name = unit.as_object()?.get_name()?;
+        let side = db.slot_miz_unit(lua, idx, slot)?.side;
+        let pos = unit.as_object()?.get_position()?;
+        let point = Vector2::new(pos.p.x, pos.p.z);
+        let ground_alt = Land::singleton(lua)?.get_height(LuaVec2(point))?;
+        let agl = pos.p.y - ground_alt;
+        let speed = unit.as_object()?.get_velocity()?.0.magnitude();
+        Ok(Self {
+            name,
+            side,
+            agl,
+            speed,
+            in_air,
+            pos,
+            point,
+            ucid,
+        })
+    }
+}
+
 impl Db {
     fn point_near_logistics(
         &self,
@@ -121,15 +164,31 @@ impl Db {
         name: &str,
     ) -> Result<()> {
         debug!("db spawning crate");
-        let side = self.slot_miz_unit(lua, idx, slot)?.side;
-        let pos = self.slot_instance_pos(lua, idx, slot)?;
-        let point = Vector2::new(pos.p.x, pos.p.z);
-        let dir = Vector2::new(pos.x.0.x, pos.x.0.z);
-        let (oid, _) = self.point_near_logistics(side, point)?;
+        if self
+            .slot_instance_unit(lua, idx, slot)?
+            .as_object()?
+            .in_air()?
+        {
+            bail!("you must land to spawn a crate")
+        }
+        let st = SlotStats::get(self, lua, idx, slot)?;
+        if st.in_air {
+            bail!("you must land to spawn crates")
+        }
+        let to_delete = self.ephemeral.cfg.max_crates.and_then(|max_crates| {
+            let crates = &self.persisted.players[&st.ucid].crates;
+            if crates.len() < max_crates as usize {
+                None
+            } else {
+                crates.into_iter().next().map(|id| *id)
+            }
+        });
+        let dir = Vector2::new(st.pos.x.x, st.pos.x.z);
+        let (oid, _) = self.point_near_logistics(st.side, st.point)?;
         let crate_cfg = self
             .ephemeral
             .deployable_idx
-            .get(&side)
+            .get(&st.side)
             .and_then(|idx| idx.crates_by_name.get(name))
             .ok_or_else(|| anyhow!("no such crate {name}"))?
             .clone();
@@ -137,19 +196,22 @@ impl Db {
             .ephemeral
             .cfg
             .crate_template
-            .get(&side)
-            .ok_or_else(|| anyhow!("missing crate template for {:?} side", side))?
+            .get(&st.side)
+            .ok_or_else(|| anyhow!("missing crate template for {:?} side", st.side))?
             .clone();
         let spawnpos = SpawnLoc::AtPos {
-            pos: point,
+            pos: st.point,
             offset_direction: dir,
             group_heading: dir.y.atan2(dir.x),
         };
-        let dk = DeployKind::Crate(oid, crate_cfg.clone());
+        let dk = DeployKind::Crate(oid, st.ucid, crate_cfg.clone());
+        if let Some(gid) = to_delete {
+            self.delete_group(&gid)?;
+        }
         self.add_and_queue_group(
             &SpawnCtx::new(lua)?,
             idx,
-            side,
+            st.side,
             spawnpos,
             &template,
             dk,
@@ -167,8 +229,8 @@ impl Db {
         for gid in &self.persisted.crates {
             let group = group!(self, gid)?;
             let (oid, crate_def) = match &group.origin {
-                DeployKind::Crate(oid, crt) => (oid, crt),
-                DeployKind::Deployed(_) | DeployKind::Troop(_) | DeployKind::Objective => {
+                DeployKind::Crate(oid, _, crt) => (oid, crt),
+                DeployKind::Deployed(_, _) | DeployKind::Troop(_, _) | DeployKind::Objective => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
             };
@@ -195,14 +257,10 @@ impl Db {
 
     pub fn list_nearby_crates<'a>(
         &'a self,
-        lua: MizLua,
-        idx: &MizIndex,
-        slot: &SlotId,
+        st: &SlotStats,
     ) -> Result<SmallVec<[NearbyCrate<'a>; 4]>> {
-        let pos = self.slot_instance_pos(lua, idx, slot)?;
-        let point = Vector2::new(pos.p.x, pos.p.z);
         let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
-        self.list_crates_near_point(point, max_dist)
+        self.list_crates_near_point(st.point, max_dist)
     }
 
     pub fn destroy_nearby_crate(
@@ -211,7 +269,11 @@ impl Db {
         idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<()> {
-        let nearby = self.list_nearby_crates(lua, idx, slot)?;
+        let st = SlotStats::get(self, lua, idx, slot)?;
+        if st.in_air {
+            bail!("you must land to destroy crates")
+        }
+        let nearby = self.list_nearby_crates(&st)?;
         let closest = nearby
             .into_iter()
             .next()
@@ -245,7 +307,7 @@ impl Db {
         let mut oldest = None;
         for gid in &self.persisted.deployed {
             let group = &group!(self, gid)?;
-            if let DeployKind::Deployed(d) = &group.origin {
+            if let DeployKind::Deployed(_, d) = &group.origin {
                 if let Some(d_name) = d.path.last() {
                     if group.side == side && d_name.as_str() == name {
                         if oldest.is_none() {
@@ -293,7 +355,7 @@ impl Db {
         let mut oldest = None;
         for gid in &self.persisted.troops {
             let group = group!(self, gid)?;
-            if let DeployKind::Troop(tr) = &group.origin {
+            if let DeployKind::Troop(_, tr) = &group.origin {
                 if group.side == side && name == tr.name.as_str() {
                     if oldest.is_none() {
                         oldest = Some(*gid);
@@ -321,14 +383,9 @@ impl Db {
                 }
             }
         }
-        fn nearby(
-            db: &Db,
-            lua: MizLua,
-            idx: &MizIndex,
-            slot: &SlotId,
-        ) -> Result<SmallVec<[Cifo; 8]>> {
+        fn nearby(db: &Db, st: &SlotStats) -> Result<SmallVec<[Cifo; 8]>> {
             let nearby_player = db
-                .list_nearby_crates(lua, idx, slot)?
+                .list_nearby_crates(st)?
                 .into_iter()
                 .map(Cifo::from)
                 .collect::<SmallVec<[Cifo; 8]>>();
@@ -423,7 +480,7 @@ impl Db {
                     for gid in &db.persisted.deployed {
                         let group = &db.persisted.groups[gid];
                         match &group.origin {
-                            DeployKind::Deployed(d) if d.path.last() == Some(&dep) => {
+                            DeployKind::Deployed(_, d) if d.path.last() == Some(&dep) => {
                                 for uid in &group.units {
                                     let unit_pos = db.persisted.units[uid].pos;
                                     if na::distance_squared(&unit_pos.into(), &cr.pos.into())
@@ -435,10 +492,10 @@ impl Db {
                                 }
                                 reasons.push(format_compact!("not close enough to repair {dep}"));
                             }
-                            DeployKind::Deployed(_)
-                            | DeployKind::Crate(_, _)
+                            DeployKind::Deployed(_, _)
+                            | DeployKind::Crate(_, _, _)
                             | DeployKind::Objective
-                            | DeployKind::Troop(_) => (),
+                            | DeployKind::Troop(_, _) => (),
                         }
                     }
                     if let Some(gid) = group_to_repair {
@@ -479,7 +536,7 @@ impl Db {
                 for cr in iter() {
                     match db.persisted.groups.get(&cr.group) {
                         Some(group) => {
-                            if let DeployKind::Crate(source, _) = &group.origin {
+                            if let DeployKind::Crate(source, _, _) = &group.origin {
                                 check |= oid == source;
                             }
                         }
@@ -504,7 +561,7 @@ impl Db {
                 for cr in iter() {
                     match db.persisted.groups.get(&cr.group) {
                         Some(group) => {
-                            if let DeployKind::Crate(source, _) = &group.origin {
+                            if let DeployKind::Crate(source, _, _) = &group.origin {
                                 is_origin |= oid == source;
                             }
                         }
@@ -531,7 +588,7 @@ impl Db {
             let mut pos_by_typ: FxHashMap<String, Vector2> = FxHashMap::default();
             for cr in have.iter().flat_map(|(_, cr)| cr.iter()) {
                 let group = &group!(db, cr.group)?;
-                if let DeployKind::Crate(_, spec) = &group.origin {
+                if let DeployKind::Crate(_, _, spec) = &group.origin {
                     if let Some(typ) = spec.pos_unit.as_ref() {
                         let uid = group
                             .units
@@ -584,23 +641,26 @@ impl Db {
             }
             Ok(())
         }
-        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let st = SlotStats::get(self, lua, idx, slot)?;
+        if st.in_air {
+            bail!("you must land to unpack crates")
+        }
         let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
-        let nearby = nearby(self, lua, idx, slot)?;
+        let nearby = nearby(self, &st)?;
         let didx = Arc::clone(
             self.ephemeral
                 .deployable_idx
-                .get(&side)
-                .ok_or_else(|| anyhow!("{:?} can't deploy anything", side))?,
+                .get(&st.side)
+                .ok_or_else(|| anyhow!("{:?} can't deploy anything", st.side))?,
         );
         if nearby.is_empty() {
             bail!("no nearby crates")
         }
         let mut reasons: SmallVec<[CompactString; 2]> = smallvec![];
-        let base_repairs = base_repairable(self, side, &nearby);
+        let base_repairs = base_repairable(self, st.side, &nearby);
         if !base_repairs.is_empty() {
             let centroid = centroid2d(base_repairs.iter().map(|(_, c)| c.pos));
-            let oid = close_enough_to_repair(self, side, centroid, || {
+            let oid = close_enough_to_repair(self, st.side, centroid, || {
                 base_repairs.iter().map(|(_, c)| c)
             });
             if let Some(oid) = oid {
@@ -608,7 +668,7 @@ impl Db {
                 if obj.logi == 100 {
                     reasons.push("objective logistics are completely repaired".into());
                 } else {
-                    self.repair_one_logi_step(side, Utc::now(), oid)?;
+                    self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
                     let obj = objective!(self, oid)?;
                     return Ok(Unpakistan::RepairedBase(obj.name.clone(), obj.logi()));
@@ -623,9 +683,10 @@ impl Db {
                 let (dep, have) = candidates.drain().next().unwrap();
                 let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
                 let centroid = centroid2d(have.values().flat_map(|c| c.iter()).map(|c| c.pos));
-                let too_close = too_close(self, side, centroid, spec.logistics.is_some(), || {
-                    have.values().flat_map(|c| c.iter())
-                });
+                let too_close =
+                    too_close(self, st.side, centroid, spec.logistics.is_some(), || {
+                        have.values().flat_map(|c| c.iter())
+                    });
                 if too_close {
                     if spec.logistics.is_none() {
                         reasons.push("can't unpack that here while enemies are close".into());
@@ -634,7 +695,7 @@ impl Db {
                     }
                 } else {
                     let spctx = SpawnCtx::new(lua)?;
-                    match enforce_deploy_limits(self, side, &spec, &dep) {
+                    match enforce_deploy_limits(self, st.side, &spec, &dep) {
                         Err(e) => reasons.push(format_compact!("{e}")),
                         Ok(()) => {
                             for cr in have.values().flat_map(|c| c.iter()) {
@@ -642,8 +703,8 @@ impl Db {
                             }
                             match &spec.logistics {
                                 Some(parts) => {
-                                    let oid =
-                                        self.add_farp(&spctx, idx, side, centroid, &spec, parts)?;
+                                    let oid = self
+                                        .add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
                                     let name = objective!(self, oid)?.name.clone();
                                     return Ok(Unpakistan::UnpackedFarp(name, oid));
                                 }
@@ -655,11 +716,11 @@ impl Db {
                                         centroid,
                                         pos.x.z.atan2(pos.x.x),
                                     )?;
-                                    let origin = DeployKind::Deployed(spec.clone());
+                                    let origin = DeployKind::Deployed(st.ucid, spec.clone());
                                     let gid = self.add_and_queue_group(
                                         &spctx,
                                         idx,
-                                        side,
+                                        st.side,
                                         spawnloc,
                                         &*spec.template,
                                         origin,
@@ -678,7 +739,7 @@ impl Db {
             Ok(mut candidates) => {
                 let (dep, (gid, have)) = candidates.drain().next().unwrap();
                 let centroid = centroid2d(have.iter().map(|c| c.pos));
-                if too_close(self, side, centroid, false, || have.iter()) {
+                if too_close(self, st.side, centroid, false, || have.iter()) {
                     reasons.push("can't repair that here while enemies are close".into())
                 } else {
                     let group = group!(self, gid)?;
@@ -709,49 +770,41 @@ impl Db {
     }
 
     pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {
+        let st = SlotStats::get(self, lua, idx, slot)?;
         let cargo = self.ephemeral.cargo.get(slot);
         if cargo.map(|c| c.crates.is_empty()).unwrap_or(true) {
             bail!("no crates onboard")
         }
-        let unit = self.slot_instance_unit(lua, idx, slot)?;
-        let in_air = unit.as_object()?.in_air()?;
-        let unit_name = unit.as_object()?.get_name()?;
-        let side = self.slot_miz_unit(lua, idx, slot)?.side;
-        let pos = unit.as_object()?.get_position()?;
-        let point = Vector2::new(pos.p.x, pos.p.z);
-        let ground_alt = Land::singleton(lua)?.get_height(LuaVec2(point))?;
-        let agl = pos.p.y - ground_alt;
-        let speed = unit.as_object()?.get_velocity()?.0.magnitude();
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let (oid, crate_cfg) = cargo.crates.pop().unwrap();
         let weight = cargo.weight();
-        debug!("drop speed {speed}, drop height {agl}");
-        if in_air && speed > crate_cfg.max_drop_speed as f64 {
+        debug!("drop speed {}, drop height {}", st.speed, st.agl);
+        if st.in_air && st.speed > crate_cfg.max_drop_speed as f64 {
             cargo.crates.push((oid, crate_cfg));
             bail!("you are going too fast to unload your cargo")
         }
-        if in_air && agl > crate_cfg.max_drop_height_agl as f64 {
+        if st.in_air && st.agl > crate_cfg.max_drop_height_agl as f64 {
             cargo.crates.push((oid, crate_cfg));
             bail!("you are too high to unload your cargo")
         }
         Trigger::singleton(lua)?
             .action()?
-            .set_unit_internal_cargo(unit_name, weight)?;
+            .set_unit_internal_cargo(st.name, weight)?;
         let template = self
             .ephemeral
             .cfg
             .crate_template
-            .get(&side)
-            .ok_or_else(|| anyhow!("missing crate template for {:?}", side))?
+            .get(&st.side)
+            .ok_or_else(|| anyhow!("missing crate template for {:?}", st.side))?
             .clone();
         let spawnpos = SpawnLoc::AtPos {
-            pos: point,
-            offset_direction: Vector2::new(pos.x.x, pos.x.z),
-            group_heading: pos.x.z.atan2(pos.x.x),
+            pos: st.point,
+            offset_direction: Vector2::new(st.pos.x.x, st.pos.x.z),
+            group_heading: st.pos.x.z.atan2(st.pos.x.x),
         };
-        let dk = DeployKind::Crate(oid, crate_cfg.clone());
+        let dk = DeployKind::Crate(oid, st.ucid, crate_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;
-        self.add_and_queue_group(&spctx, idx, side, spawnpos, &template, dk, None)?;
+        self.add_and_queue_group(&spctx, idx, st.side, spawnpos, &template, dk, None)?;
         Ok(crate_cfg)
     }
 
@@ -774,6 +827,7 @@ impl Db {
         idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<Crate> {
+        let st = SlotStats::get(self, lua, idx, slot)?;
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
         if cargo_capacity.crate_slots as usize <= cargo.num_crates()
@@ -782,7 +836,7 @@ impl Db {
             bail!("you already have a full load onboard")
         }
         let (gid, oid, crate_def) = {
-            let mut nearby = self.list_nearby_crates(lua, idx, slot)?;
+            let mut nearby = self.list_nearby_crates(&st)?;
             nearby.retain(|nc| nc.group.side == side);
             if nearby.is_empty() {
                 bail!(
@@ -847,6 +901,7 @@ impl Db {
         if unit.as_object()?.in_air()? {
             bail!("you must land to unload troops")
         }
+        let ucid = self.ephemeral.players_by_slot[slot].clone();
         let unit_name = unit.as_object()?.get_name()?;
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.as_object()?.get_position()?;
@@ -883,7 +938,7 @@ impl Db {
             offset_direction: Vector2::new(pos.x.x, pos.x.z),
             group_heading: pos.x.z.atan2(pos.x.x),
         };
-        let dk = DeployKind::Troop(troop_cfg.clone());
+        let dk = DeployKind::Troop(ucid, troop_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
@@ -927,7 +982,7 @@ impl Db {
                 .into_iter()
                 .filter_map(|gid| self.persisted.groups.get(gid).map(|g| (*gid, g)))
                 .find_map(|(gid, g)| {
-                    if let DeployKind::Troop(troop_cfg) = &g.origin {
+                    if let DeployKind::Troop(_, troop_cfg) = &g.origin {
                         if g.side == side {
                             let in_range = g
                                 .units

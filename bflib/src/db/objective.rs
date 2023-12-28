@@ -465,7 +465,7 @@ impl Db {
                 for gid in &self.persisted.troops {
                     let group = group!(self, gid)?;
                     match &group.origin {
-                        DeployKind::Troop(tr) if tr.can_capture => {
+                        DeployKind::Troop(_, tr) if tr.can_capture => {
                             let in_range = group
                                 .units
                                 .into_iter()
@@ -477,10 +477,10 @@ impl Db {
                                 captured.entry(*oid).or_default().push((group.side, *gid));
                             }
                         }
-                        DeployKind::Crate(_, _)
-                        | DeployKind::Deployed(_)
+                        DeployKind::Crate(_, _, _)
+                        | DeployKind::Deployed(_, _)
                         | DeployKind::Objective
-                        | DeployKind::Troop(_) => (),
+                        | DeployKind::Troop(_, _) => (),
                     }
                 }
             }

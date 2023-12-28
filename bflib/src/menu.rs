@@ -1,7 +1,7 @@
 use crate::{
     cfg::{Cfg, LimitEnforceTyp},
     db::{
-        cargo::{Cargo, Oldest},
+        cargo::{Cargo, Oldest, SlotStats},
         Db,
     },
     Context,
@@ -207,7 +207,8 @@ pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
 fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
-    let nearby = ctx.db.list_nearby_crates(lua, &ctx.idx, &slot)?;
+    let st = SlotStats::get(&ctx.db, lua, &ctx.idx, &slot)?;
+    let nearby = ctx.db.list_nearby_crates(&st)?;
     if nearby.len() > 0 {
         let mut msg = CompactString::new("");
         for nc in nearby {

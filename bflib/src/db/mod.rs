@@ -143,9 +143,9 @@ macro_rules! objective_mut {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
     Objective,
-    Deployed(Deployable),
-    Troop(Troop),
-    Crate(ObjectiveId, Crate),
+    Deployed(Ucid, Deployable),
+    Troop(Ucid, Troop),
+    Crate(ObjectiveId, Ucid, Crate),
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -335,6 +335,7 @@ pub struct Player {
     side: Side,
     side_switches: Option<u8>,
     lives: Map<LifeType, (DateTime<Utc>, u8)>,
+    crates: Set<GroupId>,
     #[serde(skip)]
     current_slot: Option<SlotId>,
 }
@@ -721,13 +722,14 @@ impl Db {
             .map(|m| m.remove_cow(gid));
         match &group.origin {
             DeployKind::Objective => (),
-            DeployKind::Crate(_, _) => {
+            DeployKind::Crate(_, ucid, _) => {
                 self.persisted.crates.remove_cow(gid);
+                self.persisted.players[ucid].crates.remove_cow(gid);
             }
-            DeployKind::Deployed(_) => {
+            DeployKind::Deployed(_, _) => {
                 self.persisted.deployed.remove_cow(gid);
             }
-            DeployKind::Troop(_) => {
+            DeployKind::Troop(_, _) => {
                 self.persisted.troops.remove_cow(gid);
             }
         }
@@ -925,13 +927,14 @@ impl Db {
         }
         match &spawned.origin {
             DeployKind::Objective => (),
-            DeployKind::Crate(_, _) => {
+            DeployKind::Crate(_, ucid, _) => {
                 self.persisted.crates.insert_cow(gid);
+                self.persisted.players[ucid].crates.insert_cow(gid);
             }
-            DeployKind::Deployed(_) => {
+            DeployKind::Deployed(_, _) => {
                 self.persisted.deployed.insert_cow(gid);
             }
-            DeployKind::Troop(_) => {
+            DeployKind::Troop(_, _) => {
                 self.persisted.troops.insert_cow(gid);
             }
         }

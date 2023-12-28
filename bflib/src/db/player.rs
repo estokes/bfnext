@@ -1,4 +1,4 @@
-use super::{Db, Map, Player};
+use super::{Db, Map, Player, Set};
 use crate::{cfg::LifeType, maybe};
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
@@ -226,6 +226,7 @@ impl Db {
                         side,
                         side_switches: self.ephemeral.cfg.side_switches,
                         lives: Map::new(),
+                        crates: Set::new(),
                         current_slot: None,
                     },
                 );

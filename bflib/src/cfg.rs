@@ -192,6 +192,8 @@ pub struct Cfg {
     /// how many times a user may switch sides in a given round,
     /// or None for unlimited side switches
     pub side_switches: Option<u8>,
+    /// How many crates a player may spawn at the same time
+    pub max_crates: Option<u32>,
     /// the life types different vehicles use
     pub life_types: FxHashMap<Vehicle, LifeType>,
     /// the life reset configuration for each life type. A pair
@@ -578,7 +580,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             crates: vec![Crate {
                 name: "FARP Crate".into(),
                 weight: 2000,
-                required: 8,
+                required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -791,7 +793,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             crates: vec![Crate {
                 name: "FARP Crate".into(),
                 weight: 1000,
-                required: 8,
+                required: 4,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,
@@ -881,6 +883,7 @@ impl Default for Cfg {
             crate_load_distance: 50,
             crate_spread: 250,
             side_switches: Some(1),
+            max_crates: Some(4),
             default_lives: FxHashMap::from_iter([
                 (LifeType::Standard, (3, 21600)),
                 (LifeType::Intercept, (4, 21600)),

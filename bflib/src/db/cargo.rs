@@ -162,7 +162,7 @@ impl Db {
         idx: &MizIndex,
         slot: &SlotId,
         name: &str,
-    ) -> Result<()> {
+    ) -> Result<SlotStats> {
         debug!("db spawning crate");
         if self
             .slot_instance_unit(lua, idx, slot)?
@@ -175,6 +175,11 @@ impl Db {
         if st.in_air {
             bail!("you must land to spawn crates")
         }
+        let dir = Vector2::new(st.pos.x.x, st.pos.x.z);
+        let approx_spawn_pos = st.point + dir * 20.;
+        if !self.list_crates_near_point(approx_spawn_pos, 10.)?.is_empty() {
+            bail!("move away from other crates or pick up the existing crate")
+        }
         let to_delete = self.ephemeral.cfg.max_crates.and_then(|max_crates| {
             let crates = &self.persisted.players[&st.ucid].crates;
             if crates.len() < max_crates as usize {
@@ -183,7 +188,6 @@ impl Db {
                 crates.into_iter().next().map(|id| *id)
             }
         });
-        let dir = Vector2::new(st.pos.x.x, st.pos.x.z);
         let (oid, _) = self.point_near_logistics(st.side, st.point)?;
         let crate_cfg = self
             .ephemeral
@@ -204,7 +208,7 @@ impl Db {
             offset_direction: dir,
             group_heading: dir.y.atan2(dir.x),
         };
-        let dk = DeployKind::Crate(oid, st.ucid, crate_cfg.clone());
+        let dk = DeployKind::Crate(oid, st.ucid.clone(), crate_cfg.clone());
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?;
         }
@@ -217,7 +221,7 @@ impl Db {
             dk,
             None,
         )?;
-        Ok(())
+        Ok(st)
     }
 
     fn list_crates_near_point<'a>(
@@ -364,6 +368,13 @@ impl Db {
                 }
             }
         }
+        Ok((n, oldest))
+    }
+
+    pub fn number_crates_deployed(&self, st: &SlotStats) -> Result<(usize, Option<GroupId>)> {
+        let player = maybe!(self.persisted.players, &st.ucid, "no such player")?;
+        let n = player.crates.len();
+        let oldest = player.crates.into_iter().next().map(|id| *id);
         Ok((n, oldest))
     }
 

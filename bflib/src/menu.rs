@@ -98,23 +98,23 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
             let (n, oldest) = ctx.db.number_deployed(side, dep_name.as_str())?;
             let enforce = match dep.limit_enforce {
                 LimitEnforceTyp::DenyCrate => {
-                    format_compact!("unpacking will be denied when the limit is reached")
+                    format_compact!("unpacking will be denied when the limit is exceeded")
                 }
                 LimitEnforceTyp::DeleteOldest => match oldest {
                     Some(Oldest::Group(gid)) => {
                         format_compact!(
-                            "unpacking will delete oldest, {}, when the limit is reached",
+                            "unpacking will delete oldest, {}, when the limit is exceeded",
                             gid
                         )
                     }
                     Some(Oldest::Objective(oid)) => {
                         format_compact!(
-                            "unpacking will delete oldest, {}, when the limit is reached",
+                            "unpacking will delete oldest, {}, when the limit is exceeded",
                             oid
                         )
                     }
                     None => {
-                        format_compact!("unpacking will delete oldest when the limit is reached")
+                        format_compact!("unpacking will delete oldest when the limit is exceeded")
                     }
                 },
             };
@@ -240,7 +240,19 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &arg.group)?;
-    ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.name)
+    let st = ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.name)?;
+    if let Some(max_crates) = ctx.db.cfg().max_crates {
+        let (n, oldest) = ctx.db.number_crates_deployed(&st)?;
+        let msg = match oldest {
+            None => format_compact!("{n}/{max_crates} crates spawned"),
+            Some(gid) => format_compact!(
+                "{n}/{max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
+            ),
+        };
+        ctx.pending_messages
+            .panel_to_group(10, false, arg.group, msg)
+    }
+    Ok(())
 }
 
 fn load_troops(lua: MizLua, arg: SpawnArg) -> Result<()> {
@@ -252,16 +264,16 @@ fn load_troops(lua: MizLua, arg: SpawnArg) -> Result<()> {
             let player = player_name(&ctx.db, &slot);
             let enforce = match tr.limit_enforce {
                 LimitEnforceTyp::DenyCrate => {
-                    format_compact!("unloading will be denied when the limit is reached")
+                    format_compact!("unloading will be denied when the limit is exceeded")
                 }
                 LimitEnforceTyp::DeleteOldest => match oldest {
                     Some(gid) => {
                         format_compact!(
-                            "unloading will delete oldest, {gid}, when the limit is reached"
+                            "unloading will delete oldest, {gid}, when the limit is exceeded"
                         )
                     }
                     None => {
-                        format_compact!("unloading will delete oldest when the limit is reached")
+                        format_compact!("unloading will delete oldest when the limit is exceeded")
                     }
                 },
             };

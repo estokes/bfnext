@@ -189,7 +189,7 @@ impl Db {
                 not_threatened.push(*oid);
             }
             if !obj.spawned && spawn {
-                to_spawn.push(dbg!(*oid));
+                to_spawn.push(*oid);
             } else if obj.spawned && !spawn {
                 to_cull.push(dbg!(*oid));
             }

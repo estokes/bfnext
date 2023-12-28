@@ -734,11 +734,16 @@ impl Db {
         ) -> f64 {
             positions
                 .into_iter()
-                .fold(0., |acc, p| {
+                .fold(None, |acc, p| {
                     let d = na::distance_squared(&(*p).into(), &pos.into());
-                    cmp(acc, d)
+                    let acc = match acc {
+                        None => d,
+                        Some(d) => d,
+                    };
+                    Some(cmp(acc, d))
                 })
-                .sqrt()
+                .map(|d| d.sqrt())
+                .unwrap_or(0.)
         }
         fn compute_unit_positions(
             spctx: &SpawnCtx,
@@ -769,8 +774,9 @@ impl Db {
                     offset_direction,
                     group_heading,
                 } => {
+                    let radius = distance(group_center, f64::max, positions.iter());
                     for p in positions.iter_mut() {
-                        *p = *p - group_center + pos;
+                        *p = *p - group_center + pos + radius * offset_direction;
                     }
                     rotate2d(group_heading, positions.make_contiguous());
                     let offset_magnitude = 20. - distance(pos, f64::min, positions.iter());

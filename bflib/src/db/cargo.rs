@@ -272,6 +272,18 @@ impl Db {
         Ok((n, oldest))
     }
 
+    pub fn deployable_by_crate<'a>(
+        &'a self,
+        side: &Side,
+        name: &str,
+    ) -> Option<(&'a String, &'a Deployable)> {
+        self.ephemeral.deployable_idx.get(side).and_then(|idx| {
+            idx.deployables_by_crates
+                .get(name)
+                .and_then(|name| idx.deployables_by_name.get(name).map(|dep| (name, dep)))
+        })
+    }
+
     pub fn number_troops_deployed(
         &self,
         side: Side,
@@ -811,17 +823,6 @@ impl Db {
             .and_then(|idx| idx.squads_by_name.get(name))
             .ok_or_else(|| anyhow!("no such squad {name}"))?
             .clone();
-        let (n, oldest) = self.number_troops_deployed(side, name)?;
-        let to_delete = if n < troop_cfg.limit as usize {
-            None
-        } else {
-            match troop_cfg.limit_enforce {
-                LimitEnforceTyp::DeleteOldest => oldest,
-                LimitEnforceTyp::DenyCrate => {
-                    bail!("the maximum number of {} troops are already deployed", name)
-                }
-            }
-        };
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
         if cargo_capacity.troop_slots as usize <= cargo.num_troops()
             || cargo_capacity.total_slots as usize <= cargo.num_total()
@@ -833,9 +834,6 @@ impl Db {
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, weight as i64)?;
-        if let Some(gid) = to_delete {
-            self.delete_group(&gid)?
-        }
         Ok(troop_cfg)
     }
 
@@ -858,6 +856,22 @@ impl Db {
             }
             Ok(_) | Err(_) => (),
         }
+        let cargo = self.ephemeral.cargo.get(slot).unwrap();
+        let troop_cfg = cargo.troops.last().unwrap();
+        let (n, oldest) = self.number_troops_deployed(side, troop_cfg.name.as_str())?;
+        let to_delete = if n < troop_cfg.limit as usize {
+            None
+        } else {
+            match troop_cfg.limit_enforce {
+                LimitEnforceTyp::DeleteOldest => oldest,
+                LimitEnforceTyp::DenyCrate => {
+                    bail!(
+                        "the maximum number of {} troops are already deployed",
+                        troop_cfg.name
+                    )
+                }
+            }
+        };
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let troop_cfg = cargo.troops.pop().unwrap();
         Trigger::singleton(lua)?
@@ -870,6 +884,9 @@ impl Db {
         };
         let dk = DeployKind::Troop(troop_cfg.clone());
         let spctx = SpawnCtx::new(lua)?;
+        if let Some(gid) = to_delete {
+            self.delete_group(&gid)?
+        }
         self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk, None)?;
         Ok(troop_cfg)
     }

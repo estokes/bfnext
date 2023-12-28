@@ -1,6 +1,9 @@
 use crate::{
-    cfg::Cfg,
-    db::{cargo::Cargo, Db},
+    cfg::{Cfg, LimitEnforceTyp},
+    db::{
+        cargo::{Cargo, Oldest},
+        Db,
+    },
     Context,
 };
 use anyhow::{anyhow, bail, Result};
@@ -85,10 +88,42 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
     match ctx.db.load_nearby_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
-            let msg = format_compact!("{} crate loaded", cr.name);
+            let (dep_name, dep) = ctx
+                .db
+                .deployable_by_crate(&side, &cr.name)
+                .ok_or_else(|| anyhow!("unknown deployable for crate {}", cr.name))?;
+            let (n, oldest) = ctx.db.number_deployed(side, dep_name.as_str())?;
+            let enforce = match dep.limit_enforce {
+                LimitEnforceTyp::DenyCrate => {
+                    format_compact!("unpacking will be denied when the limit is reached")
+                }
+                LimitEnforceTyp::DeleteOldest => match oldest {
+                    Some(Oldest::Group(gid)) => {
+                        format_compact!(
+                            "unpacking will delete oldest, {}, when the limit is reached",
+                            gid
+                        )
+                    }
+                    Some(Oldest::Objective(oid)) => {
+                        format_compact!(
+                            "unpacking will delete oldest, {}, when the limit is reached",
+                            oid
+                        )
+                    }
+                    None => {
+                        format_compact!("unpacking will delete oldest when the limit is reached")
+                    }
+                },
+            };
+            let msg = format_compact!(
+                "{} crate loaded, {n}/{} deployed, {}",
+                cr.name,
+                dep.limit,
+                enforce
+            );
             ctx.pending_messages.panel_to_group(10, false, gid, msg)
         }
         Err(e) => {
@@ -212,8 +247,24 @@ fn load_troops(lua: MizLua, arg: SpawnArg) -> Result<()> {
     let (side, slot) = slot_for_group(lua, ctx, &arg.group)?;
     match ctx.db.load_troops(lua, &ctx.idx, &slot, &arg.name) {
         Ok(tr) => {
+            let (n, oldest) = ctx.db.number_troops_deployed(side, &tr.name)?;
             let player = player_name(&ctx.db, &slot);
-            let msg = format_compact!("{player} loaded {}", tr.name);
+            let enforce = match tr.limit_enforce {
+                LimitEnforceTyp::DenyCrate => {
+                    format_compact!("unloading will be denied when the limit is reached")
+                }
+                LimitEnforceTyp::DeleteOldest => match oldest {
+                    Some(gid) => {
+                        format_compact!(
+                            "unloading will delete oldest, {gid}, when the limit is reached"
+                        )
+                    }
+                    None => {
+                        format_compact!("unloading will delete oldest when the limit is reached")
+                    }
+                },
+            };
+            let msg = format_compact!("{player} loaded {}, {n}/{}, {}", tr.name, tr.limit, enforce);
             ctx.pending_messages.panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx

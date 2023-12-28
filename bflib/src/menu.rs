@@ -373,7 +373,7 @@ fn add_cargo_menu_for_group(
         destroy_nearby_crate,
         group,
     )?;
-    let root = mc.add_submenu_for_group(group, "Crates".into(), None)?;
+    let root = mc.add_submenu_for_group(group, "Crates".into(), Some(root.clone()))?;
     let rep = &cfg.repair_crate[side];
     mc.add_command_for_group(
         group,

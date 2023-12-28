@@ -18,7 +18,7 @@ use fxhash::FxHashMap;
 use log::{debug, error};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NearbyCrate<'a> {
@@ -48,7 +48,10 @@ impl fmt::Display for Unpakistan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Unpacked(unit, _) => write!(f, "unpacked a {unit}"),
-            Self::UnpackedFarp(loc, _) => write!(f, "unpacked a farp at {loc}, units will spawn in 60 seconds get clear"),
+            Self::UnpackedFarp(loc, _) => write!(
+                f,
+                "unpacked a farp at {loc}, units will spawn in 60 seconds get clear"
+            ),
             Self::Repaired(unit, _) => write!(f, "repaired a {unit}"),
             Self::RepairedBase(base, logi) => write!(f, "repaired logistics at {base} to %{logi}"),
         }
@@ -572,11 +575,12 @@ impl Db {
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
         let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
         let nearby = nearby(self, lua, idx, slot)?;
-        let didx = self
-            .ephemeral
-            .deployable_idx
-            .get(&side)
-            .ok_or_else(|| anyhow!("{:?} can't deploy anything", side))?;
+        let didx = Arc::clone(
+            self.ephemeral
+                .deployable_idx
+                .get(&side)
+                .ok_or_else(|| anyhow!("{:?} can't deploy anything", side))?,
+        );
         if nearby.is_empty() {
             bail!("no nearby crates")
         }
@@ -601,7 +605,7 @@ impl Db {
                 reasons.push("not close enough to a friendly objective".into());
             }
         }
-        match buildable(&nearby, didx) {
+        match buildable(&nearby, &didx) {
             Err(mut build_reasons) => reasons.append(&mut build_reasons),
             Ok(mut candidates) => {
                 let (dep, have) = candidates.drain().next().unwrap();
@@ -618,36 +622,45 @@ impl Db {
                     }
                 } else {
                     let spctx = SpawnCtx::new(lua)?;
-                    enforce_deploy_limits(self, side, &spec, &dep)?;
-                    for cr in have.values().flat_map(|c| c.iter()) {
-                        self.delete_group(&cr.group)?
-                    }
-                    match &spec.logistics {
-                        Some(parts) => {
-                            let oid = self.add_farp(&spctx, idx, side, centroid, &spec, parts)?;
-                            return Ok(Unpakistan::UnpackedFarp(dep, oid))
-                        }
-                        None => {
-                            let pos = self.slot_instance_pos(lua, idx, slot)?;
-                            let spawnloc =
-                                compute_positions(self, &have, centroid, pos.x.z.atan2(pos.x.x))?;
-                            let origin = DeployKind::Deployed(spec.clone());
-                            let gid = self.add_and_queue_group(
-                                &spctx,
-                                idx,
-                                side,
-                                spawnloc,
-                                &*spec.template,
-                                origin,
-                                None,
-                            )?;
-                            return Ok(Unpakistan::Unpacked(dep, gid));
+                    match enforce_deploy_limits(self, side, &spec, &dep) {
+                        Err(e) => reasons.push(format_compact!("{e}")),
+                        Ok(()) => {
+                            for cr in have.values().flat_map(|c| c.iter()) {
+                                self.delete_group(&cr.group)?
+                            }
+                            match &spec.logistics {
+                                Some(parts) => {
+                                    let oid =
+                                        self.add_farp(&spctx, idx, side, centroid, &spec, parts)?;
+                                    return Ok(Unpakistan::UnpackedFarp(dep, oid));
+                                }
+                                None => {
+                                    let pos = self.slot_instance_pos(lua, idx, slot)?;
+                                    let spawnloc = compute_positions(
+                                        self,
+                                        &have,
+                                        centroid,
+                                        pos.x.z.atan2(pos.x.x),
+                                    )?;
+                                    let origin = DeployKind::Deployed(spec.clone());
+                                    let gid = self.add_and_queue_group(
+                                        &spctx,
+                                        idx,
+                                        side,
+                                        spawnloc,
+                                        &*spec.template,
+                                        origin,
+                                        None,
+                                    )?;
+                                    return Ok(Unpakistan::Unpacked(dep, gid));
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-        match repairable(self, &nearby, didx, max_dist) {
+        match repairable(self, &nearby, &didx, max_dist) {
             Err(mut rep_reasons) => reasons.append(&mut rep_reasons),
             Ok(mut candidates) => {
                 let (dep, (gid, have)) = candidates.drain().next().unwrap();

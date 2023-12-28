@@ -167,6 +167,7 @@ impl Db {
         }
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
+        self.ephemeral.dirty = true;
         Ok(oid)
     }
 

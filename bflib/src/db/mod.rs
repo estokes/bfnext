@@ -27,7 +27,7 @@ use std::{
     collections::{hash_map::Entry, BTreeMap, VecDeque},
     fs::{self, File},
     path::{Path, PathBuf},
-    str::FromStr,
+    str::FromStr, sync::Arc,
 };
 
 pub mod cargo;
@@ -383,7 +383,7 @@ impl Persisted {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 struct DeployableIndex {
     deployables_by_name: FxHashMap<String, Deployable>,
     deployables_by_crates: FxHashMap<String, String>,
@@ -398,7 +398,7 @@ struct Ephemeral {
     cfg: Cfg,
     players_by_slot: FxHashMap<SlotId, Ucid>,
     cargo: FxHashMap<SlotId, Cargo>,
-    deployable_idx: FxHashMap<Side, DeployableIndex>,
+    deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
     delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<Despawn>,
@@ -413,7 +413,7 @@ impl Ephemeral {
         repair_crate: Crate,
         deployables: &[Deployable],
     ) -> Result<()> {
-        let idx = self.deployable_idx.entry(side).or_default();
+        let idx = Arc::make_mut(self.deployable_idx.entry(side).or_default());
         idx.crates_by_name
             .insert(repair_crate.name.clone(), repair_crate);
         for dep in deployables.iter() {
@@ -505,7 +505,7 @@ impl Ephemeral {
             self.index_deployables_for_side(miz, mizidx, *side, repair_crate, deployables)?
         }
         for (side, troops) in cfg.troops.iter() {
-            let idx = self.deployable_idx.entry(*side).or_default();
+            let idx = Arc::make_mut(self.deployable_idx.entry(*side).or_default());
             for troop in troops {
                 miz.get_group_by_name(mizidx, GroupKind::Any, *side, &troop.template)?
                     .ok_or_else(|| anyhow!("missing troop template {:?} {:?}", side, troop.name))?;

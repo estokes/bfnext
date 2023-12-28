@@ -662,7 +662,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     cull_or_spawn_units(lua, ctx, ts)?;
     let spctx = SpawnCtx::new(lua)?;
-    ctx.db.process_spawn_queue(&ctx.idx, &spctx)?;
+    ctx.db.process_spawn_queue(ts, &ctx.idx, &spctx)?;
     advise_captured(ctx, ts)?;
     advise_captureable(ctx)?;
     ctx.pending_messages.process(&net, &act);

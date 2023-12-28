@@ -671,7 +671,23 @@ impl Db {
         }
     }
 
-    pub fn process_spawn_queue(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
+    pub fn process_spawn_queue(
+        &mut self,
+        now: DateTime<Utc>,
+        idx: &MizIndex,
+        spctx: &SpawnCtx,
+    ) -> Result<()> {
+        while let Some((at, gids)) = self.ephemeral.delayspawnq.first_key_value() {
+            if now < *at {
+                break;
+            } else {
+                for gid in gids {
+                    self.ephemeral.spawnq.push_back(*gid);
+                }
+                let at = *at;
+                self.ephemeral.delayspawnq.remove(&at);
+            }
+        }
         let dlen = self.ephemeral.despawnq.len();
         let slen = self.ephemeral.spawnq.len();
         if dlen > 0 {

@@ -240,17 +240,23 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &arg.group)?;
-    let st = ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.name)?;
-    if let Some(max_crates) = ctx.db.cfg().max_crates {
-        let (n, oldest) = ctx.db.number_crates_deployed(&st)?;
-        let msg = match oldest {
-            None => format_compact!("{n}/{max_crates} crates spawned"),
-            Some(gid) => format_compact!(
-                "{n}/{max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
-            ),
-        };
-        ctx.pending_messages
-            .panel_to_group(10, false, arg.group, msg)
+    match ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.name) {
+        Err(e) => ctx
+            .pending_messages
+            .panel_to_group(10, false, arg.group, format_compact!("{e}")),
+        Ok(st) => {
+            if let Some(max_crates) = ctx.db.cfg().max_crates {
+                let (n, oldest) = ctx.db.number_crates_deployed(&st)?;
+                let msg = match oldest {
+                    None => format_compact!("{n}/{max_crates} crates spawned"),
+                    Some(gid) => format_compact!(
+                        "{n}/{max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
+                    ),
+                };
+                ctx.pending_messages
+                    .panel_to_group(10, false, arg.group, msg)
+            }
+        }
     }
     Ok(())
 }

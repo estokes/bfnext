@@ -784,7 +784,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
         },
         Deployable {
             path: vec!["FARP".into()],
-            template: "RDEPFARP".into(),
+            template: "BDEPFARP".into(),
             persist: PersistTyp::Forever,
             limit: 4,
             limit_enforce: LimitEnforceTyp::DeleteOldest,

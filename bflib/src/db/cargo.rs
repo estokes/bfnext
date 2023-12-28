@@ -50,7 +50,7 @@ impl fmt::Display for Unpakistan {
             Self::Unpacked(unit, _) => write!(f, "unpacked a {unit}"),
             Self::UnpackedFarp(loc, _) => write!(
                 f,
-                "unpacked a farp at {loc}, units will spawn in 60 seconds get clear"
+                "unpacked {loc}, units will spawn in 60 seconds get clear"
             ),
             Self::Repaired(unit, _) => write!(f, "repaired a {unit}"),
             Self::RepairedBase(base, logi) => write!(f, "repaired logistics at {base} to %{logi}"),
@@ -644,7 +644,8 @@ impl Db {
                                 Some(parts) => {
                                     let oid =
                                         self.add_farp(&spctx, idx, side, centroid, &spec, parts)?;
-                                    return Ok(Unpakistan::UnpackedFarp(dep, oid));
+                                    let name = objective!(self, oid)?.name.clone();
+                                    return Ok(Unpakistan::UnpackedFarp(name, oid));
                                 }
                                 None => {
                                     let pos = self.slot_instance_pos(lua, idx, slot)?;

@@ -659,7 +659,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let act = Trigger::singleton(lua)?.action()?;
     for id in ctx.force_to_spectators.drain() {
         if let Err(e) = net.force_player_slot(id, Side::Neutral, SlotId::spectator()) {
-            error!("error forcing player {id} to spectators {e}");
+            error!("error forcing player {:?} to spectators {e}", id);
         }
     }
     if let Err(e) = cull_or_spawn_units(lua, ctx, ts) {

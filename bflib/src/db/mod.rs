@@ -769,7 +769,6 @@ impl Db {
                     offset_direction,
                     group_heading,
                 } => {
-                    let radius = distance(group_center, f64::max, positions.iter());
                     for p in positions.iter_mut() {
                         *p = *p - group_center + pos;
                     }

@@ -400,7 +400,7 @@ struct Ephemeral {
     players_by_slot: FxHashMap<SlotId, Ucid>,
     cargo: FxHashMap<SlotId, Cargo>,
     deployable_idx: FxHashMap<Side, DeployableIndex>,
-    delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 1]>>,
+    delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<Despawn>,
 }

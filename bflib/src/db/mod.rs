@@ -284,14 +284,13 @@ impl ObjGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     id: ObjectiveId,
-    //trigger_name: String,
     name: String,
     pos: Vector2,
     radius: f64,
     owner: Side,
     kind: ObjectiveKind,
     slots: Map<SlotId, Vehicle>,
-    groups: Map<Side, Map<ObjGroup, GroupId>>,
+    groups: Map<Side, Set<GroupId>>,
     health: u8,
     logi: u8,
     #[serde(skip)]
@@ -566,7 +565,7 @@ impl Db {
         }
         for (_, obj) in &self.persisted.objectives {
             if let Some(groups) = obj.groups.get(&obj.owner) {
-                for (_, gid) in groups {
+                for gid in groups {
                     let group = group!(self, gid)?;
                     if group.class.is_logi() {
                         self.spawn_group(idx, spctx, group)?

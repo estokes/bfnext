@@ -1,7 +1,7 @@
-use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId};
+use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId, Set};
 use crate::{
     cfg::{Deployable, DeployableLogistics, Vehicle},
-    db::{Map, ObjGroup, ObjectiveKind},
+    db::{Map, ObjectiveKind},
     group, group_mut, maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
@@ -12,9 +12,10 @@ use compact_str::format_compact;
 use dcso3::{
     centroid2d,
     coalition::Side,
+    coord::Coord,
     env::miz::{GroupKind, MizIndex},
     land::Land,
-    LuaVec2, LuaVec3, MizLua, Vector2, Vector3, coord::Coord, String
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use log::{debug, info};
@@ -30,7 +31,7 @@ impl Db {
                 let mut alive = 0;
                 let mut logi_total = 0;
                 let mut logi_alive = 0;
-                for (_, gid) in groups {
+                for gid in groups {
                     let group = group!(self, gid)?;
                     let logi = match &group.class {
                         ObjGroupClass::Logi => true,
@@ -60,7 +61,7 @@ impl Db {
         let obj = self.persisted.objectives.remove_cow(oid).unwrap();
         self.persisted.objectives_by_name.remove_cow(&obj.name);
         for (_, groups) in &obj.groups {
-            for (_, gid) in groups {
+            for gid in groups {
                 self.persisted.objectives_by_group.remove_cow(gid);
                 self.delete_group(gid)?;
             }
@@ -110,7 +111,7 @@ impl Db {
             let center = centroid2d(points);
             SpawnLoc::AtPosWithCenter { pos, center }
         };
-        let mut groups: Map<ObjGroup, GroupId> = Map::new();
+        let mut groups: Set<GroupId> = Set::new();
         for name in [
             &spec.template,
             &ammo_template,
@@ -118,16 +119,15 @@ impl Db {
             &barracks_template,
             &pad_template,
         ] {
-            let gid = self.add_and_queue_group(
+            groups.insert_cow(self.add_and_queue_group(
                 spctx,
                 idx,
                 side,
                 location.clone(),
                 &name,
                 DeployKind::Objective,
-                Some(now + Duration::seconds(60))
-            )?;
-            groups.insert_cow(ObjGroup(name.clone()), gid);
+                Some(now + Duration::seconds(60)),
+            )?);
         }
         let name = {
             let coord = Coord::singleton(spctx.lua())?;
@@ -135,9 +135,9 @@ impl Db {
             let mgrs = coord.ll_to_mgrs(pos.latitude, pos.longitude)?;
             let mut n = 0;
             loop {
-                let name = String::from(format_compact!("farp {} {n}", mgrs.utm_zone)); 
+                let name = String::from(format_compact!("farp {} {n}", mgrs.utm_zone));
                 if self.persisted.objectives_by_name.get(&name).is_none() {
-                    break name
+                    break name;
                 } else {
                     n += 1
                 }
@@ -161,7 +161,7 @@ impl Db {
         };
         let oid = obj.id;
         for (_, groups) in &obj.groups {
-            for (_, gid) in groups {
+            for gid in groups {
                 self.persisted.objectives_by_group.insert_cow(*gid, oid);
             }
         }
@@ -210,7 +210,7 @@ impl Db {
             let mut damaged_by_class: FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>> =
                 groups.into_iter().fold(
                     Ok(FxHashMap::default()),
-                    |m: Result<FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>>>, (_, id)| {
+                    |m: Result<FxHashMap<ObjGroupClass, Vec<(GroupId, usize)>>>, id| {
                         let mut m = m?;
                         let group = group!(self, id)?;
                         let mut damaged = 0;
@@ -345,7 +345,7 @@ impl Db {
         for oid in to_spawn {
             let obj = objective_mut!(self, oid)?;
             obj.spawned = true;
-            for (_name, gid) in maybe!(&obj.groups, obj.owner, "side group")? {
+            for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 if !group!(self, gid)?.class.is_logi() {
                     self.ephemeral.spawnq.push_back(*gid);
                 }
@@ -354,7 +354,7 @@ impl Db {
         for oid in to_cull {
             let obj = objective_mut!(self, oid)?;
             obj.spawned = false;
-            for (_name, gid) in maybe!(&obj.groups, obj.owner, "side group")? {
+            for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
                 if !group.class.is_logi() {
                     match group.kind {
@@ -386,7 +386,7 @@ impl Db {
         let obj = objective_mut!(self, oid)?;
         let mut to_repair = None;
         let current_logi = obj.logi as f64 / 100.;
-        for (_name, gid) in maybe!(&obj.groups, &side, "side group")? {
+        for gid in maybe!(&obj.groups, &side, "side group")? {
             let group = group_mut!(self, gid)?;
             if group.class.is_logi() {
                 if to_repair.is_none() {

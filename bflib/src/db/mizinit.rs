@@ -67,7 +67,6 @@ impl Db {
             id,
             spawned: false,
             threatened: false,
-            // trigger_name: zone.name()?,
             pos,
             radius,
             name: name.clone(),
@@ -130,7 +129,7 @@ impl Db {
         objective_mut!(self, obj)?
             .groups
             .get_or_default_cow(side)
-            .insert_cow(name.clone(), gid);
+            .insert_cow(gid);
         self.persisted.objectives_by_group.insert_cow(gid, obj);
         Ok(())
     }

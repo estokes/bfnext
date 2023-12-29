@@ -537,6 +537,9 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = advise_captureable(ctx) {
         error!("error advise capturable {e}")
     }
+    if let Err(e) = ctx.db.remark_objectives() {
+        error!("could not remark objectives {e}")
+    }
     ctx.db.msgs().process(&net, &act);
     Ok(())
 }

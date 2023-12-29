@@ -78,6 +78,7 @@ impl Db {
             logi: 0,
             last_change_ts: Utc::now(),
             last_threatened_ts: Utc::now(),
+            needs_mark: false,
         };
         self.persisted.objectives.insert_cow(id, obj);
         self.persisted.objectives_by_name.insert_cow(name, id);

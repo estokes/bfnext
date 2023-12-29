@@ -215,7 +215,6 @@ impl Db {
             origin: oid,
             player: st.ucid.clone(),
             spec: crate_cfg.clone(),
-            mark: None,
         };
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?;
@@ -742,7 +741,6 @@ impl Db {
                                     let origin = DeployKind::Deployed {
                                         player: st.ucid,
                                         spec: spec.clone(),
-                                        mark: None,
                                     };
                                     let gid = self.add_and_queue_group(
                                         &spctx,
@@ -833,7 +831,6 @@ impl Db {
             origin: oid,
             player: st.ucid,
             spec: crate_cfg.clone(),
-            mark: None,
         };
         let spctx = SpawnCtx::new(lua)?;
         self.add_and_queue_group(&spctx, idx, st.side, spawnpos, &template, dk, None)?;
@@ -973,7 +970,6 @@ impl Db {
         let dk = DeployKind::Troop {
             player: ucid,
             spec: troop_cfg.clone(),
-            mark: None,
         };
         let spctx = SpawnCtx::new(lua)?;
         if let Some(gid) = to_delete {

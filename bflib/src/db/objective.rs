@@ -70,6 +70,12 @@ impl Db {
             self.persisted.objectives_by_slot.remove_cow(slot);
         }
         self.persisted.farps.remove_cow(oid);
+        if let Some((fid, eid)) = self.ephemeral.objective_marks.remove(oid) {
+            self.ephemeral.msgs.delete_mark(fid);
+            if let Some(id) = eid {
+                self.ephemeral.msgs.delete_mark(id)
+            }
+        }
         Ok(())
     }
 
@@ -158,6 +164,7 @@ impl Db {
             threatened: true,
             last_threatened_ts: now,
             last_change_ts: now,
+            needs_mark: false,
         };
         let oid = obj.id;
         for (_, groups) in &obj.groups {
@@ -168,6 +175,7 @@ impl Db {
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.ephemeral.dirty = true;
+        self.mark_objective(&oid)?;
         Ok(oid)
     }
 
@@ -183,6 +191,7 @@ impl Db {
             obj.health = health;
             obj.logi = logi;
             obj.last_change_ts = now;
+            obj.needs_mark = true;
             (obj.kind.clone(), health, logi)
         };
         if let ObjectiveKind::Farp(_) = &kind {
@@ -465,7 +474,7 @@ impl Db {
                 for gid in &self.persisted.troops {
                     let group = group!(self, gid)?;
                     match &group.origin {
-                        DeployKind::Troop { spec, ..} if spec.can_capture => {
+                        DeployKind::Troop { spec, .. } if spec.can_capture => {
                             let in_range = group
                                 .units
                                 .into_iter()
@@ -477,10 +486,10 @@ impl Db {
                                 captured.entry(*oid).or_default().push((group.side, *gid));
                             }
                         }
-                        DeployKind::Crate {..}
-                        | DeployKind::Deployed {..}
+                        DeployKind::Crate { .. }
+                        | DeployKind::Deployed { .. }
                         | DeployKind::Objective
-                        | DeployKind::Troop {..} => (),
+                        | DeployKind::Troop { .. } => (),
                     }
                 }
             }
@@ -501,5 +510,67 @@ impl Db {
             }
         }
         Ok(actually_captured)
+    }
+
+    pub fn mark_objective(&mut self, oid: &ObjectiveId) -> Result<()> {
+        if let Some((id0, id1)) = self.ephemeral.objective_marks.remove(oid) {
+            self.ephemeral.msgs.delete_mark(id0);
+            if let Some(id) = id1 {
+                self.ephemeral.msgs.delete_mark(id);
+            }
+        }
+        let obj = objective!(self, oid)?;
+        let name = &obj.name;
+        let logi = obj.logi;
+        let owner = obj.owner;
+        let cap = if obj.captureable() { " capturable" } else { "" };
+        let friendly_msg = match obj.kind {
+            ObjectiveKind::Airbase => format_compact!("{name} airbase {owner} logi {logi}{cap}"),
+            ObjectiveKind::Fob => format_compact!("{name} fob {owner} logi {logi}{cap}"),
+            ObjectiveKind::Farp(_) => format_compact!("{name} farp {owner} logi {logi}{cap}"),
+            ObjectiveKind::Logistics => {
+                format_compact!("{name} logistics depot {owner} logi {logi}{cap}")
+            }
+        };
+        let enemy_msg = match obj.kind {
+            ObjectiveKind::Airbase => Some(format_compact!("{name} airbase {owner}{cap}")),
+            ObjectiveKind::Fob => Some(format_compact!("{name} fob {owner}{cap}")),
+            ObjectiveKind::Logistics => {
+                Some(format_compact!("{name} logistics depot {owner}{cap}"))
+            }
+            ObjectiveKind::Farp(_) => None,
+        };
+        let fid = self
+            .ephemeral
+            .msgs
+            .mark_to_side(owner, obj.pos, true, friendly_msg);
+        let eid = match enemy_msg {
+            None => None,
+            Some(msg) => Some(self.ephemeral.msgs.mark_to_side(
+                owner.opposite(),
+                obj.pos,
+                true,
+                msg,
+            )),
+        };
+        self.ephemeral.objective_marks.insert(*oid, (fid, eid));
+        Ok(())
+    }
+
+    pub fn remark_objectives(&mut self) -> Result<()> {
+        let objectives = self
+            .persisted
+            .objectives
+            .into_iter()
+            .map(|(oid, _)| *oid)
+            .collect::<SmallVec<[_; 64]>>();
+        for oid in objectives {
+            let obj = objective_mut!(self, oid)?;
+            if obj.needs_mark {
+                obj.needs_mark = false;
+                self.mark_objective(&oid)?
+            }
+        }
+        Ok(())
     }
 }

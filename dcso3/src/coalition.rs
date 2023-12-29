@@ -11,9 +11,15 @@ use crate::{simple_enum, wrapped_table, LuaEnv, MizLua, Sequence};
 use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::{ops::Deref, str::FromStr};
+use std::{ops::Deref, str::FromStr, fmt};
 
 simple_enum!(Side, u8, [Neutral => 0, Red => 1, Blue => 2]);
+
+impl fmt::Display for Side {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_str())
+    }
+}
 
 impl FromStr for Side {
     type Err = anyhow::Error;

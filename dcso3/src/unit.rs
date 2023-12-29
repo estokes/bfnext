@@ -1,9 +1,13 @@
 use super::{as_tbl, controller::Controller, cvt_err, group::Group, object::Object, String};
-use crate::{env::miz::UnitId, simple_enum, wrapped_table, LuaEnv, MizLua};
+use crate::{
+    env::miz::UnitId,
+    object::{DcsObject, DcsOid},
+    simple_enum, wrapped_table, LuaEnv, MizLua, LuaVec3, Position3,
+};
 use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{marker::PhantomData, ops::Deref};
 
 simple_enum!(UnitCategory, u8, [
     Airplane => 0,
@@ -26,6 +30,22 @@ impl<'lua> Unit<'lua> {
         Ok(Object::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 
+    pub fn get_point(&self) -> Result<LuaVec3> {
+        Ok(self.t.call_method("getPoint", ())?)
+    }
+
+    pub fn get_position(&self) -> Result<Position3> {
+        Ok(self.t.call_method("getPosition", ())?)
+    }
+
+    pub fn get_velocity(&self) -> Result<LuaVec3> {
+        Ok(self.t.call_method("getVelocity", ())?)
+    }
+
+    pub fn in_air(&self) -> Result<bool> {
+        Ok(self.t.call_method("inAir", ())?)
+    }
+
     pub fn is_active(&self) -> Result<bool> {
         Ok(self.t.call_method("isActive", ())?)
     }
@@ -40,10 +60,6 @@ impl<'lua> Unit<'lua> {
 
     pub fn get_number(&self) -> Result<i64> {
         Ok(self.t.call_method("getNumber", ())?)
-    }
-
-    pub fn get_object_id(&self) -> Result<i64> {
-        Ok(self.t.call_method("getObjectID", ())?)
     }
 
     pub fn get_controller(&self) -> Result<Controller<'lua>> {
@@ -76,5 +92,46 @@ impl<'lua> Unit<'lua> {
 
     pub fn get_category(&self) -> Result<UnitCategory> {
         Ok(self.t.call_method("getCategory", ())?)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassUnit;
+
+impl<'lua> DcsObject<'lua> for Unit<'lua> {
+    type Class = ClassUnit;
+
+    fn object_id(&self) -> Result<DcsOid<Self::Class>> {
+        Ok(DcsOid {
+            id: self.raw_get("id_")?,
+            class: "Unit".into(),
+            t: PhantomData,
+        })
+    }
+
+    fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self> {
+        let t = lua.inner().create_table()?;
+        t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
+        t.raw_set("id_", id.id)?;
+        Ok(Unit {
+            t,
+            lua: lua.inner(),
+        })
+    }
+
+    fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(lua, "Unit")?;
+        let id = DcsOid {
+            id: id.id,
+            class: id.class.clone(),
+            t: PhantomData,
+        };
+        Self::get_instance(lua, &id)
+    }
+
+    fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(MizLua(self.lua), "Unit")?;
+        self.t.raw_set("id_", id.id)?;
+        Ok(self)
     }
 }

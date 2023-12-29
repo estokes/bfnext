@@ -15,9 +15,10 @@ use dcso3::{
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
     net::{SlotId, Ucid},
+    object::{DcsObject, DcsOid},
     rotate2d,
     trigger::MarkId,
-    unit::Unit,
+    unit::{ClassUnit, Unit},
     MizLua, Position3, String, Vector2,
 };
 use fxhash::{FxHashMap, FxHashSet};
@@ -418,6 +419,8 @@ struct Ephemeral {
     group_marks: FxHashMap<GroupId, MarkId>,
     objective_marks: FxHashMap<ObjectiveId, (MarkId, Option<MarkId>)>,
     delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
+    object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
+    uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<Despawn>,
     msgs: MsgQ,
@@ -827,6 +830,9 @@ impl Db {
         for uid in &group.units {
             if let Some(unit) = self.persisted.units.remove_cow(uid) {
                 self.persisted.units_by_name.remove_cow(&unit.name);
+                if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
+                    self.ephemeral.uid_by_object_id.remove(&id);
+                }
                 units.push(unit.name);
             }
         }
@@ -1057,8 +1063,28 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn unit_dead(&mut self, id: UnitId, dead: bool, now: DateTime<Utc>) -> Result<()> {
-        if let Some(unit) = self.persisted.units.get_mut_cow(&id) {
+    pub fn unit_born(&mut self, id: DcsOid<ClassUnit>, name: &str) -> Result<()> {
+        if let Some(uid) = self.persisted.units_by_name.get(name) {
+            self.ephemeral.uid_by_object_id.insert(id.clone(), *uid);
+            self.ephemeral.object_id_by_uid.insert(*uid, id);
+        }
+        Ok(())
+    }
+
+    pub fn unit_dead(
+        &mut self,
+        id: DcsOid<ClassUnit>,
+        dead: bool,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        let uid = match self.ephemeral.uid_by_object_id.remove(&id) {
+            Some(uid) => {
+                self.ephemeral.object_id_by_uid.remove(&uid);
+                uid
+            }
+            None => return Ok(()),
+        };
+        if let Some(unit) = self.persisted.units.get_mut_cow(&uid) {
             unit.dead = dead;
             let gid = unit.group;
             if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
@@ -1079,6 +1105,30 @@ impl Db {
             }
         }
         self.ephemeral.dirty = true;
+        Ok(())
+    }
+
+    pub fn update_unit_positions(&mut self, lua: MizLua) -> Result<()> {
+        let mut unit: Option<Unit> = None;
+        let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
+        for (id, uid) in &self.ephemeral.uid_by_object_id {
+            let instance = match unit.take() {
+                Some(unit) => unit.change_instance(id)?,
+                None => Unit::get_instance(lua, id)?,
+            };
+            let pos = instance.get_point()?;
+            let pos = Vector2::new(pos.x, pos.z);
+            let spunit = unit_mut!(self, uid)?;
+            if spunit.pos != pos {
+                moved.push(spunit.group);
+                spunit.pos = pos;
+            }
+            unit = Some(instance);
+        }
+        for gid in moved {
+            self.ephemeral.dirty = true;
+            self.mark_group(&gid)?;
+        }
         Ok(())
     }
 

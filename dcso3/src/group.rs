@@ -1,12 +1,13 @@
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use crate::{
     env::miz::{GroupId, GroupKind},
+    object::{DcsObject, DcsOid},
     simple_enum, wrapped_table, LuaEnv, MizLua, Sequence,
 };
 use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{marker::PhantomData, ops::Deref};
 
 simple_enum!(GroupCategory, u8, [
     Airplane => 0,
@@ -98,5 +99,38 @@ impl<'lua> Group<'lua> {
 
     pub fn enable_emission(&self, on: bool) -> Result<()> {
         Ok(self.t.call_method("enableEmission", on)?)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassGroup;
+
+impl<'lua> DcsObject<'lua> for Group<'lua> {
+    type Class = ClassGroup;
+
+    fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self> {
+        let t = lua.inner().create_table()?;
+        t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
+        t.raw_set("id_", id.id)?;
+        Ok(Group {
+            t,
+            lua: lua.inner(),
+        })
+    }
+
+    fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(lua, "Group")?;
+        let id = DcsOid {
+            id: id.id,
+            class: id.class.clone(),
+            t: PhantomData,
+        };
+        Self::get_instance(lua, &id)
+    }
+
+    fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(MizLua(self.lua), "Group")?;
+        self.t.raw_set("id_", id.id)?;
+        Ok(self)
     }
 }

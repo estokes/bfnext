@@ -10,7 +10,7 @@ use std::{hash::Hash, marker::PhantomData, ops::Deref};
 pub struct DcsOid<T> {
     pub(crate) id: u64,
     pub(crate) class: String,
-    t: PhantomData<T>,
+    pub(crate) t: PhantomData<T>,
 }
 
 impl<T> DcsOid<T> {
@@ -63,13 +63,30 @@ impl<T> Ord for DcsOid<T> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ClassObject;
 
-pub trait DcsObject<'lua>: Sized {
-    type Class;
+pub trait DcsObject<'lua>: Sized + Deref<Target = mlua::Table<'lua>> {
+    type Class: fmt::Debug + Clone;
 
-    fn object_id(&self) -> Result<DcsOid<Self::Class>>;
-    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self>;
+    fn object_id(&self) -> Result<DcsOid<Self::Class>> {
+        let id = self.raw_get("id_")?;
+        let m = self
+            .get_metatable()
+            .ok_or_else(|| anyhow!("object with no metatable"))?;
+        let class = m.raw_get("className_")?;
+        Ok(DcsOid {
+            id,
+            class,
+            t: PhantomData,
+        })
+    }
+
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
+        self.raw_set("id_", id.id)?;
+        Ok(self)
+    }
+
     fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self>;
     fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self>;
     fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self>;
@@ -144,20 +161,6 @@ impl<'lua> Object<'lua> {
 impl<'lua> DcsObject<'lua> for Object<'lua> {
     type Class = ClassObject;
 
-    fn object_id(&self) -> Result<DcsOid<Self::Class>> {
-        let id = self.t.raw_get("id_")?;
-        let m = self
-            .t
-            .get_metatable()
-            .ok_or_else(|| anyhow!("object with no metatable"))?;
-        let class = m.raw_get("className_")?;
-        Ok(DcsOid {
-            id,
-            class,
-            t: PhantomData,
-        })
-    }
-
     fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self> {
         let t = lua.inner().create_table()?;
         t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
@@ -176,11 +179,6 @@ impl<'lua> DcsObject<'lua> for Object<'lua> {
             t: PhantomData,
         };
         Self::get_instance(lua, &id)
-    }
-
-    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
-        self.t.raw_set("id_", id.id)?;
-        Ok(self)
     }
 
     fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {

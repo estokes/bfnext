@@ -23,7 +23,7 @@ use dcso3::{
     trigger::Trigger,
     unit::Unit,
     world::World,
-    HooksLua, LuaEnv, MizLua, String, Vector2,
+    HooksLua, LuaEnv, MizLua, String, Vector2, object::DcsObject,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
@@ -45,14 +45,13 @@ struct Context {
     idx: env::miz::MizIndex,
     db: Db,
     to_background: Option<UnboundedSender<bg::Task>>,
-    units_by_obj_id: FxHashMap<i64, db::UnitId>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
     recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
     airborne: FxHashSet<SlotId>,
     captureable: FxHashMap<ObjectiveId, usize>,
     force_to_spectators: FxHashSet<PlayerId>,
-    last_cull: DateTime<Utc>,
+    last_slow_timed_events: DateTime<Utc>,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -289,24 +288,22 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
                 let name = unit.as_object()?.get_name()?;
-                if let Ok(su) = ctx.db.unit_by_name(name.as_str()) {
-                    let uid = su.id;
-                    let oid: i64 = unit.get_object_id()?;
-                    ctx.units_by_obj_id.insert(oid, uid);
+                if let Err(e) = ctx.db.unit_born(unit.object_id()?, name.as_str()) {
+                    error!("unit born failed {:?} {:?}", unit, e);
                 }
             }
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
-            if let Ok(unit) = e.initiator.as_unit() {
-                let id = unit.get_object_id()?;
-                if let Some(uid) = ctx.units_by_obj_id.remove(&id) {
-                    if let Err(e) = ctx.db.unit_dead(uid, true, Utc::now()) {
+            if let Some(unit) = e.initiator {
+                if let Ok(unit) = unit.as_unit() {
+                    let id = unit.object_id()?;
+                    if let Err(e) = ctx.db.unit_dead(id, true, Utc::now()) {
                         error!("unit dead failed for {:?} {:?}", unit, e);
                     }
+                    let slot = SlotId::from(unit.id()?);
+                    ctx.recently_landed.remove(&slot);
+                    force_player_in_slot_to_spectators(ctx, &slot)
                 }
-                let slot = SlotId::from(unit.id()?);
-                ctx.recently_landed.remove(&slot);
-                force_player_in_slot_to_spectators(ctx, &slot)
             }
         }
         Event::Ejection(e) => {
@@ -486,10 +483,10 @@ fn advise_captured(ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
     Ok(())
 }
 
-fn cull_or_spawn_units(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
-    let cull_freq = Duration::seconds(ctx.db.cfg().unit_cull_freq as i64);
-    if ts - ctx.last_cull > cull_freq {
-        ctx.last_cull = ts;
+fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
+    let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
+    if ts - ctx.last_slow_timed_events > freq {
+        ctx.last_slow_timed_events = ts;
         let (threatened, cleared) = ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?;
         for oid in threatened {
             let obj = ctx.db.objective(&oid)?;
@@ -503,6 +500,10 @@ fn cull_or_spawn_units(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Res
             let msg = format_compact!("{} is no longer threatened", obj.name());
             ctx.db.msgs().panel_to_side(10, false, owner, msg)
         }
+        if let Err(e) = ctx.db.remark_objectives() {
+            error!("could not remark objectives {e}")
+        }
+        ctx.db.update_unit_positions(lua)?;
     }
     Ok(())
 }
@@ -524,8 +525,8 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
             error!("error forcing player {:?} to spectators {e}", id);
         }
     }
-    if let Err(e) = cull_or_spawn_units(lua, ctx, ts) {
-        error!("error culling units {e}")
+    if let Err(e) = run_slow_timed_events(lua, ctx, ts) {
+        error!("error running slow timed events {e}")
     }
     let spctx = SpawnCtx::new(lua)?;
     if let Err(e) = ctx.db.process_spawn_queue(ts, &ctx.idx, &spctx) {
@@ -536,9 +537,6 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     if let Err(e) = advise_captureable(ctx) {
         error!("error advise capturable {e}")
-    }
-    if let Err(e) = ctx.db.remark_objectives() {
-        error!("could not remark objectives {e}")
     }
     ctx.db.msgs().process(&net, &act);
     Ok(())

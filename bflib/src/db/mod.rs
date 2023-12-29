@@ -763,7 +763,7 @@ impl Db {
             DeployKind::Objective => None,
             DeployKind::Crate { player, spec, .. } => {
                 let name = self.persisted.players[player].name.clone();
-                let msg = format_compact!("{} id {gid} deployed by {name}", spec.name);
+                let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
                 Some(
                     self.ephemeral
                         .msgs
@@ -773,7 +773,7 @@ impl Db {
             DeployKind::Deployed { spec, player } => {
                 let name = self.persisted.players[player].name.clone();
                 let msg =
-                    format_compact!("{} id {gid} deployed by {name}", spec.path.last().unwrap());
+                    format_compact!("{} {gid} deployed by {name}", spec.path.last().unwrap());
                 Some(
                     self.ephemeral
                         .msgs
@@ -782,7 +782,7 @@ impl Db {
             }
             DeployKind::Troop { player, spec } => {
                 let name = self.persisted.players[player].name.clone();
-                let msg = format_compact!("{} id {gid} deployed by {name}", spec.name);
+                let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
                 Some(
                     self.ephemeral
                         .msgs

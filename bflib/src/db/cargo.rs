@@ -720,11 +720,11 @@ impl Db {
                     match enforce_deploy_limits(self, st.side, &spec, &dep) {
                         Err(e) => reasons.push(format_compact!("{e}")),
                         Ok(()) => {
-                            for cr in have.values().flat_map(|c| c.iter()) {
-                                self.delete_group(&cr.group)?
-                            }
                             match &spec.logistics {
                                 Some(parts) => {
+                                    for cr in have.values().flat_map(|c| c.iter()) {
+                                        self.delete_group(&cr.group)?
+                                    }
                                     let oid = self
                                         .add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
                                     let name = objective!(self, oid)?.name.clone();
@@ -738,6 +738,9 @@ impl Db {
                                         centroid,
                                         pos.x.z.atan2(pos.x.x),
                                     )?;
+                                    for cr in have.values().flat_map(|c| c.iter()) {
+                                        self.delete_group(&cr.group)?
+                                    }
                                     let origin = DeployKind::Deployed {
                                         player: st.ucid,
                                         spec: spec.clone(),

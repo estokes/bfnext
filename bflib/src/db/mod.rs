@@ -315,7 +315,7 @@ pub struct Objective {
     #[serde(skip)]
     last_change_ts: DateTime<Utc>,
     #[serde(skip)]
-    needs_mark: bool
+    needs_mark: bool,
 }
 
 impl Objective {
@@ -772,8 +772,7 @@ impl Db {
             }
             DeployKind::Deployed { spec, player } => {
                 let name = self.persisted.players[player].name.clone();
-                let msg =
-                    format_compact!("{} {gid} deployed by {name}", spec.path.last().unwrap());
+                let msg = format_compact!("{} {gid} deployed by {name}", spec.path.last().unwrap());
                 Some(
                     self.ephemeral
                         .msgs
@@ -1065,7 +1064,10 @@ impl Db {
             if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
                 self.update_objective_status(&oid, now)?
             }
-            if self.persisted.deployed.contains(&gid) {
+            if self.persisted.deployed.contains(&gid)
+                || self.persisted.troops.contains(&gid)
+                || self.persisted.crates.contains(&gid)
+            {
                 let group = group_mut!(self, gid)?;
                 let mut dead = true;
                 for uid in &group.units {

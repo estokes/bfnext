@@ -1116,12 +1116,14 @@ impl Db {
                 Some(unit) => unit.change_instance(id)?,
                 None => Unit::get_instance(lua, id)?,
             };
-            let pos = instance.get_point()?;
-            let pos = Vector2::new(pos.x, pos.z);
+            let pos = instance.get_position()?;
+            let point = Vector2::new(pos.p.x, pos.p.z);
+            let heading = pos.x.z.atan2(pos.x.x);
             let spunit = unit_mut!(self, uid)?;
-            if spunit.pos != pos {
+            if spunit.pos != point {
                 moved.push(spunit.group);
-                spunit.pos = pos;
+                spunit.pos = point;
+                spunit.heading = heading;
             }
             unit = Some(instance);
         }

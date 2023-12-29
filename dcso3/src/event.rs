@@ -56,7 +56,7 @@ impl<'lua> FromLua<'lua> for ShootingEnd<'lua> {
 #[derive(Debug, Clone, Serialize)]
 pub struct WeaponUse<'lua> {
     pub time: Time,
-    pub initiator: Unit<'lua>,
+    pub initiator: Option<Object<'lua>>,
     pub target: Option<Object<'lua>>,
     pub weapon_name: String,
 }
@@ -76,7 +76,7 @@ impl<'lua> FromLua<'lua> for WeaponUse<'lua> {
 #[derive(Debug, Clone, Serialize)]
 pub struct UnitEvent<'lua> {
     pub time: Time,
-    pub initiator: Object<'lua>,
+    pub initiator: Option<Object<'lua>>,
 }
 
 impl<'lua> FromLua<'lua> for UnitEvent<'lua> {

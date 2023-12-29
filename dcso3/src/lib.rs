@@ -944,8 +944,8 @@ impl<'lua> IntoLua<'lua> for Time {
 }
 
 impl<'lua> FromLua<'lua> for Time {
-    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        Ok(Self(value.as_f32().ok_or_else(|| cvt_err("Time"))?))
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        Ok(Self(f32::from_lua(value, lua)?))
     }
 }
 
@@ -1118,8 +1118,8 @@ pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
         *p -= centroid;
         let x = p.x;
         let y = p.y;
-        p.x = x*cos - y*sin;
-        p.y = x*sin + y*cos;
+        p.x = x * cos - y * sin;
+        p.y = x * sin + y * cos;
         *p += centroid
     }
 }

@@ -2,6 +2,7 @@ pub mod bg;
 pub mod cfg;
 pub mod db;
 pub mod menu;
+pub mod msgq;
 pub mod spawnctx;
 
 extern crate nalgebra as na;
@@ -13,17 +14,13 @@ use compact_str::{format_compact, CompactString};
 use db::{Db, ObjectiveId};
 use dcso3::{
     coalition::Side,
-    env::{
-        self,
-        miz::{GroupId, Miz, UnitId},
-        Env,
-    },
+    env::{self, miz::Miz, Env},
     event::Event,
     hooks::UserHooks,
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
     timer::Timer,
-    trigger::{Action, Trigger},
+    trigger::Trigger,
     unit::Unit,
     world::World,
     HooksLua, LuaEnv, MizLua, String, Vector2,
@@ -31,6 +28,7 @@ use dcso3::{
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
 use mlua::prelude::*;
+use msgq::MsgTyp;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
 use std::path::PathBuf;
@@ -40,136 +38,6 @@ use tokio::sync::mpsc::UnboundedSender;
 struct PlayerInfo {
     name: String,
     ucid: Ucid,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum PanelDest {
-    All,
-    Side(Side),
-    Group(GroupId),
-    Unit(UnitId),
-}
-
-#[derive(Debug, Clone, Copy)]
-enum MsgTyp {
-    Chat(Option<PlayerId>),
-    Panel {
-        to: PanelDest,
-        display_time: i64,
-        clear_view: bool,
-    },
-}
-
-#[derive(Debug, Clone)]
-struct Msg {
-    typ: MsgTyp,
-    text: String,
-}
-
-#[derive(Debug, Clone, Default)]
-struct MsgQ(Vec<Msg>);
-
-impl MsgQ {
-    fn send<S: Into<String>>(&mut self, typ: MsgTyp, text: S) {
-        self.0.push(Msg {
-            typ,
-            text: text.into(),
-        })
-    }
-
-    #[allow(dead_code)]
-    fn panel_to_all<S: Into<String>>(&mut self, display_time: i64, clear_view: bool, text: S) {
-        self.send(
-            MsgTyp::Panel {
-                to: PanelDest::All,
-                display_time,
-                clear_view,
-            },
-            text,
-        )
-    }
-
-    fn panel_to_side<S: Into<String>>(
-        &mut self,
-        display_time: i64,
-        clear_view: bool,
-        side: Side,
-        text: S,
-    ) {
-        self.send(
-            MsgTyp::Panel {
-                to: PanelDest::Side(side),
-                display_time,
-                clear_view,
-            },
-            text,
-        )
-    }
-
-    fn panel_to_group<S: Into<String>>(
-        &mut self,
-        display_time: i64,
-        clear_view: bool,
-        group: GroupId,
-        text: S,
-    ) {
-        self.send(
-            MsgTyp::Panel {
-                to: PanelDest::Group(group),
-                display_time,
-                clear_view,
-            },
-            text,
-        )
-    }
-
-    fn panel_to_unit<S: Into<String>>(
-        &mut self,
-        display_time: i64,
-        clear_view: bool,
-        unit: UnitId,
-        text: S,
-    ) {
-        self.send(
-            MsgTyp::Panel {
-                to: PanelDest::Unit(unit),
-                display_time,
-                clear_view,
-            },
-            text,
-        )
-    }
-
-    fn process(&mut self, net: &Net, act: &Action) {
-        for msg in self.0.drain(..) {
-            debug!("server sending {:?}", msg);
-            let res = match msg.typ {
-                MsgTyp::Chat(to) => match to {
-                    None => net.send_chat(msg.text, true),
-                    Some(id) => net.send_chat_to(msg.text, id, Some(PlayerId::from(1))),
-                },
-                MsgTyp::Panel {
-                    to,
-                    display_time,
-                    clear_view,
-                } => match to {
-                    PanelDest::All => act.out_text(msg.text, display_time, clear_view),
-                    PanelDest::Group(gid) => {
-                        act.out_text_for_group(gid, msg.text, display_time, clear_view)
-                    }
-                    PanelDest::Side(side) => {
-                        act.out_text_for_coalition(side, msg.text, display_time, clear_view)
-                    }
-                    PanelDest::Unit(uid) => {
-                        act.out_text_for_unit(uid, msg.text, display_time, clear_view)
-                    }
-                },
-            };
-            if let Err(e) = res {
-                error!("could not send message {:?}", e)
-            }
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -184,7 +52,6 @@ struct Context {
     airborne: FxHashSet<SlotId>,
     captureable: FxHashMap<ObjectiveId, usize>,
     force_to_spectators: FxHashSet<PlayerId>,
-    pending_messages: MsgQ,
     last_cull: DateTime<Utc>,
 }
 
@@ -287,8 +154,8 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     {
         Ok(()) => {
             let msg = String::from(format_compact!("Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!", side));
-            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
-            ctx.pending_messages.send(
+            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.msgs().send(
                 MsgTyp::Chat(None),
                 format_compact!("{} has joined {:?} team", ifo.name, side),
             );
@@ -300,7 +167,7 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
                 Some(1) => format_compact!("You are already on {:?} team. You may sitch sides 1 time by typing -switch {:?}.", orig_side, side),
                 Some(n) => format_compact!("You are already on {:?} team. You may switch sides {n} times. Type -switch {:?}.", orig_side, side),
             });
-            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
         }
     }
     Ok(String::from(""))
@@ -323,9 +190,9 @@ fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String>
     match ctx.db.sideswitch_player(&ifo.ucid, side) {
         Ok(()) => {
             let msg = String::from(format_compact!("{} has switched to {:?}", ifo.name, side));
-            ctx.pending_messages.send(MsgTyp::Chat(None), msg);
+            ctx.db.msgs().send(MsgTyp::Chat(None), msg);
         }
-        Err(e) => ctx.pending_messages.send(MsgTyp::Chat(Some(id)), e),
+        Err(e) => ctx.db.msgs().send(MsgTyp::Chat(Some(id)), e),
     }
     Ok(String::from(""))
 }
@@ -337,7 +204,7 @@ fn lives_command(id: PlayerId) -> Result<()> {
         .get(&id)
         .ok_or_else(|| anyhow!("missing info for player {:?}", id))?;
     let msg = lives(&mut ctx.db, &ifo.ucid, None)?;
-    ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
+    ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
     Ok(())
 }
 
@@ -369,7 +236,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
         SlotAuth::NoLives => Ok(false),
         SlotAuth::ObjectiveHasNoLogistics => {
             let msg = format_compact!("Objective is capturable");
-            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
         SlotAuth::NotRegistered(side) => {
@@ -378,7 +245,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
                 side,
                 side
             ));
-            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
         SlotAuth::ObjectiveNotOwned(side) => {
@@ -386,7 +253,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
                 "{:?} does not own the objective associated with this slot",
                 side
             ));
-            ctx.pending_messages.send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
         SlotAuth::Yes => Ok(true),
@@ -564,7 +431,7 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
     if let Ok(lives) = lives(&mut ctx.db, &ucid, typ) {
         msg.push_str(&lives)
     }
-    ctx.pending_messages.panel_to_unit(10, false, uid, msg);
+    ctx.db.msgs().panel_to_unit(10, false, uid, msg);
     Ok(())
 }
 
@@ -598,7 +465,7 @@ fn advise_captureable(ctx: &mut Context) -> Result<()> {
         *dur += 1;
         if *dur == 10 {
             let m = format_compact!("{} is now capturable", ctx.db.objective(oid)?.name());
-            ctx.pending_messages.panel_to_all(30, false, m);
+            ctx.db.msgs().panel_to_all(30, false, m);
         }
     }
     ctx.captureable.retain(|oid, _| cur_cap.contains(oid));
@@ -608,11 +475,12 @@ fn advise_captureable(ctx: &mut Context) -> Result<()> {
 fn advise_captured(ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
     for (side, oid) in ctx.db.check_capture(ts)? {
         let name = ctx.db.objective(&oid)?.name();
-        let m = format_compact!("our forces have captured {}", name);
-        ctx.pending_messages.panel_to_side(15, false, side, m);
-        let m = format_compact!("we have lost {}", name);
-        ctx.pending_messages
-            .panel_to_side(15, false, side.opposite(), m);
+        let mcap = format_compact!("our forces have captured {}", name);
+        let mlost = format_compact!("we have lost {}", name);
+        ctx.db.msgs().panel_to_side(15, false, side, mcap);
+        ctx.db
+            .msgs()
+            .panel_to_side(15, false, side.opposite(), mlost);
         ctx.captureable.remove(&oid);
     }
     Ok(())
@@ -625,21 +493,15 @@ fn cull_or_spawn_units(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Res
         let (threatened, cleared) = ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?;
         for oid in threatened {
             let obj = ctx.db.objective(&oid)?;
-            ctx.pending_messages.panel_to_side(
-                10,
-                false,
-                obj.owner(),
-                format_compact!("enemies spotted near {}", obj.name()),
-            )
+            let owner = obj.owner();
+            let msg = format_compact!("enemies spotted near {}", obj.name());
+            ctx.db.msgs().panel_to_side(10, false, owner, msg)
         }
         for oid in cleared {
             let obj = ctx.db.objective(&oid)?;
-            ctx.pending_messages.panel_to_side(
-                10,
-                false,
-                obj.owner(),
-                format_compact!("{} is no longer threatened", obj.name()),
-            )
+            let owner = obj.owner();
+            let msg = format_compact!("{} is no longer threatened", obj.name());
+            ctx.db.msgs().panel_to_side(10, false, owner, msg)
         }
     }
     Ok(())
@@ -675,7 +537,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = advise_captureable(ctx) {
         error!("error advise capturable {e}")
     }
-    ctx.pending_messages.process(&net, &act);
+    ctx.db.msgs().process(&net, &act);
     Ok(())
 }
 

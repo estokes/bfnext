@@ -2,6 +2,7 @@ extern crate nalgebra as na;
 use self::cargo::Cargo;
 use crate::{
     cfg::{Cfg, Crate, Deployable, DeployableLogistics, LifeType, Troop, Vehicle},
+    msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Result};
@@ -15,6 +16,7 @@ use dcso3::{
     group::GroupCategory,
     net::{SlotId, Ucid},
     rotate2d,
+    trigger::MarkId,
     unit::Unit,
     MizLua, Position3, String, Vector2,
 };
@@ -27,7 +29,8 @@ use std::{
     collections::{hash_map::Entry, BTreeMap, VecDeque},
     fs::{self, File},
     path::{Path, PathBuf},
-    str::FromStr, sync::Arc,
+    str::FromStr,
+    sync::Arc,
 };
 
 pub mod cargo;
@@ -143,9 +146,22 @@ macro_rules! objective_mut {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
     Objective,
-    Deployed(Ucid, Deployable),
-    Troop(Ucid, Troop),
-    Crate(ObjectiveId, Ucid, Crate),
+    Deployed {
+        player: Ucid,
+        spec: Deployable,
+        mark: Option<MarkId>,
+    },
+    Troop {
+        player: Ucid,
+        spec: Troop,
+        mark: Option<MarkId>,
+    },
+    Crate {
+        origin: ObjectiveId,
+        player: Ucid,
+        spec: Crate,
+        mark: Option<MarkId>,
+    },
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -403,6 +419,7 @@ struct Ephemeral {
     delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<Despawn>,
+    msgs: MsgQ,
 }
 
 impl Ephemeral {
@@ -611,6 +628,10 @@ impl Db {
         self.persisted.players.get(ucid)
     }
 
+    pub fn msgs(&mut self) -> &mut MsgQ {
+        &mut self.ephemeral.msgs
+    }
+
     fn spawn_group<'lua>(
         &self,
         idx: &MizIndex,
@@ -720,18 +741,29 @@ impl Db {
             .groups_by_side
             .get_mut_cow(&group.side)
             .map(|m| m.remove_cow(gid));
-        match &group.origin {
-            DeployKind::Objective => (),
-            DeployKind::Crate(_, ucid, _) => {
+        let mark = match &group.origin {
+            DeployKind::Objective => None,
+            DeployKind::Crate {
+                player,
+                spec: _,
+                origin: _,
+                mark,
+            } => {
                 self.persisted.crates.remove_cow(gid);
-                self.persisted.players[ucid].crates.remove_cow(gid);
+                self.persisted.players[player].crates.remove_cow(gid);
+                *mark
             }
-            DeployKind::Deployed(_, _) => {
+            DeployKind::Deployed { mark, .. } => {
                 self.persisted.deployed.remove_cow(gid);
+                *mark
             }
-            DeployKind::Troop(_, _) => {
+            DeployKind::Troop { mark, .. } => {
                 self.persisted.troops.remove_cow(gid);
+                *mark
             }
+        };
+        if let Some(mark) = mark {
+            self.ephemeral.msgs.delete_mark(mark);
         }
         let mut units: SmallVec<[String; 16]> = smallvec![];
         for uid in &group.units {
@@ -889,6 +921,12 @@ impl Db {
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let (mut positions, mut positions_by_typ, heading) =
             compute_unit_positions(&spctx, idx, location, &template.group)?;
+        let group_center = centroid2d(
+            positions
+                .iter()
+                .chain(positions_by_typ.values().flat_map(|v| v.iter()))
+                .map(|p| *p),
+        );
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}-{}", template_name, gid));
@@ -925,17 +963,50 @@ impl Db {
             self.persisted.units.insert_cow(uid, spawned_unit);
             self.persisted.units_by_name.insert_cow(unit_name, uid);
         }
-        match &spawned.origin {
+        match &mut spawned.origin {
             DeployKind::Objective => (),
-            DeployKind::Crate(_, ucid, _) => {
+            DeployKind::Crate {
+                player, mark, spec, ..
+            } => {
                 self.persisted.crates.insert_cow(gid);
-                self.persisted.players[ucid].crates.insert_cow(gid);
+                let player = &mut self.persisted.players[player];
+                player.crates.insert_cow(gid);
+                let name = player.name.clone();
+                if mark.is_none() {
+                    let msg = format_compact!("{} id {gid} deployed by {name}", spec.name);
+                    *mark = Some(
+                        self.ephemeral
+                            .msgs
+                            .mark_to_side(side, group_center, true, msg),
+                    );
+                }
             }
-            DeployKind::Deployed(_, _) => {
+            DeployKind::Deployed { mark, spec, player } => {
                 self.persisted.deployed.insert_cow(gid);
+                if mark.is_none() {
+                    let name = self.persisted.players[player].name.clone();
+                    let msg = format_compact!(
+                        "{} id {gid} deployed by {name}",
+                        spec.path.last().unwrap()
+                    );
+                    *mark = Some(
+                        self.ephemeral
+                            .msgs
+                            .mark_to_side(side, group_center, true, msg),
+                    );
+                }
             }
-            DeployKind::Troop(_, _) => {
+            DeployKind::Troop { mark, player, spec } => {
                 self.persisted.troops.insert_cow(gid);
+                if mark.is_none() {
+                    let name = self.persisted.players[player].name.clone();
+                    let msg = format_compact!("{} id {gid} deployed by {name}", spec.name);
+                    *mark = Some(
+                        self.ephemeral
+                            .msgs
+                            .mark_to_side(side, group_center, true, msg),
+                    )
+                }
             }
         }
         self.persisted.groups.insert_cow(gid, spawned);

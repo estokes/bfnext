@@ -177,7 +177,10 @@ impl Db {
         }
         let dir = Vector2::new(st.pos.x.x, st.pos.x.z);
         let approx_spawn_pos = st.point + dir * 20.;
-        if !self.list_crates_near_point(approx_spawn_pos, 10.)?.is_empty() {
+        if !self
+            .list_crates_near_point(approx_spawn_pos, 10.)?
+            .is_empty()
+        {
             bail!("move away from other crates or pick up the existing crate")
         }
         let to_delete = self.ephemeral.cfg.max_crates.and_then(|max_crates| {
@@ -208,7 +211,12 @@ impl Db {
             offset_direction: dir,
             group_heading: dir.y.atan2(dir.x),
         };
-        let dk = DeployKind::Crate(oid, st.ucid.clone(), crate_cfg.clone());
+        let dk = DeployKind::Crate {
+            origin: oid,
+            player: st.ucid.clone(),
+            spec: crate_cfg.clone(),
+            mark: None,
+        };
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?;
         }
@@ -233,8 +241,12 @@ impl Db {
         for gid in &self.persisted.crates {
             let group = group!(self, gid)?;
             let (oid, crate_def) = match &group.origin {
-                DeployKind::Crate(oid, _, crt) => (oid, crt),
-                DeployKind::Deployed(_, _) | DeployKind::Troop(_, _) | DeployKind::Objective => {
+                DeployKind::Crate {
+                    origin: oid,
+                    spec: crt,
+                    ..
+                } => (oid, crt),
+                DeployKind::Deployed { .. } | DeployKind::Troop { .. } | DeployKind::Objective => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
             };
@@ -311,7 +323,7 @@ impl Db {
         let mut oldest = None;
         for gid in &self.persisted.deployed {
             let group = &group!(self, gid)?;
-            if let DeployKind::Deployed(_, d) = &group.origin {
+            if let DeployKind::Deployed { spec: d, .. } = &group.origin {
                 if let Some(d_name) = d.path.last() {
                     if group.side == side && d_name.as_str() == name {
                         if oldest.is_none() {
@@ -359,7 +371,7 @@ impl Db {
         let mut oldest = None;
         for gid in &self.persisted.troops {
             let group = group!(self, gid)?;
-            if let DeployKind::Troop(_, tr) = &group.origin {
+            if let DeployKind::Troop { spec: tr, .. } = &group.origin {
                 if group.side == side && name == tr.name.as_str() {
                     if oldest.is_none() {
                         oldest = Some(*gid);
@@ -491,7 +503,7 @@ impl Db {
                     for gid in &db.persisted.deployed {
                         let group = &db.persisted.groups[gid];
                         match &group.origin {
-                            DeployKind::Deployed(_, d) if d.path.last() == Some(&dep) => {
+                            DeployKind::Deployed { spec: d, .. } if d.path.last() == Some(&dep) => {
                                 for uid in &group.units {
                                     let unit_pos = db.persisted.units[uid].pos;
                                     if na::distance_squared(&unit_pos.into(), &cr.pos.into())
@@ -503,10 +515,10 @@ impl Db {
                                 }
                                 reasons.push(format_compact!("not close enough to repair {dep}"));
                             }
-                            DeployKind::Deployed(_, _)
-                            | DeployKind::Crate(_, _, _)
+                            DeployKind::Deployed { .. }
+                            | DeployKind::Crate { .. }
                             | DeployKind::Objective
-                            | DeployKind::Troop(_, _) => (),
+                            | DeployKind::Troop { .. } => (),
                         }
                     }
                     if let Some(gid) = group_to_repair {
@@ -547,8 +559,8 @@ impl Db {
                 for cr in iter() {
                     match db.persisted.groups.get(&cr.group) {
                         Some(group) => {
-                            if let DeployKind::Crate(source, _, _) = &group.origin {
-                                check |= oid == source;
+                            if let DeployKind::Crate { origin, .. } = &group.origin {
+                                check |= oid == origin;
                             }
                         }
                         None => error!("missing group {:?}", cr.group),
@@ -572,8 +584,8 @@ impl Db {
                 for cr in iter() {
                     match db.persisted.groups.get(&cr.group) {
                         Some(group) => {
-                            if let DeployKind::Crate(source, _, _) = &group.origin {
-                                is_origin |= oid == source;
+                            if let DeployKind::Crate { origin, .. } = &group.origin {
+                                is_origin |= oid == origin;
                             }
                         }
                         None => error!("missing group {:?}", cr.group),
@@ -599,7 +611,7 @@ impl Db {
             let mut pos_by_typ: FxHashMap<String, Vector2> = FxHashMap::default();
             for cr in have.iter().flat_map(|(_, cr)| cr.iter()) {
                 let group = &group!(db, cr.group)?;
-                if let DeployKind::Crate(_, _, spec) = &group.origin {
+                if let DeployKind::Crate { spec, .. } = &group.origin {
                     if let Some(typ) = spec.pos_unit.as_ref() {
                         let uid = group
                             .units
@@ -727,7 +739,11 @@ impl Db {
                                         centroid,
                                         pos.x.z.atan2(pos.x.x),
                                     )?;
-                                    let origin = DeployKind::Deployed(st.ucid, spec.clone());
+                                    let origin = DeployKind::Deployed {
+                                        player: st.ucid,
+                                        spec: spec.clone(),
+                                        mark: None,
+                                    };
                                     let gid = self.add_and_queue_group(
                                         &spctx,
                                         idx,
@@ -813,7 +829,12 @@ impl Db {
             offset_direction: Vector2::new(st.pos.x.x, st.pos.x.z),
             group_heading: st.pos.x.z.atan2(st.pos.x.x),
         };
-        let dk = DeployKind::Crate(oid, st.ucid, crate_cfg.clone());
+        let dk = DeployKind::Crate {
+            origin: oid,
+            player: st.ucid,
+            spec: crate_cfg.clone(),
+            mark: None,
+        };
         let spctx = SpawnCtx::new(lua)?;
         self.add_and_queue_group(&spctx, idx, st.side, spawnpos, &template, dk, None)?;
         Ok(crate_cfg)
@@ -949,7 +970,11 @@ impl Db {
             offset_direction: Vector2::new(pos.x.x, pos.x.z),
             group_heading: pos.x.z.atan2(pos.x.x),
         };
-        let dk = DeployKind::Troop(ucid, troop_cfg.clone());
+        let dk = DeployKind::Troop {
+            player: ucid,
+            spec: troop_cfg.clone(),
+            mark: None,
+        };
         let spctx = SpawnCtx::new(lua)?;
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
@@ -993,7 +1018,7 @@ impl Db {
                 .into_iter()
                 .filter_map(|gid| self.persisted.groups.get(gid).map(|g| (*gid, g)))
                 .find_map(|(gid, g)| {
-                    if let DeployKind::Troop(_, troop_cfg) = &g.origin {
+                    if let DeployKind::Troop { spec, .. } = &g.origin {
                         if g.side == side {
                             let in_range = g
                                 .units
@@ -1003,7 +1028,7 @@ impl Db {
                                     na::distance_squared(&u.pos.into(), &point.into()) <= max_dist
                                 });
                             if in_range {
-                                return Some((gid, troop_cfg.clone()));
+                                return Some((gid, spec.clone()));
                             }
                         }
                     }

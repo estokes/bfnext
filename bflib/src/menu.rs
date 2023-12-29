@@ -76,11 +76,11 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
         Ok(unpakistan) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} {unpakistan}");
-            ctx.pending_messages.panel_to_side(10, false, side, msg);
+            ctx.db.msgs().panel_to_side(10, false, side, msg);
         }
         Err(e) => {
             let msg = format_compact!("{}", e);
-            ctx.pending_messages.panel_to_group(10, false, gid, msg)
+            ctx.db.msgs().panel_to_group(10, false, gid, msg)
         }
     }
     Ok(())
@@ -124,11 +124,11 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
                 dep.limit,
                 enforce
             );
-            ctx.pending_messages.panel_to_group(10, false, gid, msg)
+            ctx.db.msgs().panel_to_group(10, false, gid, msg)
         }
         Err(e) => {
             let msg = format_compact!("crate could not be loaded: {}", e);
-            ctx.pending_messages.panel_to_group(10, false, gid, msg)
+            ctx.db.msgs().panel_to_group(10, false, gid, msg)
         }
     }
     Ok(())
@@ -140,11 +140,11 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     match ctx.db.unload_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
             let msg = format_compact!("{} crate unloaded", cr.name);
-            ctx.pending_messages.panel_to_group(10, false, gid, msg)
+            ctx.db.msgs().panel_to_group(10, false, gid, msg)
         }
         Err(e) => {
             let msg = format_compact!("{}", e);
-            ctx.pending_messages.panel_to_group(10, false, gid, msg)
+            ctx.db.msgs().panel_to_group(10, false, gid, msg)
         }
     }
     Ok(())
@@ -193,7 +193,7 @@ pub(super) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId)
         msg.push_str("----------------------------\n");
     }
     msg.push_str(&format_compact!("total cargo weight: {} kg", total as u32));
-    ctx.pending_messages
+    ctx.db.msgs()
         .panel_to_unit(15, false, slot.as_unit_id().unwrap(), msg);
     Ok(())
 }
@@ -219,9 +219,10 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
                 nc.distance as u32
             ));
         }
-        ctx.pending_messages.panel_to_group(10, false, gid, msg)
+        ctx.db.msgs().panel_to_group(10, false, gid, msg)
     } else {
-        ctx.pending_messages
+        drop(nearby);
+        ctx.db.msgs()
             .panel_to_group(10, false, gid, "No nearby crates")
     }
     Ok(())
@@ -231,7 +232,7 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     if let Err(e) = ctx.db.destroy_nearby_crate(lua, &ctx.idx, &slot) {
-        ctx.pending_messages
+        ctx.db.msgs()
             .panel_to_group(10, false, gid, format_compact!("{}", e))
     }
     Ok(())
@@ -242,7 +243,7 @@ fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
     let (_side, slot) = slot_for_group(lua, ctx, &arg.group)?;
     match ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.name) {
         Err(e) => ctx
-            .pending_messages
+            .db.msgs()
             .panel_to_group(10, false, arg.group, format_compact!("{e}")),
         Ok(st) => {
             if let Some(max_crates) = ctx.db.cfg().max_crates {
@@ -253,7 +254,7 @@ fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
                         "{n}/{max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
                     ),
                 };
-                ctx.pending_messages
+                ctx.db.msgs()
                     .panel_to_group(10, false, arg.group, msg)
             }
         }
@@ -284,10 +285,10 @@ fn load_troops(lua: MizLua, arg: SpawnArg) -> Result<()> {
                 },
             };
             let msg = format_compact!("{player} loaded {}, {n}/{}, {}", tr.name, tr.limit, enforce);
-            ctx.pending_messages.panel_to_side(10, false, side, msg)
+            ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
-            .pending_messages
+            .db.msgs()
             .panel_to_group(10, false, arg.group, format_compact!("{e}")),
     }
     Ok(())
@@ -300,10 +301,10 @@ fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} dropped {} troops into the field", tr.name);
-            ctx.pending_messages.panel_to_side(10, false, side, msg)
+            ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
-            .pending_messages
+            .db.msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
     }
     Ok(())
@@ -316,10 +317,10 @@ fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} extracted {} troops from the field", tr.name);
-            ctx.pending_messages.panel_to_side(10, false, side, msg)
+            ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
-            .pending_messages
+            .db.msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
     }
     Ok(())
@@ -332,10 +333,10 @@ fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} returned {} troops", tr.name);
-            ctx.pending_messages.panel_to_side(10, false, side, msg)
+            ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
-            .pending_messages
+            .db.msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
     }
     Ok(())

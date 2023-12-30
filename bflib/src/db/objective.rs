@@ -264,6 +264,46 @@ impl Db {
         Ok(())
     }
 
+    fn process_moved_units(&mut self, now: DateTime<Utc>) -> Result<()> {
+        match self.ephemeral.moved_units_processed {
+            Some(st) => {
+                for (_, set) in self.ephemeral.moved_units.range(st..=now) {
+                    for uid in set {
+                        self.ephemeral
+                            .units_potentially_close_to_enemies
+                            .insert(*uid);
+                        self.ephemeral.units_potentially_on_walkabout.insert(*uid);
+                    }
+                }
+            }
+            None => {
+                for (uid, unit) in &self.persisted.units {
+                    let group = group!(self, unit.group)?;
+                    match group.origin {
+                        DeployKind::Crate { .. } => (),
+                        DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
+                            self.ephemeral
+                                .units_potentially_close_to_enemies
+                                .insert(*uid);
+                        }
+                        DeployKind::Objective => {
+                            let oid = self.persisted.objectives_by_group[&unit.group];
+                            let obj = &self.persisted.objectives[&oid];
+                            if obj.owner == group.side {
+                                self.ephemeral
+                                    .units_potentially_close_to_enemies
+                                    .insert(*uid);
+                                self.ephemeral.units_potentially_on_walkabout.insert(*uid);
+                            }
+                        }
+                    }
+                }
+                self.ephemeral.moved_units_processed = Some(now);
+            }
+        }
+        Ok(())
+    }
+
     pub fn cull_or_respawn_objectives(
         &mut self,
         lua: MizLua,
@@ -284,27 +324,7 @@ impl Db {
                     .map(|inst| (side, inst.position.p, inst.typ.clone()))
             })
             .collect::<SmallVec<[_; 64]>>();
-        match self.ephemeral.moved_units_processed {
-            None => {
-                for (uid, _) in &self.persisted.units {
-                    self.ephemeral
-                        .units_potentially_close_to_enemies
-                        .insert(*uid);
-                    self.ephemeral.units_potentially_on_walkabout.insert(*uid);
-                }
-                self.ephemeral.moved_units_processed = Some(now);
-            }
-            Some(st) => {
-                for (_, set) in self.ephemeral.moved_units.range(st..=now) {
-                    for uid in set {
-                        self.ephemeral
-                            .units_potentially_close_to_enemies
-                            .insert(*uid);
-                        self.ephemeral.units_potentially_on_walkabout.insert(*uid);
-                    }
-                }
-            }
-        }
+        self.process_moved_units(now)?;
         let cfg = self.cfg();
         let cull_distance = (cfg.unit_cull_distance as f64).powi(2);
         let ground_cull_distance = (cfg.ground_vehicle_cull_distance as f64).powi(2);
@@ -347,7 +367,7 @@ impl Db {
                             if dist > radius2 || self.ephemeral.ca_controlled.contains(uid) {
                                 // part of this base is on walkabout, stay spawned
                                 spawn = true;
-                                is_on_walkabout.insert(*uid);
+                                is_on_walkabout.insert(dbg!(*uid));
                             }
                         }
                     }
@@ -358,10 +378,10 @@ impl Db {
                 let group = group!(self, unit.group)?;
                 if obj.owner != group.side {
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
-                    if dist <= ground_cull_distance {
+                    if dbg!(dist) <= dbg!(ground_cull_distance) {
                         spawn = true;
                         is_threatened = true;
-                        is_close_to_enemies.insert(*uid);
+                        is_close_to_enemies.insert(dbg!(*uid));
                     }
                 }
             }

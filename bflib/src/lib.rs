@@ -43,6 +43,7 @@ struct PlayerInfo {
 
 #[derive(Debug, Default)]
 struct Context {
+    loaded: bool,
     idx: env::miz::MizIndex,
     db: Db,
     to_background: Option<UnboundedSender<bg::Task>>,
@@ -559,10 +560,18 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     Ok(())
 }
 
+fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    ctx.loaded = true;
+    debug!("mission loaded");
+    Ok(())
+}
+
 fn init_hooks(lua: HooksLua) -> Result<()> {
     info!("setting user hooks");
     UserHooks::new(lua)
         .on_player_change_slot(on_player_change_slot)?
+        .on_mission_load_end(on_mission_load_end)?
         .on_player_try_connect(on_player_try_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .register()?;
@@ -570,11 +579,18 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    debug!("mission loaded is {}", ctx.loaded);
     let timer = Timer::singleton(lua)?;
-    let when = timer.get_time()? + 5.;
-    timer.schedule_function(when, mlua::Value::Nil, move |lua, _, _| {
-        delayed_init_miz(lua)?;
-        Ok(None)
+    let when = timer.get_time()? + 1.;
+    timer.schedule_function(when, mlua::Value::Nil, move |lua, _, now| {
+        let ctx = unsafe { Context::get_mut() };
+        if ctx.loaded {
+            delayed_init_miz(lua)?;
+            Ok(None)
+        } else {
+            Ok(Some(now + 1.))
+        }
     })?;
     Ok(())
 }

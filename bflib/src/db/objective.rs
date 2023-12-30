@@ -292,7 +292,7 @@ impl Db {
                     }
                 }
             })
-            .collect::<Vec<_>>();
+            .collect::<SmallVec<[_; 64]>>();
         let cfg = self.cfg();
         let cull_distance = (cfg.unit_cull_distance as f64).powi(2);
         let mut to_spawn: SmallVec<[ObjectiveId; 8]> = smallvec![];
@@ -327,7 +327,7 @@ impl Db {
             if !obj.spawned && spawn {
                 to_spawn.push(*oid);
             } else if obj.spawned && !spawn {
-                to_cull.push(dbg!(*oid));
+                to_cull.push(*oid);
             }
         }
         let mut became_threatened: SmallVec<[ObjectiveId; 4]> = smallvec![];
@@ -369,13 +369,13 @@ impl Db {
                         Some(_) => self
                             .ephemeral
                             .despawnq
-                            .push_back(Despawn::Group(group.name.clone())),
+                            .push_back((*gid, Despawn::Group(group.name.clone()))),
                         None => {
                             for uid in &group.units {
                                 let unit = unit!(self, uid)?;
                                 self.ephemeral
                                     .despawnq
-                                    .push_back(Despawn::Static(unit.name.clone()))
+                                    .push_back((*gid, Despawn::Static(unit.name.clone())))
                             }
                         }
                     }

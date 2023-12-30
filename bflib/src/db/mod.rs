@@ -424,7 +424,7 @@ struct Ephemeral {
     uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
     spawnq: VecDeque<GroupId>,
-    despawnq: VecDeque<Despawn>,
+    despawnq: VecDeque<(GroupId, Despawn)>,
     msgs: MsgQ,
 }
 
@@ -746,7 +746,14 @@ impl Db {
         let slen = self.ephemeral.spawnq.len();
         if dlen > 0 {
             for _ in 0..max(2, dlen >> 2) {
-                if let Some(name) = self.ephemeral.despawnq.pop_front() {
+                if let Some((gid, name)) = self.ephemeral.despawnq.pop_front() {
+                    if let Some(group) = self.persisted.groups.get(&gid) {
+                        for uid in &group.units {
+                            if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
+                                self.ephemeral.uid_by_object_id.remove(&id);
+                            }
+                        }
+                    }
                     spctx.despawn(name)?
                 }
             }
@@ -852,14 +859,14 @@ impl Db {
                 for unit in &units {
                     self.ephemeral
                         .despawnq
-                        .push_back(Despawn::Static(unit.clone()));
+                        .push_back((*gid, Despawn::Static(unit.clone())));
                 }
             }
             Some(_) => {
                 // it's a normal group
                 self.ephemeral
                     .despawnq
-                    .push_back(Despawn::Group(group.name.clone()));
+                    .push_back((*gid, Despawn::Group(group.name.clone())));
             }
         }
         Ok(())

@@ -289,8 +289,26 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
-                if let Err(e) = ctx.db.unit_born(unit.object_id()?, &unit) {
+                if let Err(e) = ctx.db.unit_born(&unit) {
                     error!("unit born failed {:?} {:?}", unit, e);
+                }
+            }
+        }
+        Event::PlayerEnterUnit(e) => {
+            if let Some(o) = &e.initiator {
+                if let Ok(unit) = o.as_unit() {
+                    if let Err(e) = ctx.db.player_entered_unit(&unit) {
+                        error!("player enter unit failed {:?} {:?}", unit, e)
+                    }
+                }
+            }
+        }
+        Event::PlayerLeaveUnit(e) => {
+            if let Some(o) = &e.initiator {
+                if let Ok(unit) = o.as_unit() {
+                    if let Err(e) = ctx.db.player_left_unit(&unit) {
+                        error!("player left unit failed {:?} {:?}", unit, e)
+                    }
                 }
             }
         }
@@ -350,12 +368,12 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
 }
 
 fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<CompactString> {
-    db.maybe_reset_lives(ucid)?;
+    db.maybe_reset_lives(ucid, Utc::now())?;
     let player = db
         .player(ucid)
         .ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
     let cfg = db.cfg();
-    let lives = player.lives();
+    let lives = &player.lives;
     let mut msg = CompactString::new("");
     let now = Utc::now();
     for (typ, (n, reset_after)) in &cfg.default_lives {
@@ -401,9 +419,9 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
         ($e:expr) => {
             match $e {
                 Ok(r) => r,
-                Err(_) => return false
+                Err(_) => return false,
             }
-        }
+        };
     }
     let db = &mut ctx.db;
     let mut returned: SmallVec<[(LifeType, SlotId); 4]> = smallvec![];
@@ -458,7 +476,9 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
     let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events > freq {
         ctx.last_slow_timed_events = ts;
-        let (threatened, cleared) = ctx.db.cull_or_respawn_objectives(lua)?;
+        ctx.db.update_unit_positions(lua, ts)?;
+        ctx.db.update_player_positions(lua)?;
+        let (threatened, cleared) = ctx.db.cull_or_respawn_objectives(lua, ts)?;
         for oid in threatened {
             let obj = ctx.db.objective(&oid)?;
             let owner = obj.owner();
@@ -474,7 +494,6 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
         if let Err(e) = ctx.db.remark_objectives() {
             error!("could not remark objectives {e}")
         }
-        ctx.db.update_unit_positions(lua)?;
     }
     Ok(())
 }

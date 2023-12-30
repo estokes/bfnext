@@ -777,7 +777,7 @@ impl<'lua> FromLua<'lua> for LuaVec2 {
 
 pub type Vector3 = na::base::Vector3<f64>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct LuaVec3(pub na::base::Vector3<f64>);
 
 impl Deref for LuaVec3 {
@@ -815,7 +815,7 @@ impl<'lua> IntoLua<'lua> for LuaVec3 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct Position3 {
     pub p: LuaVec3,
     pub x: LuaVec3,

@@ -1,6 +1,6 @@
-use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId, Set};
+use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId, Set, UnitId};
 use crate::{
-    cfg::{Deployable, DeployableLogistics, Vehicle},
+    cfg::{Deployable, DeployableLogistics},
     db::{Map, ObjectiveKind},
     group, group_mut, maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
@@ -15,12 +15,10 @@ use dcso3::{
     coord::Coord,
     env::miz::{GroupKind, MizIndex},
     land::Land,
-    object::DcsObject,
-    unit::Unit,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
-use fxhash::FxHashMap;
-use log::{debug, error, info};
+use fxhash::{FxHashMap, FxHashSet};
+use log::debug;
 use smallvec::{smallvec, SmallVec};
 use std::cmp::max;
 
@@ -269,38 +267,59 @@ impl Db {
     pub fn cull_or_respawn_objectives(
         &mut self,
         lua: MizLua,
+        now: DateTime<Utc>,
     ) -> Result<(SmallVec<[ObjectiveId; 4]>, SmallVec<[ObjectiveId; 4]>)> {
-        let now = Utc::now();
         let land = Land::singleton(lua)?;
         let players = self
-            .slotted_players()
-            .filter_map(|sp| {
-                let side = sp.player.side;
-                let pos_typ = Unit::get_instance(lua, sp.unit).and_then(|u| {
-                    let pos = u.get_point()?;
-                    let typ = u.get_type_name()?;
-                    Ok((pos, Vehicle::from(typ)))
-                });
-                match pos_typ {
-                    Ok((pos, typ)) => Some((side, pos, typ)),
-                    Err(e) => {
-                        error!("failed to get position of player {:?} {:?}", sp, e);
-                        None
-                    }
-                }
+            .ephemeral
+            .players_by_slot
+            .values()
+            .filter_map(|ucid| {
+                let player = &self.persisted.players[ucid];
+                let side = player.side;
+                player
+                    .current_slot
+                    .as_ref()
+                    .and_then(|(_, inst)| inst.as_ref())
+                    .map(|inst| (side, inst.position.p, inst.typ.clone()))
             })
             .collect::<SmallVec<[_; 64]>>();
+        match self.ephemeral.moved_units_processed {
+            None => {
+                for (uid, _) in &self.persisted.units {
+                    self.ephemeral
+                        .units_potentially_close_to_enemies
+                        .insert(*uid);
+                    self.ephemeral.units_potentially_on_walkabout.insert(*uid);
+                }
+                self.ephemeral.moved_units_processed = Some(now);
+            }
+            Some(st) => {
+                for (_, set) in self.ephemeral.moved_units.range(st..=now) {
+                    for uid in set {
+                        self.ephemeral
+                            .units_potentially_close_to_enemies
+                            .insert(*uid);
+                        self.ephemeral.units_potentially_on_walkabout.insert(*uid);
+                    }
+                }
+            }
+        }
         let cfg = self.cfg();
         let cull_distance = (cfg.unit_cull_distance as f64).powi(2);
+        let ground_cull_distance = (cfg.ground_vehicle_cull_distance as f64).powi(2);
         let mut to_spawn: SmallVec<[ObjectiveId; 8]> = smallvec![];
         let mut to_cull: SmallVec<[ObjectiveId; 8]> = smallvec![];
         let mut threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
         let mut not_threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
+        let mut is_on_walkabout: FxHashSet<UnitId> = FxHashSet::default();
+        let mut is_close_to_enemies: FxHashSet<UnitId> = FxHashSet::default();
         for (oid, obj) in &self.persisted.objectives {
             let pos3 = {
                 let alt = land.get_height(LuaVec2(obj.pos))?;
                 LuaVec3(Vector3::new(obj.pos.x, alt, obj.pos.y))
             };
+            let radius2 = obj.radius.powi(2);
             let mut spawn = false;
             let mut is_threatened = false;
             for (side, pos, typ) in &players {
@@ -316,6 +335,36 @@ impl Db {
                     }
                 }
             }
+            for uid in &self.ephemeral.units_potentially_on_walkabout {
+                let unit = unit!(self, uid)?;
+                match group!(self, unit.group)?.origin {
+                    DeployKind::Crate { .. }
+                    | DeployKind::Deployed { .. }
+                    | DeployKind::Troop { .. } => (),
+                    DeployKind::Objective => {
+                        if obj.groups[&obj.owner].contains(&unit.group) {
+                            let dist = na::distance_squared(&unit.pos.into(), &obj.pos.into());
+                            if dist > radius2 || self.ephemeral.ca_controlled.contains(uid) {
+                                // part of this base is on walkabout, stay spawned
+                                spawn = true;
+                                is_on_walkabout.insert(*uid);
+                            }
+                        }
+                    }
+                }
+            }
+            for uid in &self.ephemeral.units_potentially_close_to_enemies {
+                let unit = unit!(self, uid)?;
+                let group = group!(self, unit.group)?;
+                if obj.owner != group.side {
+                    let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
+                    if dist <= ground_cull_distance {
+                        spawn = true;
+                        is_threatened = true;
+                        is_close_to_enemies.insert(*uid);
+                    }
+                }
+            }
             if is_threatened {
                 threatened.push(*oid);
             } else {
@@ -327,6 +376,12 @@ impl Db {
                 to_cull.push(*oid);
             }
         }
+        self.ephemeral
+            .units_potentially_on_walkabout
+            .retain(|uid| is_on_walkabout.contains(uid));
+        self.ephemeral
+            .units_potentially_close_to_enemies
+            .retain(|uid| is_close_to_enemies.contains(uid));
         let mut became_threatened: SmallVec<[ObjectiveId; 4]> = smallvec![];
         let mut became_clear: SmallVec<[ObjectiveId; 4]> = smallvec![];
         for oid in &threatened {

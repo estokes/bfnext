@@ -1,11 +1,13 @@
-use super::{Db, Map, Player, Set};
-use crate::{cfg::LifeType, maybe};
+use super::{Db, Map, Player, Set, InstancedPlayer};
+use crate::{cfg::{LifeType, Vehicle}, maybe};
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{
     coalition::Side,
     net::{SlotId, SlotIdKind, Ucid},
-    String, Vector2,
+    object::DcsObject,
+    unit::Unit,
+    MizLua, String, Vector2,
 };
 use smallvec::{smallvec, SmallVec};
 
@@ -104,8 +106,7 @@ impl Db {
         }
     }
 
-    pub fn maybe_reset_lives(&mut self, ucid: &Ucid) -> Result<()> {
-        let now = Utc::now();
+    pub fn maybe_reset_lives(&mut self, ucid: &Ucid, now: DateTime<Utc>) -> Result<()> {
         let mut lt_to_reset: SmallVec<[LifeType; 2]> = smallvec![];
         let player = self
             .persisted
@@ -140,10 +141,10 @@ impl Db {
                 if slot.is_spectator() {
                     return SlotAuth::Yes;
                 }
-                return SlotAuth::NotRegistered(slot_side)
-            },
+                return SlotAuth::NotRegistered(slot_side);
+            }
         };
-        if let Some(slot) = player.current_slot.take() {
+        if let Some((slot, _)) = player.current_slot.take() {
             self.ephemeral.players_by_slot.remove(&slot);
             self.ephemeral.cargo.remove(&slot);
             if let Some(id) = self.ephemeral.object_id_by_slot.remove(&slot) {
@@ -183,7 +184,7 @@ impl Db {
                 let life_type = &self.ephemeral.cfg.life_types[&objective.slots[&slot]];
                 macro_rules! yes {
                     () => {
-                        player.current_slot = Some(slot.clone());
+                        player.current_slot = Some((slot.clone(), None));
                         self.ephemeral.players_by_slot.insert(slot, ucid.clone());
                         break SlotAuth::Yes;
                     };
@@ -262,5 +263,27 @@ impl Db {
                 }
             }
         }
+    }
+
+    pub fn update_player_positions(&mut self, lua: MizLua) -> Result<()> {
+        let mut unit: Option<Unit> = None;
+        for (slot, id) in &self.ephemeral.object_id_by_slot {
+            if let Some(ucid) = self.ephemeral.players_by_slot.get(slot) {
+                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+                    let instance = match unit.take() {
+                        Some(unit) => unit.change_instance(id)?,
+                        None => Unit::get_instance(lua, id)?,
+                    };
+                    let instanced_player = InstancedPlayer {
+                        position: instance.get_position()?,
+                        in_air: instance.in_air()?,
+                        typ: Vehicle::from(instance.get_type_name()?),
+                    };
+                    player.current_slot = Some((slot.clone(), Some(instanced_player)));
+                    unit = Some(instance);
+                }
+            }
+        }
+        Ok(())
     }
 }

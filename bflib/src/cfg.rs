@@ -176,6 +176,9 @@ pub struct Cfg {
     /// an objective will cull it's units if there are no enemy units
     /// within this distance (Meters)
     pub unit_cull_distance: u32,
+    /// an objective will cull it's units if there are no enemy ground units
+    /// within this distance (Meters)
+    pub ground_vehicle_cull_distance: u32,
     /// how often to do more expensive checks such as unit culling and
     /// updating unit positions (Seconds)
     pub slow_timed_events_freq: u32,
@@ -840,6 +843,7 @@ impl Default for Cfg {
             ]),
             logistics_exclusion: 10000,
             unit_cull_distance: 70000,
+            ground_vehicle_cull_distance: 7000,
             slow_timed_events_freq: 10,
             threatened_distance: FxHashMap::from_iter([
                 ("FA-18C_hornet".into(), 36000),

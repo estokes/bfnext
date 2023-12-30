@@ -15,7 +15,7 @@ use dcso3::{
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
     net::{SlotId, Ucid},
-    object::{ClassObject, DcsObject, DcsOid},
+    object::{DcsObject, DcsOid},
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
@@ -162,14 +162,6 @@ pub enum DeployKind {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct SlottedPlayer<'a> {
-    pub ucid: &'a Ucid,
-    pub unit: &'a DcsOid<ClassUnit>,
-    pub slot: &'a SlotId,
-    pub player: &'a Player,
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SpawnedUnit {
     pub name: String,
@@ -179,6 +171,8 @@ pub struct SpawnedUnit {
     pub pos: Vector2,
     pub heading: f64,
     pub dead: bool,
+    #[serde(skip)]
+    pub moved: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -353,25 +347,22 @@ impl Objective {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Player {
-    name: String,
-    side: Side,
-    side_switches: Option<u8>,
-    lives: Map<LifeType, (DateTime<Utc>, u8)>,
-    crates: Set<GroupId>,
-    #[serde(skip)]
-    current_slot: Option<SlotId>,
+#[derive(Debug, Clone)]
+pub struct InstancedPlayer {
+    pub position: Position3,
+    pub typ: Vehicle,
+    pub in_air: bool,
 }
 
-impl Player {
-    pub fn name(&self) -> &String {
-        &self.name
-    }
-
-    pub fn lives(&self) -> &Map<LifeType, (DateTime<Utc>, u8)> {
-        &self.lives
-    }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Player {
+    pub name: String,
+    pub side: Side,
+    pub side_switches: Option<u8>,
+    pub lives: Map<LifeType, (DateTime<Utc>, u8)>,
+    pub crates: Set<GroupId>,
+    #[serde(skip)]
+    pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -431,6 +422,11 @@ struct Ephemeral {
     object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
     uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
+    ca_controlled: FxHashSet<UnitId>,
+    moved_units: BTreeMap<DateTime<Utc>, FxHashSet<UnitId>>,
+    moved_units_processed: Option<DateTime<Utc>>,
+    units_potentially_close_to_enemies: FxHashSet<UnitId>,
+    units_potentially_on_walkabout: FxHashSet<UnitId>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<(GroupId, Despawn)>,
     msgs: MsgQ,
@@ -665,19 +661,6 @@ impl Db {
 
     pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
         self.persisted.players.get(ucid)
-    }
-
-    pub fn slotted_players<'a>(&'a self) -> impl Iterator<Item = SlottedPlayer<'a>> {
-        self.ephemeral.object_id_by_slot.iter().map(|(slot, unit)| {
-            let ucid = &self.ephemeral.players_by_slot[slot];
-            let player = &self.persisted.players[ucid];
-            SlottedPlayer {
-                slot,
-                unit,
-                ucid,
-                player,
-            }
-        })
     }
 
     pub fn msgs(&mut self) -> &mut MsgQ {
@@ -1053,6 +1036,7 @@ impl Db {
                 pos,
                 heading,
                 dead: false,
+                moved: None,
             };
             spawned.units.insert_cow(uid);
             self.persisted.units.insert_cow(uid, spawned_unit);
@@ -1100,7 +1084,24 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn unit_born(&mut self, id: DcsOid<ClassUnit>, unit: &Unit) -> Result<()> {
+    pub fn player_entered_unit(&mut self, unit: &Unit) -> Result<()> {
+        let name = unit.get_name()?;
+        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
+            self.ephemeral.ca_controlled.insert(*uid);
+        }
+        Ok(())
+    }
+
+    pub fn player_left_unit(&mut self, unit: &Unit) -> Result<()> {
+        let name = unit.get_name()?;
+        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
+            self.ephemeral.ca_controlled.remove(uid);
+        }
+        Ok(())
+    }
+
+    pub fn unit_born(&mut self, unit: &Unit) -> Result<()> {
+        let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             self.ephemeral.uid_by_object_id.insert(id.clone(), *uid);
@@ -1119,6 +1120,9 @@ impl Db {
     pub fn unit_dead(&mut self, id: &DcsOid<ClassUnit>, now: DateTime<Utc>) -> Result<()> {
         if let Some(slot) = self.ephemeral.slot_by_object_id.remove(&id) {
             self.ephemeral.object_id_by_slot.remove(&slot);
+            if let Some(ucid) = self.ephemeral.players_by_slot.remove(&slot) {
+                self.persisted.players[&ucid].current_slot = None;
+            }
         }
         let uid = match self.ephemeral.uid_by_object_id.remove(&id) {
             Some(uid) => {
@@ -1151,7 +1155,8 @@ impl Db {
         Ok(())
     }
 
-    pub fn update_unit_positions(&mut self, lua: MizLua) -> Result<()> {
+    pub fn update_unit_positions(&mut self, lua: MizLua, ts: DateTime<Utc>) -> Result<()> {
+        use std::collections::btree_map::Entry;
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
         for (id, uid) in &self.ephemeral.uid_by_object_id {
@@ -1167,6 +1172,21 @@ impl Db {
                 moved.push(spunit.group);
                 spunit.pos = point;
                 spunit.heading = heading;
+                if let Some(ts) = spunit.moved {
+                    if let Entry::Occupied(mut e) = self.ephemeral.moved_units.entry(ts) {
+                        let set = e.get_mut();
+                        set.remove(uid);
+                        if set.len() == 0 {
+                            e.remove();
+                        }
+                    }
+                }
+                self.ephemeral
+                    .moved_units
+                    .entry(ts)
+                    .or_default()
+                    .insert(*uid);
+                spunit.moved = Some(ts);
             }
             unit = Some(instance);
         }

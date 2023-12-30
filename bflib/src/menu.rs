@@ -65,7 +65,7 @@ fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, Sl
 
 fn player_name(db: &Db, slot: &SlotId) -> String {
     db.player_in_slot(&slot)
-        .and_then(|ucid| db.player(ucid).map(|p| p.name().clone()))
+        .and_then(|ucid| db.player(ucid).map(|p| p.name.clone()))
         .unwrap_or_default()
 }
 

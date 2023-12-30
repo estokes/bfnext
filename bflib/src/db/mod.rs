@@ -15,7 +15,7 @@ use dcso3::{
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
     net::{SlotId, Ucid},
-    object::{DcsObject, DcsOid},
+    object::{ClassObject, DcsObject, DcsOid},
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
@@ -160,6 +160,14 @@ pub enum DeployKind {
         player: Ucid,
         spec: Crate,
     },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SlottedPlayer<'a> {
+    pub ucid: &'a Ucid,
+    pub unit: &'a DcsOid<ClassUnit>,
+    pub slot: &'a SlotId,
+    pub player: &'a Player,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -657,6 +665,19 @@ impl Db {
 
     pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
         self.persisted.players.get(ucid)
+    }
+
+    pub fn slotted_players<'a>(&'a self) -> impl Iterator<Item = SlottedPlayer<'a>> {
+        self.ephemeral.object_id_by_slot.iter().map(|(slot, unit)| {
+            let ucid = &self.ephemeral.players_by_slot[slot];
+            let player = &self.persisted.players[ucid];
+            SlottedPlayer {
+                slot,
+                unit,
+                ucid,
+                player,
+            }
+        })
     }
 
     pub fn msgs(&mut self) -> &mut MsgQ {
@@ -1178,11 +1199,7 @@ impl Db {
             .and_then(|id| Unit::get_instance(lua, id))
     }
 
-    pub fn slot_instance_pos(
-        &self,
-        lua: MizLua,
-        slot: &SlotId,
-    ) -> Result<Position3> {
+    pub fn slot_instance_pos(&self, lua: MizLua, slot: &SlotId) -> Result<Position3> {
         self.slot_instance_unit(lua, slot)?.get_position()
     }
 }

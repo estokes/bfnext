@@ -15,10 +15,12 @@ use dcso3::{
     coord::Coord,
     env::miz::{GroupKind, MizIndex},
     land::Land,
+    object::DcsObject,
+    unit::Unit,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
-use log::{debug, info};
+use log::{debug, error, info};
 use smallvec::{smallvec, SmallVec};
 use std::cmp::max;
 
@@ -271,12 +273,10 @@ impl Db {
         let now = Utc::now();
         let land = Land::singleton(lua)?;
         let players = self
-            .ephemeral
-            .players_by_slot
-            .iter()
-            .filter_map(|(sl, ucid)| {
-                let side = self.persisted.players[ucid].side;
-                let pos_typ = self.slot_instance_unit(lua, sl).and_then(|u| {
+            .slotted_players()
+            .filter_map(|sp| {
+                let side = sp.player.side;
+                let pos_typ = Unit::get_instance(lua, sp.unit).and_then(|u| {
                     let pos = u.get_point()?;
                     let typ = u.get_type_name()?;
                     Ok((pos, Vehicle::from(typ)))
@@ -284,10 +284,7 @@ impl Db {
                 match pos_typ {
                     Ok((pos, typ)) => Some((side, pos, typ)),
                     Err(e) => {
-                        info!(
-                            "failed to get position of player {:?} {:?} {:?}",
-                            sl, ucid, e
-                        );
+                        error!("failed to get position of player {:?} {:?}", sp, e);
                         None
                     }
                 }

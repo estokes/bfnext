@@ -1,6 +1,6 @@
 use crate::{
     as_tbl, coalition::Side, country, is_hooks_env, wrapped_prim, wrapped_table, Color,
-    DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String,
+    DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String, net::SlotId,
 };
 use anyhow::{bail, Result};
 use fxhash::FxHashMap;
@@ -70,6 +70,10 @@ impl<'lua> Unit<'lua> {
 
     pub fn id(&self) -> Result<UnitId> {
         Ok(self.raw_get("unitId")?)
+    }
+
+    pub fn slot(&self) -> Result<SlotId> {
+        Ok(SlotId::from(self.id()?))
     }
 
     pub fn set_name(&self, name: String) -> Result<()> {

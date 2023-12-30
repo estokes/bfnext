@@ -267,7 +267,6 @@ impl Db {
     pub fn cull_or_respawn_objectives(
         &mut self,
         lua: MizLua,
-        idx: &MizIndex,
     ) -> Result<(SmallVec<[ObjectiveId; 4]>, SmallVec<[ObjectiveId; 4]>)> {
         let now = Utc::now();
         let land = Land::singleton(lua)?;
@@ -277,10 +276,9 @@ impl Db {
             .iter()
             .filter_map(|(sl, ucid)| {
                 let side = self.persisted.players[ucid].side;
-                let pos_typ = self.slot_instance_unit(lua, idx, sl).and_then(|u| {
-                    let o = u.as_object()?;
-                    let pos = o.get_point()?;
-                    let typ = o.get_type_name()?;
+                let pos_typ = self.slot_instance_unit(lua, sl).and_then(|u| {
+                    let pos = u.get_point()?;
+                    let typ = u.get_type_name()?;
                     Ok((pos, Vehicle::from(typ)))
                 });
                 match pos_typ {

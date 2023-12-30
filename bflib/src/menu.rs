@@ -60,7 +60,7 @@ fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, Sl
         )
     }
     let unit = units.first()?;
-    Ok((group.side, SlotId::from(unit.id()?)))
+    Ok((group.side, unit.slot()?))
 }
 
 fn player_name(db: &Db, slot: &SlotId) -> String {

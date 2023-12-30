@@ -2,10 +2,11 @@ use super::{as_tbl, controller::Controller, cvt_err, group::Group, object::Objec
 use crate::{
     env::miz::UnitId,
     object::{DcsObject, DcsOid},
-    simple_enum, wrapped_table, LuaEnv, MizLua, LuaVec3, Position3,
+    simple_enum, wrapped_table, LuaEnv, LuaVec2, LuaVec3, MizLua, Position3, net::SlotId,
 };
 use anyhow::Result;
 use mlua::{prelude::*, Value};
+use na::Vector2;
 use serde_derive::{Deserialize, Serialize};
 use std::{marker::PhantomData, ops::Deref};
 
@@ -26,8 +27,16 @@ impl<'lua> Unit<'lua> {
         Ok(unit.call_function("getByName", name)?)
     }
 
+    pub fn destroy(&self) -> Result<()> {
+        Ok(self.t.call_method("destroy", ())?)
+    }
+
     pub fn as_object(&self) -> Result<Object<'lua>> {
         Ok(Object::from_lua(Value::Table(self.t.clone()), self.lua)?)
+    }
+
+    pub fn get_type_name(&self) -> Result<String> {
+        Ok(self.t.call_method("getTypeName", ())?)
     }
 
     pub fn get_point(&self) -> Result<LuaVec3> {
@@ -36,6 +45,11 @@ impl<'lua> Unit<'lua> {
 
     pub fn get_position(&self) -> Result<Position3> {
         Ok(self.t.call_method("getPosition", ())?)
+    }
+
+    pub fn get_ground_position(&self) -> Result<LuaVec2> {
+        let pos = self.get_point()?;
+        Ok(LuaVec2(Vector2::from(na::Vector2::new(pos.0.x, pos.0.z))))
     }
 
     pub fn get_velocity(&self) -> Result<LuaVec3> {
@@ -50,12 +64,20 @@ impl<'lua> Unit<'lua> {
         Ok(self.t.call_method("isActive", ())?)
     }
 
+    pub fn get_name(&self) -> Result<String> {
+        Ok(self.t.call_method("getName", ())?)
+    }
+
     pub fn get_player_name(&self) -> Result<Option<String>> {
         Ok(self.t.call_method("getPlayerName", ())?)
     }
 
     pub fn id(&self) -> Result<UnitId> {
         Ok(self.t.call_method("getID", ())?)
+    }
+
+    pub fn slot(&self) -> Result<SlotId> {
+        Ok(SlotId::from(self.id()?))
     }
 
     pub fn get_number(&self) -> Result<i64> {

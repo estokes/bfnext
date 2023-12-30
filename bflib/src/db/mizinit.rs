@@ -9,7 +9,6 @@ use chrono::prelude::*;
 use dcso3::{
     coalition::Side,
     env::miz::{Group, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
-    net::SlotId,
     MizLua, String, Vector2,
 };
 
@@ -138,7 +137,7 @@ impl Db {
     pub fn init_objective_slots(&mut self, slot: Group) -> Result<()> {
         for unit in slot.units()? {
             let unit = unit?;
-            let id = SlotId::from(unit.id()?);
+            let id = unit.slot()?;
             let pos = slot.pos()?;
             let obj = {
                 let mut iter = self.persisted.objectives.into_iter();

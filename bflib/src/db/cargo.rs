@@ -109,15 +109,15 @@ pub struct SlotStats {
 impl SlotStats {
     pub fn get(db: &Db, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Self> {
         let ucid = maybe!(db.ephemeral.players_by_slot, slot, "no such player")?.clone();
-        let unit = db.slot_instance_unit(lua, idx, slot)?;
-        let in_air = unit.as_object()?.in_air()?;
-        let name = unit.as_object()?.get_name()?;
+        let unit = db.slot_instance_unit(lua, slot)?;
+        let in_air = unit.in_air()?;
+        let name = unit.get_name()?;
         let side = db.slot_miz_unit(lua, idx, slot)?.side;
-        let pos = unit.as_object()?.get_position()?;
+        let pos = unit.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let ground_alt = Land::singleton(lua)?.get_height(LuaVec2(point))?;
         let agl = pos.p.y - ground_alt;
-        let speed = unit.as_object()?.get_velocity()?.0.magnitude();
+        let speed = unit.get_velocity()?.0.magnitude();
         Ok(Self {
             name,
             side,
@@ -164,11 +164,7 @@ impl Db {
         name: &str,
     ) -> Result<SlotStats> {
         debug!("db spawning crate");
-        if self
-            .slot_instance_unit(lua, idx, slot)?
-            .as_object()?
-            .in_air()?
-        {
+        if self.slot_instance_unit(lua, slot)?.in_air()? {
             bail!("you must land to spawn a crate")
         }
         let st = SlotStats::get(self, lua, idx, slot)?;
@@ -719,45 +715,43 @@ impl Db {
                     let spctx = SpawnCtx::new(lua)?;
                     match enforce_deploy_limits(self, st.side, &spec, &dep) {
                         Err(e) => reasons.push(format_compact!("{e}")),
-                        Ok(()) => {
-                            match &spec.logistics {
-                                Some(parts) => {
-                                    for cr in have.values().flat_map(|c| c.iter()) {
-                                        self.delete_group(&cr.group)?
-                                    }
-                                    let oid = self
-                                        .add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
-                                    let name = objective!(self, oid)?.name.clone();
-                                    return Ok(Unpakistan::UnpackedFarp(name, oid));
+                        Ok(()) => match &spec.logistics {
+                            Some(parts) => {
+                                for cr in have.values().flat_map(|c| c.iter()) {
+                                    self.delete_group(&cr.group)?
                                 }
-                                None => {
-                                    let pos = self.slot_instance_pos(lua, idx, slot)?;
-                                    let spawnloc = compute_positions(
-                                        self,
-                                        &have,
-                                        centroid,
-                                        pos.x.z.atan2(pos.x.x),
-                                    )?;
-                                    for cr in have.values().flat_map(|c| c.iter()) {
-                                        self.delete_group(&cr.group)?
-                                    }
-                                    let origin = DeployKind::Deployed {
-                                        player: st.ucid,
-                                        spec: spec.clone(),
-                                    };
-                                    let gid = self.add_and_queue_group(
-                                        &spctx,
-                                        idx,
-                                        st.side,
-                                        spawnloc,
-                                        &*spec.template,
-                                        origin,
-                                        None,
-                                    )?;
-                                    return Ok(Unpakistan::Unpacked(dep, gid));
-                                }
+                                let oid =
+                                    self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
+                                let name = objective!(self, oid)?.name.clone();
+                                return Ok(Unpakistan::UnpackedFarp(name, oid));
                             }
-                        }
+                            None => {
+                                let pos = self.slot_instance_pos(lua, slot)?;
+                                let spawnloc = compute_positions(
+                                    self,
+                                    &have,
+                                    centroid,
+                                    pos.x.z.atan2(pos.x.x),
+                                )?;
+                                for cr in have.values().flat_map(|c| c.iter()) {
+                                    self.delete_group(&cr.group)?
+                                }
+                                let origin = DeployKind::Deployed {
+                                    player: st.ucid,
+                                    spec: spec.clone(),
+                                };
+                                let gid = self.add_and_queue_group(
+                                    &spctx,
+                                    idx,
+                                    st.side,
+                                    spawnloc,
+                                    &*spec.template,
+                                    origin,
+                                    None,
+                                )?;
+                                return Ok(Unpakistan::Unpacked(dep, gid));
+                            }
+                        },
                     }
                 }
             }
@@ -900,7 +894,7 @@ impl Db {
         name: &str,
     ) -> Result<Troop> {
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
-        let pos = self.slot_instance_pos(lua, idx, slot)?;
+        let pos = self.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let _ = self.point_near_logistics(side, point)?;
         let troop_cfg = self
@@ -929,14 +923,14 @@ impl Db {
         if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
             bail!("no troops onboard")
         }
-        let unit = self.slot_instance_unit(lua, idx, slot)?;
-        if unit.as_object()?.in_air()? {
+        let unit = self.slot_instance_unit(lua, slot)?;
+        if unit.in_air()? {
             bail!("you must land to unload troops")
         }
         let ucid = self.ephemeral.players_by_slot[slot].clone();
-        let unit_name = unit.as_object()?.get_name()?;
+        let unit_name = unit.get_name()?;
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
-        let pos = unit.as_object()?.get_position()?;
+        let pos = unit.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         match self.point_near_logistics(side, point) {
             Ok((_, obj)) if obj.threatened => {
@@ -987,13 +981,13 @@ impl Db {
         if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
             bail!("no troops onboard")
         }
-        let unit = self.slot_instance_unit(lua, idx, slot)?;
-        if unit.as_object()?.in_air()? {
+        let unit = self.slot_instance_unit(lua, slot)?;
+        if unit.in_air()? {
             bail!("you must land to return your troops")
         }
-        let unit_name = unit.as_object()?.get_name()?;
+        let unit_name = unit.get_name()?;
         let side = self.slot_miz_unit(lua, idx, slot)?.side;
-        let pos = unit.as_object()?.get_position()?;
+        let pos = unit.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         if self.point_near_logistics(side, point).is_err() {
             bail!("you are not close enough to friendly logistics to return troops")
@@ -1008,7 +1002,7 @@ impl Db {
 
     pub fn extract_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
-        let pos = self.slot_instance_pos(lua, idx, slot)?;
+        let pos = self.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let (gid, troop_cfg) = {
             let max_dist = (self.cfg().crate_load_distance as f64).powi(2);

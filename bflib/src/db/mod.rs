@@ -419,8 +419,10 @@ struct Ephemeral {
     group_marks: FxHashMap<GroupId, MarkId>,
     objective_marks: FxHashMap<ObjectiveId, (MarkId, Option<MarkId>)>,
     delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
+    object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
     object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
     uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
+    slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<Despawn>,
     msgs: MsgQ,
@@ -644,6 +646,13 @@ impl Db {
 
     pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {
         self.ephemeral.players_by_slot.get(&slot)
+    }
+
+    pub fn player_in_unit(&self, id: &DcsOid<ClassUnit>) -> Option<&Ucid> {
+        self.ephemeral
+            .slot_by_object_id
+            .get(id)
+            .and_then(|slot| self.ephemeral.players_by_slot.get(slot))
     }
 
     pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
@@ -1063,20 +1072,26 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn unit_born(&mut self, id: DcsOid<ClassUnit>, name: &str) -> Result<()> {
-        if let Some(uid) = self.persisted.units_by_name.get(name) {
+    pub fn unit_born(&mut self, id: DcsOid<ClassUnit>, unit: &Unit) -> Result<()> {
+        let name = unit.get_name()?;
+        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             self.ephemeral.uid_by_object_id.insert(id.clone(), *uid);
-            self.ephemeral.object_id_by_uid.insert(*uid, id);
+            self.ephemeral.object_id_by_uid.insert(*uid, id.clone());
+        }
+        let slot = unit.slot()?;
+        if self.persisted.objectives_by_slot.get(&slot).is_some() {
+            self.ephemeral
+                .slot_by_object_id
+                .insert(id.clone(), slot.clone());
+            self.ephemeral.object_id_by_slot.insert(slot, id);
         }
         Ok(())
     }
 
-    pub fn unit_dead(
-        &mut self,
-        id: DcsOid<ClassUnit>,
-        dead: bool,
-        now: DateTime<Utc>,
-    ) -> Result<()> {
+    pub fn unit_dead(&mut self, id: &DcsOid<ClassUnit>, now: DateTime<Utc>) -> Result<()> {
+        if let Some(slot) = self.ephemeral.slot_by_object_id.remove(&id) {
+            self.ephemeral.object_id_by_slot.remove(&slot);
+        }
         let uid = match self.ephemeral.uid_by_object_id.remove(&id) {
             Some(uid) => {
                 self.ephemeral.object_id_by_uid.remove(&uid);
@@ -1085,7 +1100,7 @@ impl Db {
             None => return Ok(()),
         };
         if let Some(unit) = self.persisted.units.get_mut_cow(&uid) {
-            unit.dead = dead;
+            unit.dead = true;
             let gid = unit.group;
             if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
                 self.update_objective_status(&oid, now)?
@@ -1148,29 +1163,19 @@ impl Db {
             .ok_or_else(|| anyhow!("unknown slot"))
     }
 
-    pub fn slot_instance_unit<'lua>(
-        &self,
-        lua: MizLua<'lua>,
-        idx: &MizIndex,
-        slot: &SlotId,
-    ) -> Result<Unit<'lua>> {
-        let miz = Miz::singleton(lua)?;
-        let uid = slot
-            .as_unit_id()
-            .ok_or_else(|| anyhow!("player is in {:?}", slot))?;
-        let uifo = miz
-            .get_unit(idx, &uid)?
-            .ok_or_else(|| anyhow!("unit {:?} not in mission", uid))?;
-        Unit::get_by_name(lua, &*uifo.unit.name()?)
+    pub fn slot_instance_unit<'lua>(&self, lua: MizLua<'lua>, slot: &SlotId) -> Result<Unit<'lua>> {
+        self.ephemeral
+            .object_id_by_slot
+            .get(slot)
+            .ok_or_else(|| anyhow!("unit {:?} not currently in the mission", slot))
+            .and_then(|id| Unit::get_instance(lua, id))
     }
 
     pub fn slot_instance_pos(
         &self,
         lua: MizLua,
-        idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<Position3> {
-        let unit = self.slot_instance_unit(lua, idx, slot)?;
-        unit.as_object()?.get_position()
+        self.slot_instance_unit(lua, slot)?.get_position()
     }
 }

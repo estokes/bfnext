@@ -19,11 +19,12 @@ use dcso3::{
     hooks::UserHooks,
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
+    object::{DcsObject, DcsOid},
     timer::Timer,
     trigger::Trigger,
-    unit::Unit,
+    unit::{ClassUnit, Unit},
     world::World,
-    HooksLua, LuaEnv, MizLua, String, Vector2, object::DcsObject,
+    HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
@@ -47,8 +48,8 @@ struct Context {
     to_background: Option<UnboundedSender<bg::Task>>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
-    recently_landed: FxHashMap<SlotId, (String, DateTime<Utc>)>,
-    airborne: FxHashSet<SlotId>,
+    recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
+    airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
     force_to_spectators: FxHashSet<PlayerId>,
     last_slow_timed_events: DateTime<Utc>,
@@ -287,8 +288,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
-                let name = unit.as_object()?.get_name()?;
-                if let Err(e) = ctx.db.unit_born(unit.object_id()?, name.as_str()) {
+                if let Err(e) = ctx.db.unit_born(unit.object_id()?, &unit) {
                     error!("unit born failed {:?} {:?}", unit, e);
                 }
             }
@@ -297,29 +297,27 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             if let Some(unit) = e.initiator {
                 if let Ok(unit) = unit.as_unit() {
                     let id = unit.object_id()?;
-                    if let Err(e) = ctx.db.unit_dead(id, true, Utc::now()) {
+                    if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
                         error!("unit dead failed for {:?} {:?}", unit, e);
                     }
-                    let slot = SlotId::from(unit.id()?);
-                    ctx.recently_landed.remove(&slot);
-                    force_player_in_slot_to_spectators(ctx, &slot)
+                    ctx.recently_landed.remove(&id);
+                    force_player_in_slot_to_spectators(ctx, &unit.slot()?)
                 }
             }
         }
         Event::Ejection(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
-                let slot = SlotId::from(unit.id()?);
-                ctx.recently_landed.remove(&slot);
-                force_player_in_slot_to_spectators(ctx, &slot)
+                ctx.recently_landed.remove(&unit.object_id()?);
+                force_player_in_slot_to_spectators(ctx, &unit.slot()?)
             }
         }
         Event::Takeoff(e) | Event::PostponedTakeoff(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
-                let slot = SlotId::from(unit.id()?);
+                let id = unit.object_id()?;
+                let slot = unit.slot()?;
                 let ctx = unsafe { Context::get_mut() };
-                if ctx.airborne.insert(slot.clone()) && ctx.recently_landed.remove(&slot).is_none()
-                {
-                    let pos = unit.as_object()?.get_point()?;
+                if ctx.airborne.insert(id.clone()) && ctx.recently_landed.remove(&id).is_none() {
+                    let pos = unit.get_point()?;
                     match ctx
                         .db
                         .takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z))
@@ -338,32 +336,16 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         }
         Event::Land(e) | Event::PostponedLand(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
-                let slot = SlotId::from(unit.id()?);
+                let id = unit.object_id()?;
                 let ctx = unsafe { Context::get_mut() };
-                if ctx.airborne.remove(&slot) {
-                    let name = unit.as_object()?.get_name()?;
-                    ctx.recently_landed.insert(slot, (name, Utc::now()));
+                if ctx.airborne.remove(&id) {
+                    ctx.recently_landed.insert(id, Utc::now());
                 }
             }
         }
         _ => (),
     }
     Ok(())
-}
-
-fn init_hooks(lua: HooksLua) -> Result<()> {
-    info!("setting user hooks");
-    UserHooks::new(lua)
-        .on_player_change_slot(on_player_change_slot)?
-        .on_player_try_connect(on_player_try_connect)?
-        .on_player_try_send_chat(on_player_try_send_chat)?
-        .register()?;
-    Ok(())
-}
-
-fn get_unit_ground_pos(lua: MizLua, name: &str) -> Result<Vector2> {
-    let pos = Unit::get_by_name(lua, name)?.as_object()?.get_point()?;
-    Ok(Vector2::from(na::Vector2::new(pos.0.x, pos.0.z)))
 }
 
 fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<CompactString> {
@@ -414,16 +396,23 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
 }
 
 fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
+    macro_rules! or_false {
+        ($e:expr) => {
+            match $e {
+                Ok(r) => r,
+                Err(_) => return false
+            }
+        }
+    }
     let db = &mut ctx.db;
     let mut returned: SmallVec<[(LifeType, SlotId); 4]> = smallvec![];
-    ctx.recently_landed.retain(|slot, (name, landed_ts)| {
+    ctx.recently_landed.retain(|id, landed_ts| {
         if ts - *landed_ts >= Duration::seconds(10) {
-            let pos = match get_unit_ground_pos(lua, &**name) {
-                Ok(pos) => pos,
-                Err(_) => return false,
-            };
-            if let Some(typ) = db.land(slot.clone(), pos) {
-                returned.push((typ, slot.clone()));
+            let unit = or_false!(Unit::get_instance(lua, id));
+            let pos = or_false!(unit.get_ground_position());
+            let slot = or_false!(unit.slot());
+            if let Some(typ) = db.land(slot.clone(), pos.0) {
+                returned.push((typ, slot));
                 return false;
             }
         }
@@ -468,7 +457,7 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
     let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events > freq {
         ctx.last_slow_timed_events = ts;
-        let (threatened, cleared) = ctx.db.cull_or_respawn_objectives(lua, &ctx.idx)?;
+        let (threatened, cleared) = ctx.db.cull_or_respawn_objectives(lua)?;
         for oid in threatened {
             let obj = ctx.db.objective(&oid)?;
             let owner = obj.owner();
@@ -541,11 +530,11 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     info!("init_miz");
     let ctx = unsafe { Context::get_mut() };
     info!("indexing the miz");
-    let miz = env::miz::Miz::singleton(lua)?;
+    let miz = Miz::singleton(lua)?;
     ctx.idx = miz.index()?;
     info!("adding event handlers");
     World::singleton(lua)?.add_event_handler(on_event)?;
-    let sortie = Miz::singleton(lua)?.sortie()?;
+    let sortie = miz.sortie()?;
     debug!("sortie is {:?}", sortie);
     let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
         "" => bail!("missing sortie in miz file"),
@@ -570,9 +559,20 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     Ok(())
 }
 
+fn init_hooks(lua: HooksLua) -> Result<()> {
+    info!("setting user hooks");
+    UserHooks::new(lua)
+        .on_player_change_slot(on_player_change_slot)?
+        .on_player_try_connect(on_player_try_connect)?
+        .on_player_try_send_chat(on_player_try_send_chat)?
+        .register()?;
+    Ok(())
+}
+
 fn init_miz(lua: MizLua) -> Result<()> {
     let timer = Timer::singleton(lua)?;
-    timer.schedule_function(timer.get_time()? + 5., mlua::Value::Nil, move |lua, _, _| {
+    let when = timer.get_time()? + 5.;
+    timer.schedule_function(when, mlua::Value::Nil, move |lua, _, _| {
         delayed_init_miz(lua)?;
         Ok(None)
     })?;

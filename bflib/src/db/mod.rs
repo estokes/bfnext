@@ -1131,6 +1131,9 @@ impl Db {
             }
             None => return Ok(()),
         };
+        self.ephemeral.units_potentially_close_to_enemies.remove(&uid);
+        self.ephemeral.units_potentially_on_walkabout.remove(&uid);
+        self.ephemeral.ca_controlled.remove(&uid);
         if let Some(unit) = self.persisted.units.get_mut_cow(&uid) {
             unit.dead = true;
             let gid = unit.group;

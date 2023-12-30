@@ -579,8 +579,6 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    debug!("mission loaded is {}", ctx.loaded);
     let timer = Timer::singleton(lua)?;
     let when = timer.get_time()? + 1.;
     timer.schedule_function(when, mlua::Value::Nil, move |lua, _, now| {

@@ -35,7 +35,6 @@ impl io::Write for LogHandle {
 
 #[derive(Debug)]
 pub enum Task {
-    MizInit,
     SaveState(PathBuf, Persisted),
     WriteLog(Bytes),
 }
@@ -51,7 +50,6 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
         .unwrap();
     while let Some(msg) = rx.recv().await {
         match msg {
-            Task::MizInit => (),
             Task::SaveState(path, db) => match db.save(&path) {
                 Ok(()) => (),
                 Err(e) => error!("failed to save state to {:?}, {:?}", path, e),

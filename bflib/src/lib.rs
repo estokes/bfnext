@@ -351,32 +351,13 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     Ok(())
 }
 
-fn on_mission_load_end(lua: HooksLua) -> Result<()> {
-    info!("on_mission_load_end");
-    let miz = env::miz::Miz::singleton(lua)?;
-    debug!("indexing mission");
-    let ctx = unsafe { Context::get_mut() };
-    ctx.idx = miz.index()?;
-    ctx.do_bg_task(bg::Task::MizInit);
-    debug!("indexed mission");
-    Ok(())
-}
-
-fn on_simulation_start(_lua: HooksLua) -> Result<()> {
-    info!("on_simulation_start");
-    Ok(())
-}
-
 fn init_hooks(lua: HooksLua) -> Result<()> {
-    debug!("setting user hooks");
+    info!("setting user hooks");
     UserHooks::new(lua)
-        .on_simulation_start(on_simulation_start)?
-        .on_mission_load_end(on_mission_load_end)?
         .on_player_change_slot(on_player_change_slot)?
         .on_player_try_connect(on_player_try_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .register()?;
-    debug!("set user hooks");
     Ok(())
 }
 
@@ -545,7 +526,10 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
 fn init_miz(lua: MizLua) -> Result<()> {
     info!("init_miz");
     let ctx = unsafe { Context::get_mut() };
-    debug!("adding event handler");
+    info!("indexing the miz");
+    let miz = env::miz::Miz::singleton(lua)?;
+    ctx.idx = miz.index()?;
+    info!("adding event handlers");
     World::singleton(lua)?.add_event_handler(on_event)?;
     let sortie = Miz::singleton(lua)?.sortie()?;
     debug!("sortie is {:?}", sortie);
@@ -564,18 +548,18 @@ fn init_miz(lua: MizLua) -> Result<()> {
             Ok(Some(now + 1.))
         }
     })?;
-    debug!("spawning");
+    info!("initializing db");
     if !path.exists() {
         debug!("saved state doesn't exist, starting from default");
         let cfg = Cfg::load(&path)?;
-        ctx.db = Db::init(lua, cfg, &ctx.idx, &Miz::singleton(lua)?)?;
+        ctx.db = Db::init(lua, cfg, &ctx.idx, &miz)?;
     } else {
         debug!("saved state exists, loading it");
-        ctx.db = Db::load(&Miz::singleton(lua)?, &ctx.idx, &path)?;
+        ctx.db = Db::load(&miz, &ctx.idx, &path)?;
     }
-    debug!("spawning units");
+    info!("spawning units");
     ctx.respawn_groups(lua)?;
-    debug!("spawned");
+    info!("initializing menus");
     menu::init(&ctx, lua)?;
     Ok(())
 }

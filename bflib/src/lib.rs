@@ -523,7 +523,21 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn init_miz(lua: MizLua) -> Result<()> {
+fn start_timed_events(lua: MizLua, path: PathBuf) -> Result<()> {
+    let timer = Timer::singleton(lua)?;
+    timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
+        let path = path.clone();
+        move |lua, _, now| {
+            if let Err(e) = run_timed_events(lua, &path) {
+                error!("failed to run timed events {:?}", e)
+            }
+            Ok(Some(now + 1.))
+        }
+    })?;
+    Ok(())
+}
+
+fn delayed_init_miz(lua: MizLua) -> Result<()> {
     info!("init_miz");
     let ctx = unsafe { Context::get_mut() };
     info!("indexing the miz");
@@ -538,16 +552,6 @@ fn init_miz(lua: MizLua) -> Result<()> {
         s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
     };
     debug!("path to saved state is {:?}", path);
-    let timer = Timer::singleton(lua)?;
-    timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
-        let path = path.clone();
-        move |lua, _, now| {
-            if let Err(e) = run_timed_events(lua, &path) {
-                error!("failed to run timed events {:?}", e)
-            }
-            Ok(Some(now + 1.))
-        }
-    })?;
     info!("initializing db");
     if !path.exists() {
         debug!("saved state doesn't exist, starting from default");
@@ -561,6 +565,17 @@ fn init_miz(lua: MizLua) -> Result<()> {
     ctx.respawn_groups(lua)?;
     info!("initializing menus");
     menu::init(&ctx, lua)?;
+    info!("starting timed events");
+    start_timed_events(lua, path)?;
+    Ok(())
+}
+
+fn init_miz(lua: MizLua) -> Result<()> {
+    let timer = Timer::singleton(lua)?;
+    timer.schedule_function(timer.get_time()? + 5., mlua::Value::Nil, move |lua, _, _| {
+        delayed_init_miz(lua)?;
+        Ok(None)
+    })?;
     Ok(())
 }
 

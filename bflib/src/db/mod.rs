@@ -1084,22 +1084,6 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn player_entered_unit(&mut self, unit: &Unit) -> Result<()> {
-        let name = unit.get_name()?;
-        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
-            self.ephemeral.ca_controlled.insert(*uid);
-        }
-        Ok(())
-    }
-
-    pub fn player_left_unit(&mut self, unit: &Unit) -> Result<()> {
-        let name = unit.get_name()?;
-        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
-            self.ephemeral.ca_controlled.remove(uid);
-        }
-        Ok(())
-    }
-
     pub fn unit_born(&mut self, unit: &Unit) -> Result<()> {
         let id = unit.object_id()?;
         let name = unit.get_name()?;

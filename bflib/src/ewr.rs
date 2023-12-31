@@ -139,6 +139,10 @@ impl Ewr {
             Some(t) => t,
             None => return smallvec![],
         };
+        let state = self.player_state.entry(ucid.clone()).or_default();
+        if !state.enabled {
+            return reports;
+        }
         for track in tracks.values() {
             let age = (now - track.last).num_seconds();
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
@@ -159,13 +163,12 @@ impl Ewr {
                 })
             }
         }
+        if reports.is_empty() {
+            return reports;
+        }
         reports.sort_by_key(|r| r.range);
         while reports.len() > 10 {
             reports.pop();
-        }
-        let state = self.player_state.entry(ucid.clone()).or_default();
-        if !state.enabled || reports.is_empty() {
-            return smallvec![];
         }
         let since_last = (now - state.last).num_seconds();
         if since_last >= 60

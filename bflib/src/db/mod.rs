@@ -167,6 +167,8 @@ pub struct SpawnedUnit {
     pub name: String,
     pub id: UnitId,
     pub group: GroupId,
+    pub side: Side,
+    pub typ: String,
     pub template_name: String,
     pub pos: Vector2,
     pub heading: f64,
@@ -675,6 +677,13 @@ impl Db {
         })
     }
 
+    pub fn instanced_units(&self) -> impl Iterator<Item = &SpawnedUnit> {
+        self.ephemeral
+            .object_id_by_uid
+            .keys()
+            .filter_map(|uid| self.persisted.units.get(uid))
+    }
+
     pub fn ewrs(&self) -> impl Iterator<Item = (Vector2, Side, &DeployableEwr)> {
         self.persisted.deployed.into_iter().filter_map(|gid| {
             let group = &self.persisted.groups[gid];
@@ -1064,6 +1073,8 @@ impl Db {
             let spawned_unit = SpawnedUnit {
                 id: uid,
                 group: gid,
+                side,
+                typ,
                 name: unit_name.clone(),
                 template_name,
                 pos,

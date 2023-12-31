@@ -107,12 +107,12 @@ pub struct SlotStats {
 }
 
 impl SlotStats {
-    pub fn get(db: &Db, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Self> {
+    pub fn get(db: &Db, lua: MizLua, slot: &SlotId) -> Result<Self> {
         let ucid = maybe!(db.ephemeral.players_by_slot, slot, "no such player")?.clone();
+        let side = maybe!(db.persisted.players, ucid, "no player for ucid")?.side;
         let unit = db.slot_instance_unit(lua, slot)?;
         let in_air = unit.in_air()?;
         let name = unit.get_name()?;
-        let side = db.slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let ground_alt = Land::singleton(lua)?.get_height(LuaVec2(point))?;
@@ -167,7 +167,7 @@ impl Db {
         if self.slot_instance_unit(lua, slot)?.in_air()? {
             bail!("you must land to spawn a crate")
         }
-        let st = SlotStats::get(self, lua, idx, slot)?;
+        let st = SlotStats::get(self, lua, slot)?;
         if st.in_air {
             bail!("you must land to spawn crates")
         }
@@ -277,10 +277,9 @@ impl Db {
     pub fn destroy_nearby_crate(
         &mut self,
         lua: MizLua,
-        idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<()> {
-        let st = SlotStats::get(self, lua, idx, slot)?;
+        let st = SlotStats::get(self, lua, slot)?;
         if st.in_air {
             bail!("you must land to destroy crates")
         }
@@ -659,7 +658,7 @@ impl Db {
             }
             Ok(())
         }
-        let st = SlotStats::get(self, lua, idx, slot)?;
+        let st = SlotStats::get(self, lua, slot)?;
         if st.in_air {
             bail!("you must land to unpack crates")
         }
@@ -792,7 +791,7 @@ impl Db {
     }
 
     pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {
-        let st = SlotStats::get(self, lua, idx, slot)?;
+        let st = SlotStats::get(self, lua, slot)?;
         let cargo = self.ephemeral.cargo.get(slot);
         if cargo.map(|c| c.crates.is_empty()).unwrap_or(true) {
             bail!("no crates onboard")
@@ -853,7 +852,7 @@ impl Db {
         idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<Crate> {
-        let st = SlotStats::get(self, lua, idx, slot)?;
+        let st = SlotStats::get(self, lua, slot)?;
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
         if cargo_capacity.crate_slots as usize <= cargo.num_crates()

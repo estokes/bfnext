@@ -2,6 +2,7 @@ pub mod bg;
 pub mod cfg;
 pub mod db;
 pub mod ewr;
+pub mod jtac;
 pub mod menu;
 pub mod msgq;
 pub mod spawnctx;

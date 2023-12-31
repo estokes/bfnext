@@ -4,10 +4,11 @@ use crate::{
         cargo::{Cargo, Oldest, SlotStats},
         Db,
     },
-    Context, ewr::EwrUnits,
+    ewr::EwrUnits,
+    Context,
 };
-use chrono::prelude::*;
 use anyhow::{anyhow, bail, Result};
+use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     as_tbl,
@@ -209,7 +210,7 @@ pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
 fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
-    let st = SlotStats::get(&ctx.db, lua, &ctx.idx, &slot)?;
+    let st = SlotStats::get(&ctx.db, lua, &slot)?;
     let nearby = ctx.db.list_nearby_crates(&st)?;
     if nearby.len() > 0 {
         let mut msg = CompactString::new("");
@@ -234,7 +235,7 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
 fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
-    if let Err(e) = ctx.db.destroy_nearby_crate(lua, &ctx.idx, &slot) {
+    if let Err(e) = ctx.db.destroy_nearby_crate(lua, &slot) {
         ctx.db
             .msgs()
             .panel_to_group(10, false, gid, format_compact!("{}", e))
@@ -407,7 +408,9 @@ fn ewr_units_imperial(lua: MizLua, gid: GroupId) -> Result<()> {
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
     if let Some(ucid) = ctx.db.player_in_slot(&slot) {
         ctx.ewr.set_units(ucid, EwrUnits::Imperial);
-        ctx.db.msgs().panel_to_group(5, false, gid, "EWR units are now Imperial");
+        ctx.db
+            .msgs()
+            .panel_to_group(5, false, gid, "EWR units are now Imperial");
     }
     Ok(())
 }
@@ -417,7 +420,9 @@ fn ewr_units_metric(lua: MizLua, gid: GroupId) -> Result<()> {
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
     if let Some(ucid) = ctx.db.player_in_slot(&slot) {
         ctx.ewr.set_units(ucid, EwrUnits::Imperial);
-        ctx.db.msgs().panel_to_group(5, false, gid, "EWR units are now Metric");
+        ctx.db
+            .msgs()
+            .panel_to_group(5, false, gid, "EWR units are now Metric");
     }
     Ok(())
 }

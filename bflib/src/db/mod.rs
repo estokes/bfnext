@@ -664,20 +664,14 @@ impl Db {
         self.persisted.players.get(ucid)
     }
 
-    pub fn airborne_players(&self) -> impl Iterator<Item = (&Ucid, &Player, &InstancedPlayer)> {
+    pub fn instanced_players(&self) -> impl Iterator<Item = (&Ucid, &Player, &InstancedPlayer)> {
         self.ephemeral.players_by_slot.values().filter_map(|ucid| {
             let player = &self.persisted.players[ucid];
             player
                 .current_slot
                 .as_ref()
                 .and_then(|(_, inst)| inst.as_ref())
-                .and_then(|inst| {
-                    if inst.in_air {
-                        Some((ucid, player, inst))
-                    } else {
-                        None
-                    }
-                })
+                .map(|inst| (ucid, player, inst))
         })
     }
 

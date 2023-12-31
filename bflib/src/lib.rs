@@ -481,7 +481,7 @@ fn advise_captured(ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
 
 fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
     let mut msgs: SmallVec<[(UnitId, CompactString); 64]> = smallvec![];
-    for (ucid, player, inst) in ctx.db.airborne_players() {
+    for (ucid, player, inst) in ctx.db.instanced_players() {
         let uid = match player
             .current_slot
             .as_ref()

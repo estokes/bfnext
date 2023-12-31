@@ -88,7 +88,10 @@ pub struct Ewr {
 impl Ewr {
     pub fn update_tracks(&mut self, lua: MizLua, db: &Db, now: DateTime<Utc>) -> Result<()> {
         let land = Land::singleton(lua)?;
-        let players: SmallVec<[_; 64]> = db.airborne_players().collect();
+        let players: SmallVec<[_; 64]> = db
+            .instanced_players()
+            .filter(|(_, _, inst)| inst.in_air)
+            .collect();
         for (ewr_pos, side, ewr) in db.ewrs() {
             let ewr_pos3 = LuaVec3(Vector3::new(
                 ewr_pos.x,

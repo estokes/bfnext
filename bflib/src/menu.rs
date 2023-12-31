@@ -4,8 +4,9 @@ use crate::{
         cargo::{Cargo, Oldest, SlotStats},
         Db,
     },
-    Context,
+    Context, ewr::EwrUnits,
 };
+use chrono::prelude::*;
 use anyhow::{anyhow, bail, Result};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -193,7 +194,8 @@ pub(super) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId)
         msg.push_str("----------------------------\n");
     }
     msg.push_str(&format_compact!("total cargo weight: {} kg", total as u32));
-    ctx.db.msgs()
+    ctx.db
+        .msgs()
         .panel_to_unit(15, false, slot.as_unit_id().unwrap(), msg);
     Ok(())
 }
@@ -222,7 +224,8 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
         ctx.db.msgs().panel_to_group(10, false, gid, msg)
     } else {
         drop(nearby);
-        ctx.db.msgs()
+        ctx.db
+            .msgs()
             .panel_to_group(10, false, gid, "No nearby crates")
     }
     Ok(())
@@ -232,7 +235,8 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     if let Err(e) = ctx.db.destroy_nearby_crate(lua, &ctx.idx, &slot) {
-        ctx.db.msgs()
+        ctx.db
+            .msgs()
             .panel_to_group(10, false, gid, format_compact!("{}", e))
     }
     Ok(())
@@ -243,7 +247,8 @@ fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
     let (_side, slot) = slot_for_group(lua, ctx, &arg.group)?;
     match ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.name) {
         Err(e) => ctx
-            .db.msgs()
+            .db
+            .msgs()
             .panel_to_group(10, false, arg.group, format_compact!("{e}")),
         Ok(st) => {
             if let Some(max_crates) = ctx.db.cfg().max_crates {
@@ -254,8 +259,7 @@ fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
                         "{n}/{max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
                     ),
                 };
-                ctx.db.msgs()
-                    .panel_to_group(10, false, arg.group, msg)
+                ctx.db.msgs().panel_to_group(10, false, arg.group, msg)
             }
         }
     }
@@ -288,7 +292,8 @@ fn load_troops(lua: MizLua, arg: SpawnArg) -> Result<()> {
             ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
-            .db.msgs()
+            .db
+            .msgs()
             .panel_to_group(10, false, arg.group, format_compact!("{e}")),
     }
     Ok(())
@@ -304,7 +309,8 @@ fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
             ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
-            .db.msgs()
+            .db
+            .msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
     }
     Ok(())
@@ -320,7 +326,8 @@ fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
             ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
-            .db.msgs()
+            .db
+            .msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
     }
     Ok(())
@@ -336,8 +343,63 @@ fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
             ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
-            .db.msgs()
+            .db
+            .msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
+    }
+    Ok(())
+}
+
+fn toggle_ewr(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+        let st = if ctx.ewr.toggle(ucid) {
+            "enabled"
+        } else {
+            "disabled"
+        };
+        ctx.db
+            .msgs()
+            .panel_to_group(5, false, gid, format_compact!("ewr reports are {st}"))
+    }
+    Ok(())
+}
+
+fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    let mut report = format_compact!("Friendlies Nearby\n");
+    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+        if let Some(player) = ctx.db.player(ucid) {
+            if let Some((_, Some(inst))) = &player.current_slot {
+                let friendlies = ctx.ewr.where_chicken(Utc::now(), true, ucid, player, inst);
+                for braa in friendlies {
+                    report.push_str(&format_compact!("{braa}\n"));
+                }
+            }
+        }
+    }
+    ctx.db.msgs().panel_to_group(10, false, gid, report);
+    Ok(())
+}
+
+fn ewr_units_imperial(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+        ctx.ewr.set_units(ucid, EwrUnits::Imperial);
+        ctx.db.msgs().panel_to_group(5, false, gid, "EWR units are now Imperial");
+    }
+    Ok(())
+}
+
+fn ewr_units_metric(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+        ctx.ewr.set_units(ucid, EwrUnits::Imperial);
+        ctx.db.msgs().panel_to_group(5, false, gid, "EWR units are now Metric");
     }
     Ok(())
 }
@@ -491,6 +553,39 @@ fn add_cargo_menu_for_group(
     Ok(())
 }
 
+fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
+    let root = mc.add_submenu_for_group(group, "EWR".into(), None)?;
+    mc.add_command_for_group(
+        group,
+        "toggle".into(),
+        Some(root.clone()),
+        toggle_ewr,
+        group,
+    )?;
+    mc.add_command_for_group(
+        group,
+        "Friendly Report".into(),
+        Some(root.clone()),
+        friendly_ewr_report,
+        group,
+    )?;
+    mc.add_command_for_group(
+        group,
+        "Units to Imperial".into(),
+        Some(root.clone()),
+        ewr_units_imperial,
+        group,
+    )?;
+    mc.add_command_for_group(
+        group,
+        "Units to Metric".into(),
+        Some(root.clone()),
+        ewr_units_metric,
+        group,
+    )?;
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 struct CarryCap {
     troops: bool,
@@ -530,22 +625,26 @@ pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
             for heli in country.helicopters()? {
                 let heli = heli?;
                 let cap = CarryCap::new(cfg, &heli)?;
+                let gid = heli.id()?;
                 if cap.crates {
-                    add_cargo_menu_for_group(cfg, &mc, &side, heli.id()?)?
+                    add_cargo_menu_for_group(cfg, &mc, &side, gid)?
                 }
                 if cap.troops {
-                    add_troops_menu_for_group(cfg, &mc, &side, heli.id()?)?
+                    add_troops_menu_for_group(cfg, &mc, &side, gid)?
                 }
+                add_ewr_menu_for_group(&mc, gid)?;
             }
             for plane in country.planes()? {
                 let plane = plane?;
                 let cap = CarryCap::new(cfg, &plane)?;
+                let gid = plane.id()?;
                 if cap.crates {
-                    add_cargo_menu_for_group(cfg, &mc, &side, plane.id()?)?
+                    add_cargo_menu_for_group(cfg, &mc, &side, gid)?
                 }
                 if cap.troops {
-                    add_troops_menu_for_group(cfg, &mc, &side, plane.id()?)?
+                    add_troops_menu_for_group(cfg, &mc, &side, gid)?
                 }
+                add_ewr_menu_for_group(&mc, gid)?;
             }
         }
     }

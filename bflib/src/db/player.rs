@@ -276,6 +276,7 @@ impl Db {
                     };
                     let instanced_player = InstancedPlayer {
                         position: instance.get_position()?,
+                        velocity: instance.get_velocity()?.0,
                         in_air: instance.in_air()?,
                         typ: Vehicle::from(instance.get_type_name()?),
                     };

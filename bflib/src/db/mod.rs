@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 use self::cargo::Cargo;
 use crate::{
-    cfg::{Cfg, Crate, Deployable, DeployableLogistics, LifeType, Troop, Vehicle},
+    cfg::{Cfg, Crate, Deployable, DeployableEwr, DeployableLogistics, LifeType, Troop, Vehicle},
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
 };
@@ -19,7 +19,7 @@ use dcso3::{
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    MizLua, Position3, String, Vector2,
+    MizLua, Position3, String, Vector2, Vector3,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use mlua::{prelude::*, Value};
@@ -350,6 +350,7 @@ impl Objective {
 #[derive(Debug, Clone)]
 pub struct InstancedPlayer {
     pub position: Position3,
+    pub velocity: Vector3,
     pub typ: Vehicle,
     pub in_air: bool,
 }
@@ -661,6 +662,44 @@ impl Db {
 
     pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
         self.persisted.players.get(ucid)
+    }
+
+    pub fn airborne_players(&self) -> impl Iterator<Item = (&Ucid, &Player, &InstancedPlayer)> {
+        self.ephemeral.players_by_slot.values().filter_map(|ucid| {
+            let player = &self.persisted.players[ucid];
+            player
+                .current_slot
+                .as_ref()
+                .and_then(|(_, inst)| inst.as_ref())
+                .and_then(|inst| {
+                    if inst.in_air {
+                        Some((ucid, player, inst))
+                    } else {
+                        None
+                    }
+                })
+        })
+    }
+
+    pub fn ewrs(&self) -> impl Iterator<Item = (Vector2, Side, &DeployableEwr)> {
+        self.persisted.deployed.into_iter().filter_map(|gid| {
+            let group = &self.persisted.groups[gid];
+            match &group.origin {
+                DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
+                DeployKind::Deployed { spec, .. } => match &spec.ewr {
+                    None => None,
+                    Some(ewr) => {
+                        let pos = centroid2d(
+                            group
+                                .units
+                                .into_iter()
+                                .map(|uid| self.persisted.units[uid].pos),
+                        );
+                        Some((pos, group.side, ewr))
+                    }
+                },
+            }
+        })
     }
 
     pub fn msgs(&mut self) -> &mut MsgQ {
@@ -1115,7 +1154,9 @@ impl Db {
             }
             None => return Ok(()),
         };
-        self.ephemeral.units_potentially_close_to_enemies.remove(&uid);
+        self.ephemeral
+            .units_potentially_close_to_enemies
+            .remove(&uid);
         self.ephemeral.units_potentially_on_walkabout.remove(&uid);
         self.ephemeral.ca_controlled.remove(&uid);
         if let Some(unit) = self.persisted.units.get_mut_cow(&uid) {

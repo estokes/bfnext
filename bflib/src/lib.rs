@@ -1,6 +1,7 @@
 pub mod bg;
 pub mod cfg;
 pub mod db;
+pub mod ewr;
 pub mod menu;
 pub mod msgq;
 pub mod spawnctx;
@@ -14,7 +15,11 @@ use compact_str::{format_compact, CompactString};
 use db::{Db, ObjectiveId};
 use dcso3::{
     coalition::Side,
-    env::{self, miz::Miz, Env},
+    env::{
+        self,
+        miz::{Miz, UnitId},
+        Env,
+    },
     event::Event,
     hooks::UserHooks,
     lfs::Lfs,
@@ -26,6 +31,7 @@ use dcso3::{
     world::World,
     HooksLua, LuaEnv, MizLua, String, Vector2,
 };
+use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, info};
 use mlua::prelude::*;
@@ -54,6 +60,7 @@ struct Context {
     captureable: FxHashMap<ObjectiveId, usize>,
     force_to_spectators: FxHashSet<PlayerId>,
     last_slow_timed_events: DateTime<Utc>,
+    ewr: Ewr,
 }
 
 static mut CONTEXT: Option<Context> = None;
@@ -472,12 +479,39 @@ fn advise_captured(ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
     Ok(())
 }
 
+fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
+    let mut msgs: SmallVec<[(UnitId, CompactString); 64]> = smallvec![];
+    for (ucid, player, inst) in ctx.db.airborne_players() {
+        let uid = match player
+            .current_slot
+            .as_ref()
+            .and_then(|(sl, _)| sl.as_unit_id())
+        {
+            Some(uid) => uid,
+            None => continue,
+        };
+        let braa_to_chickens = ctx.ewr.where_chicken(now, false, ucid, player, inst);
+        if !braa_to_chickens.is_empty() {
+            let mut report = format_compact!("Bandits BRAA ({:?})\n", braa_to_chickens[0].units);
+            for gibbraa in braa_to_chickens {
+                report.push_str(&format_compact!("{gibbraa}\n"))
+            }
+            msgs.push((uid, report));
+        }
+    }
+    for (uid, msg) in msgs {
+        ctx.db.msgs().panel_to_unit(10, false, uid, msg)
+    }
+    Ok(())
+}
+
 fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
     let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events > freq {
         ctx.last_slow_timed_events = ts;
         ctx.db.update_unit_positions(lua, ts)?;
         ctx.db.update_player_positions(lua)?;
+        generate_ewr_reports(ctx, ts)?;
         let (threatened, cleared) = ctx.db.cull_or_respawn_objectives(lua, ts)?;
         for oid in threatened {
             let obj = ctx.db.objective(&oid)?;

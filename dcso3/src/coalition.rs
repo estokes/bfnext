@@ -11,9 +11,15 @@ use crate::{simple_enum, wrapped_table, LuaEnv, MizLua, Sequence};
 use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::{ops::Deref, str::FromStr, fmt};
+use std::{fmt, ops::Deref, str::FromStr};
 
 simple_enum!(Side, u8, [Neutral => 0, Red => 1, Blue => 2]);
+
+impl Default for Side {
+    fn default() -> Self {
+        Side::Red
+    }
+}
 
 impl fmt::Display for Side {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -47,7 +53,7 @@ impl Side {
         match self {
             Self::Blue => Self::Red,
             Self::Red => Self::Blue,
-            Self::Neutral => Self::Neutral
+            Self::Neutral => Self::Neutral,
         }
     }
 }
@@ -98,7 +104,11 @@ impl<'lua> Coalition<'lua> {
         Ok(self.t.call_function("getPlayers", side)?)
     }
 
-    pub fn get_service_providers(&self, side: Side, service: Service) -> Result<Sequence<'lua, Unit<'lua>>> {
+    pub fn get_service_providers(
+        &self,
+        side: Side,
+        service: Service,
+    ) -> Result<Sequence<'lua, Unit<'lua>>> {
         Ok(self
             .t
             .call_function("getServiceProviders", (side, service))?)

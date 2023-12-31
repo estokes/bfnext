@@ -366,6 +366,24 @@ fn toggle_ewr(lua: MizLua, gid: GroupId) -> Result<()> {
     Ok(())
 }
 
+fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    let mut report = format_compact!("Bandits BRAA\n");
+    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+        if let Some(player) = ctx.db.player(ucid) {
+            if let Some((_, Some(inst))) = &player.current_slot {
+                let chickens = ctx.ewr.where_chicken(Utc::now(), false, ucid, player, inst);
+                for braa in chickens {
+                    report.push_str(&format_compact!("{braa}\n"));
+                }
+            }
+        }
+    }
+    ctx.db.msgs().panel_to_group(10, false, gid, report);
+    Ok(())
+}
+
 fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
@@ -560,6 +578,13 @@ fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
         "toggle".into(),
         Some(root.clone()),
         toggle_ewr,
+        group,
+    )?;
+    mc.add_command_for_group(
+        group,
+        "Report".into(),
+        Some(root.clone()),
+        ewr_report,
         group,
     )?;
     mc.add_command_for_group(

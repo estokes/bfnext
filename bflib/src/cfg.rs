@@ -1,4 +1,5 @@
 use dcso3::{coalition::Side, err, String};
+use enumflags2::{bitflags, BitFlags};
 use fxhash::FxHashMap;
 use log::error;
 use mlua::prelude::*;
@@ -30,6 +31,39 @@ impl Borrow<str> for Vehicle {
     fn borrow(&self) -> &str {
         &*self.0
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[bitflags]
+#[repr(u32)]
+pub enum UnitClass {
+    SAM,
+    AAA,
+    Armor,
+    APC,
+    Logistics,
+    Infantry,
+    LR,
+    SR,
+    MR,
+    IRGuided,
+    RadarGuided,
+    OpticallyGuided,
+    EngagesWeapons,
+    Unguided,
+    TrackRadar,
+    SearchRadar,
+    AuxRadarUnit,
+    ControlUnit,
+    Launcher,
+    ATGM,
+    Artillery,
+    LightCannon,
+    HeavyCannon,
+    RPG,
+    SmallArms,
+    Unarmed,
+    Invincible,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
@@ -222,6 +256,8 @@ pub struct Cfg {
     pub deployables: FxHashMap<Side, Vec<Deployable>>,
     /// deployable troops configuration for each side
     pub troops: FxHashMap<Side, Vec<Troop>>,
+    /// classification of ground units in the mission
+    pub unit_classification: FxHashMap<Vehicle, BitFlags<UnitClass>>,
 }
 
 impl Cfg {
@@ -433,7 +469,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }),
             logistics: None,
-            ewr: Some(DeployableEwr { range: 60000 })
+            ewr: Some(DeployableEwr { range: 60000 }),
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA15 Tor".into()],
@@ -451,7 +487,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: Some(DeployableEwr { range: 20000 }) 
+            ewr: Some(DeployableEwr { range: 20000 }),
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA8 Osa".into()],
@@ -469,7 +505,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["AAA".into(), "ZU23 Emplacement".into()],
@@ -487,7 +523,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Shilka".into()],
@@ -505,7 +541,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Tunguska".into()],
@@ -523,7 +559,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "SA13 Strela".into()],
@@ -541,7 +577,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "SPH 2S19 Msta 152MM".into()],
@@ -559,7 +595,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "T72".into()],
@@ -577,7 +613,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "BMP3".into()],
@@ -595,7 +631,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["EWRs".into(), "1L13".into()],
@@ -613,7 +649,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: Some(DeployableEwr { range: 500000 })
+            ewr: Some(DeployableEwr { range: 500000 }),
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -636,7 +672,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 fuel_template: "RDEPFARPFUEL".into(),
                 barracks_template: "RDEPFARPTENT".into(),
             }),
-            ewr: None
+            ewr: None,
         },
     ]
 }
@@ -710,7 +746,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 max_drop_speed: 50,
             }),
             logistics: None,
-            ewr: Some(DeployableEwr { range: 60000 }) 
+            ewr: Some(DeployableEwr { range: 60000 }),
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Avenger".into()],
@@ -728,7 +764,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Linebacker".into()],
@@ -746,7 +782,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Flakpanzergepard".into()],
@@ -764,7 +800,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Vulkan".into()],
@@ -782,7 +818,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "Firtina 155MM".into()],
@@ -800,7 +836,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "M2A2 Bradley".into()],
@@ -818,7 +854,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "2A6M Leopard".into()],
@@ -836,7 +872,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: None
+            ewr: None,
         },
         Deployable {
             path: vec!["EWRs".into(), "AN/FPS-117".into()],
@@ -854,7 +890,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: None,
-            ewr: Some(DeployableEwr { range: 500000 })
+            ewr: Some(DeployableEwr { range: 500000 }),
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -877,9 +913,234 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 fuel_template: "BDEPFARPFUEL".into(),
                 barracks_template: "BDEPFARPTENT".into(),
             }),
-            ewr: None
+            ewr: None,
         },
     ]
+}
+
+fn default_life_types() -> FxHashMap<Vehicle, LifeType> {
+    FxHashMap::from_iter([
+        ("FA-18C_hornet".into(), LifeType::Standard),
+        ("F-14A-135-GR".into(), LifeType::Standard),
+        ("F-14B".into(), LifeType::Standard),
+        ("F-15C".into(), LifeType::Standard),
+        ("F-15ESE".into(), LifeType::Standard),
+        ("MiG-29S".into(), LifeType::Standard),
+        ("M-2000C".into(), LifeType::Standard),
+        ("F-16C_50".into(), LifeType::Standard),
+        ("MiG-29A".into(), LifeType::Standard),
+        ("Su-27".into(), LifeType::Standard),
+        ("AH-64D_BLK_II".into(), LifeType::Attack),
+        ("Mi-24P".into(), LifeType::Attack),
+        ("Ka-50_3".into(), LifeType::Attack),
+        ("A-10C".into(), LifeType::Attack),
+        ("A-10A".into(), LifeType::Attack),
+        ("Su-25".into(), LifeType::Attack),
+        ("Su-25T".into(), LifeType::Attack),
+        ("AJS37".into(), LifeType::Attack),
+        ("Ka-50".into(), LifeType::Attack),
+        ("AV8BNA".into(), LifeType::Attack),
+        ("A-10C_2".into(), LifeType::Attack),
+        ("JF-17".into(), LifeType::Attack),
+        ("SA342L".into(), LifeType::Logistics),
+        ("UH-1H".into(), LifeType::Logistics),
+        ("Mi-8MT".into(), LifeType::Logistics),
+        ("SA342M".into(), LifeType::Logistics),
+        ("L-39C".into(), LifeType::Recon),
+        ("L-39ZA".into(), LifeType::Recon),
+        ("TF-51D".into(), LifeType::Recon),
+        ("Yak-52".into(), LifeType::Recon),
+        ("C-101CC".into(), LifeType::Recon),
+        ("MB-339A".into(), LifeType::Recon),
+        ("F-5E-3".into(), LifeType::Intercept),
+        ("MiG-21Bis".into(), LifeType::Intercept),
+        ("MiG-19P".into(), LifeType::Intercept),
+        ("Mirage-F1EE".into(), LifeType::Intercept),
+        ("Mirage-F1CE".into(), LifeType::Intercept),
+    ])
+}
+
+fn default_cargo() -> FxHashMap<Vehicle, CargoConfig> {
+    FxHashMap::from_iter([
+        (
+            "UH-1H".into(),
+            CargoConfig {
+                troop_slots: 1,
+                crate_slots: 1,
+                total_slots: 2,
+            },
+        ),
+        (
+            "Mi-8MT".into(),
+            CargoConfig {
+                troop_slots: 2,
+                crate_slots: 1,
+                total_slots: 2,
+            },
+        ),
+        (
+            "SA342L".into(),
+            CargoConfig {
+                troop_slots: 1,
+                crate_slots: 1,
+                total_slots: 1,
+            },
+        ),
+        (
+            "SA342M".into(),
+            CargoConfig {
+                troop_slots: 1,
+                crate_slots: 1,
+                total_slots: 1,
+            },
+        ),
+        (
+            "Mi-24P".into(),
+            CargoConfig {
+                troop_slots: 1,
+                crate_slots: 1,
+                total_slots: 1,
+            },
+        ),
+    ])
+}
+
+fn default_threatened_distance() -> FxHashMap<Vehicle, u32> {
+    FxHashMap::from_iter([
+        ("FA-18C_hornet".into(), 36000),
+        ("F-14A-135-GR".into(), 21600),
+        ("F-14B".into(), 21600),
+        ("F-15C".into(), 36000),
+        ("F-15ESE".into(), 36000),
+        ("MiG-29S".into(), 21600),
+        ("M-2000C".into(), 21600),
+        ("F-16C_50".into(), 36000),
+        ("MiG-29A".into(), 21600),
+        ("Su-27".into(), 21600),
+        ("AH-64D_BLK_II".into(), 14400),
+        ("Mi-24P".into(), 14400),
+        ("Ka-50_3".into(), 14400),
+        ("A-10C".into(), 21600),
+        ("A-10A".into(), 21600),
+        ("Su-25".into(), 21600),
+        ("Su-25T".into(), 21600),
+        ("AJS37".into(), 36000),
+        ("Ka-50".into(), 14400),
+        ("AV8BNA".into(), 36000),
+        ("A-10C_2".into(), 14400),
+        ("JF-17".into(), 36000),
+        ("SA342L".into(), 9000),
+        ("UH-1H".into(), 9000),
+        ("Mi-8MT".into(), 9000),
+        ("SA342M".into(), 9000),
+        ("L-39C".into(), 9000),
+        ("L-39ZA".into(), 9000),
+        ("TF-51D".into(), 0),
+        ("Yak-52".into(), 0),
+        ("C-101CC".into(), 9000),
+        ("MB-339A".into(), 9000),
+        ("F-5E-3".into(), 14400),
+        ("MiG-21Bis".into(), 14400),
+        ("MiG-19P".into(), 9000),
+        ("Mirage-F1EE".into(), 14400),
+        ("Mirage-F1CE".into(), 14400),
+    ])
+}
+
+fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitClass>> {
+    use UnitClass::*;
+    FxHashMap::from_iter([
+        (
+            "M6 Linebacker".into(),
+            SAM | SR | IRGuided | Launcher | APC | LightCannon,
+        ),
+        (
+            "M1097 Avenger".into(),
+            SAM | SR | IRGuided | Launcher | SmallArms,
+        ),
+        ("Hawk cwar".into(), SAM | LR | RadarGuided | AuxRadarUnit),
+        ("Hawk pcp".into(), SAM | LR | RadarGuided | ControlUnit),
+        ("Hawk sr".into(), SAM | LR | RadarGuided | SearchRadar),
+        ("Hawk tr".into(), SAM | LR | RadarGuided | TrackRadar),
+        ("Hawk ln".into(), SAM | LR | RadarGuided | Launcher),
+        ("M1134 Stryker ATGM".into(), APC | MR | ATGM | SmallArms),
+        ("M-2 Bradley".into(), APC | MR | ATGM | LightCannon),
+        ("M-1 Abrams".into(), Armor | MR | HeavyCannon | SmallArms),
+        ("outpost".into(), Logistics | SR | SmallArms),
+        ("bofors40".into(), AAA | LR),
+        ("M 818".into(), Logistics | Unarmed),
+        ("M978 HEMTT Tanker".into(), Logistics | Unarmed),
+        ("Soldier M249".into(), Infantry | SR | SmallArms),
+        ("HL_ZU-23".into(), AAA | SR),
+        (
+            "Roland ADS".into(),
+            SAM | MR | RadarGuided | EngagesWeapons | Launcher | SearchRadar | TrackRadar,
+        ),
+        ("Vulcan".into(), AAA | MR | RadarGuided),
+        ("Gepard".into(), AAA | LR | RadarGuided),
+        ("Soldier RPG".into(), Infantry | MR | RPG),
+        ("Soldier M4".into(), Infantry | SR | SmallArms),
+        ("2B11 mortar".into(), Infantry | LR | Artillery),
+        (
+            "Soldier stinger".into(),
+            SAM | Infantry | SR | IRGuided | Launcher,
+        ),
+        (
+            "Stinger comm".into(),
+            SAM | Infantry | ControlUnit | Unarmed,
+        ),
+        ("T155_Firtina".into(), Armor | LR | Artillery | SmallArms),
+        ("Leopard-2".into(), Armor | MR | HeavyCannon | SmallArms),
+        ("ZSU-23-4 Shilka".into(), AAA | MR | RadarGuided),
+        ("ZSU_57_2".into(), AAA | LR),
+        ("Strela-10M3".into(), SAM | SR | IRGuided | Launcher),
+        (
+            "SA-11 Buk CC 9S470M1".into(),
+            SAM | LR | RadarGuided | ControlUnit,
+        ),
+        (
+            "SA-11 Buk SR 9S18M1".into(),
+            SAM | LR | RadarGuided | SearchRadar,
+        ),
+        (
+            "SA-11 Buk LN 9A310M1".into(),
+            SAM | LR | RadarGuided | TrackRadar | Launcher,
+        ),
+        ("BMD-1".into(), APC | MR | ATGM | LightCannon),
+        ("BMP-3".into(), APC | MR | ATGM | LightCannon),
+        ("T-80UD".into(), Armor | MR | ATGM | HeavyCannon | SmallArms),
+        ("S-60_Type59_Artillery".into(), AAA | LR),
+        ("ZU-23 Emplacement Closed".into(), AAA | SR),
+        ("ATZ-10".into(), Logistics | Unarmed),
+        ("Ural-375".into(), Logistics | Unarmed),
+        ("Infantry AK ver3".into(), Infantry | SR | SmallArms),
+        ("Infantry AK ver2".into(), Infantry | SR | SmallArms),
+        ("Paratrooper RPG-16".into(), Infantry | MR | RPG),
+        (
+            "Kub 1S91 str".into(),
+            SAM | MR | RadarGuided | SearchRadar | TrackRadar,
+        ),
+        ("Kub 2P25 ln".into(), SAM | MR | RadarGuided | Launcher),
+        (
+            "Tor 9A331".into(),
+            SAM | MR | RadarGuided | EngagesWeapons | SearchRadar | TrackRadar | Launcher,
+        ),
+        (
+            "Osa 9A33 ln".into(),
+            SAM | SR | RadarGuided | SearchRadar | TrackRadar | Launcher,
+        ),
+        ("ZU-23 Emplacement".into(), AAA | SR),
+        (
+            "2S6 Tunguska".into(),
+            SAM | AAA | SR | OpticallyGuided | Launcher,
+        ),
+        ("Cow".into(), Logistics | Unarmed),
+        ("FARP Ammo Dump Coating".into(), Logistics | Unarmed),
+        ("FARP Fuel Depot".into(), Logistics | Unarmed),
+        ("FARP Tent".into(), Logistics | Unarmed),
+        ("Invisible FARP".into(), Logistics | Unarmed | Invincible),
+        ("M-109".into(), Armor | Artillery),
+    ])
 }
 
 impl Default for Cfg {
@@ -914,45 +1175,7 @@ impl Default for Cfg {
             unit_cull_distance: 70000,
             ground_vehicle_cull_distance: 7000,
             slow_timed_events_freq: 10,
-            threatened_distance: FxHashMap::from_iter([
-                ("FA-18C_hornet".into(), 36000),
-                ("F-14A-135-GR".into(), 21600),
-                ("F-14B".into(), 21600),
-                ("F-15C".into(), 36000),
-                ("F-15ESE".into(), 36000),
-                ("MiG-29S".into(), 21600),
-                ("M-2000C".into(), 21600),
-                ("F-16C_50".into(), 36000),
-                ("MiG-29A".into(), 21600),
-                ("Su-27".into(), 21600),
-                ("AH-64D_BLK_II".into(), 14400),
-                ("Mi-24P".into(), 14400),
-                ("Ka-50_3".into(), 14400),
-                ("A-10C".into(), 21600),
-                ("A-10A".into(), 21600),
-                ("Su-25".into(), 21600),
-                ("Su-25T".into(), 21600),
-                ("AJS37".into(), 36000),
-                ("Ka-50".into(), 14400),
-                ("AV8BNA".into(), 36000),
-                ("A-10C_2".into(), 14400),
-                ("JF-17".into(), 36000),
-                ("SA342L".into(), 9000),
-                ("UH-1H".into(), 9000),
-                ("Mi-8MT".into(), 9000),
-                ("SA342M".into(), 9000),
-                ("L-39C".into(), 9000),
-                ("L-39ZA".into(), 9000),
-                ("TF-51D".into(), 0),
-                ("Yak-52".into(), 0),
-                ("C-101CC".into(), 9000),
-                ("MB-339A".into(), 9000),
-                ("F-5E-3".into(), 14400),
-                ("MiG-21Bis".into(), 14400),
-                ("MiG-19P".into(), 9000),
-                ("Mirage-F1EE".into(), 14400),
-                ("Mirage-F1CE".into(), 14400),
-            ]),
+            threatened_distance: default_threatened_distance(),
             threatened_cooldown: 300,
             crate_load_distance: 50,
             crate_spread: 250,
@@ -965,87 +1188,8 @@ impl Default for Cfg {
                 (LifeType::Logistics, (6, 21600)),
                 (LifeType::Recon, (6, 21600)),
             ]),
-            life_types: FxHashMap::from_iter([
-                ("FA-18C_hornet".into(), LifeType::Standard),
-                ("F-14A-135-GR".into(), LifeType::Standard),
-                ("F-14B".into(), LifeType::Standard),
-                ("F-15C".into(), LifeType::Standard),
-                ("F-15ESE".into(), LifeType::Standard),
-                ("MiG-29S".into(), LifeType::Standard),
-                ("M-2000C".into(), LifeType::Standard),
-                ("F-16C_50".into(), LifeType::Standard),
-                ("MiG-29A".into(), LifeType::Standard),
-                ("Su-27".into(), LifeType::Standard),
-                ("AH-64D_BLK_II".into(), LifeType::Attack),
-                ("Mi-24P".into(), LifeType::Attack),
-                ("Ka-50_3".into(), LifeType::Attack),
-                ("A-10C".into(), LifeType::Attack),
-                ("A-10A".into(), LifeType::Attack),
-                ("Su-25".into(), LifeType::Attack),
-                ("Su-25T".into(), LifeType::Attack),
-                ("AJS37".into(), LifeType::Attack),
-                ("Ka-50".into(), LifeType::Attack),
-                ("AV8BNA".into(), LifeType::Attack),
-                ("A-10C_2".into(), LifeType::Attack),
-                ("JF-17".into(), LifeType::Attack),
-                ("SA342L".into(), LifeType::Logistics),
-                ("UH-1H".into(), LifeType::Logistics),
-                ("Mi-8MT".into(), LifeType::Logistics),
-                ("SA342M".into(), LifeType::Logistics),
-                ("L-39C".into(), LifeType::Recon),
-                ("L-39ZA".into(), LifeType::Recon),
-                ("TF-51D".into(), LifeType::Recon),
-                ("Yak-52".into(), LifeType::Recon),
-                ("C-101CC".into(), LifeType::Recon),
-                ("MB-339A".into(), LifeType::Recon),
-                ("F-5E-3".into(), LifeType::Intercept),
-                ("MiG-21Bis".into(), LifeType::Intercept),
-                ("MiG-19P".into(), LifeType::Intercept),
-                ("Mirage-F1EE".into(), LifeType::Intercept),
-                ("Mirage-F1CE".into(), LifeType::Intercept),
-            ]),
-            cargo: FxHashMap::from_iter([
-                (
-                    "UH-1H".into(),
-                    CargoConfig {
-                        troop_slots: 1,
-                        crate_slots: 1,
-                        total_slots: 2,
-                    },
-                ),
-                (
-                    "Mi-8MT".into(),
-                    CargoConfig {
-                        troop_slots: 2,
-                        crate_slots: 1,
-                        total_slots: 2,
-                    },
-                ),
-                (
-                    "SA342L".into(),
-                    CargoConfig {
-                        troop_slots: 1,
-                        crate_slots: 1,
-                        total_slots: 1,
-                    },
-                ),
-                (
-                    "SA342M".into(),
-                    CargoConfig {
-                        troop_slots: 1,
-                        crate_slots: 1,
-                        total_slots: 1,
-                    },
-                ),
-                (
-                    "Mi-24P".into(),
-                    CargoConfig {
-                        troop_slots: 1,
-                        crate_slots: 1,
-                        total_slots: 1,
-                    },
-                ),
-            ]),
+            life_types: default_life_types(),
+            cargo: default_cargo(),
             crate_template: FxHashMap::from_iter([
                 (Side::Red, "RCRATE".into()),
                 (Side::Blue, "BCRATE".into()),
@@ -1058,6 +1202,7 @@ impl Default for Cfg {
                 (Side::Red, default_red_troops()),
                 (Side::Blue, default_blue_troops()),
             ]),
+            unit_classification: default_unit_classification(),
         }
     }
 }

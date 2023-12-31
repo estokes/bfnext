@@ -20,7 +20,7 @@ serde_derive = { workspace = true }
 compact_str = { workspace = true }
 bytes = { workspace = true }
 fxhash = { workspace = true }
-enumflags2 = { workspace = true }
+enumflags2 = { workspace = true, features = ["serde"] }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
 nalgebra = { workspace = true }

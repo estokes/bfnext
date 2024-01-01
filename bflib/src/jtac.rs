@@ -2,14 +2,15 @@ use crate::{
     cfg::UnitTag,
     db::{Db, GroupId, SpawnedUnit, UnitId},
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::prelude::*;
 use dcso3::{
     coalition::Side,
     land::Land,
     object::{DcsObject, DcsOid},
     spot::{ClassSpot, Spot},
-    LuaVec3, MizLua, Vector2, Vector3,
+    unit::{ClassUnit, Unit},
+    LuaVec3, MizLua, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -22,19 +23,32 @@ struct Contact {
     last_move: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct Jtac {
     contacts: IndexMap<UnitId, Contact>,
+    id: DcsOid<ClassUnit>,
     filter: BitFlags<UnitTag>,
     priority: Vec<UnitTag>,
     target: Option<(DcsOid<ClassSpot>, UnitId)>,
     autolase: bool,
     smoketarget: bool,
     code: u16,
-    pos: Vector2,
 }
 
 impl Jtac {
+    fn new(id: DcsOid<ClassUnit>) -> Self {
+        Self {
+            contacts: IndexMap::default(),
+            id,
+            filter: BitFlags::default(),
+            priority: vec![],
+            target: None,
+            autolase: true,
+            smoketarget: false,
+            code: 1688,
+        }
+    }
+
     fn add_contact(&mut self, unit: &SpawnedUnit) {
         let ct = self.contacts.entry(unit.id).or_default();
         ct.pos = unit.position.p.0;
@@ -50,6 +64,46 @@ impl Jtac {
         Ok(())
     }
 
+    fn set_target(&mut self, lua: MizLua, i: usize) -> Result<Option<UnitId>> {
+        let (uid, ct) = self
+            .contacts
+            .get_index(i)
+            .ok_or_else(|| anyhow!("no such target"))?;
+        match &self.target {
+            Some((_, tuid)) if tuid == uid => Ok(None),
+            Some(_) | None => {
+                self.remove_target(lua);
+                let jt = Unit::get_instance(lua, &self.id)?;
+                let spot = Spot::create_laser(
+                    lua,
+                    jt.as_object()?,
+                    Some(LuaVec3(Vector3::new(0., 1., 0.))),
+                    LuaVec3(ct.pos),
+                    self.code,
+                )?;
+                self.target = Some((spot.object_id()?, *uid));
+                Ok(Some(*uid))
+            }
+        }
+    }
+
+    fn shift(&mut self, lua: MizLua) -> Result<Option<UnitId>> {
+        let i = match &self.target {
+            None => 0,
+            Some((_, uid)) => match self.contacts.get_index_of(uid) {
+                None => 0,
+                Some(i) => {
+                    if i < self.contacts.len() - 1 {
+                        i + 1
+                    } else {
+                        0
+                    }
+                }
+            },
+        };
+        self.set_target(lua, i)
+    }
+
     fn remove_contact(&mut self, lua: MizLua, uid: &UnitId) -> Result<()> {
         if let Some(_) = self.contacts.swap_remove(uid) {
             if let Some((id, tuid)) = &self.target {
@@ -61,21 +115,22 @@ impl Jtac {
         Ok(())
     }
 
-    fn sort_contacts(&mut self, plist: &[BitFlags<UnitTag>]) -> Result<()> {
-        fn priority(plist: &[BitFlags<UnitTag>], tags: BitFlags<UnitTag>) -> usize {
+    fn sort_contacts(&mut self, lua: MizLua) -> Result<Option<UnitId>> {
+        let plist = &self.priority;
+        let priority = |tags: BitFlags<UnitTag>| {
             plist
                 .iter()
                 .enumerate()
                 .find(|(_, p)| tags.contains(**p))
                 .map(|(i, _)| i)
                 .unwrap_or(plist.len())
+        };
+        self.contacts
+            .sort_by(|_, ct0, _, ct1| priority(ct0.tags).cmp(&priority(ct1.tags)));
+        if self.autolase && !self.contacts.is_empty() {
+            return self.set_target(lua, 0)
         }
-        self.contacts.sort_by(|_, ct0, _, ct1| {
-            let p0 = priority(plist, ct0.tags);
-            let p1 = priority(plist, ct1.tags);
-            p0.cmp(&p1)
-        });
-        unimplemented!()
+        Ok(None)
     }
 }
 
@@ -85,11 +140,11 @@ pub struct Jtacs {
 }
 
 impl Jtacs {
-    pub fn update_contacts(&mut self, lua: MizLua, db: &Db) -> Result<()> {
+    pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {
         let land = Land::singleton(lua)?;
         let mut saw = FxHashSet::default();
         for (unit, _) in db.instanced_units() {
-            for (pos, group, ifo) in db.jtacs() {
+            for (pos, jtid, group, ifo) in db.jtacs() {
                 saw.insert(group.id);
                 let range = (ifo.range as f64).powi(2);
                 let jtac = self
@@ -97,7 +152,7 @@ impl Jtacs {
                     .entry(group.side)
                     .or_default()
                     .entry(group.id)
-                    .or_default();
+                    .or_insert_with(|| Jtac::new(jtid.clone()));
                 if let Some(ct) = jtac.contacts.get(&unit.id) {
                     if unit.moved == ct.last_move {
                         continue;
@@ -118,6 +173,9 @@ impl Jtacs {
                     false
                 }
             })
+        }
+        for (side, j) in self.jtacs.values_mut() {
+            unimplemented!()
         }
         Ok(())
     }

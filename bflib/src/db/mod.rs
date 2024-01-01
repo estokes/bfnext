@@ -18,7 +18,7 @@ use dcso3::{
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
     net::{SlotId, Ucid},
-    object::{DcsObject, DcsOid},
+    object::{ClassObject, DcsObject, DcsOid},
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
@@ -718,9 +718,15 @@ impl Db {
         })
     }
 
-    pub fn jtacs(&self) -> impl Iterator<Item = (Vector3, &SpawnedGroup, &DeployableJtac)> {
+    pub fn jtacs(
+        &self,
+    ) -> impl Iterator<Item = (Vector3, &DcsOid<ClassUnit>, &SpawnedGroup, &DeployableJtac)> {
         self.persisted.jtacs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
+            let id = self
+                .ephemeral
+                .object_id_by_uid
+                .get(group.units.iter().next()?)?;
             match &group.origin {
                 DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
                 DeployKind::Deployed { spec, .. } => {
@@ -731,7 +737,7 @@ impl Db {
                             .into_iter()
                             .map(|u| self.persisted.units[u].position.p.0),
                     );
-                    Some((pos, group, jtac))
+                    Some((pos, id, group, jtac))
                 }
             }
         })

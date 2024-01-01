@@ -93,19 +93,13 @@ impl Ewr {
             .filter(|(_, _, inst)| inst.in_air)
             .collect();
         for (ewr_pos, side, ewr) in db.ewrs() {
-            let ewr_pos3 = LuaVec3(Vector3::new(
-                ewr_pos.x,
-                land.get_height(LuaVec2(ewr_pos))?,
-                ewr_pos.y,
-            ));
             let range = (ewr.range as f64).powi(2);
             let tracks = self.tracks.entry(side).or_default();
             for (ucid, player, inst) in &players {
                 let track = tracks.entry((*ucid).clone()).or_default();
                 if track.last != now {
-                    let player_pos = Vector2::new(inst.position.p.x, inst.position.p.z);
-                    let dist = na::distance_squared(&ewr_pos.into(), &player_pos.into());
-                    if dist <= range && land.is_visible(ewr_pos3, inst.position.p)? {
+                    let dist = na::distance_squared(&ewr_pos.into(), &inst.position.p.0.into());
+                    if dist <= range && land.is_visible(LuaVec3(ewr_pos), inst.position.p)? {
                         track.pos = inst.position;
                         track.velocity = inst.velocity;
                         track.last = now;

@@ -12,7 +12,7 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    atomic_id, centroid2d,
+    atomic_id, centroid2d, centroid3d,
     coalition::Side,
     cvt_err,
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
@@ -177,6 +177,7 @@ pub struct SpawnedUnit {
     pub template_name: String,
     pub pos: Vector2,
     pub heading: f64,
+    pub position: Position3,
     pub dead: bool,
     #[serde(skip)]
     pub moved: Option<DateTime<Utc>>,
@@ -698,31 +699,39 @@ impl Db {
             .filter_map(|(uid, id)| self.persisted.units.get(uid).map(|sp| (sp, id)))
     }
 
-    pub fn ewrs(&self) -> impl Iterator<Item = (Vector2, Side, &DeployableEwr)> {
+    pub fn ewrs(&self) -> impl Iterator<Item = (Vector3, Side, &DeployableEwr)> {
         self.persisted.ewrs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
             match &group.origin {
                 DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
                 DeployKind::Deployed { spec, .. } => {
                     let ewr = spec.ewr.as_ref()?;
-                    let pos =
-                        centroid2d(group.units.into_iter().map(|u| self.persisted.units[u].pos));
+                    let pos = centroid3d(
+                        group
+                            .units
+                            .into_iter()
+                            .map(|u| self.persisted.units[u].position.p.0),
+                    );
                     Some((pos, group.side, ewr))
                 }
             }
         })
     }
 
-    pub fn jtacs(&self) -> impl Iterator<Item = (Vector2, Side, &DeployableJtac)> {
+    pub fn jtacs(&self) -> impl Iterator<Item = (Vector3, &SpawnedGroup, &DeployableJtac)> {
         self.persisted.jtacs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
             match &group.origin {
                 DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
                 DeployKind::Deployed { spec, .. } => {
                     let jtac = spec.jtac.as_ref()?;
-                    let pos =
-                        centroid2d(group.units.into_iter().map(|u| self.persisted.units[u].pos));
-                    Some((pos, group.side, jtac))
+                    let pos = centroid3d(
+                        group
+                            .units
+                            .into_iter()
+                            .map(|u| self.persisted.units[u].position.p.0),
+                    );
+                    Some((pos, group, jtac))
                 }
             }
         })
@@ -1108,6 +1117,12 @@ impl Db {
                 None => positions.pop_front().unwrap(),
                 Some(positions) => positions.pop_front().unwrap(),
             };
+            let position = {
+                let mut p = Position3::default();
+                p.p.x = pos.x;
+                p.p.z = pos.y;
+                p
+            };
             let spawned_unit = SpawnedUnit {
                 id: uid,
                 group: gid,
@@ -1116,6 +1131,7 @@ impl Db {
                 tags,
                 name: unit_name.clone(),
                 template_name,
+                position,
                 pos,
                 heading,
                 dead: false,
@@ -1249,8 +1265,9 @@ impl Db {
             let point = Vector2::new(pos.p.x, pos.p.z);
             let heading = pos.x.z.atan2(pos.x.x);
             let spunit = unit_mut!(self, uid)?;
-            if spunit.pos != point {
+            if spunit.position != pos {
                 moved.push(spunit.group);
+                spunit.position = pos;
                 spunit.pos = point;
                 spunit.heading = heading;
                 if let Some(ts) = spunit.moved {

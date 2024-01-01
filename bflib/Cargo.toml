@@ -31,3 +31,4 @@ tokio = { workspace = true }
 simplelog = { workspace = true }
 paste = { workspace = true }
 smallvec = { workspace = true }
+indexmap = { workspace = true }

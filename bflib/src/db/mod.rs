@@ -1,7 +1,10 @@
 extern crate nalgebra as na;
 use self::cargo::Cargo;
 use crate::{
-    cfg::{Cfg, Crate, Deployable, DeployableEwr, DeployableLogistics, LifeType, Troop, Vehicle},
+    cfg::{
+        Cfg, Crate, Deployable, DeployableEwr, DeployableJtac, DeployableLogistics, LifeType,
+        Troop, UnitTag, Vehicle,
+    },
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
 };
@@ -21,6 +24,7 @@ use dcso3::{
     unit::{ClassUnit, Unit},
     MizLua, Position3, String, Vector2, Vector3,
 };
+use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
@@ -39,8 +43,8 @@ pub mod mizinit;
 pub mod objective;
 pub mod player;
 
-type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
-type Set<K> = immutable_chunkmap::set::Set<K, 32>;
+pub type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
+pub type Set<K> = immutable_chunkmap::set::Set<K, 32>;
 
 atomic_id!(GroupId);
 atomic_id!(UnitId);
@@ -169,6 +173,7 @@ pub struct SpawnedUnit {
     pub group: GroupId,
     pub side: Side,
     pub typ: String,
+    pub tags: BitFlags<UnitTag>,
     pub template_name: String,
     pub pos: Vector2,
     pub heading: f64,
@@ -380,6 +385,8 @@ pub struct Persisted {
     farps: Set<ObjectiveId>,
     crates: Set<GroupId>,
     troops: Set<GroupId>,
+    jtacs: Set<GroupId>,
+    ewrs: Set<GroupId>,
     objectives: Map<ObjectiveId, Objective>,
     objectives_by_slot: Map<SlotId, ObjectiveId>,
     objectives_by_name: Map<String, ObjectiveId>,
@@ -448,8 +455,15 @@ impl Ephemeral {
         idx.crates_by_name
             .insert(repair_crate.name.clone(), repair_crate);
         for dep in deployables.iter() {
-            miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
+            let gifo = miz
+                .get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
                 .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
+            for unit in gifo.group.units()? {
+                let typ = unit?.typ()?;
+                if !self.cfg.unit_classification.contains_key(typ.as_str()) {
+                    bail!("unit is type '{typ}' is unclassified")
+                }
+            }
             let name = match dep.path.last() {
                 None => bail!("deployable with empty path {:?}", dep),
                 Some(name) => name,
@@ -677,30 +691,39 @@ impl Db {
         })
     }
 
-    pub fn instanced_units(&self) -> impl Iterator<Item = &SpawnedUnit> {
+    pub fn instanced_units(&self) -> impl Iterator<Item = (&SpawnedUnit, &DcsOid<ClassUnit>)> {
         self.ephemeral
             .object_id_by_uid
-            .keys()
-            .filter_map(|uid| self.persisted.units.get(uid))
+            .iter()
+            .filter_map(|(uid, id)| self.persisted.units.get(uid).map(|sp| (sp, id)))
     }
 
     pub fn ewrs(&self) -> impl Iterator<Item = (Vector2, Side, &DeployableEwr)> {
-        self.persisted.deployed.into_iter().filter_map(|gid| {
-            let group = &self.persisted.groups[gid];
+        self.persisted.ewrs.into_iter().filter_map(|gid| {
+            let group = self.persisted.groups.get(gid)?;
             match &group.origin {
                 DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
-                DeployKind::Deployed { spec, .. } => match &spec.ewr {
-                    None => None,
-                    Some(ewr) => {
-                        let pos = centroid2d(
-                            group
-                                .units
-                                .into_iter()
-                                .map(|uid| self.persisted.units[uid].pos),
-                        );
-                        Some((pos, group.side, ewr))
-                    }
-                },
+                DeployKind::Deployed { spec, .. } => {
+                    let ewr = spec.ewr.as_ref()?;
+                    let pos =
+                        centroid2d(group.units.into_iter().map(|u| self.persisted.units[u].pos));
+                    Some((pos, group.side, ewr))
+                }
+            }
+        })
+    }
+
+    pub fn jtacs(&self) -> impl Iterator<Item = (Vector2, Side, &DeployableJtac)> {
+        self.persisted.jtacs.into_iter().filter_map(|gid| {
+            let group = self.persisted.groups.get(gid)?;
+            match &group.origin {
+                DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
+                DeployKind::Deployed { spec, .. } => {
+                    let jtac = spec.jtac.as_ref()?;
+                    let pos =
+                        centroid2d(group.units.into_iter().map(|u| self.persisted.units[u].pos));
+                    Some((pos, group.side, jtac))
+                }
             }
         })
     }
@@ -878,11 +901,20 @@ impl Db {
                 self.persisted.crates.remove_cow(gid);
                 self.persisted.players[player].crates.remove_cow(gid);
             }
-            DeployKind::Deployed { .. } => {
+            DeployKind::Deployed { spec, .. } => {
                 self.persisted.deployed.remove_cow(gid);
+                if spec.jtac.is_some() {
+                    self.persisted.jtacs.remove_cow(gid);
+                }
+                if spec.ewr.is_some() {
+                    self.persisted.ewrs.remove_cow(gid);
+                }
             }
-            DeployKind::Troop { .. } => {
+            DeployKind::Troop { spec, .. } => {
                 self.persisted.troops.remove_cow(gid);
+                if spec.jtac.is_some() {
+                    self.persisted.jtacs.remove_cow(gid);
+                }
             }
         }
         if let Some(mark) = self.ephemeral.group_marks.remove(gid) {
@@ -1066,6 +1098,12 @@ impl Db {
             let typ = unit.typ()?;
             let template_name = unit.name()?;
             let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
+            let tags = *self
+                .ephemeral
+                .cfg
+                .unit_classification
+                .get(typ.as_str())
+                .ok_or_else(|| anyhow!("unit type not classified {typ}"))?;
             let pos = match positions_by_typ.get_mut(&typ) {
                 None => positions.pop_front().unwrap(),
                 Some(positions) => positions.pop_front().unwrap(),
@@ -1075,6 +1113,7 @@ impl Db {
                 group: gid,
                 side,
                 typ,
+                tags,
                 name: unit_name.clone(),
                 template_name,
                 pos,
@@ -1092,11 +1131,20 @@ impl Db {
                 self.persisted.crates.insert_cow(gid);
                 self.persisted.players[player].crates.insert_cow(gid);
             }
-            DeployKind::Deployed { .. } => {
+            DeployKind::Deployed { spec, .. } => {
                 self.persisted.deployed.insert_cow(gid);
+                if spec.jtac.is_some() {
+                    self.persisted.jtacs.insert_cow(gid);
+                }
+                if spec.ewr.is_some() {
+                    self.persisted.ewrs.insert_cow(gid);
+                }
             }
-            DeployKind::Troop { .. } => {
+            DeployKind::Troop { spec, .. } => {
                 self.persisted.troops.insert_cow(gid);
+                if spec.jtac.is_some() {
+                    self.persisted.jtacs.insert_cow(gid);
+                }
             }
         }
         self.persisted.groups.insert_cow(gid, spawned);

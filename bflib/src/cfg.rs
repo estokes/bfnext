@@ -36,7 +36,7 @@ impl Borrow<str> for Vehicle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[bitflags]
 #[repr(u32)]
-pub enum UnitClass {
+pub enum UnitTag {
     SAM,
     AAA,
     Armor,
@@ -150,6 +150,13 @@ pub struct DeployableEwr {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct DeployableJtac {
+    /// jtac detection and lasing range (Meters)
+    pub range: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Deployable {
     /// The full menu path of the deployable in the menu
     pub path: Vec<String>,
@@ -169,8 +176,9 @@ pub struct Deployable {
     /// Does this deployable provide logistics services
     pub logistics: Option<DeployableLogistics>,
     /// Is this unit an early warning radar
-    #[serde(default)]
     pub ewr: Option<DeployableEwr>,
+    /// Is this unit a jtac
+    pub jtac: Option<DeployableJtac>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,8 +192,6 @@ pub struct Troop {
     pub persist: PersistTyp,
     /// Can the troops capture objectives?
     pub can_capture: bool,
-    /// Can laser designate and scout
-    pub jtac: bool,
     /// How many simultaneous instances of the group are allowed
     pub limit: u32,
     /// How to deal with it when the max number of instances are deployed and the user
@@ -193,6 +199,8 @@ pub struct Troop {
     pub limit_enforce: LimitEnforceTyp,
     /// How much weight does the group add to the carrier unit
     pub weight: u32,
+    /// Can laser designate and scout
+    pub jtac: Option<DeployableJtac>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -257,7 +265,7 @@ pub struct Cfg {
     /// deployable troops configuration for each side
     pub troops: FxHashMap<Side, Vec<Troop>>,
     /// classification of ground units in the mission
-    pub unit_classification: FxHashMap<Vehicle, BitFlags<UnitClass>>,
+    pub unit_classification: FxHashMap<Vehicle, BitFlags<UnitTag>>,
 }
 
 impl Cfg {
@@ -308,7 +316,7 @@ fn default_red_troops() -> Vec<Troop> {
             template: "RSTANDARDTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: true,
+            jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             weight: 800,
@@ -318,7 +326,7 @@ fn default_red_troops() -> Vec<Troop> {
             template: "RATTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: true,
+            jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             weight: 1000,
@@ -328,7 +336,7 @@ fn default_red_troops() -> Vec<Troop> {
             template: "RMORTARTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: true,
+            jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             weight: 1200,
@@ -338,7 +346,7 @@ fn default_red_troops() -> Vec<Troop> {
             template: "RIGLATROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: false,
-            jtac: true,
+            jtac: None,
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             weight: 500,
@@ -353,7 +361,7 @@ fn default_blue_troops() -> Vec<Troop> {
             template: "BSTANDARDTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: true,
+            jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             weight: 800,
@@ -363,7 +371,7 @@ fn default_blue_troops() -> Vec<Troop> {
             template: "BATTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: true,
+            jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             weight: 1000,
@@ -373,7 +381,7 @@ fn default_blue_troops() -> Vec<Troop> {
             template: "BMORTARTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: true,
+            jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             weight: 1200,
@@ -383,7 +391,7 @@ fn default_blue_troops() -> Vec<Troop> {
             template: "BSTINGERTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: false,
-            jtac: false,
+            jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             weight: 500,
@@ -427,6 +435,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }),
             logistics: None,
             ewr: Some(DeployableEwr { range: 30000 }),
+            jtac: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA 11 Buk".into()],
@@ -470,6 +479,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             }),
             logistics: None,
             ewr: Some(DeployableEwr { range: 60000 }),
+            jtac: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA15 Tor".into()],
@@ -488,6 +498,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: Some(DeployableEwr { range: 20000 }),
+            jtac: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA8 Osa".into()],
@@ -506,6 +517,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["AAA".into(), "ZU23 Emplacement".into()],
@@ -524,6 +536,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Shilka".into()],
@@ -542,6 +555,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Tunguska".into()],
@@ -560,6 +574,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "SA13 Strela".into()],
@@ -578,6 +593,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "SPH 2S19 Msta 152MM".into()],
@@ -596,6 +612,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "T72".into()],
@@ -614,6 +631,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: Some(DeployableJtac { range: 8000 }),
         },
         Deployable {
             path: vec!["Ground Units".into(), "BMP3".into()],
@@ -632,6 +650,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: Some(DeployableJtac { range: 8000 }),
         },
         Deployable {
             path: vec!["EWRs".into(), "1L13".into()],
@@ -650,6 +669,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: Some(DeployableEwr { range: 500000 }),
+            jtac: None,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -673,6 +693,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                 barracks_template: "RDEPFARPTENT".into(),
             }),
             ewr: None,
+            jtac: None,
         },
     ]
 }
@@ -696,6 +717,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: Some(DeployableEwr { range: 20000 }),
+            jtac: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "Hawk System".into()],
@@ -747,6 +769,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }),
             logistics: None,
             ewr: Some(DeployableEwr { range: 60000 }),
+            jtac: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Avenger".into()],
@@ -765,6 +788,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Linebacker".into()],
@@ -783,6 +807,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Flakpanzergepard".into()],
@@ -801,6 +826,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Vulkan".into()],
@@ -819,6 +845,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "Firtina 155MM".into()],
@@ -837,6 +864,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "M2A2 Bradley".into()],
@@ -855,6 +883,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: Some(DeployableJtac { range: 8000 }),
         },
         Deployable {
             path: vec!["Ground Units".into(), "2A6M Leopard".into()],
@@ -873,6 +902,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
+            jtac: Some(DeployableJtac { range: 8000 }),
         },
         Deployable {
             path: vec!["EWRs".into(), "AN/FPS-117".into()],
@@ -891,6 +921,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: Some(DeployableEwr { range: 500000 }),
+            jtac: None,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -914,6 +945,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 barracks_template: "BDEPFARPTENT".into(),
             }),
             ewr: None,
+            jtac: None,
         },
     ]
 }
@@ -1047,8 +1079,8 @@ fn default_threatened_distance() -> FxHashMap<Vehicle, u32> {
     ])
 }
 
-fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitClass>> {
-    use UnitClass::*;
+fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
+    use UnitTag::*;
     FxHashMap::from_iter([
         (
             "M6 Linebacker".into(),

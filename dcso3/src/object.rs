@@ -105,7 +105,7 @@ simple_enum!(ObjectCategory, u8, [
 wrapped_table!(Object, Some("Object"));
 
 impl<'lua> Object<'lua> {
-    pub fn destroy(&self) -> Result<()> {
+    pub fn destroy(self) -> Result<()> {
         Ok(self.t.call_method("destroy", ())?)
     }
 

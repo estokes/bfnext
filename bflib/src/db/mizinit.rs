@@ -11,6 +11,7 @@ use dcso3::{
     env::miz::{Group, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
     MizLua, String, Vector2,
 };
+use log::info;
 
 impl Db {
     /// objectives are just trigger zones named according to type codes
@@ -143,7 +144,10 @@ impl Db {
                 let mut iter = self.persisted.objectives.into_iter();
                 loop {
                     match iter.next() {
-                        None => bail!("slot {:?} not associated with an objective", slot),
+                        None => {
+                            info!("slot {:?} not associated with an objective", slot);
+                            return Ok(())
+                        },
                         Some((id, obj)) => {
                             if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
                                 break *id;

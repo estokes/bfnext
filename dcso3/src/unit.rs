@@ -27,7 +27,7 @@ impl<'lua> Unit<'lua> {
         Ok(unit.call_function("getByName", name)?)
     }
 
-    pub fn destroy(&self) -> Result<()> {
+    pub fn destroy(self) -> Result<()> {
         Ok(self.t.call_method("destroy", ())?)
     }
 

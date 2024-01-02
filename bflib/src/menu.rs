@@ -1,5 +1,5 @@
 use crate::{
-    cfg::{Cfg, LimitEnforceTyp},
+    cfg::{Cfg, LimitEnforceTyp, UnitTag},
     db::{
         cargo::{Cargo, Oldest, SlotStats},
         Db,
@@ -19,6 +19,7 @@ use dcso3::{
     net::SlotId,
     MizLua, String,
 };
+use enumflags2::BitFlag;
 use fxhash::FxHashMap;
 use log::debug;
 use mlua::{prelude::*, Value};
@@ -616,9 +617,38 @@ fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
     Ok(())
 }
 
+fn jtac_status(lua: MizLua, gid: GroupId) -> Result<()> {
+    unimplemented!()
+}
+
+fn jtac_toggle_auto_laser(lua: MizLua, gid: GroupId) -> Result<()> {
+    unimplemented!()
+}
+
+fn jtac_toggle_auto_smoke(lua: MizLua, gid: GroupId) -> Result<()> {
+    unimplemented!()
+}
+
+fn jtac_shift(lua: MizLua, gid: GroupId) -> Result<()> {
+    unimplemented!()
+}
+
+fn jtac_clear_filter(lua: MizLua, gid: GroupId) -> Result<()> {
+    unimplemented!()
+}
+
 pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: GroupId) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root = mc.add_submenu_for_coalition(side, "JTAC".into(), None)?;
+    let root =
+        mc.add_submenu_for_coalition(side, format_compact!("{:?}", group).into(), Some(root))?;
+    mc.add_command_for_coalition(
+        side,
+        "Status".into(),
+        Some(root.clone()),
+        jtac_status,
+        group,
+    )?;
     mc.add_command_for_coalition(
         side,
         "Toggle Auto Laser".into(),
@@ -626,6 +656,19 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: GroupId) -> Result<()> 
         jtac_toggle_auto_laser,
         group,
     )?;
+    mc.add_command_for_coalition(
+        side,
+        "Toggle Auto Smoke".into(),
+        Some(root.clone()),
+        jtac_toggle_auto_smoke,
+        group,
+    )?;
+    mc.add_command_for_coalition(side, "Shift".into(), Some(root.clone()), jtac_shift, group)?;
+    let root = mc.add_submenu_for_coalition(side, "Filter".into(), Some(root.clone()))?;
+    mc.add_command_for_coalition(side, "Clear".into(), Some(root.into()), jtac_clear_filter, group)?;
+    for tag in UnitTag::all().iter() {
+
+    }
     unimplemented!()
 }
 

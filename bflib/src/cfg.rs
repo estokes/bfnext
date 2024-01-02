@@ -266,6 +266,8 @@ pub struct Cfg {
     pub troops: FxHashMap<Side, Vec<Troop>>,
     /// classification of ground units in the mission
     pub unit_classification: FxHashMap<Vehicle, BitFlags<UnitTag>>,
+    /// The jtac target priority list
+    pub jtac_priority: Vec<BitFlags<UnitTag>>,
 }
 
 impl Cfg {
@@ -1175,6 +1177,23 @@ fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
     ])
 }
 
+fn default_jtac_priority() -> Vec<BitFlags<UnitTag>> {
+    use UnitTag::*;
+    vec![
+        SAM | LR | RadarGuided | TrackRadar,
+        SAM | MR | RadarGuided | TrackRadar,
+        SAM | OpticallyGuided,
+        SAM | IRGuided,
+        AAA | LR,
+        APC | ATGM,
+        AAA.into(),
+        Logistics.into(),
+        Infantry.into(),
+        Armor.into(),
+        Artillery.into(),
+    ]
+}
+
 impl Default for Cfg {
     fn default() -> Self {
         Self {
@@ -1235,6 +1254,7 @@ impl Default for Cfg {
                 (Side::Blue, default_blue_troops()),
             ]),
             unit_classification: default_unit_classification(),
+            jtac_priority: default_jtac_priority(),
         }
     }
 }

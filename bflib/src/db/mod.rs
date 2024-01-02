@@ -1353,6 +1353,14 @@ impl Db {
             .and_then(|id| Unit::get_instance(lua, id))
     }
 
+    pub fn instance_unit<'lua>(&self, lua: MizLua<'lua>, uid: &UnitId) -> Result<Unit<'lua>> {
+        self.ephemeral
+            .object_id_by_uid
+            .get(uid)
+            .ok_or_else(|| anyhow!("unit {:?} not currently in the mission", uid))
+            .and_then(|id| Unit::get_instance(lua, id))
+    }
+
     pub fn slot_instance_pos(&self, lua: MizLua, slot: &SlotId) -> Result<Position3> {
         self.slot_instance_unit(lua, slot)?.get_position()
     }

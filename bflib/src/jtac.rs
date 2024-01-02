@@ -8,6 +8,7 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
     land::Land,
+    mission_commands::{CoalitionSubMenu, MissionCommands},
     object::{DcsObject, DcsOid},
     spot::{ClassSpot, Spot},
     unit::{ClassUnit, Unit},
@@ -30,7 +31,7 @@ struct Jtac {
     contacts: IndexMap<UnitId, Contact>,
     id: DcsOid<ClassUnit>,
     filter: BitFlags<UnitTag>,
-    priority: Vec<UnitTag>,
+    priority: Vec<BitFlags<UnitTag>>,
     target: Option<(DcsOid<ClassSpot>, UnitId)>,
     autolase: bool,
     smoketarget: bool,
@@ -38,12 +39,12 @@ struct Jtac {
 }
 
 impl Jtac {
-    fn new(id: DcsOid<ClassUnit>) -> Self {
+    fn new(id: DcsOid<ClassUnit>, priority: Vec<BitFlags<UnitTag>>) -> Self {
         Self {
             contacts: IndexMap::default(),
             id,
             filter: BitFlags::default(),
-            priority: vec![],
+            priority,
             target: None,
             autolase: true,
             smoketarget: false,
@@ -151,11 +152,33 @@ fn jtac_msg(db: &mut Db, gid: GroupId, uid: UnitId) -> Result<CompactString> {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Jtacs {
-    jtacs: FxHashMap<Side, FxHashMap<GroupId, Jtac>>,
-}
+pub struct Jtacs(FxHashMap<Side, FxHashMap<GroupId, Jtac>>);
 
 impl Jtacs {
+    pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = UnitId> + 'a {
+        self.0.values().flat_map(|j| {
+            j.values()
+                .filter_map(|jt| jt.target.as_ref().map(|(_, uid)| *uid))
+        })
+    }
+
+    pub fn update_target_positions(&mut self, lua: MizLua, db: &Db) -> Result<()> {
+        for jtx in self.0.values_mut() {
+            for jt in jtx.values_mut() {
+                if let Some((spotid, uid)) = &jt.target {
+                    let unit = db.instance_unit(lua, uid)?;
+                    let pos = unit.get_point()?;
+                    if jt.contacts[uid].pos != pos.0 {
+                        jt.contacts[uid].pos = pos.0;
+                        let spot = Spot::get_instance(lua, spotid)?;
+                        spot.set_point(pos)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {
         let land = Land::singleton(lua)?;
         let mut saw: SmallVec<[GroupId; 32]> = smallvec![];
@@ -166,11 +189,11 @@ impl Jtacs {
                 }
                 let range = (ifo.range as f64).powi(2);
                 let jtac = self
-                    .jtacs
+                    .0
                     .entry(group.side)
                     .or_default()
                     .entry(group.id)
-                    .or_insert_with(|| Jtac::new(jtid.clone()));
+                    .or_insert_with(|| Jtac::new(jtid.clone(), db.cfg().jtac_priority.clone()));
                 if !unit.tags.contains(jtac.filter) {
                     jtac.remove_contact(lua, &unit.id)?;
                     continue;
@@ -188,7 +211,7 @@ impl Jtacs {
                 }
             }
         }
-        for j in self.jtacs.values_mut() {
+        for j in self.0.values_mut() {
             j.retain(|uid, jt| {
                 saw.contains(uid) || {
                     let _ = jt.remove_target(lua);
@@ -197,7 +220,7 @@ impl Jtacs {
             })
         }
         let mut new_contacts: SmallVec<[(GroupId, UnitId); 32]> = smallvec![];
-        for j in self.jtacs.values_mut() {
+        for j in self.0.values_mut() {
             for (gid, jtac) in j.iter_mut() {
                 if let Some(uid) = jtac.sort_contacts(lua)? {
                     new_contacts.push((*gid, uid));

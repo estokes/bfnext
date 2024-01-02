@@ -577,19 +577,19 @@ fn add_cargo_menu_for_group(
 }
 
 fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
-    let root = mc.add_submenu_for_group(group, "EWR".into(), None)?;
+    let root = mc.add_submenu_for_group(group, "Where Chicken?".into(), None)?;
+    mc.add_command_for_group(
+        group,
+        "Gib BRAA!".into(),
+        Some(root.clone()),
+        ewr_report,
+        group,
+    )?;
     mc.add_command_for_group(
         group,
         "toggle".into(),
         Some(root.clone()),
         toggle_ewr,
-        group,
-    )?;
-    mc.add_command_for_group(
-        group,
-        "Report".into(),
-        Some(root.clone()),
-        ewr_report,
         group,
     )?;
     mc.add_command_for_group(
@@ -614,6 +614,19 @@ fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
         group,
     )?;
     Ok(())
+}
+
+pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: GroupId) -> Result<()> {
+    let mc = MissionCommands::singleton(lua)?;
+    let root = mc.add_submenu_for_coalition(side, "JTAC".into(), None)?;
+    mc.add_command_for_coalition(
+        side,
+        "Toggle Auto Laser".into(),
+        Some(root.clone()),
+        jtac_toggle_auto_laser,
+        group,
+    )?;
+    unimplemented!()
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -677,6 +690,7 @@ pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
                 add_ewr_menu_for_group(&mc, gid)?;
             }
         }
+        let _ = mc.add_submenu_for_coalition(side, "JTAC".into(), None)?;
     }
     Ok(())
 }

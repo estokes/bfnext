@@ -4,7 +4,7 @@ use crate::db::{Db, InstancedPlayer, Player};
 use anyhow::Result;
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side, land::Land, net::Ucid, LuaVec2, LuaVec3, MizLua, Position3, Vector2, Vector3,
+    coalition::Side, land::Land, net::Ucid, LuaVec3, MizLua, Position3, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use smallvec::{smallvec, SmallVec};

@@ -34,6 +34,7 @@ use dcso3::{
 };
 use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
+use jtac::Jtacs;
 use log::{debug, error, info};
 use mlua::prelude::*;
 use msgq::MsgTyp;
@@ -62,6 +63,7 @@ struct Context {
     force_to_spectators: FxHashSet<PlayerId>,
     last_slow_timed_events: DateTime<Utc>,
     ewr: Ewr,
+    jtac: Jtacs,
 }
 
 static mut CONTEXT: Option<Context> = None;

@@ -18,7 +18,7 @@ use dcso3::{
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
     net::{SlotId, Ucid},
-    object::{ClassObject, DcsObject, DcsOid},
+    object::{DcsObject, DcsOid},
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
@@ -650,8 +650,38 @@ impl Db {
         group!(self, id)
     }
 
+    pub fn group_center(&self, id: &GroupId) -> Result<Vector2> {
+        let group = group!(self, id)?;
+        Ok(centroid2d(
+            group
+                .units
+                .into_iter()
+                .filter_map(|uid| self.persisted.units.get(uid))
+                .filter_map(|unit| if unit.dead { None } else { Some(unit.pos) }),
+        ))
+    }
+
     pub fn objective(&self, id: &ObjectiveId) -> Result<&Objective> {
         objective!(self, id)
+    }
+
+    /// (distance, heading from objective to point, objective)
+    pub fn objective_near_point(&self, pos: Vector2) -> (f64, f64, &Objective) {
+        let (dist, obj) = self.persisted.objectives.into_iter().fold(
+            (f64::MAX, None),
+            |(cur_dist, cur_obj), (_, obj)| {
+                let dist = na::distance_squared(&pos.into(), &obj.pos.into());
+                if dist < cur_dist {
+                    (dist, Some(obj))
+                } else {
+                    (cur_dist, cur_obj)
+                }
+            },
+        );
+        let obj = obj.unwrap();
+        let v = obj.pos - pos;
+        let heading = v.y.atan2(v.x);
+        (dist.sqrt(), heading, obj)
     }
 
     pub fn group_by_name(&self, name: &str) -> Result<&SpawnedGroup> {
@@ -726,7 +756,7 @@ impl Db {
             let id = self
                 .ephemeral
                 .object_id_by_uid
-                .get(group.units.iter().next()?)?;
+                .get(group.units.into_iter().next()?)?;
             match &group.origin {
                 DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
                 DeployKind::Deployed { spec, .. } => {

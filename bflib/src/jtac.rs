@@ -4,6 +4,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use chrono::prelude::*;
+use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
     land::Land,
@@ -13,8 +14,9 @@ use dcso3::{
     LuaVec3, MizLua, Vector3,
 };
 use enumflags2::BitFlags;
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use indexmap::IndexMap;
+use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Copy, Default)]
 struct Contact {
@@ -69,20 +71,22 @@ impl Jtac {
             .contacts
             .get_index(i)
             .ok_or_else(|| anyhow!("no such target"))?;
+        let uid = *uid;
+        let pos = ct.pos;
         match &self.target {
-            Some((_, tuid)) if tuid == uid => Ok(None),
+            Some((_, tuid)) if tuid == &uid => Ok(None),
             Some(_) | None => {
-                self.remove_target(lua);
+                self.remove_target(lua)?;
                 let jt = Unit::get_instance(lua, &self.id)?;
                 let spot = Spot::create_laser(
                     lua,
                     jt.as_object()?,
                     Some(LuaVec3(Vector3::new(0., 1., 0.))),
-                    LuaVec3(ct.pos),
+                    LuaVec3(pos),
                     self.code,
                 )?;
-                self.target = Some((spot.object_id()?, *uid));
-                Ok(Some(*uid))
+                self.target = Some((spot.object_id()?, uid));
+                Ok(Some(uid))
             }
         }
     }
@@ -106,7 +110,7 @@ impl Jtac {
 
     fn remove_contact(&mut self, lua: MizLua, uid: &UnitId) -> Result<()> {
         if let Some(_) = self.contacts.swap_remove(uid) {
-            if let Some((id, tuid)) = &self.target {
+            if let Some((_, tuid)) = &self.target {
                 if tuid == uid {
                     self.remove_target(lua)?
                 }
@@ -128,10 +132,22 @@ impl Jtac {
         self.contacts
             .sort_by(|_, ct0, _, ct1| priority(ct0.tags).cmp(&priority(ct1.tags)));
         if self.autolase && !self.contacts.is_empty() {
-            return self.set_target(lua, 0)
+            return self.set_target(lua, 0);
         }
         Ok(None)
     }
+}
+
+fn jtac_msg(db: &mut Db, gid: GroupId, uid: UnitId) -> Result<CompactString> {
+    let unit_typ = db.unit(&uid)?.typ.clone();
+    let jtac_pos = db.group_center(&gid)?;
+    let (dist, heading, obj) = db.objective_near_point(jtac_pos);
+    Ok(format_compact!(
+        "JTAC {gid} bearing {} for {} from {} now lasing {unit_typ}",
+        dist as u32,
+        heading as u32,
+        obj.name()
+    ))
 }
 
 #[derive(Debug, Clone, Default)]
@@ -142,10 +158,12 @@ pub struct Jtacs {
 impl Jtacs {
     pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {
         let land = Land::singleton(lua)?;
-        let mut saw = FxHashSet::default();
+        let mut saw: SmallVec<[GroupId; 32]> = smallvec![];
         for (unit, _) in db.instanced_units() {
             for (pos, jtid, group, ifo) in db.jtacs() {
-                saw.insert(group.id);
+                if !saw.contains(&group.id) {
+                    saw.push(group.id)
+                }
                 let range = (ifo.range as f64).powi(2);
                 let jtac = self
                     .jtacs
@@ -153,6 +171,10 @@ impl Jtacs {
                     .or_default()
                     .entry(group.id)
                     .or_insert_with(|| Jtac::new(jtid.clone()));
+                if !unit.tags.contains(jtac.filter) {
+                    jtac.remove_contact(lua, &unit.id)?;
+                    continue;
+                }
                 if let Some(ct) = jtac.contacts.get(&unit.id) {
                     if unit.moved == ct.last_move {
                         continue;
@@ -174,8 +196,21 @@ impl Jtacs {
                 }
             })
         }
-        for (side, j) in self.jtacs.values_mut() {
-            unimplemented!()
+        let mut new_contacts: SmallVec<[(GroupId, UnitId); 32]> = smallvec![];
+        for j in self.jtacs.values_mut() {
+            for (gid, jtac) in j.iter_mut() {
+                if let Some(uid) = jtac.sort_contacts(lua)? {
+                    new_contacts.push((*gid, uid));
+                }
+            }
+        }
+        let mut msgs: SmallVec<[(GroupId, CompactString); 32]> = smallvec![];
+        for (gid, uid) in new_contacts {
+            msgs.push((gid, jtac_msg(db, gid, uid)?))
+        }
+        for (gid, msg) in msgs {
+            let side = db.group(&gid)?.side;
+            db.msgs().panel_to_side(10, false, side, msg);
         }
         Ok(())
     }

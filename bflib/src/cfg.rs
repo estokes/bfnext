@@ -44,6 +44,8 @@ pub enum UnitTag {
     Logistics,
     Infantry,
     EWR,
+    Aircraft,
+    Helicopter,
     LR,
     SR,
     MR,

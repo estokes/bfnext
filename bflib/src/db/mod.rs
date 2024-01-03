@@ -601,6 +601,41 @@ impl Db {
         }
     }
 
+    fn check_unit_classification(&self, lua: MizLua) -> Result<()> {
+        let mut not_classified = FxHashSet::default();
+        let miz = Miz::singleton(lua)?;
+        for side in [Side::Blue, Side::Red, Side::Neutral] {
+            let coa = miz.coalition(side)?;
+            for country in coa.countries()? {
+                let country = country?;
+                for group in country
+                    .planes()?
+                    .into_iter()
+                    .chain(country.helicopters()?)
+                    .chain(country.vehicles()?)
+                {
+                    let group = group?;
+                    for unit in group.units()? {
+                        let typ = unit?.typ()?;
+                        if !self
+                            .ephemeral
+                            .cfg
+                            .unit_classification
+                            .contains_key(typ.as_str())
+                        {
+                            not_classified.insert(typ);
+                        }
+                    }
+                }
+            }
+        }
+        if not_classified.is_empty() {
+            Ok(())
+        } else {
+            bail!("unit types not classified {:?}", not_classified)
+        }
+    }
+
     pub fn respawn_after_load(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
         for gid in &self.persisted.deployed {
             self.spawn_group(idx, spctx, group!(self, gid)?)?
@@ -639,6 +674,7 @@ impl Db {
         for oid in objectives {
             self.mark_objective(&oid)?
         }
+        self.check_unit_classification(spctx.lua())?;
         Ok(())
     }
 

@@ -88,7 +88,7 @@ impl Jtac {
                 write!(msg, "now lasing {unit_typ} code {} marker {mid}", self.code)?
             }
         }
-        write!(msg, "\n")?;
+        write!(msg, "\n\n")?;
         if self.contacts.is_empty() {
             write!(msg, "No enemies in sight")?;
         } else {
@@ -103,7 +103,7 @@ impl Jtac {
         }
         write!(
             msg,
-            "\nautolase: {}, smoke: {}",
+            "\n\nautolase: {}, smoke: {}",
             self.autolase, self.smoketarget
         )?;
         write!(msg, "\nfilter: [")?;

@@ -659,23 +659,19 @@ fn jtac_shift(lua: MizLua, gid: db::GroupId) -> Result<()> {
 }
 
 fn jtac_clear_filter(lua: MizLua, gid: db::GroupId) -> Result<()> {
-    {
-        let ctx = unsafe { Context::get_mut() };
-        ctx.jtac.clear_filter(lua, &gid)?;
-    }
-    jtac_status(lua, gid)
+    let ctx = unsafe { Context::get_mut() };
+    ctx.jtac.clear_filter(lua, &gid)?;
+    Ok(())
 }
 
 fn jtac_filter(lua: MizLua, arg: ArgTuple<db::GroupId, u32>) -> Result<()> {
-    {
-        let ctx = unsafe { Context::get_mut() };
-        let filter =
-            BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
-        for tag in filter.iter() {
-            ctx.jtac.add_filter(lua, &arg.fst, tag)?;
-        }
+    let ctx = unsafe { Context::get_mut() };
+    let filter =
+        BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
+    for tag in filter.iter() {
+        ctx.jtac.add_filter(lua, &arg.fst, tag)?;
     }
-    jtac_status(lua, arg.fst)
+    Ok(())
 }
 
 fn jtac_set_code(lua: MizLua, arg: ArgTuple<db::GroupId, u16>) -> Result<()> {

@@ -11,8 +11,9 @@ use dcso3::{
     land::Land,
     object::{DcsObject, DcsOid},
     spot::{ClassSpot, Spot},
+    trigger::{MarkId, Trigger},
     unit::{ClassUnit, Unit},
-    LuaVec3, MizLua, Vector3,
+    LuaVec3, MizLua, String, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -20,9 +21,10 @@ use indexmap::IndexMap;
 use log::error;
 use smallvec::{smallvec, SmallVec};
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 struct Contact {
     pos: Vector3,
+    typ: String,
     tags: BitFlags<UnitTag>,
     last_move: Option<DateTime<Utc>>,
 }
@@ -30,20 +32,27 @@ struct Contact {
 #[derive(Debug, Clone)]
 struct Jtac {
     gid: GroupId,
+    side: Side,
     contacts: IndexMap<UnitId, Contact>,
     id: DcsOid<ClassUnit>,
     filter: BitFlags<UnitTag>,
     priority: Vec<BitFlags<UnitTag>>,
-    target: Option<(DcsOid<ClassSpot>, UnitId)>,
+    target: Option<(DcsOid<ClassSpot>, MarkId, UnitId)>,
     autolase: bool,
     smoketarget: bool,
     code: u16,
 }
 
 impl Jtac {
-    fn new(gid: GroupId, id: DcsOid<ClassUnit>, priority: Vec<BitFlags<UnitTag>>) -> Self {
+    fn new(
+        gid: GroupId,
+        side: Side,
+        id: DcsOid<ClassUnit>,
+        priority: Vec<BitFlags<UnitTag>>,
+    ) -> Self {
         Self {
             gid,
+            side,
             contacts: IndexMap::default(),
             id,
             filter: BitFlags::default(),
@@ -68,9 +77,9 @@ impl Jtac {
         );
         match self.target {
             None => write!(msg, "no target")?,
-            Some((_, uid)) => {
+            Some((_, mid, uid)) => {
                 let unit_typ = db.unit(&uid)?.typ.clone();
-                write!(msg, "now lasing {unit_typ} code {}", self.code)?
+                write!(msg, "now lasing {unit_typ} code {} marker {mid}", self.code)?
             }
         }
         write!(msg, "\n")?;
@@ -100,14 +109,28 @@ impl Jtac {
         ct.pos = unit.position.p.0;
         ct.last_move = unit.moved;
         ct.tags = unit.tags;
+        ct.typ = unit.typ.clone();
     }
 
     fn remove_target(&mut self, lua: MizLua) -> Result<()> {
-        if let Some((id, _)) = &self.target.take() {
-            let spot = Spot::get_instance(lua, id)?;
+        if let Some((id, mid, _)) = self.target.take() {
+            let spot = Spot::get_instance(lua, &id)?;
             spot.destroy()?;
+            Trigger::singleton(lua)?.action()?.remove_mark(mid)?
         }
         Ok(())
+    }
+
+    fn mark_target(&self, lua: MizLua, mid: MarkId, pos: Vector3, typ: String) -> Result<()> {
+        let act = Trigger::singleton(lua)?.action()?;
+        let _ = act.remove_mark(mid);
+        let msg = format_compact!(
+            "JTAC {} target {} marked by code {}",
+            self.gid,
+            typ,
+            self.code
+        );
+        act.mark_to_coalition(mid, msg.into(), LuaVec3(pos), self.side, true, None)
     }
 
     fn set_target(&mut self, lua: MizLua, i: usize) -> Result<bool> {
@@ -117,8 +140,9 @@ impl Jtac {
             .ok_or_else(|| anyhow!("no such target"))?;
         let uid = *uid;
         let pos = ct.pos;
+        let typ = ct.typ.clone();
         match &self.target {
-            Some((_, tuid)) if tuid == &uid => Ok(false),
+            Some((_, _, tuid)) if tuid == &uid => Ok(false),
             Some(_) | None => {
                 self.remove_target(lua)?;
                 let jt = Unit::get_instance(lua, &self.id)?;
@@ -129,7 +153,9 @@ impl Jtac {
                     LuaVec3(pos),
                     self.code,
                 )?;
-                self.target = Some((spot.object_id()?, uid));
+                let mid = MarkId::new();
+                self.target = Some((spot.object_id()?, mid, uid));
+                self.mark_target(lua, mid, pos, typ)?;
                 Ok(true)
             }
         }
@@ -153,9 +179,11 @@ impl Jtac {
             let c = self.code / 10;
             self.code = c + code_part;
         }
-        if let Some((id, _)) = &self.target {
+        if let Some((id, mid, uid)) = &self.target {
             let spot = Spot::get_instance(lua, id)?;
-            spot.set_code(self.code)?
+            spot.set_code(self.code)?;
+            let ct = &self.contacts[uid];
+            self.mark_target(lua, *mid, ct.pos, ct.typ.clone())?
         }
         Ok(())
     }
@@ -163,7 +191,7 @@ impl Jtac {
     fn shift(&mut self, lua: MizLua) -> Result<bool> {
         let i = match &self.target {
             None => 0,
-            Some((_, uid)) => match self.contacts.get_index_of(uid) {
+            Some((_, _, uid)) => match self.contacts.get_index_of(uid) {
                 None => 0,
                 Some(i) => {
                     if i < self.contacts.len() - 1 {
@@ -179,7 +207,7 @@ impl Jtac {
 
     fn remove_contact(&mut self, lua: MizLua, uid: &UnitId) -> Result<bool> {
         if let Some(_) = self.contacts.swap_remove(uid) {
-            if let Some((_, tuid)) = &self.target {
+            if let Some((_, _, tuid)) = &self.target {
                 if tuid == uid {
                     self.remove_target(lua)?;
                     return Ok(true);
@@ -274,14 +302,14 @@ impl Jtacs {
     pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = UnitId> + 'a {
         self.0.values().flat_map(|j| {
             j.values()
-                .filter_map(|jt| jt.target.as_ref().map(|(_, uid)| *uid))
+                .filter_map(|jt| jt.target.as_ref().map(|(_, _, uid)| *uid))
         })
     }
 
     pub fn update_target_positions(&mut self, lua: MizLua, db: &Db) -> Result<()> {
         for jtx in self.0.values_mut() {
             for jt in jtx.values_mut() {
-                if let Some((spotid, uid)) = &jt.target {
+                if let Some((spotid, _, uid)) = &jt.target {
                     let unit = db.instance_unit(lua, uid)?;
                     let pos = unit.get_point()?;
                     if jt.contacts[uid].pos != pos.0 {
@@ -315,7 +343,12 @@ impl Jtacs {
                         if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id) {
                             error!("could not add menu for jtac {} {e}", group.id)
                         }
-                        Jtac::new(group.id, jtid.clone(), db.cfg().jtac_priority.clone())
+                        Jtac::new(
+                            group.id,
+                            group.side,
+                            jtid.clone(),
+                            db.cfg().jtac_priority.clone(),
+                        )
                     });
                 if !unit.tags.contains(jtac.filter) {
                     jtac.remove_contact(lua, &unit.id)?;

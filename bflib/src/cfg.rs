@@ -1179,7 +1179,11 @@ fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
         ("SAU Msta".into(), Armor | Artillery | SmallArms),
         ("1L13 EWR".into(), EWR | Unarmed),
         ("FPS-117".into(), EWR | Unarmed),
-        ("FPS-117 ECS".into(), EWR | Unarmed)
+        ("FPS-117 ECS".into(), EWR | Unarmed),
+        ("p-19 s-125 sr".into(), SAM | LR | RadarGuided | SearchRadar),
+        ("SNR_75V".into(), SAM | LR | RadarGuided | TrackRadar),
+        ("S_75M_Volhov".into(), SAM | LR | RadarGuided | Launcher),
+        ("RD_75".into(), SAM | LR | RadarGuided | AuxRadarUnit),
     ])
 }
 

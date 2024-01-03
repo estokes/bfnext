@@ -2,13 +2,12 @@ use crate::{
     cfg::UnitTag,
     db::{Db, GroupId, SpawnedUnit, UnitId},
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
     land::Land,
-    mission_commands::{CoalitionSubMenu, MissionCommands},
     object::{DcsObject, DcsOid},
     spot::{ClassSpot, Spot},
     unit::{ClassUnit, Unit},
@@ -69,7 +68,7 @@ impl Jtac {
             None => write!(msg, "no target")?,
             Some((_, uid)) => {
                 let unit_typ = db.unit(&uid)?.typ.clone();
-                write!(msg, "now lasing {unit_typ}")?
+                write!(msg, "now lasing {unit_typ} code {}", self.code)?
             }
         }
         write!(msg, "\n")?;
@@ -85,7 +84,11 @@ impl Jtac {
                 }
             }
         }
-        write!(msg, "\nautolase: {}, smoke: {}", self.autolase, self.smoketarget)?;
+        write!(
+            msg,
+            "\nautolase: {}, smoke: {}",
+            self.autolase, self.smoketarget
+        )?;
         write!(msg, "\nfilter: {:?}", self.filter)?;
         Ok(msg)
     }
@@ -128,6 +131,31 @@ impl Jtac {
                 Ok(true)
             }
         }
+    }
+
+    fn set_code(&mut self, lua: MizLua, code_part: u16) -> Result<()> {
+        let hundreds = code_part / 100;
+        let tens = code_part / 10;
+        if hundreds > 9 || (hundreds > 0 && code_part % 100 > 0) || (tens > 0 && code_part % 10 > 0)
+        {
+            bail!("invalid code part {code_part}, mixed scales")
+        }
+        if hundreds > 0 {
+            let tens_ones = self.code % 100;
+            self.code = 1000 + code_part + tens_ones;
+        } else if tens > 0 {
+            let hundreds = self.code / 100;
+            let ones = self.code % 10;
+            self.code = hundreds + code_part + ones;
+        } else {
+            let c = self.code / 10;
+            self.code = c + code_part;
+        }
+        if let Some((id, _)) = &self.target {
+            let spot = Spot::get_instance(lua, id)?;
+            spot.set_code(self.code)?
+        }
+        Ok(())
     }
 
     fn shift(&mut self, lua: MizLua) -> Result<bool> {
@@ -189,8 +217,7 @@ impl Jtacs {
     }
 
     fn get_mut(&mut self, gid: &GroupId) -> Result<&mut Jtac> {
-        self
-            .0
+        self.0
             .iter_mut()
             .find_map(|(_, jtx)| jtx.get_mut(gid))
             .ok_or_else(|| anyhow!("no such jtac"))
@@ -232,6 +259,13 @@ impl Jtacs {
         let jtac = self.get_mut(gid)?;
         jtac.filter |= tag;
         jtac.sort_contacts(lua)
+    }
+
+    /// set part of the laser code, defined by the scale of the passed in number. For example,
+    /// passing 600 sets the hundreds part of the code to 6. passing 8 sets the ones part of the code to 8.
+    /// other parts of the existing code are left alone.
+    pub fn set_code_part(&mut self, lua: MizLua, gid: &GroupId, code_part: u16) -> Result<()> {
+        self.get_mut(gid)?.set_code(lua, code_part)
     }
 
     pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = UnitId> + 'a {

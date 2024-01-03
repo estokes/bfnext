@@ -6,7 +6,7 @@ use crate::{
         Db,
     },
     ewr::EwrUnits,
-    jtac, Context,
+    Context,
 };
 use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
@@ -669,11 +669,19 @@ fn jtac_clear_filter(lua: MizLua, gid: db::GroupId) -> Result<()> {
 fn jtac_filter(lua: MizLua, arg: ArgTuple<db::GroupId, u32>) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
-        let filter = BitFlags::<UnitTag>::from_bits(arg.snd)
-            .map_err(|_| anyhow!("invalid filter bits"))?;
+        let filter =
+            BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
         for tag in filter.iter() {
             ctx.jtac.add_filter(lua, &arg.fst, tag)?;
         }
+    }
+    jtac_status(lua, arg.fst)
+}
+
+fn jtac_set_code(lua: MizLua, arg: ArgTuple<db::GroupId, u16>) -> Result<()> {
+    {
+        let ctx = unsafe { Context::get_mut() };
+        ctx.jtac.set_code_part(lua, &arg.fst, arg.snd)?;
     }
     jtac_status(lua, arg.fst)
 }
@@ -726,8 +734,34 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<
         )?;
     }
     let code_root = mc.add_submenu_for_coalition(side, "Code".into(), Some(root.clone()))?;
-
-    unimplemented!()
+    let hundreds_root =
+        mc.add_submenu_for_coalition(side, "Hundreds".into(), Some(code_root.clone()))?;
+    let tens_root = mc.add_submenu_for_coalition(side, "Tens".into(), Some(code_root.clone()))?;
+    let ones_root = mc.add_submenu_for_coalition(side, "Ones".into(), Some(code_root.clone()))?;
+    for (scale, root) in [
+        (100, &hundreds_root),
+        (10, &tens_root),
+        (1, &ones_root),
+    ] {
+        let range = if scale == 100 {
+            0..=6
+        } else {
+            0..=8
+        };
+        for n in range {
+            mc.add_command_for_coalition(
+                side,
+                format_compact!("{n}").into(),
+                Some(root.clone()),
+                jtac_set_code,
+                ArgTuple {
+                    fst: group,
+                    snd: n * scale,
+                },
+            )?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, Default)]

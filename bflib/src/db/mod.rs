@@ -715,8 +715,8 @@ impl Db {
             },
         );
         let obj = obj.unwrap();
-        let v = obj.pos - pos;
-        let heading = v.y.atan2(v.x);
+        let v = pos - obj.pos;
+        let heading = dbg!(v.y.atan2(v.x));
         (dist.sqrt(), heading, obj)
     }
 
@@ -1227,7 +1227,7 @@ impl Db {
             self.persisted.units.insert_cow(uid, spawned_unit);
             self.persisted.units_by_name.insert_cow(unit_name, uid);
         }
-        match dbg!(&mut spawned.origin) {
+        match &mut spawned.origin {
             DeployKind::Objective => (),
             DeployKind::Crate { player, .. } => {
                 self.persisted.crates.insert_cow(gid);

@@ -13,7 +13,7 @@ use dcso3::{
     spot::{ClassSpot, Spot},
     trigger::{MarkId, Trigger},
     unit::{ClassUnit, Unit},
-    LuaVec3, MizLua, String, Vector3,
+    LuaVec3, MizLua, String, Vector3, radians_to_degrees,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -37,7 +37,7 @@ struct Jtac {
     id: DcsOid<ClassUnit>,
     filter: BitFlags<UnitTag>,
     priority: Vec<BitFlags<UnitTag>>,
-    target: Option<(DcsOid<ClassSpot>, MarkId, UnitId)>,
+    target: Option<(DcsOid<ClassSpot>, Option<MarkId>, UnitId)>,
     autolase: bool,
     smoketarget: bool,
     code: u16,
@@ -68,17 +68,22 @@ impl Jtac {
         use std::fmt::Write;
         let jtac_pos = db.group_center(&self.gid)?;
         let (dist, heading, obj) = db.objective_near_point(jtac_pos);
+        let dist = dist / 1000.;
         let mut msg = format_compact!(
-            "JTAC {} bearing {} for {} from {}, ",
+            "JTAC {} bearing {} for {:.1}km from {}, ",
             self.gid,
-            dist as u32,
-            heading as u32,
+            radians_to_degrees(heading.abs()) as u32,
+            dist,
             obj.name()
         );
         match self.target {
             None => write!(msg, "no target")?,
             Some((_, mid, uid)) => {
                 let unit_typ = db.unit(&uid)?.typ.clone();
+                let mid = match mid {
+                    None => format_compact!("none"),
+                    Some(mid) => format_compact!("{mid}"),
+                };
                 write!(msg, "now lasing {unit_typ} code {} marker {mid}", self.code)?
             }
         }
@@ -120,21 +125,31 @@ impl Jtac {
         if let Some((id, mid, _)) = self.target.take() {
             let spot = Spot::get_instance(lua, &id)?;
             spot.destroy()?;
-            Trigger::singleton(lua)?.action()?.remove_mark(mid)?
+            if let Some(mid) = mid {
+                Trigger::singleton(lua)?.action()?.remove_mark(mid)?
+            }
         }
         Ok(())
     }
 
-    fn mark_target(&self, lua: MizLua, mid: MarkId, pos: Vector3, typ: String) -> Result<()> {
-        let act = Trigger::singleton(lua)?.action()?;
-        let _ = act.remove_mark(mid);
-        let msg = format_compact!(
-            "JTAC {} target {} marked by code {}",
-            self.gid,
-            typ,
-            self.code
-        );
-        act.mark_to_coalition(mid, msg.into(), LuaVec3(pos), self.side, true, None)
+    fn mark_target(&mut self, lua: MizLua) -> Result<()> {
+        if let Some((_, mid, uid)) = &mut self.target {
+            let act = Trigger::singleton(lua)?.action()?;
+            if let Some(mid) = mid.take() {
+                act.remove_mark(mid)?;
+            }
+            let new_mid = MarkId::new();
+            let ct = &self.contacts[&*uid];
+            let msg = format_compact!(
+                "JTAC {} target {} marked by code {}",
+                self.gid,
+                ct.typ,
+                self.code
+            );
+            act.mark_to_coalition(new_mid, msg.into(), LuaVec3(ct.pos), self.side, true, None)?;
+            *mid = Some(new_mid);
+        }
+        Ok(())
     }
 
     fn set_target(&mut self, lua: MizLua, i: usize) -> Result<bool> {
@@ -144,7 +159,6 @@ impl Jtac {
             .ok_or_else(|| anyhow!("no such target"))?;
         let uid = *uid;
         let pos = ct.pos;
-        let typ = ct.typ.clone();
         match &self.target {
             Some((_, _, tuid)) if tuid == &uid => Ok(false),
             Some(_) | None => {
@@ -157,9 +171,8 @@ impl Jtac {
                     LuaVec3(pos),
                     self.code,
                 )?;
-                let mid = MarkId::new();
-                self.target = Some((spot.object_id()?, mid, uid));
-                self.mark_target(lua, mid, pos, typ)?;
+                self.target = Some((spot.object_id()?, None, uid));
+                self.mark_target(lua)?;
                 Ok(true)
             }
         }
@@ -178,16 +191,15 @@ impl Jtac {
         } else if tens > 0 {
             let hundreds = self.code / 100;
             let ones = self.code % 10;
-            self.code = hundreds + code_part + ones;
+            self.code = 100 * hundreds + code_part + ones;
         } else {
             let c = self.code / 10;
-            self.code = c + code_part;
+            self.code = 10 * c + code_part;
         }
-        if let Some((id, mid, uid)) = &self.target {
+        if let Some((id, _, _)) = &self.target {
             let spot = Spot::get_instance(lua, id)?;
             spot.set_code(self.code)?;
-            let ct = &self.contacts[uid];
-            self.mark_target(lua, *mid, ct.pos, ct.typ.clone())?
+            self.mark_target(lua)?
         }
         Ok(())
     }

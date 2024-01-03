@@ -370,7 +370,7 @@ impl Db {
                             if dist > radius2 || self.ephemeral.ca_controlled.contains(uid) {
                                 // part of this base is on walkabout, stay spawned
                                 spawn = true;
-                                is_on_walkabout.insert(dbg!(*uid));
+                                is_on_walkabout.insert(*uid);
                             }
                         }
                     }
@@ -381,10 +381,10 @@ impl Db {
                 let group = group!(self, unit.group)?;
                 if obj.owner != group.side {
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
-                    if dbg!(dist) <= dbg!(ground_cull_distance) {
+                    if dist <= ground_cull_distance {
                         spawn = true;
                         is_threatened = true;
-                        is_close_to_enemies.insert(dbg!(*uid));
+                        is_close_to_enemies.insert(*uid);
                     }
                 }
             }

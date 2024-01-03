@@ -741,6 +741,8 @@ impl<'lua> DcsTableExt<'lua> for mlua::Table<'lua> {
     }
 }
 
+pub type Vector2 = na::base::Vector2<f64>;
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default, Serialize, Deserialize)]
 pub struct LuaVec2(pub na::base::Vector2<f64>);
 
@@ -782,6 +784,8 @@ impl LuaVec2 {
         LuaVec2(na::base::Vector2::new(x, y))
     }
 }
+
+pub type Vector3 = na::base::Vector3<f64>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default, Serialize, Deserialize)]
 pub struct LuaVec3(pub na::base::Vector3<f64>);
@@ -1110,10 +1114,10 @@ pub fn value_to_json(
     }
 }
 
-pub fn centroid2d(points: impl IntoIterator<Item = LuaVec2>) -> LuaVec2 {
+pub fn centroid2d(points: impl IntoIterator<Item = Vector2>) -> Vector2 {
     let (n, sum) = points
         .into_iter()
-        .fold((0, LuaVec2::new(0., 0.)), |(n, c), p| (n + 1, c + p));
+        .fold((0, Vector2::new(0., 0.)), |(n, c), p| (n + 1, c + p));
     sum / (n as f64)
 }
 
@@ -1155,4 +1159,22 @@ pub fn radians_to_degrees(radians: f64) -> f64 {
 
 pub fn degrees_to_radians(degrees: f64) -> f64 {
     degrees * (std::f64::consts::PI / 180.)
+}
+
+pub fn azumith2d(v: Vector2) -> f64 {
+    let az = v.y.atan2(v.x);
+    if az < 0. { az + 2.* std::f64::consts::PI } else { az }
+}
+
+pub fn azumith2d_to(from: Vector2, to: Vector2) -> f64 {
+    azumith2d(to - from)
+}
+
+pub fn azumith3d(v: Vector3) -> f64 {
+    let az = v.z.atan2(v.x);
+    if az < 0. { az + 2.* std::f64::consts::PI } else { az }
+}
+
+pub fn azumith3d_to(from: Vector3, to: Vector3) -> f64 {
+    azumith3d(to - from)
 }

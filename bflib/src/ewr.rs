@@ -2,8 +2,8 @@ use crate::db::{Db, InstancedPlayer, Player};
 use anyhow::Result;
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side, land::Land, net::Ucid, radians_to_degrees, LuaVec3, MizLua, Position3,
-    Vector2, Vector3,
+    azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid,
+    radians_to_degrees, LuaVec3, MizLua, Position3, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use smallvec::{smallvec, SmallVec};
@@ -48,7 +48,7 @@ impl GibBraa {
             EwrUnits::Metric => (),
             EwrUnits::Imperial => {
                 self.range = self.range / 1852;
-                self.altitude = (self.altitude as f64 * 1000. * 3.38084) as u32;
+                self.altitude = (self.altitude as f64 * 3.38084) as u32;
             }
         }
         self.units = unit;
@@ -160,11 +160,10 @@ impl Ewr {
             if include && age <= 120 {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);
                 let range = na::distance(&pos.into(), &cpos.into());
-                let v = pos - cpos;
-                let bearing = radians_to_degrees(v.y.atan2(v.x).abs());
-                let heading = radians_to_degrees(track.pos.x.z.atan2(track.pos.x.x).abs());
-                let speed = track.velocity.magnitude();
-                let altitude = track.pos.p.y / 1000.;
+                let bearing = radians_to_degrees(azumith2d_to(pos, cpos));
+                let heading = radians_to_degrees(azumith3d(track.pos.x.0));
+                let speed = dbg!(track.velocity.magnitude());
+                let altitude = track.pos.p.y;
                 reports.push(GibBraa {
                     range: range as u32,
                     heading: heading as u16,

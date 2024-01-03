@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    centroid2d,
+    azumith2d, azumith2d_to, azumith3d, centroid2d,
     coalition::Side,
     env::miz::MizIndex,
     land::Land,
@@ -205,7 +205,7 @@ impl Db {
         let spawnpos = SpawnLoc::AtPos {
             pos: st.point,
             offset_direction: dir,
-            group_heading: dir.y.atan2(dir.x),
+            group_heading: azumith2d(dir),
         };
         let dk = DeployKind::Crate {
             origin: oid,
@@ -249,8 +249,7 @@ impl Db {
                 let unit = &unit!(self, uid)?;
                 let distance = na::distance(&point.into(), &unit.pos.into());
                 if distance <= max_dist {
-                    let v = unit.pos - point;
-                    let heading = radians_to_degrees(v.y.atan2(v.x));
+                    let heading = radians_to_degrees(azumith2d_to(point, unit.pos));
                     res.push(NearbyCrate {
                         group,
                         origin: *oid,
@@ -274,11 +273,7 @@ impl Db {
         self.list_crates_near_point(st.point, max_dist)
     }
 
-    pub fn destroy_nearby_crate(
-        &mut self,
-        lua: MizLua,
-        slot: &SlotId,
-    ) -> Result<()> {
+    pub fn destroy_nearby_crate(&mut self, lua: MizLua, slot: &SlotId) -> Result<()> {
         let st = SlotStats::get(self, lua, slot)?;
         if st.in_air {
             bail!("you must land to destroy crates")
@@ -726,12 +721,8 @@ impl Db {
                             }
                             None => {
                                 let pos = self.slot_instance_pos(lua, slot)?;
-                                let spawnloc = compute_positions(
-                                    self,
-                                    &have,
-                                    centroid,
-                                    pos.x.z.atan2(pos.x.x),
-                                )?;
+                                let spawnloc =
+                                    compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
@@ -821,7 +812,7 @@ impl Db {
         let spawnpos = SpawnLoc::AtPos {
             pos: st.point,
             offset_direction: Vector2::new(st.pos.x.x, st.pos.x.z),
-            group_heading: st.pos.x.z.atan2(st.pos.x.x),
+            group_heading: azumith3d(st.pos.x.0),
         };
         let dk = DeployKind::Crate {
             origin: oid,
@@ -961,7 +952,7 @@ impl Db {
         let spawnpos = SpawnLoc::AtPos {
             pos: point,
             offset_direction: Vector2::new(pos.x.x, pos.x.z),
-            group_heading: pos.x.z.atan2(pos.x.x),
+            group_heading: azumith3d(pos.x.0),
         };
         let dk = DeployKind::Troop {
             player: ucid,

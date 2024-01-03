@@ -73,7 +73,7 @@ impl Jtac {
         let mut msg = format_compact!(
             "JTAC {} bearing {} for {:.1}km from {}, ",
             self.gid,
-            radians_to_degrees(heading.abs()) as u32,
+            radians_to_degrees(heading) as u32,
             dist,
             obj.name()
         );

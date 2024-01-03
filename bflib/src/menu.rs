@@ -381,9 +381,9 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
     let mut report = format_compact!("Bandits BRAA\n");
-    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
-        if let Some(player) = ctx.db.player(ucid) {
-            if let Some((_, Some(inst))) = &player.current_slot {
+    if let Some(ucid) = dbg!(ctx.db.player_in_slot(&slot)) {
+        if let Some(player) = dbg!(ctx.db.player(ucid)) {
+            if let Some((_, Some(inst))) = dbg!(&player.current_slot) {
                 let chickens = ctx.ewr.where_chicken(Utc::now(), false, ucid, player, inst);
                 for braa in chickens {
                     report.push_str(&format_compact!("{braa}\n"));

@@ -12,7 +12,7 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    atomic_id, centroid2d, centroid3d,
+    atomic_id, azumith2d_to, centroid2d, centroid3d,
     coalition::Side,
     cvt_err,
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
@@ -22,7 +22,7 @@ use dcso3::{
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    MizLua, Position3, String, Vector2, Vector3,
+    MizLua, Position3, String, Vector2, Vector3, azumith3d,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -715,9 +715,7 @@ impl Db {
             },
         );
         let obj = obj.unwrap();
-        let v = pos - obj.pos;
-        let heading = v.y.atan2(v.x);
-        (dist.sqrt(), heading, obj)
+        (dist.sqrt(), azumith2d_to(obj.pos, pos), obj)
     }
 
     pub fn group_by_name(&self, name: &str) -> Result<&SpawnedGroup> {
@@ -1036,7 +1034,9 @@ impl Db {
                 if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
                     self.ephemeral.uid_by_object_id.remove(&id);
                 }
-                self.ephemeral.units_potentially_close_to_enemies.remove(uid);
+                self.ephemeral
+                    .units_potentially_close_to_enemies
+                    .remove(uid);
                 self.ephemeral.units_potentially_on_walkabout.remove(uid);
                 units.push(unit.name);
             }
@@ -1365,7 +1365,7 @@ impl Db {
             };
             let pos = instance.get_position()?;
             let point = Vector2::new(pos.p.x, pos.p.z);
-            let heading = pos.x.z.atan2(pos.x.x);
+            let heading = azumith3d(pos.x.0);
             let spunit = unit_mut!(self, uid)?;
             if spunit.position != pos {
                 moved.push(spunit.group);

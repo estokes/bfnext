@@ -1,6 +1,6 @@
 use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId, Set, UnitId};
 use crate::{
-    cfg::{Deployable, DeployableLogistics},
+    cfg::{Deployable, DeployableLogistics, UnitTag},
     db::{Map, ObjectiveKind},
     group, group_mut, maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
@@ -38,14 +38,17 @@ impl Db {
                         _ => false,
                     };
                     for uid in &group.units {
-                        total += 1;
-                        if logi {
-                            logi_total += 1;
-                        }
-                        if !unit!(self, uid)?.dead {
-                            alive += 1;
+                        let unit = unit!(self, uid)?;
+                        if !unit.tags.contains(UnitTag::Invincible) {
+                            total += 1;
                             if logi {
-                                logi_alive += 1;
+                                logi_total += 1;
+                            }
+                            if !unit.dead {
+                                alive += 1;
+                                if logi {
+                                    logi_alive += 1;
+                                }
                             }
                         }
                     }

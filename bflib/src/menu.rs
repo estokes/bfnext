@@ -1,11 +1,12 @@
 use crate::{
     cfg::{Cfg, LimitEnforceTyp, UnitTag},
     db::{
+        self,
         cargo::{Cargo, Oldest, SlotStats},
         Db,
     },
     ewr::EwrUnits,
-    Context,
+    jtac, Context,
 };
 use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
@@ -19,33 +20,41 @@ use dcso3::{
     net::SlotId,
     MizLua, String,
 };
-use enumflags2::BitFlag;
+use enumflags2::{BitFlag, BitFlags};
 use fxhash::FxHashMap;
 use log::debug;
 use mlua::{prelude::*, Value};
 use std::collections::hash_map::Entry;
 
 #[derive(Debug)]
-struct SpawnArg {
-    group: GroupId,
-    name: String,
+struct ArgTuple<T, U> {
+    fst: T,
+    snd: U,
 }
 
-impl<'lua> IntoLua<'lua> for SpawnArg {
+impl<'lua, T, U> IntoLua<'lua> for ArgTuple<T, U>
+where
+    T: IntoLua<'lua>,
+    U: IntoLua<'lua>,
+{
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<LuaValue<'lua>> {
         let tbl = lua.create_table()?;
-        tbl.raw_set("group", self.group)?;
-        tbl.raw_set("crate_name", self.name)?;
+        tbl.raw_set("fst", self.fst)?;
+        tbl.raw_set("snd", self.snd)?;
         Ok(Value::Table(tbl))
     }
 }
 
-impl<'lua> FromLua<'lua> for SpawnArg {
+impl<'lua, T, U> FromLua<'lua> for ArgTuple<T, U>
+where
+    T: FromLua<'lua>,
+    U: FromLua<'lua>,
+{
     fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
-        let tbl = as_tbl("SpawnCrateArg", None, value).map_err(lua_err)?;
+        let tbl = as_tbl("ArgTuple", None, value).map_err(lua_err)?;
         Ok(Self {
-            group: tbl.raw_get("group")?,
-            name: tbl.raw_get("crate_name")?,
+            fst: tbl.raw_get("fst")?,
+            snd: tbl.raw_get("snd")?,
         })
     }
 }
@@ -244,14 +253,14 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     Ok(())
 }
 
-fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
+fn spawn_crate(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_side, slot) = slot_for_group(lua, ctx, &arg.group)?;
-    match ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.name) {
+    let (_side, slot) = slot_for_group(lua, ctx, &arg.fst)?;
+    match ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.snd) {
         Err(e) => ctx
             .db
             .msgs()
-            .panel_to_group(10, false, arg.group, format_compact!("{e}")),
+            .panel_to_group(10, false, arg.fst, format_compact!("{e}")),
         Ok(st) => {
             if let Some(max_crates) = ctx.db.cfg().max_crates {
                 let (n, oldest) = ctx.db.number_crates_deployed(&st)?;
@@ -261,17 +270,17 @@ fn spawn_crate(lua: MizLua, arg: SpawnArg) -> Result<()> {
                         "{n}/{max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
                     ),
                 };
-                ctx.db.msgs().panel_to_group(10, false, arg.group, msg)
+                ctx.db.msgs().panel_to_group(10, false, arg.fst, msg)
             }
         }
     }
     Ok(())
 }
 
-fn load_troops(lua: MizLua, arg: SpawnArg) -> Result<()> {
+fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = slot_for_group(lua, ctx, &arg.group)?;
-    match ctx.db.load_troops(lua, &ctx.idx, &slot, &arg.name) {
+    let (side, slot) = slot_for_group(lua, ctx, &arg.fst)?;
+    match ctx.db.load_troops(lua, &ctx.idx, &slot, &arg.snd) {
         Ok(tr) => {
             let (n, oldest) = ctx.db.number_troops_deployed(side, &tr.name)?;
             let player = player_name(&ctx.db, &slot);
@@ -296,7 +305,7 @@ fn load_troops(lua: MizLua, arg: SpawnArg) -> Result<()> {
         Err(e) => ctx
             .db
             .msgs()
-            .panel_to_group(10, false, arg.group, format_compact!("{e}")),
+            .panel_to_group(10, false, arg.fst, format_compact!("{e}")),
     }
     Ok(())
 }
@@ -471,9 +480,9 @@ fn add_troops_menu_for_group(
                 format_compact!("Load {} squad", sq.name).into(),
                 Some(root.clone()),
                 load_troops,
-                SpawnArg {
-                    group,
-                    name: sq.name.clone(),
+                ArgTuple {
+                    fst: group,
+                    snd: sq.name.clone(),
                 },
             )?;
         }
@@ -537,9 +546,9 @@ fn add_cargo_menu_for_group(
         rep.name.clone(),
         Some(root.clone()),
         spawn_crate,
-        SpawnArg {
-            group,
-            name: rep.name.clone(),
+        ArgTuple {
+            fst: group,
+            snd: rep.name.clone(),
         },
     )?;
     let mut created_menus: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
@@ -567,9 +576,9 @@ fn add_cargo_menu_for_group(
                 title,
                 Some(root.clone()),
                 spawn_crate,
-                SpawnArg {
-                    group,
-                    name: cr.name.clone(),
+                ArgTuple {
+                    fst: group,
+                    snd: cr.name.clone(),
                 },
             )?;
         }
@@ -617,27 +626,59 @@ fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
     Ok(())
 }
 
-fn jtac_status(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+fn jtac_status(_: MizLua, gid: db::GroupId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let side = ctx.db.group(&gid)?.side;
+    let msg = ctx.jtac.jtac_status(&ctx.db, &gid)?;
+    ctx.db.msgs().panel_to_side(10, false, side, msg);
+    Ok(())
 }
 
-fn jtac_toggle_auto_laser(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+fn jtac_toggle_auto_laser(lua: MizLua, gid: db::GroupId) -> Result<()> {
+    {
+        let ctx = unsafe { Context::get_mut() };
+        ctx.jtac.toggle_auto_laser(lua, &gid)?;
+    }
+    jtac_status(lua, gid)
 }
 
-fn jtac_toggle_auto_smoke(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+fn jtac_toggle_smoke_target(lua: MizLua, gid: db::GroupId) -> Result<()> {
+    {
+        let ctx = unsafe { Context::get_mut() };
+        ctx.jtac.toggle_smoke_target(&gid)?;
+    }
+    jtac_status(lua, gid)
 }
 
-fn jtac_shift(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+fn jtac_shift(lua: MizLua, gid: db::GroupId) -> Result<()> {
+    {
+        let ctx = unsafe { Context::get_mut() };
+        ctx.jtac.shift(lua, &gid)?;
+    }
+    jtac_status(lua, gid)
 }
 
-fn jtac_clear_filter(lua: MizLua, gid: GroupId) -> Result<()> {
-    unimplemented!()
+fn jtac_clear_filter(lua: MizLua, gid: db::GroupId) -> Result<()> {
+    {
+        let ctx = unsafe { Context::get_mut() };
+        ctx.jtac.clear_filter(lua, &gid)?;
+    }
+    jtac_status(lua, gid)
 }
 
-pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: GroupId) -> Result<()> {
+fn jtac_filter(lua: MizLua, arg: ArgTuple<db::GroupId, u32>) -> Result<()> {
+    {
+        let ctx = unsafe { Context::get_mut() };
+        let filter = BitFlags::<UnitTag>::from_bits(arg.snd)
+            .map_err(|_| anyhow!("invalid filter bits"))?;
+        for tag in filter.iter() {
+            ctx.jtac.add_filter(lua, &arg.fst, tag)?;
+        }
+    }
+    jtac_status(lua, arg.fst)
+}
+
+pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root = mc.add_submenu_for_coalition(side, "JTAC".into(), None)?;
     let root =
@@ -658,17 +699,34 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: GroupId) -> Result<()> 
     )?;
     mc.add_command_for_coalition(
         side,
-        "Toggle Auto Smoke".into(),
+        "Toggle Smoke Target".into(),
         Some(root.clone()),
-        jtac_toggle_auto_smoke,
+        jtac_toggle_smoke_target,
         group,
     )?;
     mc.add_command_for_coalition(side, "Shift".into(), Some(root.clone()), jtac_shift, group)?;
-    let root = mc.add_submenu_for_coalition(side, "Filter".into(), Some(root.clone()))?;
-    mc.add_command_for_coalition(side, "Clear".into(), Some(root.into()), jtac_clear_filter, group)?;
+    let filter_root = mc.add_submenu_for_coalition(side, "Filter".into(), Some(root.clone()))?;
+    mc.add_command_for_coalition(
+        side,
+        "Clear".into(),
+        Some(filter_root.clone()),
+        jtac_clear_filter,
+        group,
+    )?;
     for tag in UnitTag::all().iter() {
-
+        mc.add_command_for_coalition(
+            side,
+            format_compact!("{:?}", tag).into(),
+            Some(filter_root.clone()),
+            jtac_filter,
+            ArgTuple {
+                fst: group,
+                snd: BitFlags::from(tag).bits(),
+            },
+        )?;
     }
+    let code_root = mc.add_submenu_for_coalition(side, "Code".into(), Some(root.clone()))?;
+
     unimplemented!()
 }
 

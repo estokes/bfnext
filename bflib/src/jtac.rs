@@ -28,6 +28,7 @@ struct Contact {
 
 #[derive(Debug, Clone)]
 struct Jtac {
+    gid: GroupId,
     contacts: IndexMap<UnitId, Contact>,
     id: DcsOid<ClassUnit>,
     filter: BitFlags<UnitTag>,
@@ -39,8 +40,9 @@ struct Jtac {
 }
 
 impl Jtac {
-    fn new(id: DcsOid<ClassUnit>, priority: Vec<BitFlags<UnitTag>>) -> Self {
+    fn new(gid: GroupId, id: DcsOid<ClassUnit>, priority: Vec<BitFlags<UnitTag>>) -> Self {
         Self {
+            gid,
             contacts: IndexMap::default(),
             id,
             filter: BitFlags::default(),
@@ -50,6 +52,42 @@ impl Jtac {
             smoketarget: false,
             code: 1688,
         }
+    }
+
+    fn status(&self, db: &Db) -> Result<CompactString> {
+        use std::fmt::Write;
+        let jtac_pos = db.group_center(&self.gid)?;
+        let (dist, heading, obj) = db.objective_near_point(jtac_pos);
+        let mut msg = format_compact!(
+            "JTAC {} bearing {} for {} from {}, ",
+            self.gid,
+            dist as u32,
+            heading as u32,
+            obj.name()
+        );
+        match self.target {
+            None => write!(msg, "no target")?,
+            Some((_, uid)) => {
+                let unit_typ = db.unit(&uid)?.typ.clone();
+                write!(msg, "now lasing {unit_typ}")?
+            }
+        }
+        write!(msg, "\n")?;
+        if self.contacts.is_empty() {
+            write!(msg, "No enemies in sight")?;
+        } else {
+            write!(msg, "Visual On: ")?;
+            for (i, uid) in self.contacts.keys().enumerate() {
+                if i == self.contacts.len() - 1 {
+                    write!(msg, "{}", db.unit(uid)?.typ)?;
+                } else {
+                    write!(msg, "{}, ", db.unit(uid)?.typ)?;
+                }
+            }
+        }
+        write!(msg, "\nautolase: {}, smoke: {}", self.autolase, self.smoketarget)?;
+        write!(msg, "\nfilter: {:?}", self.filter)?;
+        Ok(msg)
     }
 
     fn add_contact(&mut self, unit: &SpawnedUnit) {
@@ -67,7 +105,7 @@ impl Jtac {
         Ok(())
     }
 
-    fn set_target(&mut self, lua: MizLua, i: usize) -> Result<Option<UnitId>> {
+    fn set_target(&mut self, lua: MizLua, i: usize) -> Result<bool> {
         let (uid, ct) = self
             .contacts
             .get_index(i)
@@ -75,7 +113,7 @@ impl Jtac {
         let uid = *uid;
         let pos = ct.pos;
         match &self.target {
-            Some((_, tuid)) if tuid == &uid => Ok(None),
+            Some((_, tuid)) if tuid == &uid => Ok(false),
             Some(_) | None => {
                 self.remove_target(lua)?;
                 let jt = Unit::get_instance(lua, &self.id)?;
@@ -87,12 +125,12 @@ impl Jtac {
                     self.code,
                 )?;
                 self.target = Some((spot.object_id()?, uid));
-                Ok(Some(uid))
+                Ok(true)
             }
         }
     }
 
-    fn shift(&mut self, lua: MizLua) -> Result<Option<UnitId>> {
+    fn shift(&mut self, lua: MizLua) -> Result<bool> {
         let i = match &self.target {
             None => 0,
             Some((_, uid)) => match self.contacts.get_index_of(uid) {
@@ -120,7 +158,7 @@ impl Jtac {
         Ok(())
     }
 
-    fn sort_contacts(&mut self, lua: MizLua) -> Result<Option<UnitId>> {
+    fn sort_contacts(&mut self, lua: MizLua) -> Result<bool> {
         let plist = &self.priority;
         let priority = |tags: BitFlags<UnitTag>| {
             plist
@@ -135,26 +173,67 @@ impl Jtac {
         if self.autolase && !self.contacts.is_empty() {
             return self.set_target(lua, 0);
         }
-        Ok(None)
+        Ok(false)
     }
-}
-
-fn jtac_msg(db: &mut Db, gid: GroupId, uid: UnitId) -> Result<CompactString> {
-    let unit_typ = db.unit(&uid)?.typ.clone();
-    let jtac_pos = db.group_center(&gid)?;
-    let (dist, heading, obj) = db.objective_near_point(jtac_pos);
-    Ok(format_compact!(
-        "JTAC {gid} bearing {} for {} from {} now lasing {unit_typ}",
-        dist as u32,
-        heading as u32,
-        obj.name()
-    ))
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Jtacs(FxHashMap<Side, FxHashMap<GroupId, Jtac>>);
 
 impl Jtacs {
+    fn get(&self, gid: &GroupId) -> Result<&Jtac> {
+        self.0
+            .iter()
+            .find_map(|(_, jtx)| jtx.get(gid))
+            .ok_or_else(|| anyhow!("no such jtac {gid}"))
+    }
+
+    fn get_mut(&mut self, gid: &GroupId) -> Result<&mut Jtac> {
+        self
+            .0
+            .iter_mut()
+            .find_map(|(_, jtx)| jtx.get_mut(gid))
+            .ok_or_else(|| anyhow!("no such jtac"))
+    }
+
+    pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {
+        self.get(gid)?.status(db)
+    }
+
+    pub fn toggle_auto_laser(&mut self, lua: MizLua, gid: &GroupId) -> Result<()> {
+        let jtac = self.get_mut(gid)?;
+        jtac.autolase = !jtac.autolase;
+        if jtac.autolase {
+            jtac.shift(lua)?;
+        } else {
+            jtac.remove_target(lua)?
+        }
+        Ok(())
+    }
+
+    pub fn toggle_smoke_target(&mut self, gid: &GroupId) -> Result<()> {
+        let jtac = self.get_mut(gid)?;
+        jtac.smoketarget = !jtac.smoketarget;
+        Ok(())
+    }
+
+    pub fn shift(&mut self, lua: MizLua, gid: &GroupId) -> Result<bool> {
+        let jtac = self.get_mut(gid)?;
+        jtac.shift(lua)
+    }
+
+    pub fn clear_filter(&mut self, lua: MizLua, gid: &GroupId) -> Result<bool> {
+        let jtac = self.get_mut(gid)?;
+        jtac.filter = BitFlags::empty();
+        jtac.sort_contacts(lua)
+    }
+
+    pub fn add_filter(&mut self, lua: MizLua, gid: &GroupId, tag: UnitTag) -> Result<bool> {
+        let jtac = self.get_mut(gid)?;
+        jtac.filter |= tag;
+        jtac.sort_contacts(lua)
+    }
+
     pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = UnitId> + 'a {
         self.0.values().flat_map(|j| {
             j.values()
@@ -193,7 +272,9 @@ impl Jtacs {
                     .entry(group.side)
                     .or_default()
                     .entry(group.id)
-                    .or_insert_with(|| Jtac::new(jtid.clone(), db.cfg().jtac_priority.clone()));
+                    .or_insert_with(|| {
+                        Jtac::new(group.id, jtid.clone(), db.cfg().jtac_priority.clone())
+                    });
                 if !unit.tags.contains(jtac.filter) {
                     jtac.remove_contact(lua, &unit.id)?;
                     continue;
@@ -219,17 +300,17 @@ impl Jtacs {
                 }
             })
         }
-        let mut new_contacts: SmallVec<[(GroupId, UnitId); 32]> = smallvec![];
+        let mut new_contacts: SmallVec<[&Jtac; 32]> = smallvec![];
         for j in self.0.values_mut() {
-            for (gid, jtac) in j.iter_mut() {
-                if let Some(uid) = jtac.sort_contacts(lua)? {
-                    new_contacts.push((*gid, uid));
+            for (_, jtac) in j.iter_mut() {
+                if jtac.sort_contacts(lua)? {
+                    new_contacts.push(jtac);
                 }
             }
         }
         let mut msgs: SmallVec<[(GroupId, CompactString); 32]> = smallvec![];
-        for (gid, uid) in new_contacts {
-            msgs.push((gid, jtac_msg(db, gid, uid)?))
+        for jtac in new_contacts {
+            msgs.push((jtac.gid, jtac.status(db)?))
         }
         for (gid, msg) in msgs {
             let side = db.group(&gid)?.side;

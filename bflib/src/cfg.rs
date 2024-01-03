@@ -1129,6 +1129,7 @@ fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
         ("ZSU-23-4 Shilka".into(), AAA | MR | RadarGuided),
         ("ZSU_57_2".into(), AAA | LR),
         ("Strela-10M3".into(), SAM | SR | IRGuided | Launcher),
+        ("Strela-1 9P31".into(), SAM | SR | IRGuided | Launcher),
         (
             "SA-11 Buk CC 9S470M1".into(),
             SAM | LR | RadarGuided | ControlUnit,

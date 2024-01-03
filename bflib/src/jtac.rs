@@ -107,8 +107,13 @@ impl Jtac {
             self.autolase, self.smoketarget
         )?;
         write!(msg, "\nfilter: [")?;
-        for tag in self.filter.iter() {
-            write!(msg, "{:?}", tag)?;
+        let len = self.filter.len();
+        for (i, tag) in self.filter.iter().enumerate() {
+            if i < len - 1 {
+                write!(msg, "{:?}, ", tag)?;
+            } else {
+                write!(msg, "{:?}", tag)?;
+            }
         }
         write!(msg, "]")?;
         Ok(msg)

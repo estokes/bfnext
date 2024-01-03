@@ -8,7 +8,6 @@ use dcso3::{
     DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
-use log::debug;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,7 +121,6 @@ impl<'lua> SpawnCtx<'lua> {
     }
 
     pub fn despawn(&self, name: Despawn) -> Result<()> {
-        debug!("despawning {:?}", name);
         let r = match name {
             Despawn::Group(name) => {
                 let group = dcso3::group::Group::get_by_name(self.lua, &*name)?;
@@ -133,7 +131,6 @@ impl<'lua> SpawnCtx<'lua> {
                 Ok(obj.as_object()?.destroy()?)
             }
         };
-        debug!("despawned");
         r
     }
 

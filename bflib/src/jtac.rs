@@ -10,15 +10,16 @@ use dcso3::{
     coalition::Side,
     land::Land,
     object::{DcsObject, DcsOid},
+    radians_to_degrees,
     spot::{ClassSpot, Spot},
     trigger::{MarkId, Trigger},
     unit::{ClassUnit, Unit},
-    LuaVec3, MizLua, String, Vector3, radians_to_degrees,
+    LuaVec3, MizLua, String, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::{debug, error};
+use log::error;
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Default)]
@@ -346,7 +347,6 @@ impl Jtacs {
         for (unit, _) in db.instanced_units() {
             saw_units.insert(unit.id);
             for (pos, jtid, group, ifo) in db.jtacs() {
-                debug!("jtac {:?} considering {:?}", group, unit);
                 if !saw_jtacs.contains(&group.id) {
                     saw_jtacs.push(group.id)
                 }

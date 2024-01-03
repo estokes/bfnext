@@ -716,7 +716,7 @@ impl Db {
         );
         let obj = obj.unwrap();
         let v = pos - obj.pos;
-        let heading = dbg!(v.y.atan2(v.x));
+        let heading = v.y.atan2(v.x);
         (dist.sqrt(), heading, obj)
     }
 

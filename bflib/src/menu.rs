@@ -695,7 +695,6 @@ pub fn remove_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Resu
 }
 
 pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<()> {
-    debug!("adding jtac menu for {group}");
     let mc = MissionCommands::singleton(lua)?;
     let root = CoalitionSubMenu::from(vec!["JTAC".into()]);
     let root = mc.add_submenu_for_coalition(side, format_compact!("{group}").into(), Some(root))?;

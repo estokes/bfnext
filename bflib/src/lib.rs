@@ -372,6 +372,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 }
             }
         }
+        Event::MissionEnd => unsafe { CONTEXT = None; },
         _ => (),
     }
     Ok(())
@@ -641,6 +642,14 @@ fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
     Ok(())
 }
 
+fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
+        ctx.db.player_disconnect(&ifo.ucid)
+    }
+    Ok(())
+}
+
 fn init_hooks(lua: HooksLua) -> Result<()> {
     info!("setting user hooks");
     UserHooks::new(lua)
@@ -648,11 +657,15 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
         .on_mission_load_end(on_mission_load_end)?
         .on_player_try_connect(on_player_try_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
+        .on_player_disconnect(on_player_disconnect)?
         .register()?;
     Ok(())
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
+    unsafe { Context::get_mut() }
+    .init_async_bg(lua.inner())
+    .map_err(dcso3::lua_err)?;
     let timer = Timer::singleton(lua)?;
     let when = timer.get_time()? + 1.;
     timer.schedule_function(when, mlua::Value::Nil, move |lua, _, now| {
@@ -669,8 +682,5 @@ fn init_miz(lua: MizLua) -> Result<()> {
 
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable> {
-    unsafe { Context::get_mut() }
-        .init_async_bg(lua)
-        .map_err(dcso3::lua_err)?;
     dcso3::create_root_module(lua, init_hooks, init_miz)
 }

@@ -1,13 +1,13 @@
-use std::fmt;
-
 use crate::db::{Db, InstancedPlayer, Player};
 use anyhow::Result;
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side, land::Land, net::Ucid, LuaVec3, MizLua, Position3, Vector2, Vector3,
+    coalition::Side, land::Land, net::Ucid, radians_to_degrees, LuaVec3, MizLua, Position3,
+    Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use smallvec::{smallvec, SmallVec};
+use std::fmt;
 
 #[derive(Debug, Clone, Copy)]
 pub struct GibBraa {
@@ -15,16 +15,29 @@ pub struct GibBraa {
     pub range: u32,
     pub altitude: u32,
     pub heading: u16,
+    pub speed: u16,
     pub age: u16,
     pub units: EwrUnits,
 }
 
 impl fmt::Display for GibBraa {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (range_u, altitude_u, speed_u) = match self.units {
+            EwrUnits::Imperial => ("nm", "ft", "kts"),
+            EwrUnits::Metric => ("km", "m", "km/h"),
+        };
         write!(
             f,
-            "{:03} {:03} {:>5} {:03} {:03}s",
-            self.bearing, self.range, self.altitude, self.heading, self.age
+            "{:03} {:03}{} {:>5}{} {:03} {:04}{} {:03}s",
+            self.bearing,
+            self.range,
+            range_u,
+            self.altitude,
+            altitude_u,
+            self.heading,
+            self.speed,
+            speed_u,
+            self.age
         )
     }
 }
@@ -35,7 +48,7 @@ impl GibBraa {
             EwrUnits::Metric => (),
             EwrUnits::Imperial => {
                 self.range = self.range / 1852;
-                self.altitude = (self.altitude as f64 * 3.38084) as u32;
+                self.altitude = (self.altitude as f64 * 1000. * 3.38084) as u32;
             }
         }
         self.units = unit;
@@ -105,6 +118,7 @@ impl Ewr {
                         track.last = now;
                         track.side = player.side;
                     }
+                    dbg!(&track);
                 }
             }
         }
@@ -143,12 +157,13 @@ impl Ewr {
         for track in tracks.values() {
             let age = (now - track.last).num_seconds();
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
-            if age <= 120 && include {
+            if include && age <= 120 {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);
                 let range = na::distance(&pos.into(), &cpos.into());
-                let v = cpos - pos;
-                let bearing = v.y.atan2(v.x);
-                let heading = cpos.y.atan2(cpos.x);
+                let v = pos - cpos;
+                let bearing = radians_to_degrees(v.y.atan2(v.x).abs());
+                let heading = radians_to_degrees(cpos.y.atan2(cpos.x).abs());
+                let speed = track.velocity.magnitude();
                 let altitude = track.pos.p.y / 1000.;
                 reports.push(GibBraa {
                     range: range as u32,
@@ -156,6 +171,7 @@ impl Ewr {
                     altitude: altitude as u32,
                     bearing: bearing as u16,
                     age: age as u16,
+                    speed: speed as u16,
                     units: EwrUnits::Metric,
                 })
             }

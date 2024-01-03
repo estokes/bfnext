@@ -18,7 +18,7 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::{error, debug};
+use log::{debug, error};
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Default)]
@@ -100,7 +100,11 @@ impl Jtac {
             "\nautolase: {}, smoke: {}",
             self.autolase, self.smoketarget
         )?;
-        write!(msg, "\nfilter: {:?}", self.filter)?;
+        write!(msg, "\nfilter: [")?;
+        for tag in self.filter.iter() {
+            write!(msg, "{:?}", tag)?;
+        }
+        write!(msg, "]")?;
         Ok(msg)
     }
 
@@ -351,6 +355,9 @@ impl Jtacs {
                             db.cfg().jtac_priority.clone(),
                         )
                     });
+                if unit.side == jtac.side {
+                    continue;
+                }
                 if !unit.tags.contains(jtac.filter) {
                     jtac.remove_contact(lua, &unit.id)?;
                     continue;

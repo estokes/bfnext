@@ -43,6 +43,7 @@ pub enum UnitTag {
     APC,
     Logistics,
     Infantry,
+    EWR,
     LR,
     SR,
     MR,
@@ -1175,7 +1176,10 @@ fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
         ("FARP Tent".into(), Logistics | Unarmed),
         ("Invisible FARP".into(), Logistics | Unarmed | Invincible),
         ("M-109".into(), Armor | Artillery),
-        ("SAU Msta".into(), Armor | Artillery | SmallArms)
+        ("SAU Msta".into(), Armor | Artillery | SmallArms),
+        ("1L13 EWR".into(), EWR | Unarmed),
+        ("FPS-117".into(), EWR | Unarmed),
+        ("FPS-117 ECS".into(), EWR | Unarmed)
     ])
 }
 

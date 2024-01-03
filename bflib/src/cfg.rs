@@ -1143,6 +1143,7 @@ fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
         ("BMD-1".into(), APC | MR | ATGM | LightCannon),
         ("BMP-3".into(), APC | MR | ATGM | LightCannon),
         ("T-80UD".into(), Armor | MR | ATGM | HeavyCannon | SmallArms),
+        ("T-72B".into(), Armor | MR | ATGM | HeavyCannon | SmallArms),
         ("S-60_Type59_Artillery".into(), AAA | LR),
         ("ZU-23 Emplacement Closed".into(), AAA | SR),
         ("ATZ-10".into(), Logistics | Unarmed),

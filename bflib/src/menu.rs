@@ -721,7 +721,8 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<
         group,
     )?;
     mc.add_command_for_coalition(side, "Shift".into(), Some(root.clone()), jtac_shift, group)?;
-    let filter_root = mc.add_submenu_for_coalition(side, "Filter".into(), Some(root.clone()))?;
+    let mut filter_root =
+        mc.add_submenu_for_coalition(side, "Filter".into(), Some(root.clone()))?;
     mc.add_command_for_coalition(
         side,
         "Clear".into(),
@@ -729,7 +730,11 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<
         jtac_clear_filter,
         group,
     )?;
-    for tag in UnitTag::all().iter() {
+    for (i, tag) in UnitTag::all().iter().enumerate() {
+        if (i + 1) % 9 == 0 {
+            filter_root =
+                mc.add_submenu_for_coalition(side, "Next>>".into(), Some(filter_root.clone()))?;
+        }
         mc.add_command_for_coalition(
             side,
             format_compact!("{:?}", tag).into(),

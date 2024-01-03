@@ -741,13 +741,11 @@ impl<'lua> DcsTableExt<'lua> for mlua::Table<'lua> {
     }
 }
 
-pub type Vector2 = na::base::Vector2<f64>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct LuaVec2(pub Vector2);
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default, Serialize, Deserialize)]
+pub struct LuaVec2(pub na::base::Vector2<f64>);
 
 impl Deref for LuaVec2 {
-    type Target = Vector2;
+    type Target = na::base::Vector2<f64>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -772,13 +770,20 @@ impl<'lua> IntoLua<'lua> for LuaVec2 {
 impl<'lua> FromLua<'lua> for LuaVec2 {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Vec2", None, value).map_err(lua_err)?;
-        Ok(Self(Vector2::new(tbl.raw_get("x")?, tbl.raw_get("y")?)))
+        Ok(Self(na::base::Vector2::new(
+            tbl.raw_get("x")?,
+            tbl.raw_get("y")?,
+        )))
     }
 }
 
-pub type Vector3 = na::base::Vector3<f64>;
+impl LuaVec2 {
+    pub fn new(x: f64, y: f64) -> Self {
+        LuaVec2(na::base::Vector2::new(x, y))
+    }
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default, Serialize, Deserialize)]
 pub struct LuaVec3(pub na::base::Vector3<f64>);
 
 impl Deref for LuaVec3 {
@@ -798,7 +803,7 @@ impl DerefMut for LuaVec3 {
 impl<'lua> FromLua<'lua> for LuaVec3 {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Vec3", None, value).map_err(lua_err)?;
-        Ok(Self(Vector3::new(
+        Ok(Self(na::base::Vector3::new(
             tbl.raw_get("x")?,
             tbl.raw_get("y")?,
             tbl.raw_get("z")?,
@@ -813,6 +818,12 @@ impl<'lua> IntoLua<'lua> for LuaVec3 {
         tbl.raw_set("y", self.0.y)?;
         tbl.raw_set("z", self.0.z)?;
         Ok(Value::Table(tbl))
+    }
+}
+
+impl LuaVec3 {
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
+        Self(na::base::Vector3::new(x, y, z))
     }
 }
 
@@ -1099,10 +1110,10 @@ pub fn value_to_json(
     }
 }
 
-pub fn centroid2d(points: impl IntoIterator<Item = Vector2>) -> Vector2 {
+pub fn centroid2d(points: impl IntoIterator<Item = LuaVec2>) -> LuaVec2 {
     let (n, sum) = points
         .into_iter()
-        .fold((0, Vector2::new(0., 0.)), |(n, c), p| (n + 1, c + p));
+        .fold((0, LuaVec2::new(0., 0.)), |(n, c), p| (n + 1, c + p));
     sum / (n as f64)
 }
 

@@ -1,6 +1,7 @@
 use crate::{
     cfg::UnitTag,
     db::{Db, GroupId, SpawnedUnit, UnitId},
+    menu,
 };
 use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
@@ -14,8 +15,9 @@ use dcso3::{
     LuaVec3, MizLua, Vector3,
 };
 use enumflags2::BitFlags;
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
+use log::error;
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -175,15 +177,16 @@ impl Jtac {
         self.set_target(lua, i)
     }
 
-    fn remove_contact(&mut self, lua: MizLua, uid: &UnitId) -> Result<()> {
+    fn remove_contact(&mut self, lua: MizLua, uid: &UnitId) -> Result<bool> {
         if let Some(_) = self.contacts.swap_remove(uid) {
             if let Some((_, tuid)) = &self.target {
                 if tuid == uid {
-                    self.remove_target(lua)?
+                    self.remove_target(lua)?;
+                    return Ok(true);
                 }
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     fn sort_contacts(&mut self, lua: MizLua) -> Result<bool> {
@@ -294,11 +297,13 @@ impl Jtacs {
 
     pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {
         let land = Land::singleton(lua)?;
-        let mut saw: SmallVec<[GroupId; 32]> = smallvec![];
+        let mut saw_jtacs: SmallVec<[GroupId; 32]> = smallvec![];
+        let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
         for (unit, _) in db.instanced_units() {
+            saw_units.insert(unit.id);
             for (pos, jtid, group, ifo) in db.jtacs() {
-                if !saw.contains(&group.id) {
-                    saw.push(group.id)
+                if !saw_jtacs.contains(&group.id) {
+                    saw_jtacs.push(group.id)
                 }
                 let range = (ifo.range as f64).powi(2);
                 let jtac = self
@@ -307,6 +312,9 @@ impl Jtacs {
                     .or_default()
                     .entry(group.id)
                     .or_insert_with(|| {
+                        if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id) {
+                            error!("could not add menu for jtac {} {e}", group.id)
+                        }
                         Jtac::new(group.id, jtid.clone(), db.cfg().jtac_priority.clone())
                     });
                 if !unit.tags.contains(jtac.filter) {
@@ -322,17 +330,45 @@ impl Jtacs {
                 if dist <= range && land.is_visible(LuaVec3(pos), unit.position.p)? {
                     jtac.add_contact(unit)
                 } else {
-                    jtac.remove_contact(lua, &unit.id)?
+                    jtac.remove_contact(lua, &unit.id)?;
                 }
             }
         }
-        for j in self.0.values_mut() {
-            j.retain(|uid, jt| {
-                saw.contains(uid) || {
+        for (side, jtx) in self.0.iter_mut() {
+            jtx.retain(|gid, jt| {
+                saw_jtacs.contains(gid) || {
                     let _ = jt.remove_target(lua);
+                    db.msgs().panel_to_side(
+                        10,
+                        false,
+                        *side,
+                        format_compact!("JTAC {gid} is no longer available"),
+                    );
+                    if let Err(e) = menu::remove_menu_for_jtac(lua, *side, *gid) {
+                        error!("could not remove menu for jtac {gid} {e}")
+                    }
                     false
                 }
             })
+        }
+        let mut killed_targets: SmallVec<[(Side, GroupId, UnitId); 16]> = smallvec![];
+        for (side, jtx) in self.0.iter_mut() {
+            for jtac in jtx.values_mut() {
+                for (uid, _) in &jtac.contacts {
+                    if !saw_units.contains(uid) {
+                        killed_targets.push((*side, jtac.gid, *uid));
+                    }
+                }
+            }
+        }
+        for (side, gid, uid) in killed_targets {
+            self.get_mut(&gid)?.remove_contact(lua, &uid)?;
+            db.msgs().panel_to_side(
+                10,
+                false,
+                side,
+                format_compact!("JTAC {gid} target destroyed"),
+            );
         }
         let mut new_contacts: SmallVec<[&Jtac; 32]> = smallvec![];
         for j in self.0.values_mut() {

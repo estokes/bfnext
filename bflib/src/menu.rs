@@ -16,7 +16,7 @@ use dcso3::{
     coalition::Side,
     env::miz::{Group, GroupId, Miz},
     lua_err,
-    mission_commands::{GroupSubMenu, MissionCommands},
+    mission_commands::{CoalitionSubMenu, GroupSubMenu, MissionCommands},
     net::SlotId,
     MizLua, String,
 };
@@ -686,6 +686,14 @@ fn jtac_set_code(lua: MizLua, arg: ArgTuple<db::GroupId, u16>) -> Result<()> {
     jtac_status(lua, arg.fst)
 }
 
+pub fn remove_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<()> {
+    let mc = MissionCommands::singleton(lua)?;
+    mc.remove_submenu_for_coalition(
+        side,
+        CoalitionSubMenu::from(vec!["JTAC".into(), format_compact!("{:?}", group).into()]),
+    )
+}
+
 pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root = mc.add_submenu_for_coalition(side, "JTAC".into(), None)?;
@@ -738,16 +746,8 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<
         mc.add_submenu_for_coalition(side, "Hundreds".into(), Some(code_root.clone()))?;
     let tens_root = mc.add_submenu_for_coalition(side, "Tens".into(), Some(code_root.clone()))?;
     let ones_root = mc.add_submenu_for_coalition(side, "Ones".into(), Some(code_root.clone()))?;
-    for (scale, root) in [
-        (100, &hundreds_root),
-        (10, &tens_root),
-        (1, &ones_root),
-    ] {
-        let range = if scale == 100 {
-            0..=6
-        } else {
-            0..=8
-        };
+    for (scale, root) in [(100, &hundreds_root), (10, &tens_root), (1, &ones_root)] {
+        let range = if scale == 100 { 0..=6 } else { 0..=8 };
         for n in range {
             mc.add_command_for_coalition(
                 side,

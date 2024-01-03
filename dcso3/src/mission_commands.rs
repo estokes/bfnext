@@ -129,12 +129,12 @@ impl<'lua> MissionCommands<'lua> {
         Ok(self.call_function("addCommandForCoalition", (side, name, parent, f, arg))?)
     }
 
-    pub fn remove_submenu_for_coalition(&self, menu: CoalitionSubMenu) -> Result<()> {
-        Ok(self.call_function("removeItemForCoalition", menu)?)
+    pub fn remove_submenu_for_coalition(&self, side: Side, menu: CoalitionSubMenu) -> Result<()> {
+        Ok(self.call_function("removeItemForCoalition", (side, menu))?)
     }
 
-    pub fn remove_command_for_coalition(&self, item: CoalitionCommandItem) -> Result<()> {
-        Ok(self.call_function("removeItemForCoalition", item)?)
+    pub fn remove_command_for_coalition(&self, side: Side, item: CoalitionCommandItem) -> Result<()> {
+        Ok(self.call_function("removeItemForCoalition", (side, item))?)
     }
 
     pub fn add_submenu_for_group(
@@ -165,12 +165,12 @@ impl<'lua> MissionCommands<'lua> {
         Ok(self.call_function("addCommandForGroup", (group, name, parent, f, arg))?)
     }
 
-    pub fn remove_submenu_for_group(&self, menu: GroupSubMenu) -> Result<()> {
-        Ok(self.call_function("removeItemForGroup", menu)?)
+    pub fn remove_submenu_for_group(&self, group: GroupId, menu: GroupSubMenu) -> Result<()> {
+        Ok(self.call_function("removeItemForGroup", (group, menu))?)
     }
 
-    pub fn remove_command_for_group(&self, item: GroupCommandItem) -> Result<()> {
-        Ok(self.call_function("removeItemForGroup", item)?)
+    pub fn remove_command_for_group(&self, group: GroupId, item: GroupCommandItem) -> Result<()> {
+        Ok(self.call_function("removeItemForGroup", (group, item))?)
     }
 
     pub fn clear_all_menus(&self) -> Result<()> {

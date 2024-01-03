@@ -512,24 +512,37 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
     let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events > freq {
         ctx.last_slow_timed_events = ts;
-        ctx.db.update_unit_positions(lua, ts)?;
-        ctx.db.update_player_positions(lua)?;
-        generate_ewr_reports(ctx, ts)?;
-        let (threatened, cleared) = ctx.db.cull_or_respawn_objectives(lua, ts)?;
-        for oid in threatened {
-            let obj = ctx.db.objective(&oid)?;
-            let owner = obj.owner();
-            let msg = format_compact!("enemies spotted near {}", obj.name());
-            ctx.db.msgs().panel_to_side(10, false, owner, msg)
+        if let Err(e) = ctx.db.update_unit_positions(lua, ts) {
+            error!("could not update unit positions {e}")
         }
-        for oid in cleared {
-            let obj = ctx.db.objective(&oid)?;
-            let owner = obj.owner();
-            let msg = format_compact!("{} is no longer threatened", obj.name());
-            ctx.db.msgs().panel_to_side(10, false, owner, msg)
+        if let Err(e) = ctx.db.update_player_positions(lua) {
+            error!("could not update player positions {e}")
+        }
+        if let Err(e) = generate_ewr_reports(ctx, ts) {
+            error!("could not generate ewr reports {e}")
+        }
+        match ctx.db.cull_or_respawn_objectives(lua, ts) {
+            Err(e) => error!("could not cull or respawn objectives {e}"),
+            Ok((threatened, cleared)) => {
+                for oid in threatened {
+                    let obj = ctx.db.objective(&oid)?;
+                    let owner = obj.owner();
+                    let msg = format_compact!("enemies spotted near {}", obj.name());
+                    ctx.db.msgs().panel_to_side(10, false, owner, msg)
+                }
+                for oid in cleared {
+                    let obj = ctx.db.objective(&oid)?;
+                    let owner = obj.owner();
+                    let msg = format_compact!("{} is no longer threatened", obj.name());
+                    ctx.db.msgs().panel_to_side(10, false, owner, msg)
+                }
+            }
         }
         if let Err(e) = ctx.db.remark_objectives() {
             error!("could not remark objectives {e}")
+        }
+        if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
+            error!("could not update jtac contacts {e}")
         }
     }
     Ok(())
@@ -564,6 +577,9 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     if let Err(e) = advise_captureable(ctx) {
         error!("error advise capturable {e}")
+    }
+    if let Err(e) = ctx.jtac.update_target_positions(lua, &ctx.db) {
+        error!("error updating jtac target positions {e}")
     }
     ctx.db.msgs().process(&net, &act);
     Ok(())

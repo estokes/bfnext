@@ -1189,6 +1189,25 @@ fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
         ("SNR_75V".into(), SAM | LR | RadarGuided | TrackRadar),
         ("S_75M_Volhov".into(), SAM | LR | RadarGuided | Launcher),
         ("RD_75".into(), SAM | LR | RadarGuided | AuxRadarUnit),
+        ("MiG-29A".into(), Aircraft.into()),
+        ("Su-27".into(), Aircraft.into()),
+        ("SA342L".into(), Helicopter.into()),
+        ("Su-25T".into(), Aircraft.into()),
+        ("MiG-21Bis".into(), Aircraft.into()),
+        ("AH-64D_BLK_II".into(), Helicopter.into()),
+        ("F-16C_50".into(), Aircraft.into()),
+        ("UH-1H".into(), Helicopter.into()),
+        ("M-2000C".into(), Aircraft.into()),
+        ("Mi-8MT".into(), Helicopter.into()),
+        ("SA-18 Igla-S manpad".into(), SAM | SR | IRGuided | Launcher),
+        ("SA-18 Igla comm".into(), SAM | SR | IRGuided | ControlUnit),
+        ("SA-18 Igla-S comm".into(), SAM | SR | IRGuided | ControlUnit),
+        ("Ka-50_3".into(), Helicopter.into()),
+        ("Ka-50".into(), Helicopter.into()),
+        ("Infantry AK".into(), Infantry | SR | SmallArms),
+        ("Mi-24P".into(), Helicopter.into()),
+        ("F-15ESE".into(), Aircraft.into()),
+        ("Mirage-F1EE".into(), Aircraft.into())
     ])
 }
 

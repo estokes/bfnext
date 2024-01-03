@@ -1022,6 +1022,8 @@ impl Db {
                 if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
                     self.ephemeral.uid_by_object_id.remove(&id);
                 }
+                self.ephemeral.units_potentially_close_to_enemies.remove(uid);
+                self.ephemeral.units_potentially_on_walkabout.remove(uid);
                 units.push(unit.name);
             }
         }

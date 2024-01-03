@@ -518,6 +518,9 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
         if let Err(e) = ctx.db.update_player_positions(lua) {
             error!("could not update player positions {e}")
         }
+        if let Err(e) = ctx.ewr.update_tracks(lua, &ctx.db, ts) {
+            error!("could not update ewr tracks {e}")
+        }
         if let Err(e) = generate_ewr_reports(ctx, ts) {
             error!("could not generate ewr reports {e}")
         }

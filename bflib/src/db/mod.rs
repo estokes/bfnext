@@ -794,9 +794,19 @@ impl Db {
                 .object_id_by_uid
                 .get(group.units.into_iter().next()?)?;
             match &group.origin {
-                DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
-                DeployKind::Deployed { spec, .. } => {
-                    let jtac = spec.jtac.as_ref()?;
+                DeployKind::Troop {
+                    spec: Troop {
+                        jtac: Some(jtac), ..
+                    },
+                    ..
+                }
+                | DeployKind::Deployed {
+                    spec:
+                        Deployable {
+                            jtac: Some(jtac), ..
+                        },
+                    ..
+                } => {
                     let pos = centroid3d(
                         group
                             .units
@@ -805,6 +815,10 @@ impl Db {
                     );
                     Some((pos, id, group, jtac))
                 }
+                DeployKind::Crate { .. }
+                | DeployKind::Objective
+                | DeployKind::Troop { .. }
+                | DeployKind::Deployed { .. } => None,
             }
         })
     }
@@ -1213,7 +1227,7 @@ impl Db {
             self.persisted.units.insert_cow(uid, spawned_unit);
             self.persisted.units_by_name.insert_cow(unit_name, uid);
         }
-        match &mut spawned.origin {
+        match dbg!(&mut spawned.origin) {
             DeployKind::Objective => (),
             DeployKind::Crate { player, .. } => {
                 self.persisted.crates.insert_cow(gid);

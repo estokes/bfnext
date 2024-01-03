@@ -18,7 +18,7 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::error;
+use log::{error, debug};
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Default)]
@@ -330,6 +330,7 @@ impl Jtacs {
         for (unit, _) in db.instanced_units() {
             saw_units.insert(unit.id);
             for (pos, jtid, group, ifo) in db.jtacs() {
+                debug!("jtac {:?} considering {:?}", group, unit);
                 if !saw_jtacs.contains(&group.id) {
                     saw_jtacs.push(group.id)
                 }

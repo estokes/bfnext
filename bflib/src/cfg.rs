@@ -685,7 +685,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             crates: vec![Crate {
                 name: "1L13 Crate".into(),
                 weight: 2000,
-                required: 4,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 20,
                 max_drop_speed: 350,
@@ -956,7 +956,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             crates: vec![Crate {
                 name: "FPS-117 Crate".into(),
                 weight: 1000,
-                required: 4,
+                required: 2,
                 pos_unit: None,
                 max_drop_height_agl: 10,
                 max_drop_speed: 50,

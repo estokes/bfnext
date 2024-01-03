@@ -658,6 +658,25 @@ fn default_red_deployables() -> Vec<Deployable> {
             jtac: Some(DeployableJtac { range: 8000 }),
         },
         Deployable {
+            path: vec!["Ground Units".into(), "Ammo Truck".into()],
+            template: "DEPRAMMO".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Ammo Truck Crate".into(),
+                weight: 2000,
+                required: 2,
+                pos_unit: None,
+                max_drop_height_agl: 20,
+                max_drop_speed: 350,
+            }],
+            repair_crate: None,
+            logistics: None,
+            ewr: None,
+            jtac: None,
+        },
+        Deployable {
             path: vec!["EWRs".into(), "1L13".into()],
             template: "DEP1L13".into(),
             persist: PersistTyp::Forever,
@@ -908,6 +927,25 @@ fn default_blue_deployables() -> Vec<Deployable> {
             logistics: None,
             ewr: None,
             jtac: Some(DeployableJtac { range: 8000 }),
+        },
+        Deployable {
+            path: vec!["Ground Units".into(), "Ammo Truck".into()],
+            template: "DEPBAMMO".into(),
+            persist: PersistTyp::Forever,
+            limit: 4,
+            limit_enforce: LimitEnforceTyp::DeleteOldest,
+            crates: vec![Crate {
+                name: "Ammo Truck Crate".into(),
+                weight: 2000,
+                required: 2,
+                pos_unit: None,
+                max_drop_height_agl: 20,
+                max_drop_speed: 350,
+            }],
+            repair_crate: None,
+            logistics: None,
+            ewr: None,
+            jtac: None,
         },
         Deployable {
             path: vec!["EWRs".into(), "AN/FPS-117".into()],
@@ -1201,13 +1239,16 @@ fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
         ("Mi-8MT".into(), Helicopter.into()),
         ("SA-18 Igla-S manpad".into(), SAM | SR | IRGuided | Launcher),
         ("SA-18 Igla comm".into(), SAM | SR | IRGuided | ControlUnit),
-        ("SA-18 Igla-S comm".into(), SAM | SR | IRGuided | ControlUnit),
+        (
+            "SA-18 Igla-S comm".into(),
+            SAM | SR | IRGuided | ControlUnit,
+        ),
         ("Ka-50_3".into(), Helicopter.into()),
         ("Ka-50".into(), Helicopter.into()),
         ("Infantry AK".into(), Infantry | SR | SmallArms),
         ("Mi-24P".into(), Helicopter.into()),
         ("F-15ESE".into(), Aircraft.into()),
-        ("Mirage-F1EE".into(), Aircraft.into())
+        ("Mirage-F1EE".into(), Aircraft.into()),
     ])
 }
 

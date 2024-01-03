@@ -1174,6 +1174,7 @@ fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
         ("FARP Tent".into(), Logistics | Unarmed),
         ("Invisible FARP".into(), Logistics | Unarmed | Invincible),
         ("M-109".into(), Armor | Artillery),
+        ("SAU Msta".into(), Armor | Artillery | SmallArms)
     ])
 }
 

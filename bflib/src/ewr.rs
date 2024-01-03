@@ -162,7 +162,7 @@ impl Ewr {
                 let range = na::distance(&pos.into(), &cpos.into());
                 let v = pos - cpos;
                 let bearing = radians_to_degrees(v.y.atan2(v.x).abs());
-                let heading = radians_to_degrees(cpos.y.atan2(cpos.x).abs());
+                let heading = radians_to_degrees(track.pos.x.z.atan2(track.pos.x.x).abs());
                 let speed = track.velocity.magnitude();
                 let altitude = track.pos.p.y / 1000.;
                 reports.push(GibBraa {

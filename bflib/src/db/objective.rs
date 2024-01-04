@@ -359,7 +359,7 @@ impl Db {
                 }
             }
             for uid in &self.ephemeral.units_potentially_on_walkabout {
-                let unit = unit!(self, uid)?;
+                let unit = dbg!(unit!(self, uid))?;
                 match group!(self, unit.group)?.origin {
                     DeployKind::Crate { .. }
                     | DeployKind::Deployed { .. }
@@ -377,7 +377,7 @@ impl Db {
                 }
             }
             for uid in &self.ephemeral.units_potentially_close_to_enemies {
-                let unit = unit!(self, uid)?;
+                let unit = dbg!(unit!(self, uid))?;
                 let group = group!(self, unit.group)?;
                 if obj.owner != group.side {
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
@@ -447,7 +447,7 @@ impl Db {
                             .push_back((*gid, Despawn::Group(group.name.clone()))),
                         None => {
                             for uid in &group.units {
-                                let unit = unit!(self, uid)?;
+                                let unit = dbg!(unit!(self, uid))?;
                                 self.ephemeral
                                     .despawnq
                                     .push_back((*gid, Despawn::Static(unit.name.clone())))

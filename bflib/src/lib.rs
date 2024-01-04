@@ -54,6 +54,8 @@ struct PlayerInfo {
 struct Perf {
     timed_events: Histogram<u64>,
     slow_timed: Histogram<u64>,
+    dcs_events: Histogram<u64>,
+    dcs_hooks: Histogram<u64>,
 }
 
 impl Default for Perf {
@@ -61,25 +63,35 @@ impl Default for Perf {
         Perf {
             timed_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             slow_timed: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            dcs_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            dcs_hooks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+        }
+    }
+}
+
+fn record_perf(h: &mut Histogram<u64>, start_ts: DateTime<Utc>) {
+    if let Some(ns) = (Utc::now() - start_ts).num_nanoseconds() {
+        if ns >= 1 && ns <= 1_000_000_000 {
+            *h += ns as u64;
         }
     }
 }
 
 impl Perf {
     fn record_timed(&mut self, start_ts: DateTime<Utc>) {
-        if let Some(ns) = (Utc::now() - start_ts).num_nanoseconds() {
-            if ns >= 1 && ns <= 1_000_000_000 {
-                self.timed_events += ns as u64;
-            }
-        }
+        record_perf(&mut self.timed_events, start_ts)
     }
 
     fn record_slow_timed(&mut self, start_ts: DateTime<Utc>) {
-        if let Some(ns) = (Utc::now() - start_ts).num_nanoseconds() {
-            if ns >= 1 && ns <= 1_000_000_000 {
-                self.slow_timed += ns as u64;
-            }
-        }
+        record_perf(&mut self.slow_timed, start_ts)
+    }
+
+    fn record_dcs_event(&mut self, start_ts: DateTime<Utc>) {
+        record_perf(&mut self.dcs_events, start_ts)
+    }
+
+    fn record_dcs_hook(&mut self, start_ts: DateTime<Utc>) {
+        record_perf(&mut self.dcs_hooks, start_ts)
     }
 
     fn log(&self) {
@@ -89,10 +101,12 @@ impl Perf {
             let fifty = h.value_at_quantile(0.5);
             let ninety = h.value_at_quantile(0.9);
             let ninety_nine = h.value_at_quantile(0.99);
-            info!("{name}: n: {n}, 25th: {twenty_five}, 50th: {fifty}, 90th: {ninety}, 99th: {ninety_nine}");
+            info!("{name} n: {n}, 25th: {twenty_five}, 50th: {fifty}, 90th: {ninety}, 99th: {ninety_nine}");
         }
-        log_histogram(&self.timed_events, "timed_events");
-        log_histogram(&self.slow_timed, "slow_timed");
+        log_histogram(&self.timed_events, "timed events:      ");
+        log_histogram(&self.slow_timed,   "slow timed events: ");
+        log_histogram(&self.dcs_events,   "dcs events:        ");
+        log_histogram(&self.dcs_hooks,    "dcs hooks:         ")
     }
 }
 
@@ -187,6 +201,7 @@ fn on_player_try_connect(
     ucid: Ucid,
     id: PlayerId,
 ) -> Result<bool> {
+    let start_ts = Utc::now();
     info!(
         "onPlayerTryConnect addr: {:?}, name: {:?}, ucid: {:?}, id: {:?}",
         addr, name, ucid, id
@@ -194,6 +209,7 @@ fn on_player_try_connect(
     let ctx = unsafe { Context::get_mut() };
     ctx.id_by_ucid.insert(ucid.clone(), id);
     ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
+    ctx.perf.record_dcs_hook(start_ts);
     Ok(true)
 }
 
@@ -268,6 +284,7 @@ fn lives_command(id: PlayerId) -> Result<()> {
 }
 
 fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
+    let start_ts = Utc::now();
     info!(
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
@@ -280,8 +297,10 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         if let Err(e) = lives_command(id) {
             error!("lives command failed for player {:?} {:?}", id, e);
         }
+        unsafe { Context::get_mut() }.perf.record_dcs_hook(start_ts);
         Ok("".into())
     } else {
+        unsafe { Context::get_mut() }.perf.record_dcs_hook(start_ts);
         Ok(msg)
     }
 }
@@ -320,6 +339,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
 }
 
 fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
+    let start_ts = Utc::now();
     info!("onPlayerChangeSlot: {:?}", id);
     let ctx = unsafe { Context::get_mut() };
     if let Some(ifo) = ctx.info_by_player_id.get(&id) {
@@ -331,9 +351,12 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
             error!("error checking slot {:?}", e);
             ctx.force_to_spectators.insert(id);
         }
-        Ok(false) => { ctx.force_to_spectators.insert(id); },
+        Ok(false) => {
+            ctx.force_to_spectators.insert(id);
+        }
         Ok(true) => (),
     }
+    ctx.perf.record_dcs_hook(start_ts);
     Ok(())
 }
 
@@ -348,6 +371,7 @@ fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
 }
 
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
+    let start_ts = Utc::now();
     info!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -432,6 +456,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         },
         _ => (),
     }
+    ctx.perf.record_dcs_event(start_ts);
     Ok(())
 }
 
@@ -706,10 +731,12 @@ fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
 }
 
 fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
+    let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
         ctx.db.player_deslot(&ifo.ucid)
     }
+    ctx.perf.record_dcs_hook(start_ts);
     Ok(())
 }
 

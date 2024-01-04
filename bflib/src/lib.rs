@@ -101,12 +101,15 @@ impl Perf {
             let fifty = h.value_at_quantile(0.5);
             let ninety = h.value_at_quantile(0.9);
             let ninety_nine = h.value_at_quantile(0.99);
-            info!("{name} n: {n}, 25th: {twenty_five}, 50th: {fifty}, 90th: {ninety}, 99th: {ninety_nine}");
+            info!(
+                "{name} n: {:>5}, 25th: {:>6}, 50th: {:>6}, 90th: {:>6}, 99th: {:>6}",
+                n, twenty_five, fifty, ninety, ninety_nine
+            );
         }
         log_histogram(&self.timed_events, "timed events:      ");
-        log_histogram(&self.slow_timed,   "slow timed events: ");
-        log_histogram(&self.dcs_events,   "dcs events:        ");
-        log_histogram(&self.dcs_hooks,    "dcs hooks:         ")
+        log_histogram(&self.slow_timed, "slow timed events: ");
+        log_histogram(&self.dcs_events, "dcs events:        ");
+        log_histogram(&self.dcs_hooks, "dcs hooks:         ")
     }
 }
 

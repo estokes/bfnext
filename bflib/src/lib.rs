@@ -329,12 +329,12 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Some(unit) = e.initiator {
                 if let Ok(unit) = unit.as_unit() {
+                    force_player_in_slot_to_spectators(ctx, &unit.slot()?);
                     let id = unit.object_id()?;
                     if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
                         error!("unit dead failed for {:?} {:?}", unit, e);
                     }
                     ctx.recently_landed.remove(&id);
-                    force_player_in_slot_to_spectators(ctx, &unit.slot()?)
                 }
             }
         }

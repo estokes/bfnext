@@ -1,10 +1,11 @@
 use super::{as_tbl, controller::Controller, cvt_err, group::Group, object::Object, String};
 use crate::{
     env::miz::UnitId,
+    net::SlotId,
     object::{DcsObject, DcsOid},
-    simple_enum, wrapped_table, LuaEnv, LuaVec2, LuaVec3, MizLua, Position3, net::SlotId,
+    simple_enum, wrapped_table, LuaEnv, LuaVec2, LuaVec3, MizLua, Position3,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
 use na::Vector2;
 use serde_derive::{Deserialize, Serialize};
@@ -25,6 +26,10 @@ impl<'lua> Unit<'lua> {
         let globals = lua.inner().globals();
         let unit = as_tbl("Unit", None, globals.raw_get("Unit")?)?;
         Ok(unit.call_function("getByName", name)?)
+    }
+
+    pub fn is_exist(&self) -> Result<bool> {
+        Ok(self.t.call_method("isExist", ())?)
     }
 
     pub fn destroy(self) -> Result<()> {
@@ -135,10 +140,14 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
         let t = lua.inner().create_table()?;
         t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
         t.raw_set("id_", id.id)?;
-        Ok(Unit {
+        let t = Unit {
             t,
             lua: lua.inner(),
-        })
+        };
+        if !t.is_exist()? {
+            bail!("{} is an invalid unit", id.id)
+        }
+        Ok(t)
     }
 
     fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
@@ -151,9 +160,20 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
         Self::get_instance(lua, &id)
     }
 
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
+        self.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid unit", id.id)
+        }
+        Ok(self)
+    }
+
     fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
         id.check_implements(MizLua(self.lua), "Unit")?;
         self.t.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid unit", id.id)
+        }
         Ok(self)
     }
 }

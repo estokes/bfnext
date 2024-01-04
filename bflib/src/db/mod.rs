@@ -745,6 +745,7 @@ impl Db {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             if let Some((sl, _)) = player.current_slot.take() {
                 self.ephemeral.players_by_slot.remove(&sl);
+                self.ephemeral.cargo.remove(&sl);
                 if let Some(id) = self.ephemeral.object_id_by_slot.remove(&sl) {
                     self.ephemeral.slot_by_object_id.remove(&id);
                     if let Some(uid) = self.ephemeral.uid_by_object_id.remove(&id) {

@@ -4,7 +4,7 @@ use crate::{
     object::{DcsObject, DcsOid},
     simple_enum, wrapped_table, LuaEnv, MizLua, Sequence,
 };
-use anyhow::Result;
+use anyhow::{Result, bail};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{marker::PhantomData, ops::Deref};
@@ -51,6 +51,10 @@ impl<'lua> Group<'lua> {
         let globals = lua.inner().globals();
         let class = as_tbl("Group", None, globals.raw_get("Group")?)?;
         Ok(class.call_function("getByName", name)?)
+    }
+
+    pub fn is_exist(&self) -> Result<bool> {
+        Ok(self.t.call_method("isExist", ())?)
     }
 
     pub fn destroy(self) -> Result<()> {
@@ -112,10 +116,14 @@ impl<'lua> DcsObject<'lua> for Group<'lua> {
         let t = lua.inner().create_table()?;
         t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
         t.raw_set("id_", id.id)?;
-        Ok(Group {
+        let t = Group {
             t,
             lua: lua.inner(),
-        })
+        };
+        if !t.is_exist()? {
+            bail!("{} is an invalid group", id.id)
+        }
+        Ok(t)
     }
 
     fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
@@ -128,9 +136,20 @@ impl<'lua> DcsObject<'lua> for Group<'lua> {
         Self::get_instance(lua, &id)
     }
 
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
+        self.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid group", id.id)
+        }
+        Ok(self)
+    }
+
     fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
         id.check_implements(MizLua(self.lua), "Group")?;
         self.t.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid group", id.id)
+        }
         Ok(self)
     }
 }

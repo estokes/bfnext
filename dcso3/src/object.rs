@@ -82,11 +82,7 @@ pub trait DcsObject<'lua>: Sized + Deref<Target = mlua::Table<'lua>> {
         })
     }
 
-    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
-        self.raw_set("id_", id.id)?;
-        Ok(self)
-    }
-
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self>;
     fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self>;
     fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self>;
     fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self>;
@@ -165,10 +161,14 @@ impl<'lua> DcsObject<'lua> for Object<'lua> {
         let t = lua.inner().create_table()?;
         t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
         t.raw_set("id_", id.id)?;
-        Ok(Object {
+        let t = Object {
             t,
             lua: lua.inner(),
-        })
+        };
+        if !t.is_exist()? {
+            bail!("{} is an invalid object", id.id)
+        }
+        Ok(t)
     }
 
     fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
@@ -181,9 +181,20 @@ impl<'lua> DcsObject<'lua> for Object<'lua> {
         Self::get_instance(lua, &id)
     }
 
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
+        self.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid object", id.id)
+        }
+        Ok(self)
+    }
+
     fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
         id.check_implements(MizLua(self.lua), "Object")?;
         self.t.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid object", id.id)
+        }
         Ok(self)
     }
 }

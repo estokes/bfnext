@@ -12,7 +12,7 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    atomic_id, azumith2d_to, centroid2d, centroid3d,
+    atomic_id, azumith2d_to, azumith3d, centroid2d, centroid3d,
     coalition::Side,
     cvt_err,
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
@@ -22,7 +22,7 @@ use dcso3::{
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    MizLua, Position3, String, Vector2, Vector3, azumith3d,
+    MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -803,10 +803,10 @@ impl Db {
     ) -> impl Iterator<Item = (Vector3, &DcsOid<ClassUnit>, &SpawnedGroup, &DeployableJtac)> {
         self.persisted.jtacs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
-            let id = self
-                .ephemeral
-                .object_id_by_uid
-                .get(group.units.into_iter().next()?)?;
+            let id = group
+                .units
+                .into_iter()
+                .find_map(|gid| self.ephemeral.object_id_by_uid.get(gid))?;
             match &group.origin {
                 DeployKind::Troop {
                     spec: Troop {
@@ -1316,6 +1316,7 @@ impl Db {
     pub fn unit_dead(&mut self, id: &DcsOid<ClassUnit>, now: DateTime<Utc>) -> Result<()> {
         if let Some(slot) = self.ephemeral.slot_by_object_id.remove(&id) {
             self.ephemeral.object_id_by_slot.remove(&slot);
+            self.ephemeral.cargo.remove(&slot);
             if let Some(ucid) = self.ephemeral.players_by_slot.remove(&slot) {
                 self.persisted.players[&ucid].current_slot = None;
             }

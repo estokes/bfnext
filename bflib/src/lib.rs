@@ -339,7 +339,9 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
 
 fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
     if let Some(ucid) = ctx.db.player_in_slot(slot) {
-        if let Some(id) = ctx.id_by_ucid.get(ucid) {
+        let ucid = ucid.clone();
+        ctx.db.player_deslot(&ucid);
+        if let Some(id) = ctx.id_by_ucid.get(&ucid) {
             ctx.force_to_spectators.insert(*id);
         }
     }

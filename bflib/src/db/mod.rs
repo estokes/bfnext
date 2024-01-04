@@ -741,7 +741,7 @@ impl Db {
             .and_then(|slot| self.ephemeral.players_by_slot.get(slot))
     }
 
-    pub fn player_disconnect(&mut self, ucid: &Ucid) {
+    pub fn player_deslot(&mut self, ucid: &Ucid) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             if let Some((sl, _)) = player.current_slot.take() {
                 self.ephemeral.players_by_slot.remove(&sl);

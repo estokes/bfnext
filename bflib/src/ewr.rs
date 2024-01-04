@@ -171,7 +171,7 @@ impl Ewr {
                 let range = na::distance(&pos.into(), &cpos.into());
                 let bearing = radians_to_degrees(azumith2d_to(pos, cpos));
                 let heading = radians_to_degrees(azumith3d(track.pos.x.0));
-                let speed = dbg!(track.velocity.magnitude());
+                let speed = track.velocity.magnitude();
                 let altitude = track.pos.p.y;
                 reports.push(GibBraa {
                     range: range as u32,

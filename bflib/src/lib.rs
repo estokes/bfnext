@@ -273,6 +273,10 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
 
 fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
     info!("onPlayerChangeSlot: {:?}", id);
+    let ctx = unsafe { Context::get_mut() };
+    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+        ctx.db.player_deslot(&ifo.ucid);
+    }
     let net = Net::singleton(lua)?;
     match try_occupy_slot(lua, &net, id) {
         Err(e) => {
@@ -645,7 +649,7 @@ fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
 fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
-        ctx.db.player_disconnect(&ifo.ucid)
+        ctx.db.player_deslot(&ifo.ucid)
     }
     Ok(())
 }

@@ -1031,15 +1031,15 @@ impl Db {
         }
         let mut units: SmallVec<[String; 16]> = smallvec![];
         for uid in &group.units {
+            self.ephemeral
+                .units_potentially_close_to_enemies
+                .remove(uid);
+            self.ephemeral.units_potentially_on_walkabout.remove(uid);
+            if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
+                self.ephemeral.uid_by_object_id.remove(&id);
+            }
             if let Some(unit) = self.persisted.units.remove_cow(uid) {
                 self.persisted.units_by_name.remove_cow(&unit.name);
-                if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
-                    self.ephemeral.uid_by_object_id.remove(&id);
-                }
-                self.ephemeral
-                    .units_potentially_close_to_enemies
-                    .remove(uid);
-                self.ephemeral.units_potentially_on_walkabout.remove(uid);
                 units.push(unit.name);
             }
         }

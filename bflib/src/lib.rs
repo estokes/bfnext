@@ -329,7 +329,7 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
     match try_occupy_slot(lua, &net, id) {
         Err(e) => {
             error!("error checking slot {:?}", e);
-            // ctx.force_to_spectators.insert(id);
+            ctx.force_to_spectators.insert(id);
         }
         Ok(false) => { ctx.force_to_spectators.insert(id); },
         Ok(true) => (),

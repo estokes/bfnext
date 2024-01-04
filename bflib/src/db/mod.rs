@@ -749,6 +749,7 @@ impl Db {
                     self.ephemeral.slot_by_object_id.remove(&id);
                     if let Some(uid) = self.ephemeral.uid_by_object_id.remove(&id) {
                         self.ephemeral.object_id_by_uid.remove(&uid);
+                        self.ephemeral.ca_controlled.remove(&uid);
                     }
                 }
             }

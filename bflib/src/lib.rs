@@ -34,6 +34,7 @@ use dcso3::{
 };
 use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
+use hdrhistogram::Histogram;
 use jtac::Jtacs;
 use log::{debug, error, info};
 use mlua::prelude::*;
@@ -49,8 +50,55 @@ struct PlayerInfo {
     ucid: Ucid,
 }
 
+#[derive(Debug)]
+struct Perf {
+    timed_events: Histogram<u64>,
+    slow_timed: Histogram<u64>,
+}
+
+impl Default for Perf {
+    fn default() -> Self {
+        Perf {
+            timed_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            slow_timed: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+        }
+    }
+}
+
+impl Perf {
+    fn record_timed(&mut self, start_ts: DateTime<Utc>) {
+        if let Some(ns) = (Utc::now() - start_ts).num_nanoseconds() {
+            if ns >= 1 && ns <= 1_000_000_000 {
+                self.timed_events += ns as u64;
+            }
+        }
+    }
+
+    fn record_slow_timed(&mut self, start_ts: DateTime<Utc>) {
+        if let Some(ns) = (Utc::now() - start_ts).num_nanoseconds() {
+            if ns >= 1 && ns <= 1_000_000_000 {
+                self.slow_timed += ns as u64;
+            }
+        }
+    }
+
+    fn log(&self) {
+        fn log_histogram(h: &Histogram<u64>, name: &str) {
+            let n = h.len();
+            let twenty_five = h.value_at_quantile(0.25);
+            let fifty = h.value_at_quantile(0.5);
+            let ninety = h.value_at_quantile(0.9);
+            let ninety_nine = h.value_at_quantile(0.99);
+            info!("{name}: n: {n}, 25th: {twenty_five}, 50th: {fifty}, 90th: {ninety}, 99th: {ninety_nine}");
+        }
+        log_histogram(&self.timed_events, "timed_events");
+        log_histogram(&self.slow_timed, "slow_timed");
+    }
+}
+
 #[derive(Debug, Default)]
 struct Context {
+    perf: Perf,
     loaded: bool,
     idx: env::miz::MizIndex,
     db: Db,
@@ -281,9 +329,9 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
     match try_occupy_slot(lua, &net, id) {
         Err(e) => {
             error!("error checking slot {:?}", e);
-            net.force_player_slot(id, Side::Neutral, SlotId::spectator())?
+            ctx.force_to_spectators.insert(id);
         }
-        Ok(false) => net.force_player_slot(id, Side::Neutral, SlotId::spectator())?,
+        Ok(false) => { ctx.force_to_spectators.insert(id); },
         Ok(true) => (),
     }
     Ok(())
@@ -522,12 +570,14 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
     let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events > freq {
         ctx.last_slow_timed_events = ts;
+        let start_ts = Utc::now();
         if let Err(e) = ctx.db.update_unit_positions(lua, ts) {
             error!("could not update unit positions {e}")
         }
         if let Err(e) = ctx.db.update_player_positions(lua) {
             error!("could not update player positions {e}")
         }
+        ctx.perf.record_slow_timed(start_ts);
         if let Err(e) = ctx.ewr.update_tracks(lua, &ctx.db, ts) {
             error!("could not update ewr tracks {e}")
         }
@@ -557,6 +607,7 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
         if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
             error!("could not update jtac contacts {e}")
         }
+        ctx.perf.log();
     }
     Ok(())
 }
@@ -568,9 +619,6 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         error!("error doing repairs {:?}", e)
     }
     return_lives(lua, ctx, ts);
-    if let Some(snap) = ctx.db.maybe_snapshot() {
-        ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
-    }
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
     for id in ctx.force_to_spectators.drain() {
@@ -595,6 +643,10 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         error!("error updating jtac target positions {e}")
     }
     ctx.db.msgs().process(&net, &act);
+    if let Some(snap) = ctx.db.maybe_snapshot() {
+        ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
+    }
+    ctx.perf.record_timed(ts);
     Ok(())
 }
 

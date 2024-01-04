@@ -30,6 +30,7 @@ log = "0.4.20"
 tokio = { version = "1", features = ["full"] }
 simplelog = "0.12"
 smallvec = { version = "1", features = ["const_generics", "union", "serde"] }
+hdrhistogram = { version = "7" }
 
 [workspace]
 resolver = "2"

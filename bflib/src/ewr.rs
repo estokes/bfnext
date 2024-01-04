@@ -18,6 +18,7 @@ pub struct GibBraa {
     pub speed: u16,
     pub age: u16,
     pub units: EwrUnits,
+    converted: bool
 }
 
 impl fmt::Display for GibBraa {
@@ -44,11 +45,18 @@ impl fmt::Display for GibBraa {
 
 impl GibBraa {
     fn convert(&mut self, unit: EwrUnits) {
+        if self.converted { return }
+        self.converted = true;
         match unit {
-            EwrUnits::Metric => (),
+            EwrUnits::Metric => {
+                self.range = self.range / 1000;
+                self.altitude = (self.altitude / 250) * 250;
+                self.speed = ((self.speed * 3600 / 1000) / 50) * 50;
+            }
             EwrUnits::Imperial => {
                 self.range = self.range / 1852;
-                self.altitude = (self.altitude as f64 * 3.38084) as u32;
+                self.altitude = ((self.altitude as f64 * 3.38084) as u32 / 1000) * 1000;
+                self.speed = ((self.speed as f64 * 1.94384) as u16 / 25) * 25;
             }
         }
         self.units = unit;
@@ -105,14 +113,15 @@ impl Ewr {
             .instanced_players()
             .filter(|(_, _, inst)| inst.in_air)
             .collect();
-        for (ewr_pos, side, ewr) in db.ewrs() {
+        for (mut ewr_pos, side, ewr) in db.ewrs() {
             let range = (ewr.range as f64).powi(2);
             let tracks = self.tracks.entry(side).or_default();
+            ewr_pos.y += 10.; // factor in antenna height
             for (ucid, player, inst) in &players {
                 let track = tracks.entry((*ucid).clone()).or_default();
                 if track.last != now {
                     let dist = na::distance_squared(&ewr_pos.into(), &inst.position.p.0.into());
-                    if dist <= range && land.is_visible(LuaVec3(ewr_pos), inst.position.p)? {
+                    if dbg!(dist) <= dbg!(range) && dbg!(land.is_visible(LuaVec3(ewr_pos), inst.position.p))? {
                         track.pos = inst.position;
                         track.velocity = inst.velocity;
                         track.last = now;
@@ -172,6 +181,7 @@ impl Ewr {
                     age: age as u16,
                     speed: speed as u16,
                     units: EwrUnits::Metric,
+                    converted: false,
                 })
             }
         }

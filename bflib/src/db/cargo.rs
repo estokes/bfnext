@@ -117,7 +117,7 @@ impl SlotStats {
         let point = Vector2::new(pos.p.x, pos.p.z);
         let ground_alt = Land::singleton(lua)?.get_height(LuaVec2(point))?;
         let agl = pos.p.y - ground_alt;
-        let speed = unit.get_velocity()?.0.magnitude();
+        let speed = unit.get_velocity()?.0.magnitude() * 3600. / 1000.;
         Ok(Self {
             name,
             side,
@@ -790,7 +790,6 @@ impl Db {
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
         let (oid, crate_cfg) = cargo.crates.pop().unwrap();
         let weight = cargo.weight();
-        debug!("drop speed {}, drop height {}", st.speed, st.agl);
         if st.in_air && st.speed > crate_cfg.max_drop_speed as f64 {
             cargo.crates.push((oid, crate_cfg));
             bail!("you are going too fast to unload your cargo")

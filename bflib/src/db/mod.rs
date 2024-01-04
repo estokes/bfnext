@@ -17,12 +17,13 @@ use dcso3::{
     cvt_err,
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
+    land::Land,
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    MizLua, Position3, String, Vector2, Vector3,
+    LuaVec2, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -1188,6 +1189,7 @@ impl Db {
                 }
             }
         }
+        let land = Land::singleton(spctx.lua())?;
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let (mut positions, mut positions_by_typ, heading) =
@@ -1224,6 +1226,7 @@ impl Db {
             let position = {
                 let mut p = Position3::default();
                 p.p.x = pos.x;
+                p.p.y = land.get_height(LuaVec2(pos))?;
                 p.p.z = pos.y;
                 p
             };
@@ -1361,7 +1364,8 @@ impl Db {
         use std::collections::btree_map::Entry;
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
-        for (id, uid) in &self.ephemeral.uid_by_object_id {
+        for uid in &self.ephemeral.ca_controlled {
+            let id = maybe!(self.ephemeral.object_id_by_uid, uid, "object id")?;
             let instance = match unit.take() {
                 Some(unit) => unit.change_instance(id)?,
                 None => Unit::get_instance(lua, id)?,

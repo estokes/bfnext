@@ -5,7 +5,7 @@ use crate::{
         cargo::{Cargo, Oldest, SlotStats},
         Db,
     },
-    ewr::EwrUnits,
+    ewr::{EwrUnits, self},
     Context,
 };
 use anyhow::{anyhow, bail, Result};
@@ -24,7 +24,7 @@ use enumflags2::{BitFlag, BitFlags};
 use fxhash::FxHashMap;
 use log::debug;
 use mlua::{prelude::*, Value};
-use std::collections::hash_map::Entry;
+use std::{collections::hash_map::Entry, fmt::Write};
 
 #[derive(Debug)]
 struct ArgTuple<T, U> {
@@ -384,9 +384,10 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     if let Some(ucid) = ctx.db.player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
             if let Some((_, Some(inst))) = &player.current_slot {
-                let chickens = dbg!(ctx.ewr.where_chicken(Utc::now(), false, ucid, player, inst));
+                let chickens = ctx.ewr.where_chicken(Utc::now(), false, true, ucid, player, inst);
+                write!(report, "{}\n", ewr::HEADER)?;
                 for braa in chickens {
-                    report.push_str(&format_compact!("{braa}\n"));
+                    write!(report, "{braa}\n")?;
                 }
             }
         }
@@ -398,13 +399,14 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
 fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
-    let mut report = format_compact!("Friendlies Nearby\n");
+    let mut report = format_compact!("Friendlies BRAA\n");
     if let Some(ucid) = ctx.db.player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
             if let Some((_, Some(inst))) = &player.current_slot {
-                let friendlies = ctx.ewr.where_chicken(Utc::now(), true, ucid, player, inst);
+                let friendlies = ctx.ewr.where_chicken(Utc::now(), true, true, ucid, player, inst);
+                write!(report, "{}\n", ewr::HEADER)?;
                 for braa in friendlies {
-                    report.push_str(&format_compact!("{braa}\n"));
+                    write!(report, "{braa}\n")?;
                 }
             }
         }

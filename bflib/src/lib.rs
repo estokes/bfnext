@@ -376,7 +376,9 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 }
             }
         }
-        Event::MissionEnd => unsafe { CONTEXT = None; },
+        Event::MissionEnd => unsafe {
+            CONTEXT = None;
+        },
         _ => (),
     }
     Ok(())
@@ -488,6 +490,7 @@ fn advise_captured(ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
 }
 
 fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
+    use std::fmt::Write;
     let mut msgs: SmallVec<[(UnitId, CompactString); 64]> = smallvec![];
     for (ucid, player, inst) in ctx.db.instanced_players() {
         let uid = match player
@@ -498,11 +501,12 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
             Some(uid) => uid,
             None => continue,
         };
-        let braa_to_chickens = ctx.ewr.where_chicken(now, false, ucid, player, inst);
+        let braa_to_chickens = ctx.ewr.where_chicken(now, false, false, ucid, player, inst);
         if !braa_to_chickens.is_empty() {
-            let mut report = format_compact!("Bandits BRAA ({:?})\n", braa_to_chickens[0].units);
+            let mut report = format_compact!("Bandits BRAA\n");
+            write!(report, "{}\n", ewr::HEADER)?;
             for gibbraa in braa_to_chickens {
-                report.push_str(&format_compact!("{gibbraa}\n"))
+                write!(report, "{gibbraa}\n")?;
             }
             msgs.push((uid, report));
         }
@@ -667,9 +671,6 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
-    unsafe { Context::get_mut() }
-    .init_async_bg(lua.inner())
-    .map_err(dcso3::lua_err)?;
     let timer = Timer::singleton(lua)?;
     let when = timer.get_time()? + 1.;
     timer.schedule_function(when, mlua::Value::Nil, move |lua, _, now| {
@@ -686,5 +687,8 @@ fn init_miz(lua: MizLua) -> Result<()> {
 
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable> {
+    unsafe { Context::get_mut() }
+        .init_async_bg(lua.inner())
+        .map_err(dcso3::lua_err)?;
     dcso3::create_root_module(lua, init_hooks, init_miz)
 }

@@ -2,8 +2,8 @@ use crate::db::{Db, InstancedPlayer, Player};
 use anyhow::Result;
 use chrono::prelude::*;
 use dcso3::{
-    azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid,
-    radians_to_degrees, LuaVec3, MizLua, Position3, Vector2, Vector3,
+    azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid, radians_to_degrees, LuaVec3,
+    MizLua, Position3, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use smallvec::{smallvec, SmallVec};
@@ -18,26 +18,28 @@ pub struct GibBraa {
     pub speed: u16,
     pub age: u16,
     pub units: EwrUnits,
-    converted: bool
+    converted: bool,
 }
+
+pub const HEADER: &'static str = "BRG    RNG    ALT    SPD    HDG    AGE";
 
 impl fmt::Display for GibBraa {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (range_u, altitude_u, speed_u) = match self.units {
-            EwrUnits::Imperial => ("nm", "ft", "kts"),
-            EwrUnits::Metric => ("km", "m", "km/h"),
+            EwrUnits::Imperial => ("nm", "ft", "kts "),
+            EwrUnits::Metric => ("km", "m ", "km/h"),
         };
         write!(
             f,
-            "{:>3} {:>3}{} {:>5}{} {:>3} {:>4}{} {:>3}s",
+            "{:>6} {:>6}{} {:>6}{} {:>6}{} {:>6} {:>6}s",
             self.bearing,
             self.range,
             range_u,
             self.altitude,
             altitude_u,
-            self.heading,
             self.speed,
             speed_u,
+            self.heading,
             self.age
         )
     }
@@ -45,13 +47,13 @@ impl fmt::Display for GibBraa {
 
 impl GibBraa {
     fn convert(&mut self, unit: EwrUnits) {
-        if self.converted { return }
-        dbg!(&self);
+        if self.converted {
+            return;
+        }
         self.converted = true;
         match unit {
             EwrUnits::Metric => {
                 self.range = self.range / 1000;
-                self.altitude = self.altitude / 100;
                 self.speed = (self.speed as f64 * 3.6) as u16;
             }
             EwrUnits::Imperial => {
@@ -148,6 +150,7 @@ impl Ewr {
         &mut self,
         now: DateTime<Utc>,
         friendly: bool,
+        force: bool,
         ucid: &Ucid,
         player: &Player,
         inst: &InstancedPlayer,
@@ -157,7 +160,7 @@ impl Ewr {
         let mut reports: SmallVec<[GibBraa; 64]> = smallvec![];
         let tracks = match self.tracks.get(&side) {
             Some(t) => t,
-            None => return smallvec![],
+            None => return reports,
         };
         let state = self.player_state.entry(ucid.clone()).or_default();
         if !state.enabled {
@@ -166,7 +169,7 @@ impl Ewr {
         for track in tracks.values() {
             let age = (now - track.last).num_seconds();
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
-            if include && age <= 120 {
+            if include && age <= 600 {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);
                 let range = na::distance(&pos.into(), &cpos.into());
                 let bearing = radians_to_degrees(azumith2d_to(pos, cpos));
@@ -193,7 +196,8 @@ impl Ewr {
             reports.pop();
         }
         let since_last = (now - state.last).num_seconds();
-        if since_last >= 60
+        if force
+            || since_last >= 60
             || reports[0].range <= 20000
             || (reports[0].range <= 40000 && since_last >= 30)
         {

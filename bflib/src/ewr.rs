@@ -158,7 +158,7 @@ impl Ewr {
         let side = player.side;
         let pos = Vector2::new(inst.position.p.x, inst.position.p.z);
         let mut reports: SmallVec<[GibBraa; 64]> = smallvec![];
-        let tracks = match self.tracks.get(&side) {
+        let tracks = match self.tracks.get_mut(&side) {
             Some(t) => t,
             None => return reports,
         };
@@ -166,10 +166,10 @@ impl Ewr {
         if !state.enabled {
             return reports;
         }
-        for track in tracks.values() {
+        tracks.retain(|_, track| {
             let age = (now - track.last).num_seconds();
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
-            if include && age <= 600 {
+            if include && age <= 120 {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);
                 let range = na::distance(&pos.into(), &cpos.into());
                 let bearing = radians_to_degrees(azumith2d_to(pos, cpos));
@@ -187,7 +187,8 @@ impl Ewr {
                     converted: false,
                 })
             }
-        }
+            age <= 120
+        });
         if reports.is_empty() {
             return reports;
         }

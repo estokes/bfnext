@@ -579,7 +579,6 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
         if let Err(e) = ctx.db.update_player_positions(lua) {
             error!("could not update player positions {e}")
         }
-        ctx.perf.record_slow_timed(start_ts);
         if let Err(e) = ctx.ewr.update_tracks(lua, &ctx.db, ts) {
             error!("could not update ewr tracks {e}")
         }
@@ -609,6 +608,7 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
         if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
             error!("could not update jtac contacts {e}")
         }
+        ctx.perf.record_slow_timed(start_ts);
         ctx.perf.log();
     }
     Ok(())

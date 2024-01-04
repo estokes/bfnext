@@ -15,9 +15,6 @@ mlua = { version = "0.9.1", features = ["lua51", "module", "serialize"] }
 serde = "1"
 serde_json = "1"
 serde_derive = "1"
-#netidx = "0.25"
-#netidx-core = "0.25"
-#netidx-derive = "0.22"
 compact_str = { version = "0.7", features = ["serde"] }
 bytes = "1"
 fxhash = "0.2"

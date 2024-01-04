@@ -1,6 +1,9 @@
 ## 0.0.10
 
 - fix cargo category and keywords
+- implement laser spot
+- implement object ids for object, unit, and group
+- implement a few additional vec3 and vec2 functions
 
 ## 0.0.9
 

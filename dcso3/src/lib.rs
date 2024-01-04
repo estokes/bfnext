@@ -230,7 +230,10 @@ pub fn wrap_f<'lua, L: LuaEnv<'lua>, R: Default, F: FnOnce(L) -> Result<R>>(
     match r {
         Ok(r) => r,
         Err(e) => {
-            error!("{} panicked {:?} {}", name, e, Backtrace::capture());
+            match e.downcast::<anyhow::Error>() {
+                Ok(e) => error!("{} panicked {:?} {}", name, e, Backtrace::capture()),
+                Err(_) => error!("{} panicked {}", name, Backtrace::capture()),
+            }
             Ok(R::default())
         }
     }
@@ -1163,7 +1166,11 @@ pub fn degrees_to_radians(degrees: f64) -> f64 {
 
 pub fn azumith2d(v: Vector2) -> f64 {
     let az = v.y.atan2(v.x);
-    if az < 0. { az + 2.* std::f64::consts::PI } else { az }
+    if az < 0. {
+        az + 2. * std::f64::consts::PI
+    } else {
+        az
+    }
 }
 
 pub fn azumith2d_to(from: Vector2, to: Vector2) -> f64 {
@@ -1172,7 +1179,11 @@ pub fn azumith2d_to(from: Vector2, to: Vector2) -> f64 {
 
 pub fn azumith3d(v: Vector3) -> f64 {
     let az = v.z.atan2(v.x);
-    if az < 0. { az + 2.* std::f64::consts::PI } else { az }
+    if az < 0. {
+        az + 2. * std::f64::consts::PI
+    } else {
+        az
+    }
 }
 
 pub fn azumith3d_to(from: Vector3, to: Vector3) -> f64 {

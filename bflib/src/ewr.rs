@@ -121,13 +121,12 @@ impl Ewr {
                 let track = tracks.entry((*ucid).clone()).or_default();
                 if track.last != now {
                     let dist = na::distance_squared(&ewr_pos.into(), &inst.position.p.0.into());
-                    if dbg!(dist) <= dbg!(range) && dbg!(land.is_visible(LuaVec3(ewr_pos), inst.position.p))? {
+                    if dist <= range && land.is_visible(LuaVec3(ewr_pos), inst.position.p)? {
                         track.pos = inst.position;
                         track.velocity = inst.velocity;
                         track.last = now;
                         track.side = player.side;
                     }
-                    dbg!(&track);
                 }
             }
         }
@@ -168,11 +167,11 @@ impl Ewr {
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
             if include && age <= 120 {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);
-                let range = na::distance(&pos.into(), &cpos.into());
-                let bearing = radians_to_degrees(azumith2d_to(pos, cpos));
-                let heading = radians_to_degrees(azumith3d(track.pos.x.0));
-                let speed = track.velocity.magnitude();
-                let altitude = track.pos.p.y;
+                let range = dbg!(na::distance(&pos.into(), &cpos.into()));
+                let bearing = dbg!(radians_to_degrees(azumith2d_to(pos, cpos)));
+                let heading = dbg!(radians_to_degrees(azumith3d(track.pos.x.0)));
+                let speed = dbg!(track.velocity.magnitude());
+                let altitude = dbg!(track.pos.p.y);
                 reports.push(GibBraa {
                     range: range as u32,
                     heading: heading as u16,

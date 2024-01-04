@@ -1,6 +1,7 @@
 use crate::db::Persisted;
 use bytes::{Bytes, BytesMut};
 use log::error;
+use once_cell::sync::OnceCell;
 use simplelog::{LevelFilter, WriteLogger};
 use std::{cell::RefCell, env, io, path::PathBuf, thread};
 use tokio::{
@@ -59,6 +60,8 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
     }
 }
 
+static TXCOM: OnceCell<mpsc::UnboundedSender<Task>> = OnceCell::new();
+
 fn setup_logger(tx: UnboundedSender<Task>) {
     let level = match env::var("RUST_LOG").ok().map(|s| s.to_ascii_lowercase()) {
         None => LevelFilter::Debug,
@@ -74,11 +77,17 @@ fn setup_logger(tx: UnboundedSender<Task>) {
 }
 
 pub fn init(write_dir: PathBuf) -> UnboundedSender<Task> {
-    let (tx, rx) = mpsc::unbounded_channel();
-    setup_logger(tx.clone());
-    thread::spawn(move || {
-        let rt = Builder::new_current_thread().enable_all().build().unwrap();
-        rt.block_on(background_loop(write_dir, rx))
-    });
-    tx
+    match TXCOM.get() {
+        Some(tx) => tx.clone(),
+        None => {
+            let (tx, rx) = mpsc::unbounded_channel();
+            TXCOM.set(tx.clone()).unwrap();
+            setup_logger(tx.clone());
+            thread::spawn(move || {
+                let rt = Builder::new_current_thread().enable_all().build().unwrap();
+                rt.block_on(background_loop(write_dir, rx))
+            });
+            tx
+        }
+    }
 }

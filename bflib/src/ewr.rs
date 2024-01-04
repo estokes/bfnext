@@ -21,7 +21,7 @@ pub struct GibBraa {
     converted: bool,
 }
 
-pub const HEADER: &'static str = "BRG    RNG    ALT    SPD    HDG    AGE";
+pub const HEADER: &'static str = "BRG      RNG      ALT      SPD        HDG      AGE";
 
 impl fmt::Display for GibBraa {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

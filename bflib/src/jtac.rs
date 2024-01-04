@@ -351,7 +351,8 @@ impl Jtacs {
         let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
         for (unit, _) in db.instanced_units() {
             saw_units.insert(unit.id);
-            for (pos, jtid, group, ifo) in db.jtacs() {
+            for (mut pos, jtid, group, ifo) in db.jtacs() {
+                pos.y += 5.;
                 if !saw_jtacs.contains(&group.id) {
                     saw_jtacs.push(group.id)
                 }

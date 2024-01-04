@@ -29,7 +29,7 @@ impl fmt::Display for GibBraa {
         };
         write!(
             f,
-            "{:03} {:03}{} {:>5}{} {:03} {:04}{} {:03}s",
+            "{:>3} {:>3}{} {:>5}{} {:>3} {:>4}{} {:>3}s",
             self.bearing,
             self.range,
             range_u,
@@ -46,17 +46,18 @@ impl fmt::Display for GibBraa {
 impl GibBraa {
     fn convert(&mut self, unit: EwrUnits) {
         if self.converted { return }
+        dbg!(&self);
         self.converted = true;
         match unit {
             EwrUnits::Metric => {
                 self.range = self.range / 1000;
-                self.altitude = (self.altitude / 250) * 250;
-                self.speed = ((self.speed * 3600 / 1000) / 50) * 50;
+                self.altitude = self.altitude / 100;
+                self.speed = (self.speed as f64 * 3.6) as u16;
             }
             EwrUnits::Imperial => {
                 self.range = self.range / 1852;
-                self.altitude = ((self.altitude as f64 * 3.38084) as u32 / 1000) * 1000;
-                self.speed = ((self.speed as f64 * 1.94384) as u16 / 25) * 25;
+                self.altitude = (self.altitude as f64 * 3.38084) as u32;
+                self.speed = (self.speed as f64 * 1.94384) as u16;
             }
         }
         self.units = unit;
@@ -167,11 +168,11 @@ impl Ewr {
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
             if include && age <= 120 {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);
-                let range = dbg!(na::distance(&pos.into(), &cpos.into()));
-                let bearing = dbg!(radians_to_degrees(azumith2d_to(pos, cpos)));
-                let heading = dbg!(radians_to_degrees(azumith3d(track.pos.x.0)));
-                let speed = dbg!(track.velocity.magnitude());
-                let altitude = dbg!(track.pos.p.y);
+                let range = na::distance(&pos.into(), &cpos.into());
+                let bearing = radians_to_degrees(azumith2d_to(pos, cpos));
+                let heading = radians_to_degrees(azumith3d(track.pos.x.0));
+                let speed = track.velocity.magnitude();
+                let altitude = track.pos.p.y;
                 reports.push(GibBraa {
                     range: range as u32,
                     heading: heading as u16,

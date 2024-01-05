@@ -5,7 +5,7 @@ use crate::{
         cargo::{Cargo, Oldest, SlotStats},
         Db,
     },
-    ewr::{EwrUnits, self},
+    ewr::{self, EwrUnits},
     Context,
 };
 use anyhow::{anyhow, bail, Result};
@@ -131,9 +131,10 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
                 },
             };
             let msg = format_compact!(
-                "{} crate loaded, {n} of {} deployed, {}",
+                "{} crate loaded\n{n} of {} {} deployed, {}",
                 cr.name,
                 dep.limit,
+                cr.name,
                 enforce
             );
             ctx.db.msgs().panel_to_group(10, false, gid, msg)
@@ -299,7 +300,13 @@ fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
                     }
                 },
             };
-            let msg = format_compact!("{player} loaded {}, {n} of {} deployed, {}", tr.name, tr.limit, enforce);
+            let msg = format_compact!(
+                "{player} loaded {}\n{n} of {} {} deployed, {}",
+                tr.name,
+                tr.limit,
+                tr.name,
+                enforce
+            );
             ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
@@ -384,7 +391,9 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     if let Some(ucid) = ctx.db.player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
             if let Some((_, Some(inst))) = &player.current_slot {
-                let chickens = ctx.ewr.where_chicken(Utc::now(), false, true, ucid, player, inst);
+                let chickens = ctx
+                    .ewr
+                    .where_chicken(Utc::now(), false, true, ucid, player, inst);
                 write!(report, "{}\n", ewr::HEADER)?;
                 for braa in chickens {
                     write!(report, "{braa}\n")?;
@@ -403,7 +412,9 @@ fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     if let Some(ucid) = ctx.db.player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
             if let Some((_, Some(inst))) = &player.current_slot {
-                let friendlies = ctx.ewr.where_chicken(Utc::now(), true, true, ucid, player, inst);
+                let friendlies = ctx
+                    .ewr
+                    .where_chicken(Utc::now(), true, true, ucid, player, inst);
                 write!(report, "{}\n", ewr::HEADER)?;
                 for braa in friendlies {
                     write!(report, "{braa}\n")?;

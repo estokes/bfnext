@@ -644,7 +644,7 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
 
 fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
     let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
-    if ts - ctx.last_slow_timed_events > freq {
+    if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         let start_ts = Utc::now();
         if let Err(e) = ctx

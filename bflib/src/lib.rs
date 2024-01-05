@@ -56,6 +56,13 @@ struct Perf {
     slow_timed: Histogram<u64>,
     dcs_events: Histogram<u64>,
     dcs_hooks: Histogram<u64>,
+    unit_positions: Histogram<u64>,
+    player_positions: Histogram<u64>,
+    ewr_tracks: Histogram<u64>,
+    ewr_reports: Histogram<u64>,
+    unit_culling: Histogram<u64>,
+    remark_objectives: Histogram<u64>,
+    update_jtac_contacts: Histogram<u64>,
 }
 
 impl Default for Perf {
@@ -65,6 +72,13 @@ impl Default for Perf {
             slow_timed: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             dcs_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             dcs_hooks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            unit_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            player_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            ewr_tracks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            ewr_reports: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            unit_culling: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            remark_objectives: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            update_jtac_contacts: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
         }
     }
 }
@@ -77,23 +91,13 @@ fn record_perf(h: &mut Histogram<u64>, start_ts: DateTime<Utc>) {
     }
 }
 
+macro_rules! snap {
+    ($ctx:expr, $histogram:ident, $start:expr) => {
+        record_perf(&mut $ctx.perf.$histogram, $start)
+    };
+}
+
 impl Perf {
-    fn record_timed(&mut self, start_ts: DateTime<Utc>) {
-        record_perf(&mut self.timed_events, start_ts)
-    }
-
-    fn record_slow_timed(&mut self, start_ts: DateTime<Utc>) {
-        record_perf(&mut self.slow_timed, start_ts)
-    }
-
-    fn record_dcs_event(&mut self, start_ts: DateTime<Utc>) {
-        record_perf(&mut self.dcs_events, start_ts)
-    }
-
-    fn record_dcs_hook(&mut self, start_ts: DateTime<Utc>) {
-        record_perf(&mut self.dcs_hooks, start_ts)
-    }
-
     fn log(&self) {
         fn log_histogram(h: &Histogram<u64>, name: &str) {
             let n = h.len();
@@ -109,7 +113,14 @@ impl Perf {
         log_histogram(&self.timed_events, "timed events:      ");
         log_histogram(&self.slow_timed, "slow timed events: ");
         log_histogram(&self.dcs_events, "dcs events:        ");
-        log_histogram(&self.dcs_hooks, "dcs hooks:         ")
+        log_histogram(&self.dcs_hooks, "dcs hooks:         ");
+        log_histogram(&self.unit_positions, "unit positions:    ");
+        log_histogram(&self.player_positions, "player positions:  ");
+        log_histogram(&self.ewr_tracks, "ewr tracks:        ");
+        log_histogram(&self.ewr_reports, "ewr reports:       ");
+        log_histogram(&self.unit_culling, "unit culling:      ");
+        log_histogram(&self.remark_objectives, "remark objectives: ");
+        log_histogram(&self.update_jtac_contacts, "update jtacs:      ")
     }
 }
 
@@ -204,7 +215,7 @@ fn on_player_try_connect(
     ucid: Ucid,
     id: PlayerId,
 ) -> Result<bool> {
-    let start_ts = Utc::now();
+    let ts = Utc::now();
     info!(
         "onPlayerTryConnect addr: {:?}, name: {:?}, ucid: {:?}, id: {:?}",
         addr, name, ucid, id
@@ -212,7 +223,7 @@ fn on_player_try_connect(
     let ctx = unsafe { Context::get_mut() };
     ctx.id_by_ucid.insert(ucid.clone(), id);
     ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
-    ctx.perf.record_dcs_hook(start_ts);
+    snap!(ctx, dcs_hooks, ts);
     Ok(true)
 }
 
@@ -304,10 +315,10 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         if let Err(e) = lives_command(id) {
             error!("lives command failed for player {:?} {:?}", id, e);
         }
-        unsafe { Context::get_mut() }.perf.record_dcs_hook(start_ts);
+        snap!(unsafe { Context::get_mut() }, dcs_hooks, start_ts);
         Ok("".into())
     } else {
-        unsafe { Context::get_mut() }.perf.record_dcs_hook(start_ts);
+        snap!(unsafe { Context::get_mut() }, dcs_hooks, start_ts);
         Ok(msg)
     };
     match r {
@@ -373,7 +384,7 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
         }
         Ok(true) => (),
     }
-    ctx.perf.record_dcs_hook(start_ts);
+    snap!(ctx, dcs_hooks, start_ts);
     Ok(())
 }
 
@@ -473,7 +484,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         },
         _ => (),
     }
-    ctx.perf.record_dcs_event(start_ts);
+    snap!(ctx, dcs_events, start_ts);
     Ok(())
 }
 
@@ -618,15 +629,23 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
         if let Err(e) = ctx.db.update_unit_positions(lua) {
             error!("could not update unit positions {e}")
         }
+        snap!(ctx, unit_positions, start_ts);
+        let ts = Utc::now();
         if let Err(e) = ctx.db.update_player_positions(lua) {
             error!("could not update player positions {e}")
         }
+        snap!(ctx, player_positions, ts);
+        let ts = Utc::now();
         if let Err(e) = ctx.ewr.update_tracks(lua, &ctx.db, ts) {
             error!("could not update ewr tracks {e}")
         }
+        snap!(ctx, ewr_tracks, ts);
+        let ts = Utc::now();
         if let Err(e) = generate_ewr_reports(ctx, ts) {
             error!("could not generate ewr reports {e}")
         }
+        snap!(ctx, ewr_reports, ts);
+        let ts = Utc::now();
         match ctx.db.cull_or_respawn_objectives(lua, ts) {
             Err(e) => error!("could not cull or respawn objectives {e}"),
             Ok((threatened, cleared)) => {
@@ -644,13 +663,18 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
                 }
             }
         }
+        snap!(ctx, unit_culling, ts);
+        let ts = Utc::now();
         if let Err(e) = ctx.db.remark_objectives() {
             error!("could not remark objectives {e}")
         }
+        snap!(ctx, remark_objectives, ts);
+        let ts = Utc::now();
         if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
             error!("could not update jtac contacts {e}")
         }
-        ctx.perf.record_slow_timed(start_ts);
+        snap!(ctx, update_jtac_contacts, ts);
+        snap!(ctx, slow_timed, start_ts);
         ctx.perf.log();
     }
     Ok(())
@@ -690,7 +714,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Some(snap) = ctx.db.maybe_snapshot() {
         ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
     }
-    ctx.perf.record_timed(ts);
+    snap!(ctx, timed_events, ts);
     Ok(())
 }
 
@@ -753,7 +777,7 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
         ctx.db.player_deslot(&ifo.ucid)
     }
-    ctx.perf.record_dcs_hook(start_ts);
+    snap!(ctx, dcs_hooks, start_ts);
     Ok(())
 }
 

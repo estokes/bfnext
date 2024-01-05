@@ -27,7 +27,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
-use log::error;
+use log::{error, info};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -865,7 +865,7 @@ impl Db {
             .filter_map(|uid| {
                 self.persisted.units.get(uid).and_then(|u| {
                     points.push(u.pos);
-                    if u.dead {
+                    if dbg!(u.dead) {
                         None
                     } else {
                         Some((u.template_name.as_str(), u))
@@ -1327,7 +1327,7 @@ impl Db {
         }
         let uid = match self.ephemeral.uid_by_object_id.remove(&id) {
             None => {
-                error!("no uid for object id {:?}", id);
+                info!("no uid for object id {:?}", id);
                 return Ok(());
             }
             Some(uid) => {
@@ -1344,6 +1344,7 @@ impl Db {
             None => error!("unit_dead: missing unit {:?}", uid),
             Some(unit) => {
                 unit.dead = true;
+                self.ephemeral.dirty = true;
                 let gid = unit.group;
                 if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
                     self.update_objective_status(&oid, now)?
@@ -1363,7 +1364,6 @@ impl Db {
                 }
             }
         }
-        self.ephemeral.dirty = true;
         Ok(())
     }
 

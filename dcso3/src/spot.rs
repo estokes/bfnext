@@ -1,9 +1,12 @@
 use super::{as_tbl, object::Object};
-use crate::{wrapped_table, LuaEnv, LuaVec3, MizLua, object::{DcsObject, DcsOid}};
-use anyhow::{Result, bail};
+use crate::{
+    object::{DcsObject, DcsOid},
+    wrapped_table, LuaEnv, LuaVec3, MizLua,
+};
+use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use std::{ops::Deref, marker::PhantomData};
+use std::{marker::PhantomData, ops::Deref};
 
 wrapped_table!(Spot, Some("Spot"));
 
@@ -29,10 +32,6 @@ impl<'lua> Spot<'lua> {
         let globals = lua.inner().globals();
         let spot: LuaTable = globals.raw_get("Spot")?;
         Ok(spot.call_function("createInfraRed", (source, local_ref, target))?)
-    }
-
-    pub fn is_exist(&self) -> Result<bool> {
-        Ok(self.t.call_method("isExist", ())?)
     }
 
     pub fn destroy(self) -> Result<()> {
@@ -70,9 +69,6 @@ impl<'lua> DcsObject<'lua> for Spot<'lua> {
             t,
             lua: lua.inner(),
         };
-        if !t.is_exist()? {
-            bail!("{} is an invalid spot", id.id)
-        }
         Ok(t)
     }
 
@@ -88,18 +84,12 @@ impl<'lua> DcsObject<'lua> for Spot<'lua> {
 
     fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
         self.raw_set("id_", id.id)?;
-        if !self.is_exist()? {
-            bail!("{} is an invalid spot", id.id)
-        }
         Ok(self)
     }
 
     fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
         id.check_implements(MizLua(self.lua), "Spot")?;
         self.t.raw_set("id_", id.id)?;
-        if !self.is_exist()? {
-            bail!("{} is an invalid spot", id.id)
-        }
         Ok(self)
     }
 }

@@ -27,6 +27,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
+use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -1325,11 +1326,14 @@ impl Db {
             }
         }
         let uid = match self.ephemeral.uid_by_object_id.remove(&id) {
+            None => {
+                error!("no unit for object id {:?}", id);
+                return Ok(())
+            },
             Some(uid) => {
                 self.ephemeral.object_id_by_uid.remove(&uid);
                 uid
             }
-            None => return Ok(()),
         };
         self.ephemeral
             .units_potentially_close_to_enemies

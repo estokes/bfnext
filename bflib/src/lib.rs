@@ -102,7 +102,7 @@ impl Perf {
             let ninety = h.value_at_quantile(0.9);
             let ninety_nine = h.value_at_quantile(0.99);
             info!(
-                "{name} n: {:>7}, 25th: {:>7}, 50th: {:>7}, 90th: {:>7}, 99th: {:>7}",
+                "{name} n: {:>7}, 25th: {:>7}, 50th: {:>7}, 90th: {:>7}, 99th: {:>8}",
                 n, twenty_five, fifty, ninety, ninety_nine
             );
         }

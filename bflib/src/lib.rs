@@ -13,7 +13,7 @@ use anyhow::{anyhow, bail, Result};
 use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::{Db, ObjectiveId};
+use db::{player::RegErr, Db, ObjectiveId};
 use dcso3::{
     coalition::Side,
     env::{
@@ -238,7 +238,11 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
                 format_compact!("{} has joined {:?} team", ifo.name, side),
             );
         }
-        Err((side_switches, orig_side)) => {
+        Err(RegErr::AlreadyOn(side)) => ctx.db.msgs().send(
+            MsgTyp::Chat(Some(id)),
+            format_compact!("you are already on {:?} team!", side),
+        ),
+        Err(RegErr::AlreadyRegistered(side_switches, orig_side)) => {
             let msg = String::from(match side_switches {
                 None => format_compact!("You are already on the {:?} team. You may switch sides by typing -switch {:?}.", orig_side, side),
                 Some(0) => format_compact!("You are already on {:?} team, and you may not switch sides.", orig_side),
@@ -248,7 +252,7 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
             ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
         }
     }
-    Ok(String::from(""))
+    Ok("".into())
 }
 
 fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
@@ -272,7 +276,7 @@ fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String>
         }
         Err(e) => ctx.db.msgs().send(MsgTyp::Chat(Some(id)), e),
     }
-    Ok(String::from(""))
+    Ok("".into())
 }
 
 fn lives_command(id: PlayerId) -> Result<()> {
@@ -292,7 +296,7 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
     );
-    if msg.eq_ignore_ascii_case("blue") || msg.eq_ignore_ascii_case("red") {
+    let r = if msg.eq_ignore_ascii_case("blue") || msg.eq_ignore_ascii_case("red") {
         register_player(lua, id, msg)
     } else if msg.eq_ignore_ascii_case("-switch blue") || msg.eq_ignore_ascii_case("-switch red") {
         sideswitch_player(lua, id, msg)
@@ -305,6 +309,16 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
     } else {
         unsafe { Context::get_mut() }.perf.record_dcs_hook(start_ts);
         Ok(msg)
+    };
+    match r {
+        Ok(s) => Ok(s),
+        Err(e) => {
+            unsafe { Context::get_mut() }
+                .db
+                .msgs()
+                .send(MsgTyp::Chat(Some(id)), format_compact!("{e}"));
+            Ok("".into())
+        }
     }
 }
 

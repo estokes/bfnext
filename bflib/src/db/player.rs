@@ -1,5 +1,8 @@
-use super::{Db, Map, Player, Set, InstancedPlayer};
-use crate::{cfg::{LifeType, Vehicle}, maybe};
+use super::{Db, InstancedPlayer, Map, Player, Set};
+use crate::{
+    cfg::{LifeType, Vehicle},
+    maybe,
+};
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{
@@ -19,6 +22,11 @@ pub enum SlotAuth {
     ObjectiveHasNoLogistics,
     NoLives,
     NotRegistered(Side),
+}
+
+pub enum RegErr {
+    AlreadyRegistered(Option<u8>, Side),
+    AlreadyOn(Side),
 }
 
 impl Db {
@@ -207,15 +215,10 @@ impl Db {
         }
     }
 
-    pub fn register_player(
-        &mut self,
-        ucid: Ucid,
-        name: String,
-        side: Side,
-    ) -> Result<(), (Option<u8>, Side)> {
+    pub fn register_player(&mut self, ucid: Ucid, name: String, side: Side) -> Result<(), RegErr> {
         match self.persisted.players.get(&ucid) {
-            Some(p) if p.side != side => Err((p.side_switches, p.side)),
-            Some(_) => Ok(()),
+            Some(p) if p.side != side => Err(RegErr::AlreadyRegistered(p.side_switches, p.side)),
+            Some(_) => Err(RegErr::AlreadyOn(side)),
             None => {
                 self.persisted.players.insert_cow(
                     ucid,

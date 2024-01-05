@@ -131,7 +131,7 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
                 },
             };
             let msg = format_compact!(
-                "{} crate loaded, {n}/{} deployed, {}",
+                "{} crate loaded, {n} of {} deployed, {}",
                 cr.name,
                 dep.limit,
                 enforce
@@ -265,9 +265,9 @@ fn spawn_crate(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
             if let Some(max_crates) = ctx.db.cfg().max_crates {
                 let (n, oldest) = ctx.db.number_crates_deployed(&st)?;
                 let msg = match oldest {
-                    None => format_compact!("{n}/{max_crates} crates spawned"),
+                    None => format_compact!("{n} of {max_crates} crates spawned"),
                     Some(gid) => format_compact!(
-                        "{n}/{max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
+                        "{n} of {max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
                     ),
                 };
                 ctx.db.msgs().panel_to_group(10, false, arg.fst, msg)
@@ -299,7 +299,7 @@ fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
                     }
                 },
             };
-            let msg = format_compact!("{player} loaded {}, {n}/{}, {}", tr.name, tr.limit, enforce);
+            let msg = format_compact!("{player} loaded {}, {n} of {} deployed, {}", tr.name, tr.limit, enforce);
             ctx.db.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx

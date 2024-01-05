@@ -134,7 +134,7 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
                 "{} crate loaded\n{n} of {} {} deployed, {}",
                 cr.name,
                 dep.limit,
-                cr.name,
+                dep_name,
                 enforce
             );
             ctx.db.msgs().panel_to_group(10, false, gid, msg)

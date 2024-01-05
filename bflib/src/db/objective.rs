@@ -18,7 +18,7 @@ use dcso3::{
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::{FxHashMap, FxHashSet};
-use log::debug;
+use log::{debug, error};
 use smallvec::{smallvec, SmallVec};
 use std::cmp::max;
 
@@ -359,7 +359,13 @@ impl Db {
                 }
             }
             for uid in &self.ephemeral.units_potentially_on_walkabout {
-                let unit = unit!(self, uid)?;
+                let unit = match unit!(self, uid) {
+                    Ok(unit) => unit,
+                    Err(e) => {
+                        error!("missing unit in potentially on walkabout {e}");
+                        continue
+                    }
+                };
                 match group!(self, unit.group)?.origin {
                     DeployKind::Crate { .. }
                     | DeployKind::Deployed { .. }
@@ -377,7 +383,13 @@ impl Db {
                 }
             }
             for uid in &self.ephemeral.units_potentially_close_to_enemies {
-                let unit = unit!(self, uid)?;
+                let unit = match unit!(self, uid) {
+                    Ok(unit) => unit,
+                    Err(e) => {
+                        error!("missing unit in potentially close to enemies {e}");
+                        continue
+                    }
+                };
                 let group = group!(self, unit.group)?;
                 if obj.owner != group.side {
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());

@@ -414,6 +414,7 @@ impl Db {
             }
             obj.threatened = true;
             obj.last_threatened_ts = now;
+            self.ephemeral.dirty = true;
         }
         let cooldown = Duration::seconds(self.ephemeral.cfg.threatened_cooldown as i64);
         for oid in &not_threatened {
@@ -521,7 +522,7 @@ impl Db {
             })
             .collect::<Vec<_>>();
         for oid in to_repair {
-            self.repair_objective(idx, &spctx, dbg!(oid), now)?
+            self.repair_objective(idx, &spctx, oid, now)?
         }
         Ok(())
     }

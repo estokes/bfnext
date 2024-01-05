@@ -9,6 +9,7 @@ use dcso3::{
     unit::Unit,
     MizLua, String, Vector2,
 };
+use log::error;
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Copy)]
@@ -289,10 +290,14 @@ impl Db {
         Ok(())
     }
 
-    pub fn player_left_unit(&mut self, unit: &Unit) -> Result<()> {
+    pub fn player_left_unit(&mut self, lua: MizLua, now: DateTime<Utc>, unit: &Unit) -> Result<()> {
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
-            self.ephemeral.ca_controlled.remove(uid);
+            let uid = *uid;
+            if let Err(e) = self.update_unit_positions(lua, now) {
+                error!("could not sync final CA unit position {e}");
+            }
+            self.ephemeral.ca_controlled.remove(&uid);
         }
         Ok(())
     }

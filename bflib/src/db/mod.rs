@@ -319,14 +319,11 @@ pub struct Objective {
     groups: Map<Side, Set<GroupId>>,
     health: u8,
     logi: u8,
+    threatened: bool,
+    last_threatened_ts: DateTime<Utc>,
+    last_change_ts: DateTime<Utc>,
     #[serde(skip)]
     spawned: bool,
-    #[serde(skip)]
-    threatened: bool,
-    #[serde(skip)]
-    last_threatened_ts: DateTime<Utc>,
-    #[serde(skip)]
-    last_change_ts: DateTime<Utc>,
     #[serde(skip)]
     needs_mark: bool,
 }
@@ -865,7 +862,7 @@ impl Db {
             .filter_map(|uid| {
                 self.persisted.units.get(uid).and_then(|u| {
                     points.push(u.pos);
-                    if dbg!(u.dead) {
+                    if u.dead {
                         None
                     } else {
                         Some((u.template_name.as_str(), u))

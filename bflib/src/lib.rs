@@ -397,7 +397,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::PlayerLeaveUnit(e) => {
             if let Some(o) = &e.initiator {
                 if let Ok(unit) = o.as_unit() {
-                    if let Err(e) = ctx.db.player_left_unit(&unit) {
+                    if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &unit) {
                         error!("player left unit failed {:?} {:?}", unit, e)
                     }
                 }

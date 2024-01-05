@@ -433,8 +433,6 @@ struct Ephemeral {
     uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
     ca_controlled: FxHashSet<UnitId>,
-    moved_units: BTreeMap<DateTime<Utc>, FxHashSet<UnitId>>,
-    moved_units_processed: Option<DateTime<Utc>>,
     units_potentially_close_to_enemies: FxHashSet<UnitId>,
     units_potentially_on_walkabout: FxHashSet<UnitId>,
     spawnq: VecDeque<GroupId>,
@@ -672,6 +670,27 @@ impl Db {
             .collect::<Vec<_>>();
         for oid in objectives {
             self.mark_objective(&oid)?
+        }
+        for (uid, unit) in &self.persisted.units {
+            let group = group!(self, unit.group)?;
+            match group.origin {
+                DeployKind::Crate { .. } => (),
+                DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
+                    self.ephemeral
+                        .units_potentially_close_to_enemies
+                        .insert(*uid);
+                }
+                DeployKind::Objective => {
+                    let oid = self.persisted.objectives_by_group[&unit.group];
+                    let obj = &self.persisted.objectives[&oid];
+                    if obj.owner == group.side {
+                        self.ephemeral
+                            .units_potentially_close_to_enemies
+                            .insert(*uid);
+                        self.ephemeral.units_potentially_on_walkabout.insert(*uid);
+                    }
+                }
+            }
         }
         self.check_unit_classification(spctx.lua())?;
         Ok(())
@@ -1364,8 +1383,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn update_unit_positions(&mut self, lua: MizLua, ts: DateTime<Utc>) -> Result<()> {
-        use std::collections::btree_map::Entry;
+    pub fn update_unit_positions(&mut self, lua: MizLua) -> Result<()> {
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
         for uid in &self.ephemeral.ca_controlled {
@@ -1383,21 +1401,10 @@ impl Db {
                 spunit.position = pos;
                 spunit.pos = point;
                 spunit.heading = heading;
-                if let Some(ts) = spunit.moved {
-                    if let Entry::Occupied(mut e) = self.ephemeral.moved_units.entry(ts) {
-                        let set = e.get_mut();
-                        set.remove(uid);
-                        if set.len() == 0 {
-                            e.remove();
-                        }
-                    }
-                }
                 self.ephemeral
-                    .moved_units
-                    .entry(ts)
-                    .or_default()
+                    .units_potentially_close_to_enemies
                     .insert(*uid);
-                spunit.moved = Some(ts);
+                self.ephemeral.units_potentially_on_walkabout.insert(*uid);
             }
             unit = Some(instance);
         }

@@ -397,7 +397,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::PlayerLeaveUnit(e) => {
             if let Some(o) = &e.initiator {
                 if let Ok(unit) = o.as_unit() {
-                    if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &unit) {
+                    if let Err(e) = ctx.db.player_left_unit(lua, &unit) {
                         error!("player left unit failed {:?} {:?}", unit, e)
                     }
                 }
@@ -601,7 +601,7 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
     if ts - ctx.last_slow_timed_events > freq {
         ctx.last_slow_timed_events = ts;
         let start_ts = Utc::now();
-        if let Err(e) = ctx.db.update_unit_positions(lua, ts) {
+        if let Err(e) = ctx.db.update_unit_positions(lua) {
             error!("could not update unit positions {e}")
         }
         if let Err(e) = ctx.db.update_player_positions(lua) {

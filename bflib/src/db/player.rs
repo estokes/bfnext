@@ -290,11 +290,11 @@ impl Db {
         Ok(())
     }
 
-    pub fn player_left_unit(&mut self, lua: MizLua, now: DateTime<Utc>, unit: &Unit) -> Result<()> {
+    pub fn player_left_unit(&mut self, lua: MizLua, unit: &Unit) -> Result<()> {
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             let uid = *uid;
-            if let Err(e) = self.update_unit_positions(lua, now) {
+            if let Err(e) = self.update_unit_positions(lua) {
                 error!("could not sync final CA unit position {e}");
             }
             self.ephemeral.ca_controlled.remove(&uid);

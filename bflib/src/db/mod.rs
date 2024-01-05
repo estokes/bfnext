@@ -1327,9 +1327,9 @@ impl Db {
         }
         let uid = match self.ephemeral.uid_by_object_id.remove(&id) {
             None => {
-                error!("no unit for object id {:?}", id);
-                return Ok(())
-            },
+                error!("no uid for object id {:?}", id);
+                return Ok(());
+            }
             Some(uid) => {
                 self.ephemeral.object_id_by_uid.remove(&uid);
                 uid
@@ -1340,23 +1340,26 @@ impl Db {
             .remove(&uid);
         self.ephemeral.units_potentially_on_walkabout.remove(&uid);
         self.ephemeral.ca_controlled.remove(&uid);
-        if let Some(unit) = self.persisted.units.get_mut_cow(&uid) {
-            unit.dead = true;
-            let gid = unit.group;
-            if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
-                self.update_objective_status(&oid, now)?
-            }
-            if self.persisted.deployed.contains(&gid)
-                || self.persisted.troops.contains(&gid)
-                || self.persisted.crates.contains(&gid)
-            {
-                let group = group_mut!(self, gid)?;
-                let mut dead = true;
-                for uid in &group.units {
-                    dead &= unit!(self, uid)?.dead
+        match self.persisted.units.get_mut_cow(&uid) {
+            None => error!("unit_dead: missing unit {:?}", uid),
+            Some(unit) => {
+                unit.dead = true;
+                let gid = unit.group;
+                if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
+                    self.update_objective_status(&oid, now)?
                 }
-                if dead {
-                    self.delete_group(&gid)?
+                if self.persisted.deployed.contains(&gid)
+                    || self.persisted.troops.contains(&gid)
+                    || self.persisted.crates.contains(&gid)
+                {
+                    let group = group_mut!(self, gid)?;
+                    let mut dead = true;
+                    for uid in &group.units {
+                        dead &= unit!(self, uid)?.dead
+                    }
+                    if dead {
+                        self.delete_group(&gid)?
+                    }
                 }
             }
         }

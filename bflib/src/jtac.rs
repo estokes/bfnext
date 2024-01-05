@@ -328,16 +328,16 @@ impl Jtacs {
         })
     }
 
-    pub fn update_target_positions(&mut self, lua: MizLua, db: &Db) -> Result<()> {
+    pub fn update_target_positions(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {
+        db.update_unit_positions(lua, Some(self.jtac_targets()))?;
         for jtx in self.0.values_mut() {
             for jt in jtx.values_mut() {
                 if let Some((spotid, _, uid)) = &jt.target {
-                    let unit = db.instance_unit(lua, uid)?;
-                    let pos = unit.get_point()?;
-                    if jt.contacts[uid].pos != pos.0 {
-                        jt.contacts[uid].pos = pos.0;
+                    let unit = db.unit(uid)?;
+                    if jt.contacts[uid].pos != unit.position.p.0 {
+                        jt.contacts[uid].pos = unit.position.p.0;
                         let spot = Spot::get_instance(lua, spotid)?;
-                        spot.set_point(pos)?;
+                        spot.set_point(unit.position.p)?;
                     }
                 }
             }
@@ -349,30 +349,30 @@ impl Jtacs {
         let land = Land::singleton(lua)?;
         let mut saw_jtacs: SmallVec<[GroupId; 32]> = smallvec![];
         let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
-        for (unit, _) in db.instanced_units() {
-            saw_units.insert(unit.id);
-            for (mut pos, jtid, group, ifo) in db.jtacs() {
-                pos.y += 5.;
-                if !saw_jtacs.contains(&group.id) {
-                    saw_jtacs.push(group.id)
-                }
-                let range = (ifo.range as f64).powi(2);
-                let jtac = self
-                    .0
-                    .entry(group.side)
-                    .or_default()
-                    .entry(group.id)
-                    .or_insert_with(|| {
-                        if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id) {
-                            error!("could not add menu for jtac {} {e}", group.id)
-                        }
-                        Jtac::new(
-                            group.id,
-                            group.side,
-                            jtid.clone(),
-                            db.cfg().jtac_priority.clone(),
-                        )
-                    });
+        for (mut pos, jtid, group, ifo) in db.jtacs() {
+            if !saw_jtacs.contains(&group.id) {
+                saw_jtacs.push(group.id)
+            }
+            let range = (ifo.range as f64).powi(2);
+            pos.y += 5.;
+            let jtac = self
+                .0
+                .entry(group.side)
+                .or_default()
+                .entry(group.id)
+                .or_insert_with(|| {
+                    if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id) {
+                        error!("could not add menu for jtac {} {e}", group.id)
+                    }
+                    Jtac::new(
+                        group.id,
+                        group.side,
+                        jtid.clone(),
+                        db.cfg().jtac_priority.clone(),
+                    )
+                });
+            for (unit, _) in db.instanced_units() {
+                saw_units.insert(unit.id);
                 if unit.side == jtac.side {
                     continue;
                 }
@@ -384,7 +384,7 @@ impl Jtacs {
                     if unit.moved == ct.last_move {
                         continue;
                     }
-                }
+                };
                 let dist = na::distance_squared(&pos.into(), &unit.position.p.0.into());
                 if dist <= range && land.is_visible(LuaVec3(pos), unit.position.p)? {
                     jtac.add_contact(unit)

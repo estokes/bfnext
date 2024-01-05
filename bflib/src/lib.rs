@@ -63,6 +63,13 @@ struct Perf {
     unit_culling: Histogram<u64>,
     remark_objectives: Histogram<u64>,
     update_jtac_contacts: Histogram<u64>,
+    do_repairs: Histogram<u64>,
+    spawn_queue: Histogram<u64>,
+    advise_captured: Histogram<u64>,
+    advise_capturable: Histogram<u64>,
+    jtac_target_positions: Histogram<u64>,
+    process_messages: Histogram<u64>,
+    snapshot: Histogram<u64>,
 }
 
 impl Default for Perf {
@@ -79,6 +86,13 @@ impl Default for Perf {
             unit_culling: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             remark_objectives: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             update_jtac_contacts: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            do_repairs: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            spawn_queue: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            advise_captured: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            advise_capturable: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            jtac_target_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            process_messages: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            snapshot: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
         }
     }
 }
@@ -120,7 +134,14 @@ impl Perf {
         log_histogram(&self.ewr_reports, "ewr reports:       ");
         log_histogram(&self.unit_culling, "unit culling:      ");
         log_histogram(&self.remark_objectives, "remark objectives: ");
-        log_histogram(&self.update_jtac_contacts, "update jtacs:      ")
+        log_histogram(&self.update_jtac_contacts, "update jtacs:      ");
+        log_histogram(&self.do_repairs, "do repairs:        ");
+        log_histogram(&self.spawn_queue, "spawn queue:       ");
+        log_histogram(&self.advise_captured, "advise captured:   ");
+        log_histogram(&self.advise_capturable, "advise capturable: ");
+        log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
+        log_histogram(&self.process_messages, "process messages:  ");
+        log_histogram(&self.snapshot, "snapshot:          ")
     }
 }
 
@@ -626,7 +647,10 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
     if ts - ctx.last_slow_timed_events > freq {
         ctx.last_slow_timed_events = ts;
         let start_ts = Utc::now();
-        if let Err(e) = ctx.db.update_unit_positions(lua) {
+        if let Err(e) = ctx
+            .db
+            .update_unit_positions::<std::iter::Once<_>>(lua, None)
+        {
             error!("could not update unit positions {e}")
         }
         snap!(ctx, unit_positions, start_ts);
@@ -686,6 +710,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, ts) {
         error!("error doing repairs {:?}", e)
     }
+    snap!(ctx, do_repairs, ts);
     return_lives(lua, ctx, ts);
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
@@ -697,23 +722,35 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = run_slow_timed_events(lua, ctx, ts) {
         error!("error running slow timed events {e}")
     }
+    let now = Utc::now();
     let spctx = SpawnCtx::new(lua)?;
     if let Err(e) = ctx.db.process_spawn_queue(ts, &ctx.idx, &spctx) {
         error!("error processing spawn queue {e}")
     }
+    snap!(ctx, spawn_queue, now);
+    let now = Utc::now();
     if let Err(e) = advise_captured(ctx, ts) {
         error!("error advise captured {e}")
     }
+    snap!(ctx, advise_captured, now);
+    let now = Utc::now();
     if let Err(e) = advise_captureable(ctx) {
         error!("error advise capturable {e}")
     }
-    if let Err(e) = ctx.jtac.update_target_positions(lua, &ctx.db) {
+    snap!(ctx, advise_capturable, now);
+    let now = Utc::now();
+    if let Err(e) = ctx.jtac.update_target_positions(lua, &mut ctx.db) {
         error!("error updating jtac target positions {e}")
     }
+    snap!(ctx, jtac_target_positions, now);
+    let now = Utc::now();
     ctx.db.msgs().process(&net, &act);
+    snap!(ctx, process_messages, now);
+    let now = Utc::now();
     if let Some(snap) = ctx.db.maybe_snapshot() {
         ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
     }
+    snap!(ctx, snapshot, now);
     snap!(ctx, timed_events, ts);
     Ok(())
 }

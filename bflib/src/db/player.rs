@@ -288,7 +288,7 @@ impl Db {
     pub fn player_entered_unit(&mut self, unit: &Unit) -> Result<()> {
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
-            self.ephemeral.ca_controlled.insert(*uid);
+            self.ephemeral.units_able_to_move.insert(*uid);
         }
         Ok(())
     }
@@ -297,10 +297,10 @@ impl Db {
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             let uid = *uid;
-            if let Err(e) = self.update_unit_positions(lua) {
+            if let Err(e) = self.update_unit_positions(lua, Some(std::iter::once(uid))) {
                 error!("could not sync final CA unit position {e}");
             }
-            self.ephemeral.ca_controlled.remove(&uid);
+            self.ephemeral.units_able_to_move.remove(&uid);
         }
         Ok(())
     }

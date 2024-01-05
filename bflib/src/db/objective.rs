@@ -332,7 +332,7 @@ impl Db {
                     DeployKind::Objective => {
                         if obj.groups[&obj.owner].contains(&unit.group) {
                             let dist = na::distance_squared(&unit.pos.into(), &obj.pos.into());
-                            if dist > radius2 || self.ephemeral.ca_controlled.contains(uid) {
+                            if dist > radius2 || self.ephemeral.units_able_to_move.contains(uid) {
                                 // part of this base is on walkabout, stay spawned
                                 spawn = true;
                                 is_on_walkabout.insert(*uid);

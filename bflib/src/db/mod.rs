@@ -432,7 +432,7 @@ struct Ephemeral {
     object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
     uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
-    ca_controlled: FxHashSet<UnitId>,
+    units_able_to_move: FxHashSet<UnitId>,
     units_potentially_close_to_enemies: FxHashSet<UnitId>,
     units_potentially_on_walkabout: FxHashSet<UnitId>,
     spawnq: VecDeque<GroupId>,
@@ -768,7 +768,7 @@ impl Db {
                     self.ephemeral.slot_by_object_id.remove(&id);
                     if let Some(uid) = self.ephemeral.uid_by_object_id.remove(&id) {
                         self.ephemeral.object_id_by_uid.remove(&uid);
-                        self.ephemeral.ca_controlled.remove(&uid);
+                        self.ephemeral.units_able_to_move.remove(&uid);
                     }
                 }
             }
@@ -791,10 +791,10 @@ impl Db {
     }
 
     pub fn instanced_units(&self) -> impl Iterator<Item = (&SpawnedUnit, &DcsOid<ClassUnit>)> {
-        self.ephemeral
-            .object_id_by_uid
-            .iter()
-            .filter_map(|(uid, id)| self.persisted.units.get(uid).map(|sp| (sp, id)))
+        self.persisted
+            .units
+            .into_iter()
+            .filter_map(|(uid, sp)| self.ephemeral.object_id_by_uid.get(uid).map(|id| (sp, id)))
     }
 
     pub fn ewrs(&self) -> impl Iterator<Item = (Vector3, Side, &DeployableEwr)> {
@@ -1355,7 +1355,7 @@ impl Db {
             .units_potentially_close_to_enemies
             .remove(&uid);
         self.ephemeral.units_potentially_on_walkabout.remove(&uid);
-        self.ephemeral.ca_controlled.remove(&uid);
+        self.ephemeral.units_able_to_move.remove(&uid);
         match self.persisted.units.get_mut_cow(&uid) {
             None => error!("unit_dead: missing unit {:?}", uid),
             Some(unit) => {
@@ -1383,10 +1383,20 @@ impl Db {
         Ok(())
     }
 
-    pub fn update_unit_positions(&mut self, lua: MizLua) -> Result<()> {
+    pub fn update_unit_positions<'a, I: Iterator<Item = UnitId> + 'a>(
+        &'a mut self,
+        lua: MizLua,
+        units: Option<I>,
+    ) -> Result<()> {
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
-        for uid in &self.ephemeral.ca_controlled {
+        let units = units
+            .map(|i| Box::new(i) as Box<dyn Iterator<Item = UnitId>>)
+            .unwrap_or_else(|| {
+                Box::new(self.ephemeral.units_able_to_move.iter().map(|i| *i))
+                    as Box<dyn Iterator<Item = UnitId>>
+            });
+        for uid in units {
             let id = maybe!(self.ephemeral.object_id_by_uid, uid, "object id")?;
             let instance = match unit.take() {
                 Some(unit) => unit.change_instance(id)?,
@@ -1403,8 +1413,8 @@ impl Db {
                 spunit.heading = heading;
                 self.ephemeral
                     .units_potentially_close_to_enemies
-                    .insert(*uid);
-                self.ephemeral.units_potentially_on_walkabout.insert(*uid);
+                    .insert(uid);
+                self.ephemeral.units_potentially_on_walkabout.insert(uid);
             }
             unit = Some(instance);
         }

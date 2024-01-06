@@ -52,6 +52,7 @@ struct PlayerInfo {
 
 #[derive(Debug)]
 struct Perf {
+    last_log: DateTime<Utc>,
     timed_events: Histogram<u64>,
     slow_timed: Histogram<u64>,
     dcs_events: Histogram<u64>,
@@ -75,6 +76,7 @@ struct Perf {
 impl Default for Perf {
     fn default() -> Self {
         Perf {
+            last_log: Utc::now(),
             timed_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             slow_timed: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             dcs_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
@@ -112,7 +114,7 @@ macro_rules! snap {
 }
 
 impl Perf {
-    fn log(&self) {
+    fn log(&mut self, now: DateTime<Utc>) {
         fn log_histogram(h: &Histogram<u64>, name: &str) {
             let n = h.len();
             let twenty_five = h.value_at_quantile(0.25);
@@ -124,24 +126,27 @@ impl Perf {
                 n, twenty_five, fifty, ninety, ninety_nine
             );
         }
-        log_histogram(&self.timed_events, "timed events:      ");
-        log_histogram(&self.slow_timed, "slow timed events: ");
-        log_histogram(&self.dcs_events, "dcs events:        ");
-        log_histogram(&self.dcs_hooks, "dcs hooks:         ");
-        log_histogram(&self.unit_positions, "unit positions:    ");
-        log_histogram(&self.player_positions, "player positions:  ");
-        log_histogram(&self.ewr_tracks, "ewr tracks:        ");
-        log_histogram(&self.ewr_reports, "ewr reports:       ");
-        log_histogram(&self.unit_culling, "unit culling:      ");
-        log_histogram(&self.remark_objectives, "remark objectives: ");
-        log_histogram(&self.update_jtac_contacts, "update jtacs:      ");
-        log_histogram(&self.do_repairs, "do repairs:        ");
-        log_histogram(&self.spawn_queue, "spawn queue:       ");
-        log_histogram(&self.advise_captured, "advise captured:   ");
-        log_histogram(&self.advise_capturable, "advise capturable: ");
-        log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
-        log_histogram(&self.process_messages, "process messages:  ");
-        log_histogram(&self.snapshot, "snapshot:          ")
+        if now - self.last_log > Duration::seconds(60) {
+            self.last_log = now;
+            log_histogram(&self.timed_events, "timed events:      ");
+            log_histogram(&self.slow_timed, "slow timed events: ");
+            log_histogram(&self.dcs_events, "dcs events:        ");
+            log_histogram(&self.dcs_hooks, "dcs hooks:         ");
+            log_histogram(&self.unit_positions, "unit positions:    ");
+            log_histogram(&self.player_positions, "player positions:  ");
+            log_histogram(&self.ewr_tracks, "ewr tracks:        ");
+            log_histogram(&self.ewr_reports, "ewr reports:       ");
+            log_histogram(&self.unit_culling, "unit culling:      ");
+            log_histogram(&self.remark_objectives, "remark objectives: ");
+            log_histogram(&self.update_jtac_contacts, "update jtacs:      ");
+            log_histogram(&self.do_repairs, "do repairs:        ");
+            log_histogram(&self.spawn_queue, "spawn queue:       ");
+            log_histogram(&self.advise_captured, "advise captured:   ");
+            log_histogram(&self.advise_capturable, "advise capturable: ");
+            log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
+            log_histogram(&self.process_messages, "process messages:  ");
+            log_histogram(&self.snapshot, "snapshot:          ")
+        }
     }
 }
 
@@ -699,7 +704,7 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
         }
         snap!(ctx, update_jtac_contacts, ts);
         snap!(ctx, slow_timed, start_ts);
-        ctx.perf.log();
+        ctx.perf.log(start_ts);
     }
     Ok(())
 }

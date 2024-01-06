@@ -17,7 +17,7 @@ use dcso3::{
     cvt_err,
     env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
     group::GroupCategory,
-    land::Land,
+    land::{Land, SurfaceType},
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
     rotate2d,
@@ -1209,11 +1209,30 @@ impl Db {
                 }
             }
         }
+        fn check_water(
+            land: &Land,
+            positions: &VecDeque<Vector2>,
+            positions_by_typ: &FxHashMap<String, VecDeque<Vector2>>,
+        ) -> Result<()> {
+            for pos in positions
+                .iter()
+                .chain(positions_by_typ.values().flat_map(|v| v.iter()))
+            {
+                match land.get_surface_type(LuaVec2(*pos))? {
+                    SurfaceType::Land | SurfaceType::Road | SurfaceType::Runway => (),
+                    SurfaceType::ShallowWater | SurfaceType::Water => {
+                        bail!("you can't spawn units in water")
+                    }
+                }
+            }
+            Ok(())
+        }
         let land = Land::singleton(spctx.lua())?;
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let (mut positions, mut positions_by_typ, heading) =
             compute_unit_positions(&spctx, idx, location, &template.group)?;
+        check_water(&land, &positions, &positions_by_typ)?;
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}-{}", template_name, gid));
@@ -1386,7 +1405,7 @@ impl Db {
                     if dead {
                         self.delete_group(&gid)?
                     }
-                } 
+                }
             }
         }
         Ok(())

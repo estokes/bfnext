@@ -723,9 +723,6 @@ impl Db {
                                 let pos = self.slot_instance_pos(lua, slot)?;
                                 let spawnloc =
                                     compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
-                                for cr in have.values().flat_map(|c| c.iter()) {
-                                    self.delete_group(&cr.group)?
-                                }
                                 let origin = DeployKind::Deployed {
                                     player: st.ucid,
                                     spec: spec.clone(),
@@ -739,6 +736,9 @@ impl Db {
                                     origin,
                                     None,
                                 )?;
+                                for cr in have.values().flat_map(|c| c.iter()) {
+                                    self.delete_group(&cr.group)?
+                                }
                                 return Ok(Unpakistan::Unpacked(dep, gid));
                             }
                         },
@@ -819,7 +819,17 @@ impl Db {
             spec: crate_cfg.clone(),
         };
         let spctx = SpawnCtx::new(lua)?;
-        self.add_and_queue_group(&spctx, idx, st.side, spawnpos, &template, dk, None)?;
+        if let Err(e) =
+            self.add_and_queue_group(&spctx, idx, st.side, spawnpos, &template, dk, None)
+        {
+            self.ephemeral
+                .cargo
+                .get_mut(slot)
+                .unwrap()
+                .crates
+                .push((oid, crate_cfg));
+            return Err(e);
+        }
         Ok(crate_cfg)
     }
 
@@ -961,7 +971,17 @@ impl Db {
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
         }
-        self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk, None)?;
+        if let Err(e) =
+            self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk, None)
+        {
+            self.ephemeral
+                .cargo
+                .get_mut(slot)
+                .unwrap()
+                .troops
+                .push(troop_cfg);
+            return Err(e);
+        }
         Ok(troop_cfg)
     }
 

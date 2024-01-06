@@ -296,6 +296,58 @@ impl Db {
         let mut not_threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
         let mut is_on_walkabout: FxHashSet<UnitId> = FxHashSet::default();
         let mut is_close_to_enemies: FxHashSet<UnitId> = FxHashSet::default();
+        let mut check_for_walkabout = |obj: &Objective, radius2: f64| -> Result<()> {
+            let groups = maybe!(obj.groups, obj.owner, "owner")?;
+            for uid in &self.ephemeral.units_potentially_on_walkabout {
+                let unit = unit!(self, uid)?;
+                match group!(self, unit.group)?.origin {
+                    DeployKind::Crate { .. }
+                    | DeployKind::Deployed { .. }
+                    | DeployKind::Troop { .. } => (),
+                    DeployKind::Objective => {
+                        if groups.contains(&unit.group) {
+                            let dist = na::distance_squared(&unit.pos.into(), &obj.pos.into());
+                            if dist > radius2 || self.ephemeral.units_able_to_move.contains(uid) {
+                                is_on_walkabout.insert(*uid);
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        };
+        let mut check_close_units = |obj: &Objective, spawn: &mut bool, threat: &mut bool| {
+            for uid in &self.ephemeral.units_potentially_close_to_enemies {
+                let unit = unit!(self, uid)?;
+                let group = group!(self, unit.group)?;
+                if obj.owner != group.side {
+                    let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
+                    if dist <= ground_cull_distance {
+                        *spawn = true;
+                        *threat = true;
+                        is_close_to_enemies.insert(*uid);
+                    }
+                }
+            }
+            Ok::<_, anyhow::Error>(())
+        };
+        let check_close_players =
+            |obj: &Objective, pos3: LuaVec3, spawn: &mut bool, threat: &mut bool| {
+                for (side, pos, typ) in &players {
+                    if obj.owner != *side {
+                        let threat_dist = (cfg.threatened_distance[typ] as f64).powi(2);
+                        let ppos = Vector2::new(pos.x, pos.z);
+                        let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
+                        if dist <= cull_distance {
+                            *spawn = true;
+                        }
+                        if dist <= threat_dist && land.is_visible(pos3, *pos)? {
+                            *threat = true;
+                        }
+                    }
+                }
+                Ok::<_, anyhow::Error>(())
+            };
         for (oid, obj) in &self.persisted.objectives {
             let pos3 = {
                 let alt = land.get_height(LuaVec2(obj.pos))?;
@@ -304,60 +356,14 @@ impl Db {
             let radius2 = obj.radius.powi(2);
             let mut spawn = false;
             let mut is_threatened = false;
-            for (side, pos, typ) in &players {
-                if obj.owner != *side {
-                    let threat_dist = (cfg.threatened_distance[typ] as f64).powi(2);
-                    let ppos = Vector2::new(pos.x, pos.z);
-                    let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
-                    if dist <= cull_distance {
-                        spawn = true;
-                    }
-                    if dist <= threat_dist && land.is_visible(pos3, *pos)? {
-                        is_threatened = true;
-                    }
-                }
+            if let Err(e) = check_close_players(obj, pos3, &mut spawn, &mut is_threatened) {
+                error!("failed to check for close players {} {e}", obj.id)
             }
-            for uid in &self.ephemeral.units_potentially_on_walkabout {
-                let unit = match unit!(self, uid) {
-                    Ok(unit) => unit,
-                    Err(e) => {
-                        error!("missing unit in potentially on walkabout {e}");
-                        continue
-                    }
-                };
-                match group!(self, unit.group)?.origin {
-                    DeployKind::Crate { .. }
-                    | DeployKind::Deployed { .. }
-                    | DeployKind::Troop { .. } => (),
-                    DeployKind::Objective => {
-                        if obj.groups[&obj.owner].contains(&unit.group) {
-                            let dist = na::distance_squared(&unit.pos.into(), &obj.pos.into());
-                            if dist > radius2 || self.ephemeral.units_able_to_move.contains(uid) {
-                                // part of this base is on walkabout, stay spawned
-                                spawn = true;
-                                is_on_walkabout.insert(*uid);
-                            }
-                        }
-                    }
-                }
+            if let Err(e) = check_for_walkabout(obj, radius2) {
+                error!("failed to check walkabout for {} {e}", obj.id)
             }
-            for uid in &self.ephemeral.units_potentially_close_to_enemies {
-                let unit = match unit!(self, uid) {
-                    Ok(unit) => unit,
-                    Err(e) => {
-                        error!("missing unit in potentially close to enemies {e}");
-                        continue
-                    }
-                };
-                let group = group!(self, unit.group)?;
-                if obj.owner != group.side {
-                    let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
-                    if dist <= ground_cull_distance {
-                        spawn = true;
-                        is_threatened = true;
-                        is_close_to_enemies.insert(*uid);
-                    }
-                }
+            if let Err(e) = check_close_units(obj, &mut spawn, &mut is_threatened) {
+                error!("failed to check close units {} {e}", obj.id)
             }
             if is_threatened {
                 threatened.push(*oid);
@@ -401,7 +407,13 @@ impl Db {
             let obj = objective_mut!(self, oid)?;
             obj.spawned = true;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
-                if !group!(self, gid)?.class.is_logi() {
+                let group = group!(self, gid)?;
+                let logi = group.class.is_logi();
+                let walkabout = group
+                    .units
+                    .into_iter()
+                    .any(|u| self.ephemeral.units_potentially_on_walkabout.contains(u));
+                if !logi && !walkabout {
                     self.ephemeral.spawnq.push_back(*gid);
                 }
             }
@@ -411,7 +423,12 @@ impl Db {
             obj.spawned = false;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
-                if !group.class.is_logi() {
+                let logi = group.class.is_logi();
+                let walkabout = group
+                    .units
+                    .into_iter()
+                    .any(|u| self.ephemeral.units_potentially_on_walkabout.contains(u));
+                if !logi && !walkabout {
                     match group.kind {
                         Some(_) => self
                             .ephemeral

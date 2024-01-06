@@ -11,7 +11,7 @@ DEP means deployable (player dropped units  via crates)
 
 Template names: (Start with B or R)
 LOGI
-Blue | 1 Outpost 4 HEMTT 4 M939 Heavy 2 m249 1 SPAA HL with ZU-23 1 Bofors 40mm
+Blue | 1 Outpost 4 HEMTT 4 M939 Heavy 2 m249 1 Vulcan 1 Bofors 40mm
 Red  | 1 Outpost 4 ATZ-10 4 URAL 375, 2 AK74v3, 1 S-60, 1 ZU-23 emplacement
 Neut | 6 Ural 375
 AAA
@@ -43,7 +43,7 @@ STINGERTROOP
 Blue | 2 m249 2 stingers 2 stinger c2
 Red  | 2 AK74v3 2 Igla-S, 2 Igla C2
 MORTARTROOP
-Blue | 3 m249 5 2b11 120mm
+Blue | 3 m249   5 2b11 120mm
 Red  | 3 AK74v3 5 2B11 120mm
 
 Deployable Templates via helo/etc
@@ -85,16 +85,16 @@ LEOPARD
 Blue | Armor > Leopard-2a6m
 T72
 Red  | Armor > T-72B
-FARP
-Blue | Bofors 40mm M978 HEMTT M939 Heavy 2 M249 inf, Invisible Farp named DEPBFARPPAD, FARP Fuel Depot named DEPBFARPFUEL, FARP Ammo Depot named DEPBFARPAMMO, FARP Tent named DEPBFARPTENT
-Red | S-60, ATZ-10, Ural 375, 2 AK74v3, Invisible Farp named DEPRFARPPAD, FARP Fuel Depot named DEPRFARPFUEL, Farp Ammo Storage named DEPRFARPAMMO, Farp Tent named DEPRFARPTENT
-HAWK
-Blue | Standard HAWK battery
 FPS117
 Blue | EWR AN/FPS 117 Radar, EWR AN/FPS-117 ECS
 1L13
-Red  | EWR 1L13
+Red  | EWR 55G6
+HAWK
+Blue | Standard HAWK battery
 SA11
 Red  | SA-11 Battery
 SA6
 Red  | SA-6 Battery
+FARP
+Blue | Bofors 40mm M978 HEMTT M939 Heavy 2 M249 inf, Invisible Farp named DEPBFARPPAD, FARP Fuel Depot named DEPBFARPFUEL, FARP Ammo Depot named DEPBFARPAMMO, FARP Tent named DEPBFARPTENT
+Red | S-60, ATZ-10, Ural 375, 2 AK74v3, Invisible Farp named DEPRFARPPAD, FARP Fuel Depot named DEPRFARPFUEL, Farp Ammo Storage named DEPRFARPAMMO, Farp Tent named DEPRFARPTENT

@@ -1,7 +1,7 @@
 use super::{as_tbl, coalition::Side, controller::Controller, cvt_err, unit::Unit, String};
 use crate::{
     env::miz::{GroupId, GroupKind},
-    object::{DcsObject, DcsOid},
+    object::{DcsObject, DcsOid, Object},
     simple_enum, wrapped_table, LuaEnv, MizLua, Sequence,
 };
 use anyhow::{Result, bail};
@@ -103,6 +103,10 @@ impl<'lua> Group<'lua> {
 
     pub fn enable_emission(&self, on: bool) -> Result<()> {
         Ok(self.t.call_method("enableEmission", on)?)
+    }
+
+    pub fn as_object(&self) -> Result<Object<'lua>> {
+        Ok(Object::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 }
 

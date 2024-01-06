@@ -1,9 +1,9 @@
 use super::{as_tbl, coalition::Side, object::Object, warehouse::Warehouse, String, LuaVec3};
-use crate::{wrapped_table, Sequence};
-use anyhow::Result;
+use crate::{wrapped_table, Sequence, object::{DcsObject, DcsOid}, MizLua, LuaEnv};
+use anyhow::{Result, bail};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use std::ops::Deref;
+use std::{ops::Deref, marker::PhantomData};
 
 wrapped_table!(Runway, None);
 
@@ -14,6 +14,14 @@ impl<'lua> Airbase<'lua> {
         let globals = self.lua.globals();
         let class = as_tbl("Airbase", Some("Airbase"), globals.raw_get("Airbase")?)?;
         Ok(class.call_method("getByName", name)?)
+    }
+
+    pub fn is_exist(&self) -> Result<bool> {
+        Ok(self.t.call_method("isExist", ())?)
+    }
+
+    pub fn destroy(&self) -> Result<()> {
+        Ok(self.t.call_method("destroy", ())?)
     }
 
     pub fn get_callsign(&self) -> Result<String> {
@@ -62,5 +70,57 @@ impl<'lua> Airbase<'lua> {
 
     pub fn get_warehouse(&self) -> Result<Warehouse<'lua>> {
         Ok(self.t.call_method("getWarehouse", ())?)
+    }
+
+    pub fn as_object(&self) -> Result<Object<'lua>> {
+        Ok(Object::from_lua(Value::Table(self.t.clone()), self.lua)?)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassAirbase;
+
+impl<'lua> DcsObject<'lua> for Airbase<'lua> {
+    type Class = ClassAirbase;
+
+    fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self> {
+        let t = lua.inner().create_table()?;
+        t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
+        t.raw_set("id_", id.id)?;
+        let t = Airbase {
+            t,
+            lua: lua.inner(),
+        };
+        if !t.is_exist()? {
+            bail!("{} is an invalid airbase", id.id)
+        }
+        Ok(t)
+    }
+
+    fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(lua, "Airbase")?;
+        let id = DcsOid {
+            id: id.id,
+            class: id.class.clone(),
+            t: PhantomData,
+        };
+        Self::get_instance(lua, &id)
+    }
+
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
+        self.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid airbase", id.id)
+        }
+        Ok(self)
+    }
+
+    fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(MizLua(self.lua), "Airbase")?;
+        self.t.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid airbase", id.id)
+        }
+        Ok(self)
     }
 }

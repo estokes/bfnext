@@ -122,11 +122,11 @@ impl<'lua> World<'lua> {
         Ok(())
     }
 
-    pub fn get_player(&self) -> Result<Sequence<Unit>> {
+    pub fn get_player(&self) -> Result<Sequence<Unit<'lua>>> {
         Ok(self.t.call_function("getPlayer", ())?)
     }
 
-    pub fn get_airbases(&self) -> Result<Sequence<Airbase>> {
+    pub fn get_airbases(&self) -> Result<Sequence<Airbase<'lua>>> {
         Ok(self.t.call_function("getAirbases", ())?)
     }
 

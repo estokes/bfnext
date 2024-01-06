@@ -41,7 +41,7 @@ use mlua::prelude::*;
 use msgq::MsgTyp;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
@@ -50,9 +50,8 @@ struct PlayerInfo {
     ucid: Ucid,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Perf {
-    last_log: DateTime<Utc>,
     timed_events: Histogram<u64>,
     slow_timed: Histogram<u64>,
     dcs_events: Histogram<u64>,
@@ -73,10 +72,11 @@ struct Perf {
     snapshot: Histogram<u64>,
 }
 
+static mut PERF: Option<Arc<Perf>> = None;
+
 impl Default for Perf {
     fn default() -> Self {
         Perf {
-            last_log: Utc::now(),
             timed_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             slow_timed: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             dcs_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
@@ -107,14 +107,18 @@ fn record_perf(h: &mut Histogram<u64>, start_ts: DateTime<Utc>) {
     }
 }
 
-macro_rules! snap {
-    ($ctx:expr, $histogram:ident, $start:expr) => {
-        record_perf(&mut $ctx.perf.$histogram, $start)
-    };
-}
-
 impl Perf {
-    fn log(&mut self, now: DateTime<Utc>) {
+    unsafe fn get_mut() -> &'static mut Arc<Perf> {
+        match PERF.as_mut() {
+            Some(perf) => perf,
+            None => {
+                PERF = Some(Arc::new(Perf::default()));
+                PERF.as_mut().unwrap()
+            }
+        }
+    }
+
+    fn log(&self) {
         fn log_histogram(h: &Histogram<u64>, name: &str) {
             let n = h.len();
             let twenty_five = h.value_at_quantile(0.25);
@@ -126,33 +130,30 @@ impl Perf {
                 n, twenty_five, fifty, ninety, ninety_nine
             );
         }
-        if now - self.last_log > Duration::seconds(60) {
-            self.last_log = now;
-            log_histogram(&self.timed_events, "timed events:      ");
-            log_histogram(&self.slow_timed, "slow timed events: ");
-            log_histogram(&self.dcs_events, "dcs events:        ");
-            log_histogram(&self.dcs_hooks, "dcs hooks:         ");
-            log_histogram(&self.unit_positions, "unit positions:    ");
-            log_histogram(&self.player_positions, "player positions:  ");
-            log_histogram(&self.ewr_tracks, "ewr tracks:        ");
-            log_histogram(&self.ewr_reports, "ewr reports:       ");
-            log_histogram(&self.unit_culling, "unit culling:      ");
-            log_histogram(&self.remark_objectives, "remark objectives: ");
-            log_histogram(&self.update_jtac_contacts, "update jtacs:      ");
-            log_histogram(&self.do_repairs, "do repairs:        ");
-            log_histogram(&self.spawn_queue, "spawn queue:       ");
-            log_histogram(&self.advise_captured, "advise captured:   ");
-            log_histogram(&self.advise_capturable, "advise capturable: ");
-            log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
-            log_histogram(&self.process_messages, "process messages:  ");
-            log_histogram(&self.snapshot, "snapshot:          ")
-        }
+        log_histogram(&self.timed_events, "timed events:      ");
+        log_histogram(&self.slow_timed, "slow timed events: ");
+        log_histogram(&self.dcs_events, "dcs events:        ");
+        log_histogram(&self.dcs_hooks, "dcs hooks:         ");
+        log_histogram(&self.unit_positions, "unit positions:    ");
+        log_histogram(&self.player_positions, "player positions:  ");
+        log_histogram(&self.ewr_tracks, "ewr tracks:        ");
+        log_histogram(&self.ewr_reports, "ewr reports:       ");
+        log_histogram(&self.unit_culling, "unit culling:      ");
+        log_histogram(&self.remark_objectives, "remark objectives: ");
+        log_histogram(&self.update_jtac_contacts, "update jtacs:      ");
+        log_histogram(&self.do_repairs, "do repairs:        ");
+        log_histogram(&self.spawn_queue, "spawn queue:       ");
+        log_histogram(&self.advise_captured, "advise captured:   ");
+        log_histogram(&self.advise_capturable, "advise capturable: ");
+        log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
+        log_histogram(&self.process_messages, "process messages:  ");
+        log_histogram(&self.snapshot, "snapshot:          ")
     }
 }
 
 #[derive(Debug, Default)]
 struct Context {
-    perf: Perf,
+    last_perf_log: DateTime<Utc>,
     loaded: bool,
     idx: env::miz::MizIndex,
     db: Db,
@@ -211,6 +212,13 @@ impl Context {
         let spctx = SpawnCtx::new(lua)?;
         self.db.respawn_after_load(&self.idx, &spctx)
     }
+
+    fn log_perf(&mut self, now: DateTime<Utc>) {
+        if now - self.last_perf_log > Duration::seconds(60) {
+            self.last_perf_log = now;
+            self.do_bg_task(bg::Task::LogPerf(Arc::clone(unsafe { Perf::get_mut() })))
+        }
+    }
 }
 
 fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
@@ -249,7 +257,7 @@ fn on_player_try_connect(
     let ctx = unsafe { Context::get_mut() };
     ctx.id_by_ucid.insert(ucid.clone(), id);
     ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
-    snap!(ctx, dcs_hooks, ts);
+    record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
     Ok(true)
 }
 
@@ -341,10 +349,16 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         if let Err(e) = lives_command(id) {
             error!("lives command failed for player {:?} {:?}", id, e);
         }
-        snap!(unsafe { Context::get_mut() }, dcs_hooks, start_ts);
+        record_perf(
+            &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+            start_ts,
+        );
         Ok("".into())
     } else {
-        snap!(unsafe { Context::get_mut() }, dcs_hooks, start_ts);
+        record_perf(
+            &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+            start_ts,
+        );
         Ok(msg)
     };
     match r {
@@ -410,7 +424,10 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
         }
         Ok(true) => (),
     }
-    snap!(ctx, dcs_hooks, start_ts);
+    record_perf(
+        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+        start_ts,
+    );
     Ok(())
 }
 
@@ -510,7 +527,10 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         },
         _ => (),
     }
-    snap!(ctx, dcs_events, start_ts);
+    record_perf(
+        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_events,
+        start_ts,
+    );
     Ok(())
 }
 
@@ -647,7 +667,12 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
     Ok(())
 }
 
-fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
+fn run_slow_timed_events(
+    lua: MizLua,
+    ctx: &mut Context,
+    perf: &mut Perf,
+    ts: DateTime<Utc>,
+) -> Result<()> {
     let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
@@ -658,22 +683,22 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
         {
             error!("could not update unit positions {e}")
         }
-        snap!(ctx, unit_positions, start_ts);
+        record_perf(&mut perf.unit_positions, start_ts);
         let ts = Utc::now();
         if let Err(e) = ctx.db.update_player_positions(lua) {
             error!("could not update player positions {e}")
         }
-        snap!(ctx, player_positions, ts);
+        record_perf(&mut perf.player_positions, ts);
         let ts = Utc::now();
         if let Err(e) = ctx.ewr.update_tracks(lua, &ctx.db, ts) {
             error!("could not update ewr tracks {e}")
         }
-        snap!(ctx, ewr_tracks, ts);
+        record_perf(&mut perf.ewr_tracks, ts);
         let ts = Utc::now();
         if let Err(e) = generate_ewr_reports(ctx, ts) {
             error!("could not generate ewr reports {e}")
         }
-        snap!(ctx, ewr_reports, ts);
+        record_perf(&mut perf.ewr_reports, ts);
         let ts = Utc::now();
         match ctx.db.cull_or_respawn_objectives(lua, ts) {
             Err(e) => error!("could not cull or respawn objectives {e}"),
@@ -692,19 +717,18 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
                 }
             }
         }
-        snap!(ctx, unit_culling, ts);
+        record_perf(&mut perf.unit_culling, ts);
         let ts = Utc::now();
         if let Err(e) = ctx.db.remark_objectives() {
             error!("could not remark objectives {e}")
         }
-        snap!(ctx, remark_objectives, ts);
+        record_perf(&mut perf.remark_objectives, ts);
         let ts = Utc::now();
         if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
             error!("could not update jtac contacts {e}")
         }
-        snap!(ctx, update_jtac_contacts, ts);
-        snap!(ctx, slow_timed, start_ts);
-        ctx.perf.log(start_ts);
+        record_perf(&mut perf.update_jtac_contacts, ts);
+        record_perf(&mut perf.slow_timed, start_ts);
     }
     Ok(())
 }
@@ -712,10 +736,11 @@ fn run_slow_timed_events(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) -> R
 fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
+    let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, ts) {
         error!("error doing repairs {:?}", e)
     }
-    snap!(ctx, do_repairs, ts);
+    record_perf(&mut perf.do_repairs, ts);
     return_lives(lua, ctx, ts);
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
@@ -724,7 +749,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
             error!("error forcing player {:?} to spectators {e}", id);
         }
     }
-    if let Err(e) = run_slow_timed_events(lua, ctx, ts) {
+    if let Err(e) = run_slow_timed_events(lua, ctx, perf, ts) {
         error!("error running slow timed events {e}")
     }
     let now = Utc::now();
@@ -732,31 +757,32 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = ctx.db.process_spawn_queue(ts, &ctx.idx, &spctx) {
         error!("error processing spawn queue {e}")
     }
-    snap!(ctx, spawn_queue, now);
+    record_perf(&mut perf.spawn_queue, now);
     let now = Utc::now();
     if let Err(e) = advise_captured(ctx, ts) {
         error!("error advise captured {e}")
     }
-    snap!(ctx, advise_captured, now);
+    record_perf(&mut perf.advise_captured, now);
     let now = Utc::now();
     if let Err(e) = advise_captureable(ctx) {
         error!("error advise capturable {e}")
     }
-    snap!(ctx, advise_capturable, now);
+    record_perf(&mut perf.advise_capturable, now);
     let now = Utc::now();
     if let Err(e) = ctx.jtac.update_target_positions(lua, &mut ctx.db) {
         error!("error updating jtac target positions {e}")
     }
-    snap!(ctx, jtac_target_positions, now);
+    record_perf(&mut perf.jtac_target_positions, now);
     let now = Utc::now();
     ctx.db.msgs().process(&net, &act);
-    snap!(ctx, process_messages, now);
+    record_perf(&mut perf.process_messages, now);
     let now = Utc::now();
     if let Some(snap) = ctx.db.maybe_snapshot() {
         ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
     }
-    snap!(ctx, snapshot, now);
-    snap!(ctx, timed_events, ts);
+    record_perf(&mut perf.snapshot, now);
+    record_perf(&mut perf.timed_events, ts);
+    ctx.log_perf(now);
     Ok(())
 }
 
@@ -819,7 +845,10 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
         ctx.db.player_deslot(&ifo.ucid)
     }
-    snap!(ctx, dcs_hooks, start_ts);
+    record_perf(
+        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+        start_ts,
+    );
     Ok(())
 }
 

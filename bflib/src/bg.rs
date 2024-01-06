@@ -1,9 +1,9 @@
-use crate::db::Persisted;
+use crate::{db::Persisted, Perf};
 use bytes::{Bytes, BytesMut};
 use log::error;
 use once_cell::sync::OnceCell;
 use simplelog::{LevelFilter, WriteLogger};
-use std::{cell::RefCell, env, io, path::PathBuf, thread};
+use std::{cell::RefCell, env, io, path::PathBuf, thread, sync::Arc};
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
@@ -35,9 +35,10 @@ impl io::Write for LogHandle {
 }
 
 #[derive(Debug)]
-pub enum Task {
+pub(super) enum Task {
     SaveState(PathBuf, Persisted),
     WriteLog(Bytes),
+    LogPerf(Arc<Perf>),
 }
 
 async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
@@ -56,6 +57,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                 Err(e) => error!("failed to save state to {:?}, {:?}", path, e),
             },
             Task::WriteLog(mut buf) => log_file.write_all_buf(&mut buf).await.unwrap(),
+            Task::LogPerf(perf) => perf.log(),
         }
     }
 }
@@ -76,7 +78,7 @@ fn setup_logger(tx: UnboundedSender<Task>) {
     WriteLogger::init(level, simplelog::Config::default(), LogHandle(tx)).unwrap()
 }
 
-pub fn init(write_dir: PathBuf) -> UnboundedSender<Task> {
+pub(super) fn init(write_dir: PathBuf) -> UnboundedSender<Task> {
     match TXCOM.get() {
         Some(tx) => tx.clone(),
         None => {

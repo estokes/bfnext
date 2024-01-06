@@ -177,6 +177,9 @@ pub struct SpawnedUnit {
     pub typ: String,
     pub tags: BitFlags<UnitTag>,
     pub template_name: String,
+    pub spawn_pos: Vector2,
+    pub spawn_heading: f64,
+    pub spawn_position: Position3,
     pub pos: Vector2,
     pub heading: f64,
     pub position: Position3,
@@ -1255,6 +1258,9 @@ impl Db {
                 tags,
                 name: unit_name.clone(),
                 template_name,
+                spawn_position: position,
+                spawn_pos: pos,
+                spawn_heading: heading,
                 position,
                 pos,
                 heading,
@@ -1360,6 +1366,9 @@ impl Db {
             None => error!("unit_dead: missing unit {:?}", uid),
             Some(unit) => {
                 unit.dead = true;
+                unit.pos = unit.spawn_pos;
+                unit.heading = unit.spawn_heading;
+                unit.position = unit.spawn_position;
                 self.ephemeral.dirty = true;
                 let gid = unit.group;
                 if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
@@ -1377,7 +1386,7 @@ impl Db {
                     if dead {
                         self.delete_group(&gid)?
                     }
-                }
+                } 
             }
         }
         Ok(())

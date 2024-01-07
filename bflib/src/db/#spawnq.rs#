@@ -1,6 +1,0 @@
-
-pub struct SpawnQ {
-    delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
-    spawnq: VecDeque<GroupId>,
-    despawnq: VecDeque<(GroupId, Despawn)>,
-}

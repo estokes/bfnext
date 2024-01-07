@@ -12,6 +12,7 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
+    airbase::ClassAirbase,
     atomic_id, azumith2d_to, azumith3d, centroid2d, centroid3d,
     coalition::Side,
     cvt_err,
@@ -23,6 +24,7 @@ use dcso3::{
     rotate2d,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
+    warehouse::{ClassWarehouse, LiquidType},
     LuaVec2, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
@@ -310,6 +312,18 @@ impl ObjGroup {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct Inventory<N> {
+    stored: N,
+    capacity: N,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Warehouse {
+    equipment: Map<String, Inventory<u32>>,
+    liquids: Map<LiquidType, Inventory<u16>>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     id: ObjectiveId,
@@ -325,6 +339,7 @@ pub struct Objective {
     threatened: bool,
     last_threatened_ts: DateTime<Utc>,
     last_change_ts: DateTime<Utc>,
+    warehouse: Warehouse,
     #[serde(skip)]
     spawned: bool,
     #[serde(skip)]
@@ -395,6 +410,7 @@ pub struct Persisted {
     objectives_by_name: Map<String, ObjectiveId>,
     objectives_by_group: Map<GroupId, ObjectiveId>,
     players: Map<Ucid, Player>,
+    central_warehouse: Map<Side, Warehouse>,
 }
 
 impl Persisted {
@@ -421,6 +437,12 @@ struct DeployableIndex {
     squads_by_name: FxHashMap<String, Troop>,
 }
 
+#[derive(Debug, Clone)]
+struct ObjLogi {
+    airbase: DcsOid<ClassAirbase>,
+    warehouse: DcsOid<ClassWarehouse>,
+}
+
 #[derive(Debug, Default)]
 struct Ephemeral {
     dirty: bool,
@@ -430,14 +452,15 @@ struct Ephemeral {
     deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
     group_marks: FxHashMap<GroupId, MarkId>,
     objective_marks: FxHashMap<ObjectiveId, (MarkId, Option<MarkId>)>,
-    delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
-    object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
     object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
     uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
+    object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
     slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
+    logistics_by_oid: FxHashMap<ObjectiveId, ObjLogi>,
     units_able_to_move: FxHashSet<UnitId>,
     units_potentially_close_to_enemies: FxHashSet<UnitId>,
     units_potentially_on_walkabout: FxHashSet<UnitId>,
+    delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<(GroupId, Despawn)>,
     msgs: MsgQ,
@@ -948,6 +971,11 @@ impl Db {
                 if let Some((gid, name)) = self.ephemeral.despawnq.pop_front() {
                     if let Some(group) = self.persisted.groups.get(&gid) {
                         for uid in &group.units {
+                            self.ephemeral.units_able_to_move.remove(uid);
+                            self.ephemeral
+                                .units_potentially_close_to_enemies
+                                .remove(uid);
+                            self.ephemeral.units_potentially_on_walkabout.remove(uid);
                             if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
                                 self.ephemeral.uid_by_object_id.remove(&id);
                             }

@@ -875,7 +875,8 @@ fn init_miz(lua: MizLua) -> Result<()> {
                 let timer = Timer::singleton(lua)?;
                 timer.schedule_function(now + 1., mlua::Value::Nil, move |lua, _, now| {
                     let _ = Trigger::singleton(lua)?.action()?.out_text(
-                        format_compact!("THE MISSION CANNOT START BECAUSE OF AN ERROR\n\n{:?}", e).into(),
+                        format_compact!("THE MISSION CANNOT START BECAUSE OF AN ERROR\n\n{:?}", e)
+                            .into(),
                         3600,
                         true,
                     );

@@ -544,6 +544,35 @@ impl Ephemeral {
     }
 
     fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, cfg: Cfg) -> Result<()> {
+        let check_unit_classification = || -> Result<()> {
+            let mut not_classified = FxHashSet::default();
+            for side in [Side::Blue, Side::Red, Side::Neutral] {
+                let coa = miz.coalition(side)?;
+                for country in coa.countries()? {
+                    let country = country?;
+                    for group in country
+                        .planes()?
+                        .into_iter()
+                        .chain(country.helicopters()?)
+                        .chain(country.vehicles()?)
+                    {
+                        let group = group?;
+                        for unit in group.units()? {
+                            let typ = unit?.typ()?;
+                            if !cfg.unit_classification.contains_key(typ.as_str()) {
+                                not_classified.insert(typ);
+                            }
+                        }
+                    }
+                }
+            }
+            if not_classified.is_empty() {
+                Ok(())
+            } else {
+                bail!("unit types not classified {:?}", not_classified)
+            }
+        };
+        check_unit_classification()?;
         for (side, template) in cfg.crate_template.iter() {
             miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?
                 .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
@@ -598,41 +627,6 @@ impl Db {
             Some(self.persisted.clone())
         } else {
             None
-        }
-    }
-
-    fn check_unit_classification(&self, lua: MizLua) -> Result<()> {
-        let mut not_classified = FxHashSet::default();
-        let miz = Miz::singleton(lua)?;
-        for side in [Side::Blue, Side::Red, Side::Neutral] {
-            let coa = miz.coalition(side)?;
-            for country in coa.countries()? {
-                let country = country?;
-                for group in country
-                    .planes()?
-                    .into_iter()
-                    .chain(country.helicopters()?)
-                    .chain(country.vehicles()?)
-                {
-                    let group = group?;
-                    for unit in group.units()? {
-                        let typ = unit?.typ()?;
-                        if !self
-                            .ephemeral
-                            .cfg
-                            .unit_classification
-                            .contains_key(typ.as_str())
-                        {
-                            not_classified.insert(typ);
-                        }
-                    }
-                }
-            }
-        }
-        if not_classified.is_empty() {
-            Ok(())
-        } else {
-            bail!("unit types not classified {:?}", not_classified)
         }
     }
 
@@ -695,7 +689,6 @@ impl Db {
                 }
             }
         }
-        self.check_unit_classification(spctx.lua())?;
         Ok(())
     }
 

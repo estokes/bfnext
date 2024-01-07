@@ -1,5 +1,5 @@
 use crate::{
-    cfg::UnitTag,
+    cfg::{UnitTag, UnitTags},
     db::{Db, GroupId, SpawnedUnit, UnitId},
     menu,
 };
@@ -26,7 +26,7 @@ use smallvec::{smallvec, SmallVec};
 struct Contact {
     pos: Vector3,
     typ: String,
-    tags: BitFlags<UnitTag>,
+    tags: UnitTags,
     last_move: Option<DateTime<Utc>>,
 }
 
@@ -37,7 +37,7 @@ struct Jtac {
     contacts: IndexMap<UnitId, Contact>,
     id: DcsOid<ClassUnit>,
     filter: BitFlags<UnitTag>,
-    priority: Vec<BitFlags<UnitTag>>,
+    priority: Vec<UnitTags>,
     target: Option<(DcsOid<ClassSpot>, Option<MarkId>, UnitId)>,
     autolase: bool,
     smoketarget: bool,
@@ -49,7 +49,7 @@ impl Jtac {
         gid: GroupId,
         side: Side,
         id: DcsOid<ClassUnit>,
-        priority: Vec<BitFlags<UnitTag>>,
+        priority: Vec<UnitTags>,
     ) -> Self {
         Self {
             gid,
@@ -241,11 +241,11 @@ impl Jtac {
 
     fn sort_contacts(&mut self, lua: MizLua) -> Result<bool> {
         let plist = &self.priority;
-        let priority = |tags: BitFlags<UnitTag>| {
+        let priority = |tags: UnitTags| {
             plist
                 .iter()
                 .enumerate()
-                .find(|(_, p)| tags.contains(**p))
+                .find(|(_, p)| tags.contains(p.0))
                 .map(|(i, _)| i)
                 .unwrap_or(plist.len())
         };

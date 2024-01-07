@@ -9,6 +9,7 @@ use std::{
     fmt,
     fs::File,
     io,
+    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
 };
 
@@ -35,7 +36,7 @@ impl Borrow<str> for Vehicle {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[bitflags]
-#[repr(u32)]
+#[repr(u64)]
 pub enum UnitTag {
     SAM,
     AAA,
@@ -67,6 +68,44 @@ pub enum UnitTag {
     SmallArms,
     Unarmed,
     Invincible,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
+#[serde(from = "Vec<UnitTag>", into = "Vec<UnitTag>")]
+pub struct UnitTags(pub BitFlags<UnitTag>);
+
+impl Deref for UnitTags {
+    type Target = BitFlags<UnitTag>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for UnitTags {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl From<Vec<UnitTag>> for UnitTags {
+    fn from(value: Vec<UnitTag>) -> Self {
+        Self(value.into_iter().collect())
+    }
+}
+
+impl From<BitFlags<UnitTag>> for UnitTags {
+    fn from(value: BitFlags<UnitTag>) -> Self {
+        Self(value)
+    }
+}
+
+impl Into<Vec<UnitTag>> for UnitTags {
+    fn into(self) -> Vec<UnitTag> {
+        self.0.into_iter().collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
@@ -268,9 +307,9 @@ pub struct Cfg {
     /// deployable troops configuration for each side
     pub troops: FxHashMap<Side, Vec<Troop>>,
     /// classification of ground units in the mission
-    pub unit_classification: FxHashMap<Vehicle, BitFlags<UnitTag>>,
+    pub unit_classification: FxHashMap<Vehicle, UnitTags>,
     /// The jtac target priority list
-    pub jtac_priority: Vec<BitFlags<UnitTag>>,
+    pub jtac_priority: Vec<UnitTags>,
 }
 
 impl Cfg {
@@ -1122,139 +1161,144 @@ fn default_threatened_distance() -> FxHashMap<Vehicle, u32> {
     ])
 }
 
-fn default_unit_classification() -> FxHashMap<Vehicle, BitFlags<UnitTag>> {
+fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
     use UnitTag::*;
-    FxHashMap::from_iter([
-        (
-            "M6 Linebacker".into(),
-            SAM | SR | IRGuided | Launcher | APC | LightCannon,
-        ),
-        (
-            "M1097 Avenger".into(),
-            SAM | SR | IRGuided | Launcher | SmallArms,
-        ),
-        ("Hawk cwar".into(), SAM | LR | RadarGuided | AuxRadarUnit),
-        ("Hawk pcp".into(), SAM | LR | RadarGuided | ControlUnit),
-        ("Hawk sr".into(), SAM | LR | RadarGuided | SearchRadar),
-        ("Hawk tr".into(), SAM | LR | RadarGuided | TrackRadar),
-        ("Hawk ln".into(), SAM | LR | RadarGuided | Launcher),
-        ("M1134 Stryker ATGM".into(), APC | MR | ATGM | SmallArms),
-        ("M-2 Bradley".into(), APC | MR | ATGM | LightCannon),
-        ("M-1 Abrams".into(), Armor | MR | HeavyCannon | SmallArms),
-        ("outpost".into(), Logistics | SR | SmallArms),
-        ("bofors40".into(), AAA | LR),
-        ("M 818".into(), Logistics | Unarmed),
-        ("M978 HEMTT Tanker".into(), Logistics | Unarmed),
-        ("Soldier M249".into(), Infantry | SR | SmallArms),
-        ("HL_ZU-23".into(), AAA | SR),
-        (
-            "Roland ADS".into(),
-            SAM | MR | RadarGuided | EngagesWeapons | Launcher | SearchRadar | TrackRadar,
-        ),
-        ("Vulcan".into(), AAA | MR | RadarGuided),
-        ("Gepard".into(), AAA | LR | RadarGuided),
-        ("Soldier RPG".into(), Infantry | MR | RPG),
-        ("Soldier M4".into(), Infantry | SR | SmallArms),
-        ("2B11 mortar".into(), Infantry | LR | Artillery),
-        (
-            "Soldier stinger".into(),
-            SAM | Infantry | SR | IRGuided | Launcher,
-        ),
-        (
-            "Stinger comm".into(),
-            SAM | Infantry | ControlUnit | Unarmed,
-        ),
-        ("T155_Firtina".into(), Armor | LR | Artillery | SmallArms),
-        ("Leopard-2".into(), Armor | MR | HeavyCannon | SmallArms),
-        ("ZSU-23-4 Shilka".into(), AAA | MR | RadarGuided),
-        ("ZSU_57_2".into(), AAA | LR),
-        ("Strela-10M3".into(), SAM | SR | IRGuided | Launcher),
-        ("Strela-1 9P31".into(), SAM | SR | IRGuided | Launcher),
-        (
-            "SA-11 Buk CC 9S470M1".into(),
-            SAM | LR | RadarGuided | ControlUnit,
-        ),
-        (
-            "SA-11 Buk SR 9S18M1".into(),
-            SAM | LR | RadarGuided | SearchRadar,
-        ),
-        (
-            "SA-11 Buk LN 9A310M1".into(),
-            SAM | LR | RadarGuided | TrackRadar | Launcher,
-        ),
-        ("BMD-1".into(), APC | MR | ATGM | LightCannon),
-        ("BMP-1".into(), APC | MR | ATGM | LightCannon),
-        ("BMP-3".into(), APC | MR | ATGM | LightCannon),
-        ("T-80UD".into(), Armor | MR | ATGM | HeavyCannon | SmallArms),
-        ("T-72B".into(), Armor | MR | HeavyCannon | SmallArms),
-        ("T-55".into(), Armor | MR | HeavyCannon | SmallArms),
-        ("S-60_Type59_Artillery".into(), AAA | LR),
-        ("ZU-23 Emplacement Closed".into(), AAA | SR),
-        ("ATZ-10".into(), Logistics | Unarmed),
-        ("Ural-375".into(), Logistics | Unarmed),
-        ("Infantry AK ver3".into(), Infantry | SR | SmallArms),
-        ("Infantry AK ver2".into(), Infantry | SR | SmallArms),
-        ("Paratrooper RPG-16".into(), Infantry | MR | RPG),
-        (
-            "Kub 1S91 str".into(),
-            SAM | MR | RadarGuided | SearchRadar | TrackRadar,
-        ),
-        ("Kub 2P25 ln".into(), SAM | MR | RadarGuided | Launcher),
-        (
-            "Tor 9A331".into(),
-            SAM | MR | RadarGuided | EngagesWeapons | SearchRadar | TrackRadar | Launcher,
-        ),
-        (
-            "Osa 9A33 ln".into(),
-            SAM | SR | RadarGuided | SearchRadar | TrackRadar | Launcher,
-        ),
-        ("ZU-23 Emplacement".into(), AAA | SR),
-        (
-            "2S6 Tunguska".into(),
-            SAM | AAA | SR | OpticallyGuided | Launcher,
-        ),
-        ("Cow".into(), Logistics | Unarmed),
-        ("FARP Ammo Dump Coating".into(), Logistics | Unarmed),
-        ("FARP Fuel Depot".into(), Logistics | Unarmed),
-        ("FARP Tent".into(), Logistics | Unarmed),
-        ("Invisible FARP".into(), Logistics | Unarmed | Invincible),
-        ("M-109".into(), Armor | Artillery),
-        ("SAU Msta".into(), Armor | Artillery | SmallArms),
-        ("1L13 EWR".into(), EWR | Unarmed),
-        ("FPS-117".into(), EWR | Unarmed),
-        ("FPS-117 ECS".into(), EWR | Unarmed),
-        ("p-19 s-125 sr".into(), SAM | LR | RadarGuided | SearchRadar),
-        ("SNR_75V".into(), SAM | LR | RadarGuided | TrackRadar),
-        ("S_75M_Volhov".into(), SAM | LR | RadarGuided | Launcher),
-        ("RD_75".into(), SAM | LR | RadarGuided | AuxRadarUnit),
-        ("MiG-29A".into(), Aircraft.into()),
-        ("Su-27".into(), Aircraft.into()),
-        ("SA342L".into(), Helicopter.into()),
-        ("Su-25T".into(), Aircraft.into()),
-        ("MiG-21Bis".into(), Aircraft.into()),
-        ("AH-64D_BLK_II".into(), Helicopter.into()),
-        ("F-16C_50".into(), Aircraft.into()),
-        ("UH-1H".into(), Helicopter.into()),
-        ("M-2000C".into(), Aircraft.into()),
-        ("Mi-8MT".into(), Helicopter.into()),
-        ("SA-18 Igla-S manpad".into(), SAM | SR | IRGuided | Launcher),
-        ("SA-18 Igla comm".into(), SAM | SR | IRGuided | ControlUnit),
-        (
-            "SA-18 Igla-S comm".into(),
-            SAM | SR | IRGuided | ControlUnit,
-        ),
-        ("Ka-50_3".into(), Helicopter.into()),
-        ("Ka-50".into(), Helicopter.into()),
-        ("Infantry AK".into(), Infantry | SR | SmallArms),
-        ("Mi-24P".into(), Helicopter.into()),
-        ("F-15ESE".into(), Aircraft.into()),
-        ("Mirage-F1EE".into(), Aircraft.into()),
-    ])
+    FxHashMap::from_iter(
+        [
+            (
+                "M6 Linebacker".into(),
+                SAM | SR | IRGuided | Launcher | APC | LightCannon,
+            ),
+            (
+                "M1097 Avenger".into(),
+                SAM | SR | IRGuided | Launcher | SmallArms,
+            ),
+            ("Hawk cwar".into(), SAM | LR | RadarGuided | AuxRadarUnit),
+            ("Hawk pcp".into(), SAM | LR | RadarGuided | ControlUnit),
+            ("Hawk sr".into(), SAM | LR | RadarGuided | SearchRadar),
+            ("Hawk tr".into(), SAM | LR | RadarGuided | TrackRadar),
+            ("Hawk ln".into(), SAM | LR | RadarGuided | Launcher),
+            ("M1134 Stryker ATGM".into(), APC | MR | ATGM | SmallArms),
+            ("M-2 Bradley".into(), APC | MR | ATGM | LightCannon),
+            ("M-1 Abrams".into(), Armor | MR | HeavyCannon | SmallArms),
+            ("outpost".into(), Logistics | SR | SmallArms),
+            ("bofors40".into(), AAA | LR),
+            ("M 818".into(), Logistics | Unarmed),
+            ("M978 HEMTT Tanker".into(), Logistics | Unarmed),
+            ("Soldier M249".into(), Infantry | SR | SmallArms),
+            ("HL_ZU-23".into(), AAA | SR),
+            (
+                "Roland ADS".into(),
+                SAM | MR | RadarGuided | EngagesWeapons | Launcher | SearchRadar | TrackRadar,
+            ),
+            ("Vulcan".into(), AAA | MR | RadarGuided),
+            ("Gepard".into(), AAA | LR | RadarGuided),
+            ("Soldier RPG".into(), Infantry | MR | RPG),
+            ("Soldier M4".into(), Infantry | SR | SmallArms),
+            ("2B11 mortar".into(), Infantry | LR | Artillery),
+            (
+                "Soldier stinger".into(),
+                SAM | Infantry | SR | IRGuided | Launcher,
+            ),
+            (
+                "Stinger comm".into(),
+                SAM | Infantry | ControlUnit | Unarmed,
+            ),
+            ("T155_Firtina".into(), Armor | LR | Artillery | SmallArms),
+            ("Leopard-2".into(), Armor | MR | HeavyCannon | SmallArms),
+            ("ZSU-23-4 Shilka".into(), AAA | MR | RadarGuided),
+            ("ZSU_57_2".into(), AAA | LR),
+            ("Strela-10M3".into(), SAM | SR | IRGuided | Launcher),
+            ("Strela-1 9P31".into(), SAM | SR | IRGuided | Launcher),
+            (
+                "SA-11 Buk CC 9S470M1".into(),
+                SAM | LR | RadarGuided | ControlUnit,
+            ),
+            (
+                "SA-11 Buk SR 9S18M1".into(),
+                SAM | LR | RadarGuided | SearchRadar,
+            ),
+            (
+                "SA-11 Buk LN 9A310M1".into(),
+                SAM | LR | RadarGuided | TrackRadar | Launcher,
+            ),
+            ("BMD-1".into(), APC | MR | ATGM | LightCannon),
+            ("BMP-1".into(), APC | MR | ATGM | LightCannon),
+            ("BMP-3".into(), APC | MR | ATGM | LightCannon),
+            ("T-80UD".into(), Armor | MR | ATGM | HeavyCannon | SmallArms),
+            ("T-72B".into(), Armor | MR | HeavyCannon | SmallArms),
+            ("T-55".into(), Armor | MR | HeavyCannon | SmallArms),
+            ("S-60_Type59_Artillery".into(), AAA | LR),
+            ("ZU-23 Emplacement Closed".into(), AAA | SR),
+            ("ATZ-10".into(), Logistics | Unarmed),
+            ("Ural-375".into(), Logistics | Unarmed),
+            ("Infantry AK ver3".into(), Infantry | SR | SmallArms),
+            ("Infantry AK ver2".into(), Infantry | SR | SmallArms),
+            ("Paratrooper RPG-16".into(), Infantry | MR | RPG),
+            (
+                "Kub 1S91 str".into(),
+                SAM | MR | RadarGuided | SearchRadar | TrackRadar,
+            ),
+            ("Kub 2P25 ln".into(), SAM | MR | RadarGuided | Launcher),
+            (
+                "Tor 9A331".into(),
+                SAM | MR | RadarGuided | EngagesWeapons | SearchRadar | TrackRadar | Launcher,
+            ),
+            (
+                "Osa 9A33 ln".into(),
+                SAM | SR | RadarGuided | SearchRadar | TrackRadar | Launcher,
+            ),
+            ("ZU-23 Emplacement".into(), AAA | SR),
+            (
+                "2S6 Tunguska".into(),
+                SAM | AAA | SR | OpticallyGuided | Launcher,
+            ),
+            ("Cow".into(), Logistics | Unarmed),
+            ("FARP Ammo Dump Coating".into(), Logistics | Unarmed),
+            ("FARP Fuel Depot".into(), Logistics | Unarmed),
+            ("FARP Tent".into(), Logistics | Unarmed),
+            ("Invisible FARP".into(), Logistics | Unarmed | Invincible),
+            ("M-109".into(), Armor | Artillery),
+            ("SAU Msta".into(), Armor | Artillery | SmallArms),
+            ("1L13 EWR".into(), EWR | Unarmed),
+            ("FPS-117".into(), EWR | Unarmed),
+            ("FPS-117 ECS".into(), EWR | Unarmed),
+            ("p-19 s-125 sr".into(), SAM | LR | RadarGuided | SearchRadar),
+            ("SNR_75V".into(), SAM | LR | RadarGuided | TrackRadar),
+            ("S_75M_Volhov".into(), SAM | LR | RadarGuided | Launcher),
+            ("RD_75".into(), SAM | LR | RadarGuided | AuxRadarUnit),
+            ("MiG-29A".into(), Aircraft.into()),
+            ("Su-27".into(), Aircraft.into()),
+            ("SA342L".into(), Helicopter.into()),
+            ("Su-25T".into(), Aircraft.into()),
+            ("MiG-21Bis".into(), Aircraft.into()),
+            ("AH-64D_BLK_II".into(), Helicopter.into()),
+            ("F-16C_50".into(), Aircraft.into()),
+            ("UH-1H".into(), Helicopter.into()),
+            ("M-2000C".into(), Aircraft.into()),
+            ("Mi-8MT".into(), Helicopter.into()),
+            ("SA-18 Igla-S manpad".into(), SAM | SR | IRGuided | Launcher),
+            ("SA-18 Igla comm".into(), SAM | SR | IRGuided | ControlUnit),
+            (
+                "SA-18 Igla-S comm".into(),
+                SAM | SR | IRGuided | ControlUnit,
+            ),
+            ("Ka-50_3".into(), Helicopter.into()),
+            ("Ka-50".into(), Helicopter.into()),
+            ("Infantry AK".into(), Infantry | SR | SmallArms),
+            ("Mi-24P".into(), Helicopter.into()),
+            ("F-15ESE".into(), Aircraft.into()),
+            ("Mirage-F1EE".into(), Aircraft.into()),
+            (".Ammunition depot".into(), Logistics | Unarmed),
+        ]
+        .into_iter()
+        .map(|(k, f)| (k, UnitTags::from(f))),
+    )
 }
 
-fn default_jtac_priority() -> Vec<BitFlags<UnitTag>> {
+fn default_jtac_priority() -> Vec<UnitTags> {
     use UnitTag::*;
-    vec![
+    [
         SAM | LR | RadarGuided | TrackRadar,
         SAM | MR | RadarGuided | TrackRadar,
         SAM | OpticallyGuided,
@@ -1267,6 +1311,9 @@ fn default_jtac_priority() -> Vec<BitFlags<UnitTag>> {
         Armor.into(),
         Artillery.into(),
     ]
+    .into_iter()
+    .map(UnitTags::from)
+    .collect()
 }
 
 impl Default for Cfg {

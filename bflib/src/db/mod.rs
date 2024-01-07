@@ -3,7 +3,7 @@ use self::cargo::Cargo;
 use crate::{
     cfg::{
         Cfg, Crate, Deployable, DeployableEwr, DeployableJtac, DeployableLogistics, LifeType,
-        Troop, UnitTag, Vehicle,
+        Troop, Vehicle, UnitTags,
     },
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
@@ -25,7 +25,6 @@ use dcso3::{
     unit::{ClassUnit, Unit},
     LuaVec2, MizLua, Position3, String, Vector2, Vector3,
 };
-use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{error, info};
 use mlua::{prelude::*, Value};
@@ -175,7 +174,7 @@ pub struct SpawnedUnit {
     pub group: GroupId,
     pub side: Side,
     pub typ: String,
-    pub tags: BitFlags<UnitTag>,
+    pub tags: UnitTags,
     pub template_name: String,
     pub spawn_pos: Vector2,
     pub spawn_heading: f64,

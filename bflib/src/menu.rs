@@ -677,7 +677,7 @@ fn jtac_clear_filter(lua: MizLua, gid: db::GroupId) -> Result<()> {
     Ok(())
 }
 
-fn jtac_filter(lua: MizLua, arg: ArgTuple<db::GroupId, u32>) -> Result<()> {
+fn jtac_filter(lua: MizLua, arg: ArgTuple<db::GroupId, u64>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let filter =
         BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;

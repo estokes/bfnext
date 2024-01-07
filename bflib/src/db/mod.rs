@@ -456,15 +456,8 @@ impl Ephemeral {
         idx.crates_by_name
             .insert(repair_crate.name.clone(), repair_crate);
         for dep in deployables.iter() {
-            let gifo = miz
-                .get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
+            miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
                 .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
-            for unit in gifo.group.units()? {
-                let typ = unit?.typ()?;
-                if !self.cfg.unit_classification.contains_key(typ.as_str()) {
-                    bail!("unit is type '{typ}' is unclassified")
-                }
-            }
             let name = match dep.path.last() {
                 None => bail!("deployable with empty path {:?}", dep),
                 Some(name) => name,
@@ -555,6 +548,8 @@ impl Ephemeral {
                         .into_iter()
                         .chain(country.helicopters()?)
                         .chain(country.vehicles()?)
+                        .chain(country.ships()?)
+                        .chain(country.statics()?)
                     {
                         let group = group?;
                         for unit in group.units()? {

@@ -871,11 +871,16 @@ fn init_miz(lua: MizLua) -> Result<()> {
         let ctx = unsafe { Context::get_mut() };
         if ctx.loaded {
             if let Err(e) = delayed_init_miz(lua) {
-                let _ = Trigger::singleton(lua)?.action()?.out_text(
-                    format_compact!("THE MISSION CANNOT START BECAUSE OF AN ERROR\n\n{:?}", e).into(),
-                    3600,
-                    true,
-                );
+                error!("THE MISSION CANNOT START: {:?}", e);
+                let timer = Timer::singleton(lua)?;
+                timer.schedule_function(now + 1., mlua::Value::Nil, move |lua, _, now| {
+                    let _ = Trigger::singleton(lua)?.action()?.out_text(
+                        format_compact!("THE MISSION CANNOT START BECAUSE OF AN ERROR\n\n{:?}", e).into(),
+                        3600,
+                        true,
+                    );
+                    Ok(Some(now + 10.))
+                })?;
             }
             Ok(None)
         } else {

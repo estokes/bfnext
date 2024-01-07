@@ -523,9 +523,6 @@ impl Ephemeral {
                 ] {
                     miz.get_group_by_name(mizidx, GroupKind::Any, side, name)?
                         .ok_or_else(|| anyhow!("missing farp template {:?} {:?}", side, name))?;
-                    if !name.starts_with("R") && !name.starts_with("B") && !name.starts_with("N") {
-                        bail!("deployables with logistics must use templates starting with R, B, or N")
-                    }
                     if !names.insert(name) {
                         bail!("deployables with logistics must use unique templates for each part {name} is reused")
                     }

@@ -988,108 +988,503 @@
     ]
   },
   "unit_classification": {
-    "Mirage-F1EE": 128,
-    "Hawk sr": 270849,
-    "Soldier M4": 134218784,
-    "ZSU_57_2": 514,
-    "Hawk ln": 2105857,
-    "SA-11 Buk CC 9S470M1": 1057281,
-    "SNR_75V": 139777,
-    "M-2000C": 128,
-    "M6 Linebacker": 18879497,
-    "Tor 9A331": 2533377,
-    "Ka-50_3": 256,
-    "SA342M": 256,
-    "FARP Ammo Dump Coating": 268435472,
-    "SA-11 Buk LN 9A310M1": 2236929,
-    "T-80UD": 171968516,
-    "T-55": 167774212,
-    "M978 HEMTT Tanker": 268435472,
-    "Vulcan": 10242,
-    "ZU-23 Emplacement": 1026,
-    "FPS-117": 268435520,
-    "T155_Firtina": 142606852,
-    "Roland ADS": 2533377,
-    "2B11 mortar": 8389152,
-    "SA-11 Buk SR 9S18M1": 270849,
-    "S_75M_Volhov": 2105857,
-    "Su-25T": 128,
-    "AH-64D_BLK_II": 256,
-    "M-109": 8388612,
-    "M1134 Stryker ATGM": 138414088,
-    "Soldier stinger": 2102305,
-    "Paratrooper RPG-16": 67110944,
-    "Osa 9A33 ln": 2499585,
-    "Infantry AK": 134218784,
-    "Hawk pcp": 1057281,
-    "ZU-23 Emplacement Closed": 1026,
-    "Ural-375": 268435472,
-    "Mi-24P": 256,
-    "BMP-1": 20973576,
-    "p-19 s-125 sr": 270849,
-    "Soldier M249": 134218784,
-    "FARP Tent": 268435472,
-    "TV tower": 268435456,
-    "ZSU-23-4 Shilka": 10242,
-    "Stinger comm": 269484065,
-    "MiG-29A": 128,
-    "MiG-21Bis": 128,
-    "M1097 Avenger": 136320001,
-    "F-16C_50": 128,
-    "Kub 1S91 str": 403457,
-    "Mi-8MT": 256,
-    "SA-18 Igla-S manpad": 2102273,
-    "Kub 2P25 ln": 2107393,
-    "1L13 EWR": 268435520,
-    "55G6 EWR": 268435520,
-    "M-1 Abrams": 167774212,
-    "M 818": 268435472,
-    "Ural-4320-31": 268435472,
-    "outpost": 134218768,
-    "Infantry AK ver2": 134218784,
-    "BMD-1": 20973576,
-    "Ka-50": 256,
-    "SA-18 Igla comm": 1053697,
-    "S-60_Type59_Artillery": 514,
-    "Strela-10M3": 2102273,
-    "Strela-1 9P31": 2102273,
-    "Cow": 268435472,
-    "bofors40": 514,
-    "FPS-117 ECS": 268435520,
-    "RD_75": 532993,
-    "SA-18 Igla-S comm": 1053697,
-    "Su-27": 128,
-    "Hawk tr": 139777,
-    "Soldier RPG": 67110944,
-    "Infantry AK ver3": 134218784,
-    "SA342L": 256,
-    "Invisible FARP": 805306384,
-    "2S6 Tunguska": 2114563,
-    "Gepard": 8706,
-    "UH-1H": 256,
-    "FARP Fuel Depot": 268435472,
-    "HL_ZU-23": 1026,
-    "M-2 Bradley": 20973576,
-    "Hawk cwar": 532993,
-    "BMP-3": 20973576,
-    "Leopard-2": 167774212,
-    "T-72B": 167774212,
-    "SAU Msta": 142606340,
-    "F-15ESE": 128,
-    "ATZ-10": 268435472,
-    "tt_ZU-23": 1026
+    "Mirage-F1EE": [
+      "Aircraft"
+    ],
+    "Hawk sr": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "SearchRadar"
+    ],
+    "Soldier M4": [
+      "Infantry",
+      "SR",
+      "SmallArms"
+    ],
+    "ZSU_57_2": [
+      "AAA",
+      "LR"
+    ],
+    "Hawk ln": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "Launcher"
+    ],
+    "SA-11 Buk CC 9S470M1": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "ControlUnit"
+    ],
+    "SNR_75V": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "TrackRadar"
+    ],
+    "M-2000C": [
+      "Aircraft"
+    ],
+    "M6 Linebacker": [
+      "SAM",
+      "APC",
+      "SR",
+      "IRGuided",
+      "Launcher",
+      "LightCannon"
+    ],
+    "Tor 9A331": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "EngagesWeapons",
+      "TrackRadar",
+      "SearchRadar",
+      "Launcher"
+    ],
+    "Ka-50_3": [
+      "Helicopter"
+    ],
+    "FARP Ammo Dump Coating": [
+      "Logistics",
+      "Unarmed"
+    ],
+    ".Ammunition depot": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "SA-11 Buk LN 9A310M1": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "TrackRadar",
+      "Launcher"
+    ],
+    "T-80UD": [
+      "Armor",
+      "MR",
+      "ATGM",
+      "HeavyCannon",
+      "SmallArms"
+    ],
+    "T-55": [
+      "Armor",
+      "MR",
+      "HeavyCannon",
+      "SmallArms"
+    ],
+    "M978 HEMTT Tanker": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "Vulcan": [
+      "AAA",
+      "MR",
+      "RadarGuided"
+    ],
+    "ZU-23 Emplacement": [
+      "AAA",
+      "SR"
+    ],
+    "FPS-117": [
+      "EWR",
+      "Unarmed"
+    ],
+    "T155_Firtina": [
+      "Armor",
+      "LR",
+      "Artillery",
+      "SmallArms"
+    ],
+    "Roland ADS": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "EngagesWeapons",
+      "TrackRadar",
+      "SearchRadar",
+      "Launcher"
+    ],
+    "2B11 mortar": [
+      "Infantry",
+      "LR",
+      "Artillery"
+    ],
+    "SA-11 Buk SR 9S18M1": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "SearchRadar"
+    ],
+    "S_75M_Volhov": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "Launcher"
+    ],
+    "Su-25T": [
+      "Aircraft"
+    ],
+    "AH-64D_BLK_II": [
+      "Helicopter"
+    ],
+    "M-109": [
+      "Armor",
+      "Artillery"
+    ],
+    "M1134 Stryker ATGM": [
+      "APC",
+      "MR",
+      "ATGM",
+      "SmallArms"
+    ],
+    "Soldier stinger": [
+      "SAM",
+      "Infantry",
+      "SR",
+      "IRGuided",
+      "Launcher"
+    ],
+    "Paratrooper RPG-16": [
+      "Infantry",
+      "MR",
+      "RPG"
+    ],
+    "Osa 9A33 ln": [
+      "SAM",
+      "SR",
+      "RadarGuided",
+      "TrackRadar",
+      "SearchRadar",
+      "Launcher"
+    ],
+    "Infantry AK": [
+      "Infantry",
+      "SR",
+      "SmallArms"
+    ],
+    "Hawk pcp": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "ControlUnit"
+    ],
+    "ZU-23 Emplacement Closed": [
+      "AAA",
+      "SR"
+    ],
+    "Ural-375": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "Mi-24P": [
+      "Helicopter"
+    ],
+    "BMP-1": [
+      "APC",
+      "MR",
+      "ATGM",
+      "LightCannon"
+    ],
+    "p-19 s-125 sr": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "SearchRadar"
+    ],
+    "Soldier M249": [
+      "Infantry",
+      "SR",
+      "SmallArms"
+    ],
+    "FARP Tent": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "ZSU-23-4 Shilka": [
+      "AAA",
+      "MR",
+      "RadarGuided"
+    ],
+    "Stinger comm": [
+      "SAM",
+      "Infantry",
+      "ControlUnit",
+      "Unarmed"
+    ],
+    "MiG-29A": [
+      "Aircraft"
+    ],
+    "MiG-21Bis": [
+      "Aircraft"
+    ],
+    "M1097 Avenger": [
+      "SAM",
+      "SR",
+      "IRGuided",
+      "Launcher",
+      "SmallArms"
+    ],
+    "F-16C_50": [
+      "Aircraft"
+    ],
+    "Kub 1S91 str": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "TrackRadar",
+      "SearchRadar"
+    ],
+    "Mi-8MT": [
+      "Helicopter"
+    ],
+    "SA-18 Igla-S manpad": [
+      "SAM",
+      "SR",
+      "IRGuided",
+      "Launcher"
+    ],
+    "Kub 2P25 ln": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "Launcher"
+    ],
+    "1L13 EWR": [
+      "EWR",
+      "Unarmed"
+    ],
+    "M-1 Abrams": [
+      "Armor",
+      "MR",
+      "HeavyCannon",
+      "SmallArms"
+    ],
+    "M 818": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "outpost": [
+      "Logistics",
+      "SR",
+      "SmallArms"
+    ],
+    "Infantry AK ver2": [
+      "Infantry",
+      "SR",
+      "SmallArms"
+    ],
+    "BMD-1": [
+      "APC",
+      "MR",
+      "ATGM",
+      "LightCannon"
+    ],
+    "Ka-50": [
+      "Helicopter"
+    ],
+    "SA-18 Igla comm": [
+      "SAM",
+      "SR",
+      "IRGuided",
+      "ControlUnit"
+    ],
+    "S-60_Type59_Artillery": [
+      "AAA",
+      "LR"
+    ],
+    "Strela-10M3": [
+      "SAM",
+      "SR",
+      "IRGuided",
+      "Launcher"
+    ],
+    "Strela-1 9P31": [
+      "SAM",
+      "SR",
+      "IRGuided",
+      "Launcher"
+    ],
+    "Cow": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "bofors40": [
+      "AAA",
+      "LR"
+    ],
+    "FPS-117 ECS": [
+      "EWR",
+      "Unarmed"
+    ],
+    "RD_75": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "AuxRadarUnit"
+    ],
+    "SA-18 Igla-S comm": [
+      "SAM",
+      "SR",
+      "IRGuided",
+      "ControlUnit"
+    ],
+    "Su-27": [
+      "Aircraft"
+    ],
+    "Hawk tr": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "TrackRadar"
+    ],
+    "Soldier RPG": [
+      "Infantry",
+      "MR",
+      "RPG"
+    ],
+    "Infantry AK ver3": [
+      "Infantry",
+      "SR",
+      "SmallArms"
+    ],
+    "SA342L": [
+      "Helicopter"
+    ],
+    "Invisible FARP": [
+      "Logistics",
+      "Unarmed",
+      "Invincible"
+    ],
+    "2S6 Tunguska": [
+      "SAM",
+      "AAA",
+      "SR",
+      "OpticallyGuided",
+      "Launcher"
+    ],
+    "Gepard": [
+      "AAA",
+      "LR",
+      "RadarGuided"
+    ],
+    "UH-1H": [
+      "Helicopter"
+    ],
+    "FARP Fuel Depot": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "HL_ZU-23": [
+      "AAA",
+      "SR"
+    ],
+    "tt_ZU-23": [
+      "AAA",
+      "SR"
+    ],
+    "M-2 Bradley": [
+      "APC",
+      "MR",
+      "ATGM",
+      "LightCannon"
+    ],
+    "Hawk cwar": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "AuxRadarUnit"
+    ],
+    "BMP-3": [
+      "APC",
+      "MR",
+      "ATGM",
+      "LightCannon"
+    ],
+    "Leopard-2": [
+      "Armor",
+      "MR",
+      "HeavyCannon",
+      "SmallArms"
+    ],
+    "T-72B": [
+      "Armor",
+      "MR",
+      "HeavyCannon",
+      "SmallArms"
+    ],
+    "SAU Msta": [
+      "Armor",
+      "Artillery",
+      "SmallArms"
+    ],
+    "F-15ESE": [
+      "Aircraft"
+    ],
+    "ATZ-10": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "TV tower": [
+      "Unarmed"
+    ],
+    "55G6 EWR": [
+      "EWR",
+      "Unarmed"
+    ],
+    "Ural-4320-31": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "SA342M": [
+      "Helicopter"
+    ]
   },
   "jtac_priority": [
-    139777,
-    141313,
-    16385,
-    4097,
-    514,
-    4194312,
-    2,
-    16,
-    32,
-    4,
-    8388608
+    [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "TrackRadar"
+    ],
+    [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "TrackRadar"
+    ],
+    [
+      "SAM",
+      "OpticallyGuided"
+    ],
+    [
+      "SAM",
+      "IRGuided"
+    ],
+    [
+      "AAA",
+      "LR"
+    ],
+    [
+      "APC",
+      "ATGM"
+    ],
+    [
+      "AAA"
+    ],
+    [
+      "Logistics"
+    ],
+    [
+      "Infantry"
+    ],
+    [
+      "Armor"
+    ],
+    [
+      "Artillery"
+    ]
   ]
 }

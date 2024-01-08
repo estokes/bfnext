@@ -13,6 +13,7 @@ wrapped_table!(Weather, None);
 wrapped_prim!(UnitId, i64, Hash, Copy);
 wrapped_prim!(GroupId, i64, Hash, Copy);
 
+#[derive(Debug, Clone, Copy)]
 pub enum TriggerZoneTyp {
     Circle { radius: f64 },
     Quad(Quad2),
@@ -37,7 +38,7 @@ impl<'lua> TriggerZone<'lua> {
             0 => TriggerZoneTyp::Circle {
                 radius: self.raw_get("radius")?,
             },
-            2 => TriggerZoneTyp::Quad(self.raw_get("vertices")?),
+            2 => TriggerZoneTyp::Quad(self.raw_get("verticies")?),
             n => bail!("unknown trigger zone type {}", n),
         })
     }

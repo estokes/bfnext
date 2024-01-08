@@ -131,6 +131,7 @@ macro_rules! atomic_id {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Quad2 {
     pub p0: LuaVec2,
     pub p1: LuaVec2,

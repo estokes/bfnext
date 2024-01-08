@@ -44,7 +44,7 @@ ARMOR
 Blue | ATGM Stryker / IFV M2A2 Bradley / MBT M1A2 Abrams
 Red  | BMD-1, BMP-3, T-80U
 Neut | 3 BMP-1
-CRATE
+CRATE (DO NOT PUT DEP IN FRONT OF THIS)
 Blue |
 Red  |
 STANDARDTROOP 
@@ -124,3 +124,12 @@ OFORVLADIKAVKAZ
 OFONKAZBEGI (REMOVE TREES)
 OFOBZhinvali
 OABTbilisi
+
+
+***STEPS TO COMPILE THE DLL (this requires rust and the Visual Studio Build components***
+From terminal:
+Verify LUA_LIB is pointed to *\GitHub\bfnext by using command: echo $env:LUA_LIB
+./setup-build.ps1 (will take a second)
+cargo build --release (will take a long time)
+Once complete, the file will now be in *\GitHub\bfnext\target\release
+Use the copy command to move the file where you need it: cp target/release/bflib.dll 'C:\Users\Adam\Saved Games\DCS.openbeta\Scripts\'

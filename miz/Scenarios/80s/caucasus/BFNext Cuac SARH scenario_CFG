@@ -59,7 +59,9 @@
     "F-15ESE": 36000,
     "Su-25": 21600,
     "AV8BNA": 36000,
-    "MB-339A": 9000
+    "MB-339A": 9000,
+	"J-11A": 36000,
+	"Su-33": 36000
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
@@ -103,7 +105,9 @@
     "F-15ESE": "Standard",
     "Su-25": "Attack",
     "AV8BNA": "Attack",
-    "MB-339A": "Recon"
+    "MB-339A": "Recon",
+	"J-11A": "Standard",
+	"Su-33": "Standard"
   },
   "default_lives": {
     "Standard": [

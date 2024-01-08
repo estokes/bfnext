@@ -29,12 +29,12 @@
         "min": 40,
         "max": 60
       },
-      "name": "Senaki",
+      "name": "Beslan",
       "location": [
-        "OABRSenaki"
+        "OABRBeslan"
       ],
       "pak": 1,
-      "id": "Senaki"
+      "id": "Beslan"
     },
     {
       "baseType": "AIRBASE",
@@ -44,27 +44,12 @@
         "min": 50,
         "max": 70
       },
-      "name": "KOBULETI",
+      "name": "Tbilisi",
       "location": [
-        "OABRKOBULETI"
+        "OABTbilisi"
       ],
-      "pak": 1,
-      "id": "KOBULETI"
-    },
-    {
-      "baseType": "AIRBASE",
-      "initialFuel": 200000,
-      "repairFuel": 10000,
-      "repairTimer": {
-        "min": 50,
-        "max": 70
-      },
-      "name": "BATUMI",
-      "location": [
-        "OABBBATUMI"
-      ],
-      "pak": 1,
-      "id": "BATUMI"
+      "pak": 4,
+      "id": "TBILISI"
     },
     {
       "initialCoalition": 1,
@@ -83,12 +68,36 @@
           "groupName": "Blue Defenders"
         }
       },
-      "name": "Tuapse",
+      "name": "Zhinvali",
       "location": [
-        "Tuapse"
+        "OFOBZhinvali"
       ],
-      "pak": 1,
-      "id": "TUAPSE"
+      "pak": 3,
+      "id": "ZHINVALI"
+    },
+    {
+      "initialCoalition": 1,
+      "baseType": "FARP",
+      "initialFuel": 200000,
+      "repairFuel": 10000,
+      "repairTimer": {
+        "min": 45,
+        "max": 60
+      },
+      "defenderGroup": {
+        "red": {
+          "groupName": "Red Defenders"
+        },
+        "blue": {
+          "groupName": "Blue Defenders"
+        }
+      },
+      "name": "Kazbegi",
+      "location": [
+        "OFONKAZBEGI"
+      ],
+      "pak": 2,
+      "id": "KAZBEGI"
     },
     {
       "initialCoalition": 1,
@@ -107,12 +116,12 @@
           "groupName": "Blue Defenders"
         }
       },
-      "name": "Chikola",
+      "name": "Vladikavkaz",
       "location": [
-        "Chikola"
+        "OFORVLADIKAVKAZ"
       ],
-      "pak": 5,
-      "id": "CHIKOLA"
+      "pak": 1,
+      "id": "VLADIKAVKAZ"
     },
     {
       "initialCoalition": 1,

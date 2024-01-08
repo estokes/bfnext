@@ -9,6 +9,20 @@ LR means long range (template)
 SR means shorad (template)
 DEP means deployable (player dropped units  via crates)
 
+Basic makeup of OBJs
+Base:
+	LOGI
+	AAA x2
+	SR x2
+	ARMOR
+	LR (home base)
+FOBs:
+	LOGI
+	AAA
+	SR (2 for home OBJ)
+	Armor
+
+
 Template names: (Start with B or R)
 LOGI
 Blue | 1 Outpost 4 HEMTT 4 M939 Heavy 2 m249 1 Vulcan 1 Bofors 40mm
@@ -41,6 +55,7 @@ Blue | 5 rpgs 3 m249s
 Red  | 5 rpgs 3 AK74v3
 STINGERTROOP 
 Blue | 2 m249 2 stingers 2 stinger c2
+RIGLATROOP
 Red  | 2 AK74v3 2 Igla-S, 2 Igla C2
 MORTARTROOP
 Blue | 3 m249   5 2b11 120mm
@@ -98,3 +113,14 @@ Red  | SA-6 Battery
 FARP
 Blue | Bofors 40mm M978 HEMTT M939 Heavy 2 M249 inf, Invisible Farp named DEPBFARPPAD, FARP Fuel Depot named DEPBFARPFUEL, FARP Ammo Depot named DEPBFARPAMMO, FARP Tent named DEPBFARPTENT
 Red | S-60, ATZ-10, Ural 375, 2 AK74v3, Invisible Farp named DEPRFARPPAD, FARP Fuel Depot named DEPRFARPFUEL, Farp Ammo Storage named DEPRFARPAMMO, Farp Tent named DEPRFARPTENT
+
+
+Mapfix command to run:
+luae payloadfix.lua "C:\Users\Adam\Documents\GitHub\bfnext\miz\Scenarios\80s\caucasus\Caucasus 0.2.miz" "C:\Users\Adam\Documents\GitHub\bfnext\miz\Scenarios\80s\caucasus\BFConfig.json"
+
+OBJs that Ive created:
+OABRBeslan
+OFORVLADIKAVKAZ
+OFONKAZBEGI (REMOVE TREES)
+OFOBZhinvali
+OABTbilisi

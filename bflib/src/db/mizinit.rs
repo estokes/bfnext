@@ -24,7 +24,7 @@ impl Db {
     /// - AB: Airbase
     /// - FO: Fob
     /// - SA: Sam site
-    /// - FB: Fuel base
+    /// - LO: Logistics Objective
     ///
     /// Then a 1 character code for the default owner
     /// followed by the display name

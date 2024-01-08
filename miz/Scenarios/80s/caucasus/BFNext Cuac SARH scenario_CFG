@@ -1440,6 +1440,39 @@
     ],
     "SA342M": [
       "Helicopter"
+    ],
+    "Su-33": [
+      "Aircraft"
+    ],
+    "J-11A": [
+      "Aircraft"
+    ],
+    "A-10C_2": [
+      "Aircraft"
+    ],
+    "F-14B": [
+      "Aircraft"
+    ],
+    "MiG-29S": [
+      "Aircraft"
+    ],
+    "FA-18C_hornet": [
+      "Aircraft"
+    ],
+    "L-39C": [
+      "Aircraft"
+    ],
+    "JF-17": [
+      "Aircraft"
+    ],
+    "AJS37": [
+      "Aircraft"
+    ],
+    "MB-339A": [
+      "Aircraft"
+    ],
+    "AV8BNA": [
+      "Aircraft"
     ]
   },
   "jtac_priority": [

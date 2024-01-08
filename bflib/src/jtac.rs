@@ -366,7 +366,7 @@ impl Jtacs {
                         group.id,
                         group.side,
                         jtid.clone(),
-                        db.cfg().jtac_priority.clone(),
+                        db.ephemeral.cfg().jtac_priority.clone(),
                     )
                 });
             for (unit, _) in db.instanced_units() {
@@ -395,7 +395,7 @@ impl Jtacs {
             jtx.retain(|gid, jt| {
                 saw_jtacs.contains(gid) || {
                     let _ = jt.remove_target(lua);
-                    db.msgs().panel_to_side(
+                    db.ephemeral.msgs().panel_to_side(
                         10,
                         false,
                         *side,
@@ -420,7 +420,7 @@ impl Jtacs {
         }
         for (side, gid, uid) in killed_targets {
             self.get_mut(&gid)?.remove_contact(lua, &uid)?;
-            db.msgs().panel_to_side(
+            db.ephemeral.msgs().panel_to_side(
                 10,
                 false,
                 side,
@@ -441,7 +441,7 @@ impl Jtacs {
         }
         for (gid, msg) in msgs {
             let side = db.group(&gid)?.side;
-            db.msgs().panel_to_side(10, false, side, msg);
+            db.ephemeral.msgs().panel_to_side(10, false, side, msg);
         }
         Ok(())
     }

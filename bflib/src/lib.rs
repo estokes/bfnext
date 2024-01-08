@@ -277,13 +277,13 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     {
         Ok(()) => {
             let msg = String::from(format_compact!("Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!", side));
-            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            ctx.db.msgs().send(
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.ephemeral.msgs().send(
                 MsgTyp::Chat(None),
                 format_compact!("{} has joined {:?} team", ifo.name, side),
             );
         }
-        Err(RegErr::AlreadyOn(side)) => ctx.db.msgs().send(
+        Err(RegErr::AlreadyOn(side)) => ctx.db.ephemeral.msgs().send(
             MsgTyp::Chat(Some(id)),
             format_compact!("you are already on {:?} team!", side),
         ),
@@ -294,7 +294,7 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
                 Some(1) => format_compact!("You are already on {:?} team. You may sitch sides 1 time by typing -switch {:?}.", orig_side, side),
                 Some(n) => format_compact!("You are already on {:?} team. You may switch sides {n} times. Type -switch {:?}.", orig_side, side),
             });
-            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
         }
     }
     Ok("".into())
@@ -317,9 +317,9 @@ fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String>
     match ctx.db.sideswitch_player(&ifo.ucid, side) {
         Ok(()) => {
             let msg = String::from(format_compact!("{} has switched to {:?}", ifo.name, side));
-            ctx.db.msgs().send(MsgTyp::Chat(None), msg);
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(None), msg);
         }
-        Err(e) => ctx.db.msgs().send(MsgTyp::Chat(Some(id)), e),
+        Err(e) => ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), e),
     }
     Ok("".into())
 }
@@ -331,7 +331,7 @@ fn lives_command(id: PlayerId) -> Result<()> {
         .get(&id)
         .ok_or_else(|| anyhow!("missing info for player {:?}", id))?;
     let msg = lives(&mut ctx.db, &ifo.ucid, None)?;
-    ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
+    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
     Ok(())
 }
 
@@ -366,6 +366,7 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         Err(e) => {
             unsafe { Context::get_mut() }
                 .db
+                .ephemeral
                 .msgs()
                 .send(MsgTyp::Chat(Some(id)), format_compact!("{e}"));
             Ok("".into())
@@ -382,7 +383,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
         SlotAuth::NoLives => Ok(false),
         SlotAuth::ObjectiveHasNoLogistics => {
             let msg = format_compact!("Objective is capturable");
-            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
         SlotAuth::NotRegistered(side) => {
@@ -391,7 +392,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
                 side,
                 side
             ));
-            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
         SlotAuth::ObjectiveNotOwned(side) => {
@@ -399,7 +400,7 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
                 "{:?} does not own the objective associated with this slot",
                 side
             ));
-            ctx.db.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
         SlotAuth::Yes => Ok(true),
@@ -432,7 +433,7 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
 }
 
 fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
-    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(slot) {
+    if let Some(ucid) = ctx.db.ephemeral.player_in_slot(slot) {
         let ucid = ucid.clone();
         ctx.db.player_deslot(&ucid);
         if let Some(id) = ctx.id_by_ucid.get(&ucid) {
@@ -539,7 +540,7 @@ fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<Compac
     let player = db
         .player(ucid)
         .ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
-    let cfg = db.cfg();
+    let cfg = db.ephemeral.cfg();
     let lives = &player.lives;
     let mut msg = CompactString::new("");
     let now = Utc::now();
@@ -570,7 +571,7 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
     let uid = slot.as_unit_id().ok_or_else(|| anyhow!("not a unit"))?;
     let ucid = ctx
         .db
-        .ephemeral()
+        .ephemeral
         .player_in_slot(slot)
         .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?
         .clone();
@@ -578,7 +579,7 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
     if let Ok(lives) = lives(&mut ctx.db, &ucid, typ) {
         msg.push_str(&lives)
     }
-    ctx.db.msgs().panel_to_unit(10, false, uid, msg);
+    ctx.db.ephemeral.msgs().panel_to_unit(10, false, uid, msg);
     Ok(())
 }
 
@@ -619,7 +620,7 @@ fn advise_captureable(ctx: &mut Context) -> Result<()> {
         *dur += 1;
         if *dur == 10 {
             let m = format_compact!("{} is now capturable", ctx.db.objective(oid)?.name());
-            ctx.db.msgs().panel_to_all(30, false, m);
+            ctx.db.ephemeral.msgs().panel_to_all(30, false, m);
         }
     }
     ctx.captureable.retain(|oid, _| cur_cap.contains(oid));
@@ -631,8 +632,9 @@ fn advise_captured(ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
         let name = ctx.db.objective(&oid)?.name();
         let mcap = format_compact!("our forces have captured {}", name);
         let mlost = format_compact!("we have lost {}", name);
-        ctx.db.msgs().panel_to_side(15, false, side, mcap);
+        ctx.db.ephemeral.msgs().panel_to_side(15, false, side, mcap);
         ctx.db
+            .ephemeral
             .msgs()
             .panel_to_side(15, false, side.opposite(), mlost);
         ctx.captureable.remove(&oid);
@@ -663,7 +665,7 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
         }
     }
     for (uid, msg) in msgs {
-        ctx.db.msgs().panel_to_unit(10, false, uid, msg)
+        ctx.db.ephemeral.msgs().panel_to_unit(10, false, uid, msg)
     }
     Ok(())
 }
@@ -674,7 +676,7 @@ fn run_slow_timed_events(
     perf: &mut Perf,
     ts: DateTime<Utc>,
 ) -> Result<()> {
-    let freq = Duration::seconds(ctx.db.cfg().slow_timed_events_freq as i64);
+    let freq = Duration::seconds(ctx.db.ephemeral.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         let start_ts = Utc::now();
@@ -708,13 +710,13 @@ fn run_slow_timed_events(
                     let obj = ctx.db.objective(&oid)?;
                     let owner = obj.owner();
                     let msg = format_compact!("enemies spotted near {}", obj.name());
-                    ctx.db.msgs().panel_to_side(10, false, owner, msg)
+                    ctx.db.ephemeral.msgs().panel_to_side(10, false, owner, msg)
                 }
                 for oid in cleared {
                     let obj = ctx.db.objective(&oid)?;
                     let owner = obj.owner();
                     let msg = format_compact!("{} is no longer threatened", obj.name());
-                    ctx.db.msgs().panel_to_side(10, false, owner, msg)
+                    ctx.db.ephemeral.msgs().panel_to_side(10, false, owner, msg)
                 }
             }
         }
@@ -775,7 +777,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.jtac_target_positions, now);
     let now = Utc::now();
-    ctx.db.msgs().process(&net, &act);
+    ctx.db.ephemeral.msgs().process(&net, &act);
     record_perf(&mut perf.process_messages, now);
     let now = Utc::now();
     if let Some(snap) = ctx.db.maybe_snapshot() {

@@ -1,11 +1,15 @@
 use super::{
-    ephemeral::DeployableIndex, Db, group::{SpawnedGroup, GroupId}, objective::{ObjectiveId, Objective, ObjectiveKind}, 
+    ephemeral::DeployableIndex,
+    group::{GroupId, SpawnedGroup},
+    objective::{Objective, ObjectiveId, ObjectiveKind},
+    Db,
 };
 use crate::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
+    db::group::DeployKind,
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
-    unit, unit_mut, db::group::DeployKind,
+    unit, unit_mut,
 };
 use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
@@ -480,7 +484,7 @@ impl Db {
             side: Side,
             nearby: &SmallVec<[Cifo; 8]>,
         ) -> FxHashMap<GroupId, Cifo> {
-            let cr = &db.cfg().repair_crate[&side];
+            let cr = &db.ephemeral.cfg.repair_crate[&side];
             nearby
                 .iter()
                 .filter(|ci| ci.crate_def.name == cr.name)
@@ -1027,7 +1031,7 @@ impl Db {
         let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let (gid, troop_cfg) = {
-            let max_dist = (self.cfg().crate_load_distance as f64).powi(2);
+            let max_dist = (self.ephemeral.cfg.crate_load_distance as f64).powi(2);
             self.persisted
                 .troops
                 .into_iter()

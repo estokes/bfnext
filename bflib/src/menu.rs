@@ -3,8 +3,8 @@ use crate::{
     db::{
         self,
         cargo::{Cargo, Oldest, SlotStats},
-        Db,
         group::GroupId as DbGid,
+        Db,
     },
     ewr::{self, EwrUnits},
     Context,
@@ -77,7 +77,8 @@ fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, Sl
 }
 
 fn player_name(db: &Db, slot: &SlotId) -> String {
-    db.ephemeral().player_in_slot(&slot)
+    db.ephemeral
+        .player_in_slot(&slot)
         .and_then(|ucid| db.player(ucid).map(|p| p.name.clone()))
         .unwrap_or_default()
 }
@@ -89,11 +90,11 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
         Ok(unpakistan) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} {unpakistan}");
-            ctx.db.msgs().panel_to_side(10, false, side, msg);
+            ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg);
         }
         Err(e) => {
             let msg = format_compact!("{}", e);
-            ctx.db.msgs().panel_to_group(10, false, gid, msg)
+            ctx.db.ephemeral.msgs().panel_to_group(10, false, gid, msg)
         }
     }
     Ok(())
@@ -138,11 +139,11 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
                 dep_name,
                 enforce
             );
-            ctx.db.msgs().panel_to_group(10, false, gid, msg)
+            ctx.db.ephemeral.msgs().panel_to_group(10, false, gid, msg)
         }
         Err(e) => {
             let msg = format_compact!("crate could not be loaded: {}", e);
-            ctx.db.msgs().panel_to_group(10, false, gid, msg)
+            ctx.db.ephemeral.msgs().panel_to_group(10, false, gid, msg)
         }
     }
     Ok(())
@@ -154,11 +155,11 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     match ctx.db.unload_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
             let msg = format_compact!("{} crate unloaded", cr.name);
-            ctx.db.msgs().panel_to_group(10, false, gid, msg)
+            ctx.db.ephemeral.msgs().panel_to_group(10, false, gid, msg)
         }
         Err(e) => {
             let msg = format_compact!("{}", e);
-            ctx.db.msgs().panel_to_group(10, false, gid, msg)
+            ctx.db.ephemeral.msgs().panel_to_group(10, false, gid, msg)
         }
     }
     Ok(())
@@ -208,6 +209,7 @@ pub(super) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId)
     }
     msg.push_str(&format_compact!("total cargo weight: {} kg", total as u32));
     ctx.db
+        .ephemeral
         .msgs()
         .panel_to_unit(15, false, slot.as_unit_id().unwrap(), msg);
     Ok(())
@@ -234,10 +236,11 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
                 nc.distance as u32
             ));
         }
-        ctx.db.msgs().panel_to_group(10, false, gid, msg)
+        ctx.db.ephemeral.msgs().panel_to_group(10, false, gid, msg)
     } else {
         drop(nearby);
         ctx.db
+            .ephemeral
             .msgs()
             .panel_to_group(10, false, gid, "No nearby crates")
     }
@@ -249,6 +252,7 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
     if let Err(e) = ctx.db.destroy_nearby_crate(lua, &slot) {
         ctx.db
+            .ephemeral
             .msgs()
             .panel_to_group(10, false, gid, format_compact!("{}", e))
     }
@@ -259,12 +263,14 @@ fn spawn_crate(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &arg.fst)?;
     match ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.snd) {
-        Err(e) => ctx
-            .db
-            .msgs()
-            .panel_to_group(10, false, arg.fst, format_compact!("{e}")),
+        Err(e) => {
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_group(10, false, arg.fst, format_compact!("{e}"))
+        }
         Ok(st) => {
-            if let Some(max_crates) = ctx.db.cfg().max_crates {
+            if let Some(max_crates) = ctx.db.ephemeral.cfg().max_crates {
                 let (n, oldest) = ctx.db.number_crates_deployed(&st)?;
                 let msg = match oldest {
                     None => format_compact!("{n} of {max_crates} crates spawned"),
@@ -272,7 +278,10 @@ fn spawn_crate(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
                         "{n} of {max_crates} crates spawned, {gid} will be deleted if the limit is exceeded"
                     ),
                 };
-                ctx.db.msgs().panel_to_group(10, false, arg.fst, msg)
+                ctx.db
+                    .ephemeral
+                    .msgs()
+                    .panel_to_group(10, false, arg.fst, msg)
             }
         }
     }
@@ -308,12 +317,14 @@ fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
                 tr.name,
                 enforce
             );
-            ctx.db.msgs().panel_to_side(10, false, side, msg)
+            ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg)
         }
-        Err(e) => ctx
-            .db
-            .msgs()
-            .panel_to_group(10, false, arg.fst, format_compact!("{e}")),
+        Err(e) => {
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_group(10, false, arg.fst, format_compact!("{e}"))
+        }
     }
     Ok(())
 }
@@ -325,10 +336,11 @@ fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} dropped {} troops into the field", tr.name);
-            ctx.db.msgs().panel_to_side(10, false, side, msg)
+            ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
             .db
+            .ephemeral
             .msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
     }
@@ -342,10 +354,11 @@ fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} extracted {} troops from the field", tr.name);
-            ctx.db.msgs().panel_to_side(10, false, side, msg)
+            ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
             .db
+            .ephemeral
             .msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
     }
@@ -359,10 +372,11 @@ fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} returned {} troops", tr.name);
-            ctx.db.msgs().panel_to_side(10, false, side, msg)
+            ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg)
         }
         Err(e) => ctx
             .db
+            .ephemeral
             .msgs()
             .panel_to_group(10, false, gid, format_compact!("{e}")),
     }
@@ -372,15 +386,18 @@ fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
 fn toggle_ewr(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
-    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         let st = if ctx.ewr.toggle(ucid) {
             "enabled"
         } else {
             "disabled"
         };
-        ctx.db
-            .msgs()
-            .panel_to_group(5, false, gid, format_compact!("ewr reports are {st}"))
+        ctx.db.ephemeral.msgs().panel_to_group(
+            5,
+            false,
+            gid,
+            format_compact!("ewr reports are {st}"),
+        )
     }
     Ok(())
 }
@@ -389,7 +406,7 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
     let mut report = format_compact!("Bandits BRAA\n");
-    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
             if let Some((_, Some(inst))) = &player.current_slot {
                 let chickens = ctx
@@ -402,7 +419,10 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
             }
         }
     }
-    ctx.db.msgs().panel_to_group(10, false, gid, report);
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_group(10, false, gid, report);
     Ok(())
 }
 
@@ -410,7 +430,7 @@ fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
     let mut report = format_compact!("Friendlies BRAA\n");
-    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
             if let Some((_, Some(inst))) = &player.current_slot {
                 let friendlies = ctx
@@ -423,16 +443,20 @@ fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
             }
         }
     }
-    ctx.db.msgs().panel_to_group(10, false, gid, report);
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_group(10, false, gid, report);
     Ok(())
 }
 
 fn ewr_units_imperial(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
-    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         ctx.ewr.set_units(ucid, EwrUnits::Imperial);
         ctx.db
+            .ephemeral
             .msgs()
             .panel_to_group(5, false, gid, "EWR units are now Imperial");
     }
@@ -442,9 +466,10 @@ fn ewr_units_imperial(lua: MizLua, gid: GroupId) -> Result<()> {
 fn ewr_units_metric(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
-    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         ctx.ewr.set_units(ucid, EwrUnits::Imperial);
         ctx.db
+            .ephemeral
             .msgs()
             .panel_to_group(5, false, gid, "EWR units are now Metric");
     }
@@ -644,7 +669,7 @@ fn jtac_status(_: MizLua, gid: DbGid) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let side = ctx.db.group(&gid)?.side;
     let msg = ctx.jtac.jtac_status(&ctx.db, &gid)?;
-    ctx.db.msgs().panel_to_side(10, false, side, msg);
+    ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg);
     Ok(())
 }
 
@@ -807,7 +832,7 @@ impl CarryCap {
 
 pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
     debug!("initializing menus");
-    let cfg = ctx.db.cfg();
+    let cfg = ctx.db.ephemeral.cfg();
     let miz = Miz::singleton(lua)?;
     let mc = MissionCommands::singleton(lua)?;
     for side in [Side::Red, Side::Blue, Side::Neutral] {

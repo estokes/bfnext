@@ -64,6 +64,14 @@ pub struct Ephemeral {
 }
 
 impl Ephemeral {
+    pub fn msgs(&mut self) -> &mut MsgQ {
+        &mut self.msgs
+    }
+
+    pub fn cfg(&self) -> &Cfg {
+        &self.cfg
+    }
+
     fn index_deployables_for_side(
         &mut self,
         miz: &Miz,

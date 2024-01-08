@@ -16,7 +16,7 @@ use dcso3::{
     env::miz::{GroupKind, MizIndex},
     land::Land,
     net::SlotId,
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3, azumith2d_to,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error};
@@ -190,6 +190,27 @@ impl Objective {
 }
 
 impl Db {
+    pub fn objective(&self, id: &ObjectiveId) -> Result<&Objective> {
+        objective!(self, id)
+    }
+
+    /// (distance, heading from objective to point, objective)
+    pub fn objective_near_point(&self, pos: Vector2) -> (f64, f64, &Objective) {
+        let (dist, obj) = self.persisted.objectives.into_iter().fold(
+            (f64::MAX, None),
+            |(cur_dist, cur_obj), (_, obj)| {
+                let dist = na::distance_squared(&pos.into(), &obj.pos.into());
+                if dist < cur_dist {
+                    (dist, Some(obj))
+                } else {
+                    (cur_dist, cur_obj)
+                }
+            },
+        );
+        let obj = obj.unwrap();
+        (dist.sqrt(), azumith2d_to(obj.pos, pos), obj)
+    }
+
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
         obj.groups
             .get(&obj.owner)
@@ -455,7 +476,7 @@ impl Db {
                     .map(|inst| (side, inst.position.p, inst.typ.clone()))
             })
             .collect::<SmallVec<[_; 64]>>();
-        let cfg = self.cfg();
+        let cfg = &self.ephemeral.cfg;
         let cull_distance = (cfg.unit_cull_distance as f64).powi(2);
         let ground_cull_distance = (cfg.ground_vehicle_cull_distance as f64).powi(2);
         let mut to_spawn: SmallVec<[ObjectiveId; 8]> = smallvec![];

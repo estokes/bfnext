@@ -1,4 +1,4 @@
-use super::{Db, Map, Set, group::GroupId};
+use super::{group::GroupId, Db, Map, Set};
 use crate::{
     cfg::{LifeType, Vehicle},
     maybe,
@@ -10,10 +10,10 @@ use dcso3::{
     net::{SlotId, SlotIdKind, Ucid},
     object::DcsObject,
     unit::Unit,
-    MizLua, String, Vector2, Position3, Vector3,
+    MizLua, Position3, String, Vector2, Vector3,
 };
 use log::error;
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Copy)]
@@ -50,6 +50,29 @@ pub struct Player {
 }
 
 impl Db {
+    pub fn player_deslot(&mut self, ucid: &Ucid) {
+        if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
+            if let Some((slot, _)) = player.current_slot.take() {
+                self.ephemeral.player_deslot(&slot)
+            }
+        }
+    }
+
+    pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
+        self.persisted.players.get(ucid)
+    }
+
+    pub fn instanced_players(&self) -> impl Iterator<Item = (&Ucid, &Player, &InstancedPlayer)> {
+        self.ephemeral.players_by_slot.values().filter_map(|ucid| {
+            let player = &self.persisted.players[ucid];
+            player
+                .current_slot
+                .as_ref()
+                .and_then(|(_, inst)| inst.as_ref())
+                .map(|inst| (ucid, player, inst))
+        })
+    }
+
     pub fn takeoff(
         &mut self,
         time: DateTime<Utc>,

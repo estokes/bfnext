@@ -1,26 +1,22 @@
 extern crate nalgebra as na;
 use self::{
     group::{DeployKind, GroupId, SpawnedGroup, SpawnedUnit, UnitId},
-    objective::{Objective, ObjectiveId},
     persisted::Persisted,
-    player::{InstancedPlayer, Player},
 };
 use crate::{
     cfg::{Cfg, Deployable, DeployableEwr, DeployableJtac, Troop},
     db::{ephemeral::Ephemeral, objective::ObjGroupClass},
-    msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    azumith2d_to, azumith3d, centroid2d, centroid3d,
+    azumith3d, centroid2d, centroid3d,
     coalition::Side,
     env::miz::{Group, GroupKind, Miz, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
-    net::Ucid,
     object::{DcsObject, DcsOid},
     rotate2d,
     unit::{ClassUnit, Unit},
@@ -143,19 +139,11 @@ macro_rules! objective_mut {
 
 #[derive(Debug, Default)]
 pub struct Db {
-    persisted: Persisted,
-    ephemeral: Ephemeral,
+    pub persisted: Persisted,
+    pub ephemeral: Ephemeral,
 }
 
 impl Db {
-    pub fn cfg(&self) -> &Cfg {
-        &self.ephemeral.cfg
-    }
-
-    pub fn ephemeral(&self) -> &Ephemeral {
-        &self.ephemeral
-    }
-
     pub fn load(miz: &Miz, idx: &MizIndex, path: &Path) -> Result<Self> {
         let file = File::open(&path)
             .map_err(|e| anyhow!("failed to open save file {:?}, {:?}", path, e))?;
@@ -175,88 +163,6 @@ impl Db {
         } else {
             None
         }
-    }
-
-    pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
-        self.persisted.groups.into_iter()
-    }
-
-    pub fn group(&self, id: &GroupId) -> Result<&SpawnedGroup> {
-        group!(self, id)
-    }
-
-    pub fn group_center(&self, id: &GroupId) -> Result<Vector2> {
-        let group = group!(self, id)?;
-        Ok(centroid2d(
-            group
-                .units
-                .into_iter()
-                .filter_map(|uid| self.persisted.units.get(uid))
-                .filter_map(|unit| if unit.dead { None } else { Some(unit.pos) }),
-        ))
-    }
-
-    pub fn objective(&self, id: &ObjectiveId) -> Result<&Objective> {
-        objective!(self, id)
-    }
-
-    /// (distance, heading from objective to point, objective)
-    pub fn objective_near_point(&self, pos: Vector2) -> (f64, f64, &Objective) {
-        let (dist, obj) = self.persisted.objectives.into_iter().fold(
-            (f64::MAX, None),
-            |(cur_dist, cur_obj), (_, obj)| {
-                let dist = na::distance_squared(&pos.into(), &obj.pos.into());
-                if dist < cur_dist {
-                    (dist, Some(obj))
-                } else {
-                    (cur_dist, cur_obj)
-                }
-            },
-        );
-        let obj = obj.unwrap();
-        (dist.sqrt(), azumith2d_to(obj.pos, pos), obj)
-    }
-
-    pub fn group_by_name(&self, name: &str) -> Result<&SpawnedGroup> {
-        group_by_name!(self, name)
-    }
-
-    pub fn unit(&self, id: &UnitId) -> Result<&SpawnedUnit> {
-        unit!(self, id)
-    }
-
-    pub fn unit_by_name(&self, name: &str) -> Result<&SpawnedUnit> {
-        unit_by_name!(self, name)
-    }
-
-    pub fn player_deslot(&mut self, ucid: &Ucid) {
-        if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
-            if let Some((slot, _)) = player.current_slot.take() {
-                self.ephemeral.player_deslot(&slot)
-            }
-        }
-    }
-
-    pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
-        self.persisted.players.get(ucid)
-    }
-
-    pub fn instanced_players(&self) -> impl Iterator<Item = (&Ucid, &Player, &InstancedPlayer)> {
-        self.ephemeral.players_by_slot.values().filter_map(|ucid| {
-            let player = &self.persisted.players[ucid];
-            player
-                .current_slot
-                .as_ref()
-                .and_then(|(_, inst)| inst.as_ref())
-                .map(|inst| (ucid, player, inst))
-        })
-    }
-
-    pub fn instanced_units(&self) -> impl Iterator<Item = (&SpawnedUnit, &DcsOid<ClassUnit>)> {
-        self.persisted
-            .units
-            .into_iter()
-            .filter_map(|(uid, sp)| self.ephemeral.object_id_by_uid.get(uid).map(|id| (sp, id)))
     }
 
     pub fn ewrs(&self) -> impl Iterator<Item = (Vector3, Side, &DeployableEwr)> {
@@ -315,10 +221,6 @@ impl Db {
                 | DeployKind::Deployed { .. } => None,
             }
         })
-    }
-
-    pub fn msgs(&mut self) -> &mut MsgQ {
-        &mut self.ephemeral.msgs
     }
 
     fn spawn_group<'lua>(

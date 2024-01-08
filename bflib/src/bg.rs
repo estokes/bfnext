@@ -1,4 +1,4 @@
-use crate::{db::Persisted, Perf};
+use crate::{db::persisted::Persisted, Perf};
 use bytes::{Bytes, BytesMut};
 use log::error;
 use once_cell::sync::OnceCell;

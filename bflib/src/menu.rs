@@ -4,6 +4,7 @@ use crate::{
         self,
         cargo::{Cargo, Oldest, SlotStats},
         Db,
+        group::GroupId as DbGid,
     },
     ewr::{self, EwrUnits},
     Context,
@@ -76,7 +77,7 @@ fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, Sl
 }
 
 fn player_name(db: &Db, slot: &SlotId) -> String {
-    db.player_in_slot(&slot)
+    db.ephemeral().player_in_slot(&slot)
         .and_then(|ucid| db.player(ucid).map(|p| p.name.clone()))
         .unwrap_or_default()
 }
@@ -166,7 +167,7 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 pub(super) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId) -> Result<()> {
     let cargo = Cargo::default();
     let cargo = ctx.db.list_cargo(&slot).unwrap_or(&cargo);
-    let uinfo = ctx.db.slot_miz_unit(lua, &ctx.idx, &slot)?;
+    let uinfo = db::cargo::slot_miz_unit(lua, &ctx.idx, &slot)?;
     let capacity = ctx.db.cargo_capacity(&uinfo.unit)?;
     let mut msg = CompactString::new("Current Cargo\n----------------------------\n");
     msg.push_str(&format_compact!(
@@ -371,7 +372,7 @@ fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
 fn toggle_ewr(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
-    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
         let st = if ctx.ewr.toggle(ucid) {
             "enabled"
         } else {
@@ -388,7 +389,7 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
     let mut report = format_compact!("Bandits BRAA\n");
-    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
             if let Some((_, Some(inst))) = &player.current_slot {
                 let chickens = ctx
@@ -409,7 +410,7 @@ fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
     let mut report = format_compact!("Friendlies BRAA\n");
-    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
             if let Some((_, Some(inst))) = &player.current_slot {
                 let friendlies = ctx
@@ -429,7 +430,7 @@ fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
 fn ewr_units_imperial(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
-    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
         ctx.ewr.set_units(ucid, EwrUnits::Imperial);
         ctx.db
             .msgs()
@@ -441,7 +442,7 @@ fn ewr_units_imperial(lua: MizLua, gid: GroupId) -> Result<()> {
 fn ewr_units_metric(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid)?;
-    if let Some(ucid) = ctx.db.player_in_slot(&slot) {
+    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(&slot) {
         ctx.ewr.set_units(ucid, EwrUnits::Imperial);
         ctx.db
             .msgs()
@@ -639,7 +640,7 @@ fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
     Ok(())
 }
 
-fn jtac_status(_: MizLua, gid: db::GroupId) -> Result<()> {
+fn jtac_status(_: MizLua, gid: DbGid) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let side = ctx.db.group(&gid)?.side;
     let msg = ctx.jtac.jtac_status(&ctx.db, &gid)?;
@@ -647,7 +648,7 @@ fn jtac_status(_: MizLua, gid: db::GroupId) -> Result<()> {
     Ok(())
 }
 
-fn jtac_toggle_auto_laser(lua: MizLua, gid: db::GroupId) -> Result<()> {
+fn jtac_toggle_auto_laser(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac.toggle_auto_laser(lua, &gid)?;
@@ -655,7 +656,7 @@ fn jtac_toggle_auto_laser(lua: MizLua, gid: db::GroupId) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_toggle_smoke_target(lua: MizLua, gid: db::GroupId) -> Result<()> {
+fn jtac_toggle_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac.toggle_smoke_target(&gid)?;
@@ -663,7 +664,7 @@ fn jtac_toggle_smoke_target(lua: MizLua, gid: db::GroupId) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_shift(lua: MizLua, gid: db::GroupId) -> Result<()> {
+fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac.shift(lua, &gid)?;
@@ -671,13 +672,13 @@ fn jtac_shift(lua: MizLua, gid: db::GroupId) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_clear_filter(lua: MizLua, gid: db::GroupId) -> Result<()> {
+fn jtac_clear_filter(lua: MizLua, gid: DbGid) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     ctx.jtac.clear_filter(lua, &gid)?;
     Ok(())
 }
 
-fn jtac_filter(lua: MizLua, arg: ArgTuple<db::GroupId, u64>) -> Result<()> {
+fn jtac_filter(lua: MizLua, arg: ArgTuple<DbGid, u64>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let filter =
         BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
@@ -687,7 +688,7 @@ fn jtac_filter(lua: MizLua, arg: ArgTuple<db::GroupId, u64>) -> Result<()> {
     Ok(())
 }
 
-fn jtac_set_code(lua: MizLua, arg: ArgTuple<db::GroupId, u16>) -> Result<()> {
+fn jtac_set_code(lua: MizLua, arg: ArgTuple<DbGid, u16>) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac.set_code_part(lua, &arg.fst, arg.snd)?;
@@ -695,7 +696,7 @@ fn jtac_set_code(lua: MizLua, arg: ArgTuple<db::GroupId, u16>) -> Result<()> {
     jtac_status(lua, arg.fst)
 }
 
-pub fn remove_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<()> {
+pub fn remove_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     mc.remove_submenu_for_coalition(
         side,
@@ -703,7 +704,7 @@ pub fn remove_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Resu
     )
 }
 
-pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: db::GroupId) -> Result<()> {
+pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root = CoalitionSubMenu::from(vec!["JTAC".into()]);
     let root = mc.add_submenu_for_coalition(side, format_compact!("{group}").into(), Some(root))?;

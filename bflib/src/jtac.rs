@@ -1,6 +1,9 @@
 use crate::{
     cfg::{UnitTag, UnitTags},
-    db::{Db, GroupId, SpawnedUnit, UnitId},
+    db::{
+        group::{GroupId, SpawnedUnit, UnitId},
+        Db,
+    },
     menu,
 };
 use anyhow::{anyhow, bail, Result};
@@ -45,12 +48,7 @@ struct Jtac {
 }
 
 impl Jtac {
-    fn new(
-        gid: GroupId,
-        side: Side,
-        id: DcsOid<ClassUnit>,
-        priority: Vec<UnitTags>,
-    ) -> Self {
+    fn new(gid: GroupId, side: Side, id: DcsOid<ClassUnit>, priority: Vec<UnitTags>) -> Self {
         Self {
             gid,
             side,

@@ -1,7 +1,6 @@
-use super::{Db, DeployKind, GroupId, ObjGroupClass, Objective, ObjectiveId, Set, UnitId};
+use super::{logistics::Warehouse, Db, Map, Set, group::{GroupId, DeployKind, UnitId}};
 use crate::{
-    cfg::{Deployable, DeployableLogistics, UnitTag},
-    db::{Map, ObjectiveKind},
+    cfg::{Deployable, DeployableLogistics, UnitTag, Vehicle},
     group, group_mut, maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
@@ -10,17 +9,185 @@ use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
-    centroid2d,
+    atomic_id, centroid2d,
     coalition::Side,
     coord::Coord,
+    cvt_err,
     env::miz::{GroupKind, MizIndex},
     land::Land,
+    net::SlotId,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error};
+use mlua::{prelude::*, Value};
+use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::cmp::max;
+use std::{cmp::max, str::FromStr};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ObjectiveKind {
+    Airbase,
+    Fob,
+    Logistics,
+    Farp(Deployable),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum ObjGroupClass {
+    Logi,
+    Aaa,
+    Lr,
+    Mr,
+    Sr,
+    Armor,
+    Other,
+}
+
+impl ObjGroupClass {
+    pub fn is_logi(&self) -> bool {
+        match self {
+            Self::Logi => true,
+            Self::Aaa | Self::Lr | Self::Mr | Self::Sr | Self::Armor | Self::Other => false,
+        }
+    }
+}
+
+impl From<&str> for ObjGroupClass {
+    fn from(value: &str) -> Self {
+        match value {
+            "BLOGI" | "RLOGI" | "NLOGI" | "LOGI" => ObjGroupClass::Logi,
+            s => {
+                if s.starts_with("BAAA")
+                    || s.starts_with("RAAA")
+                    || s.starts_with("NAAA")
+                    || s.starts_with("AAA")
+                {
+                    ObjGroupClass::Aaa
+                } else if s.starts_with("BLR")
+                    || s.starts_with("RLR")
+                    || s.starts_with("NLR")
+                    || s.starts_with("LR")
+                {
+                    ObjGroupClass::Lr
+                } else if s.starts_with("BMR")
+                    || s.starts_with("RMR")
+                    || s.starts_with("NMR")
+                    || s.starts_with("MR")
+                {
+                    ObjGroupClass::Mr
+                } else if s.starts_with("BSR")
+                    || s.starts_with("RSR")
+                    || s.starts_with("NSR")
+                    || s.starts_with("SR")
+                {
+                    ObjGroupClass::Sr
+                } else if s.starts_with("BARMOR")
+                    || s.starts_with("RARMOR")
+                    || s.starts_with("NARMOR")
+                    || s.starts_with("ARMOR")
+                {
+                    ObjGroupClass::Armor
+                } else {
+                    ObjGroupClass::Other
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ObjGroup(String);
+
+impl FromStr for ObjGroup {
+    type Err = LuaError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(String::from(s)))
+    }
+}
+
+impl<'lua> FromLua<'lua> for ObjGroup {
+    fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
+        match value {
+            Value::String(s) => s.to_str()?.parse(),
+            _ => Err(cvt_err("ObjGroup")),
+        }
+    }
+}
+
+impl ObjGroup {
+    pub(super) fn template(&self, side: Side) -> (Side, String) {
+        let s = match self.0.rsplit_once("-") {
+            Some((l, _)) => l,
+            None => self.0.as_str(),
+        };
+        if s.starts_with("R") {
+            (Side::Red, s.into())
+        } else if s.starts_with("B") {
+            (Side::Blue, s.into())
+        } else if s.starts_with("N") {
+            (Side::Neutral, s.into())
+        } else {
+            let pfx = match side {
+                Side::Red => "R",
+                Side::Blue => "B",
+                Side::Neutral => "N",
+            };
+            (side, format_compact!("{}{}", pfx, s).into())
+        }
+    }
+}
+
+atomic_id!(ObjectiveId);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Objective {
+    pub(super) id: ObjectiveId,
+    pub(super) name: String,
+    pub(super) pos: Vector2,
+    pub(super) radius: f64,
+    pub(super) owner: Side,
+    pub(super) kind: ObjectiveKind,
+    pub(super) slots: Map<SlotId, Vehicle>,
+    pub(super) groups: Map<Side, Set<GroupId>>,
+    pub(super) health: u8,
+    pub(super) logi: u8,
+    pub(super) threatened: bool,
+    pub(super) last_threatened_ts: DateTime<Utc>,
+    pub(super) last_change_ts: DateTime<Utc>,
+    pub(super) warehouse: Warehouse,
+    #[serde(skip)]
+    pub(super) spawned: bool,
+    #[serde(skip)]
+    pub(super) needs_mark: bool,
+}
+
+impl Objective {
+    pub fn is_in_circle(&self, pos: Vector2) -> bool {
+        na::distance_squared(&self.pos.into(), &pos.into()) <= self.radius.powi(2)
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    pub fn health(&self) -> u8 {
+        self.health
+    }
+
+    pub fn logi(&self) -> u8 {
+        self.logi
+    }
+
+    pub fn captureable(&self) -> bool {
+        self.logi == 0
+    }
+
+    pub fn owner(&self) -> Side {
+        self.owner
+    }
+}
 
 impl Db {
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
@@ -165,6 +332,7 @@ impl Db {
             logi: 100,
             spawned: true,
             threatened: true,
+            warehouse: Warehouse::default(),
             last_threatened_ts: now,
             last_change_ts: now,
             needs_mark: false,
@@ -177,7 +345,7 @@ impl Db {
         }
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
-        self.ephemeral.dirty = true;
+        self.ephemeral.dirty();
         self.mark_objective(&oid)?;
         Ok(oid)
     }
@@ -202,7 +370,7 @@ impl Db {
                 self.delete_objective(oid)?;
             }
         }
-        self.ephemeral.dirty = true;
+        self.ephemeral.dirty();
         debug!("objective {oid} health: {}, logi: {}", health, logi);
         Ok(())
     }
@@ -258,7 +426,7 @@ impl Db {
                             self.spawn_group(idx, spctx, group)?;
                         }
                         self.update_objective_status(&oid, now)?;
-                        self.ephemeral.dirty = true;
+                        self.ephemeral.dirty();
                         return Ok(());
                     }
                 }
@@ -391,7 +559,7 @@ impl Db {
             }
             obj.threatened = true;
             obj.last_threatened_ts = now;
-            self.ephemeral.dirty = true;
+            self.ephemeral.dirty();
         }
         let cooldown = Duration::seconds(self.ephemeral.cfg.threatened_cooldown as i64);
         for oid in &not_threatened {
@@ -568,7 +736,7 @@ impl Db {
                 for (_, gid) in gids {
                     self.delete_group(&gid)?
                 }
-                self.ephemeral.dirty = true;
+                self.ephemeral.dirty();
             }
         }
         Ok(actually_captured)

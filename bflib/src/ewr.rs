@@ -1,4 +1,4 @@
-use crate::db::{Db, InstancedPlayer, Player};
+use crate::db::{Db, player::{InstancedPlayer, Player}};
 use anyhow::Result;
 use chrono::prelude::*;
 use dcso3::{

@@ -1,10 +1,13 @@
 extern crate nalgebra as na;
-use self::cargo::Cargo;
+use self::{
+    group::{DeployKind, GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+    objective::{Objective, ObjectiveId},
+    persisted::Persisted,
+    player::{InstancedPlayer, Player},
+};
 use crate::{
-    cfg::{
-        Cfg, Crate, Deployable, DeployableEwr, DeployableJtac, DeployableLogistics, LifeType,
-        Troop, Vehicle, UnitTags,
-    },
+    cfg::{Cfg, Deployable, DeployableEwr, DeployableJtac, Troop},
+    db::{ephemeral::Ephemeral, objective::ObjGroupClass},
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
 };
@@ -12,46 +15,33 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    airbase::ClassAirbase,
-    atomic_id, azumith2d_to, azumith3d, centroid2d, centroid3d,
+    azumith2d_to, azumith3d, centroid2d, centroid3d,
     coalition::Side,
-    cvt_err,
-    env::miz::{Group, GroupKind, Miz, MizIndex, UnitInfo},
+    env::miz::{Group, GroupKind, Miz, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
-    net::{SlotId, Ucid},
+    net::Ucid,
     object::{DcsObject, DcsOid},
     rotate2d,
-    trigger::MarkId,
     unit::{ClassUnit, Unit},
-    warehouse::{ClassWarehouse, LiquidType},
     LuaVec2, MizLua, Position3, String, Vector2, Vector3,
 };
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use log::{error, info};
-use mlua::{prelude::*, Value};
-use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{
-    cmp::max,
-    collections::{hash_map::Entry, BTreeMap, VecDeque},
-    fs::{self, File},
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::Arc,
-};
+use std::{cmp::max, collections::VecDeque, fs::File, path::Path};
 
 pub mod cargo;
+pub mod ephemeral;
+pub mod group;
+pub mod logistics;
 pub mod mizinit;
 pub mod objective;
+pub mod persisted;
 pub mod player;
 
 pub type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
 pub type Set<K> = immutable_chunkmap::set::Set<K, 32>;
-
-atomic_id!(GroupId);
-atomic_id!(UnitId);
-atomic_id!(ObjectiveId);
 
 #[macro_export]
 macro_rules! maybe {
@@ -151,470 +141,6 @@ macro_rules! objective_mut {
     };
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub enum DeployKind {
-    Objective,
-    Deployed {
-        player: Ucid,
-        spec: Deployable,
-    },
-    Troop {
-        player: Ucid,
-        spec: Troop,
-    },
-    Crate {
-        origin: ObjectiveId,
-        player: Ucid,
-        spec: Crate,
-    },
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SpawnedUnit {
-    pub name: String,
-    pub id: UnitId,
-    pub group: GroupId,
-    pub side: Side,
-    pub typ: String,
-    pub tags: UnitTags,
-    pub template_name: String,
-    pub spawn_pos: Vector2,
-    pub spawn_heading: f64,
-    pub spawn_position: Position3,
-    pub pos: Vector2,
-    pub heading: f64,
-    pub position: Position3,
-    pub dead: bool,
-    #[serde(skip)]
-    pub moved: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpawnedGroup {
-    pub id: GroupId,
-    pub name: String,
-    pub template_name: String,
-    pub side: Side,
-    pub kind: Option<GroupCategory>,
-    pub class: ObjGroupClass,
-    pub origin: DeployKind,
-    pub units: Set<UnitId>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ObjectiveKind {
-    Airbase,
-    Fob,
-    Logistics,
-    Farp(Deployable),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum ObjGroupClass {
-    Logi,
-    Aaa,
-    Lr,
-    Mr,
-    Sr,
-    Armor,
-    Other,
-}
-
-impl ObjGroupClass {
-    pub fn is_logi(&self) -> bool {
-        match self {
-            Self::Logi => true,
-            Self::Aaa | Self::Lr | Self::Mr | Self::Sr | Self::Armor | Self::Other => false,
-        }
-    }
-}
-
-impl From<&str> for ObjGroupClass {
-    fn from(value: &str) -> Self {
-        match value {
-            "BLOGI" | "RLOGI" | "NLOGI" | "LOGI" => ObjGroupClass::Logi,
-            s => {
-                if s.starts_with("BAAA")
-                    || s.starts_with("RAAA")
-                    || s.starts_with("NAAA")
-                    || s.starts_with("AAA")
-                {
-                    ObjGroupClass::Aaa
-                } else if s.starts_with("BLR")
-                    || s.starts_with("RLR")
-                    || s.starts_with("NLR")
-                    || s.starts_with("LR")
-                {
-                    ObjGroupClass::Lr
-                } else if s.starts_with("BMR")
-                    || s.starts_with("RMR")
-                    || s.starts_with("NMR")
-                    || s.starts_with("MR")
-                {
-                    ObjGroupClass::Mr
-                } else if s.starts_with("BSR")
-                    || s.starts_with("RSR")
-                    || s.starts_with("NSR")
-                    || s.starts_with("SR")
-                {
-                    ObjGroupClass::Sr
-                } else if s.starts_with("BARMOR")
-                    || s.starts_with("RARMOR")
-                    || s.starts_with("NARMOR")
-                    || s.starts_with("ARMOR")
-                {
-                    ObjGroupClass::Armor
-                } else {
-                    ObjGroupClass::Other
-                }
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ObjGroup(String);
-
-impl FromStr for ObjGroup {
-    type Err = LuaError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(String::from(s)))
-    }
-}
-
-impl<'lua> FromLua<'lua> for ObjGroup {
-    fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
-        match value {
-            Value::String(s) => s.to_str()?.parse(),
-            _ => Err(cvt_err("ObjGroup")),
-        }
-    }
-}
-
-impl ObjGroup {
-    fn template(&self, side: Side) -> (Side, String) {
-        let s = match self.0.rsplit_once("-") {
-            Some((l, _)) => l,
-            None => self.0.as_str(),
-        };
-        if s.starts_with("R") {
-            (Side::Red, s.into())
-        } else if s.starts_with("B") {
-            (Side::Blue, s.into())
-        } else if s.starts_with("N") {
-            (Side::Neutral, s.into())
-        } else {
-            let pfx = match side {
-                Side::Red => "R",
-                Side::Blue => "B",
-                Side::Neutral => "N",
-            };
-            (side, format_compact!("{}{}", pfx, s).into())
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct Inventory<N> {
-    stored: N,
-    capacity: N,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Warehouse {
-    equipment: Map<String, Inventory<u32>>,
-    liquids: Map<LiquidType, Inventory<u16>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Objective {
-    id: ObjectiveId,
-    name: String,
-    pos: Vector2,
-    radius: f64,
-    owner: Side,
-    kind: ObjectiveKind,
-    slots: Map<SlotId, Vehicle>,
-    groups: Map<Side, Set<GroupId>>,
-    health: u8,
-    logi: u8,
-    threatened: bool,
-    last_threatened_ts: DateTime<Utc>,
-    last_change_ts: DateTime<Utc>,
-    warehouse: Warehouse,
-    #[serde(skip)]
-    spawned: bool,
-    #[serde(skip)]
-    needs_mark: bool,
-}
-
-impl Objective {
-    pub fn is_in_circle(&self, pos: Vector2) -> bool {
-        na::distance_squared(&self.pos.into(), &pos.into()) <= self.radius.powi(2)
-    }
-
-    pub fn name(&self) -> &str {
-        self.name.as_str()
-    }
-
-    pub fn health(&self) -> u8 {
-        self.health
-    }
-
-    pub fn logi(&self) -> u8 {
-        self.logi
-    }
-
-    pub fn captureable(&self) -> bool {
-        self.logi == 0
-    }
-
-    pub fn owner(&self) -> Side {
-        self.owner
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct InstancedPlayer {
-    pub position: Position3,
-    pub velocity: Vector3,
-    pub typ: Vehicle,
-    pub in_air: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Player {
-    pub name: String,
-    pub side: Side,
-    pub side_switches: Option<u8>,
-    pub lives: Map<LifeType, (DateTime<Utc>, u8)>,
-    pub crates: Set<GroupId>,
-    #[serde(skip)]
-    pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Persisted {
-    groups: Map<GroupId, SpawnedGroup>,
-    units: Map<UnitId, SpawnedUnit>,
-    groups_by_name: Map<String, GroupId>,
-    units_by_name: Map<String, UnitId>,
-    groups_by_side: Map<Side, Set<GroupId>>,
-    deployed: Set<GroupId>,
-    farps: Set<ObjectiveId>,
-    crates: Set<GroupId>,
-    troops: Set<GroupId>,
-    jtacs: Set<GroupId>,
-    ewrs: Set<GroupId>,
-    objectives: Map<ObjectiveId, Objective>,
-    objectives_by_slot: Map<SlotId, ObjectiveId>,
-    objectives_by_name: Map<String, ObjectiveId>,
-    objectives_by_group: Map<GroupId, ObjectiveId>,
-    players: Map<Ucid, Player>,
-    central_warehouse: Map<Side, Warehouse>,
-}
-
-impl Persisted {
-    pub fn save(&self, path: &Path) -> anyhow::Result<()> {
-        let mut tmp = PathBuf::from(path);
-        tmp.set_extension("tmp");
-        let file = File::options()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(&tmp)?;
-        serde_json::to_writer(file, &self)?;
-        fs::rename(tmp, path)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct DeployableIndex {
-    deployables_by_name: FxHashMap<String, Deployable>,
-    deployables_by_crates: FxHashMap<String, String>,
-    deployables_by_repair: FxHashMap<String, String>,
-    crates_by_name: FxHashMap<String, Crate>,
-    squads_by_name: FxHashMap<String, Troop>,
-}
-
-#[derive(Debug, Clone)]
-struct ObjLogi {
-    airbase: DcsOid<ClassAirbase>,
-    warehouse: DcsOid<ClassWarehouse>,
-}
-
-#[derive(Debug, Default)]
-struct Ephemeral {
-    dirty: bool,
-    cfg: Cfg,
-    players_by_slot: FxHashMap<SlotId, Ucid>,
-    cargo: FxHashMap<SlotId, Cargo>,
-    deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
-    group_marks: FxHashMap<GroupId, MarkId>,
-    objective_marks: FxHashMap<ObjectiveId, (MarkId, Option<MarkId>)>,
-    object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
-    uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
-    object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
-    slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
-    logistics_by_oid: FxHashMap<ObjectiveId, ObjLogi>,
-    units_able_to_move: FxHashSet<UnitId>,
-    units_potentially_close_to_enemies: FxHashSet<UnitId>,
-    units_potentially_on_walkabout: FxHashSet<UnitId>,
-    delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
-    spawnq: VecDeque<GroupId>,
-    despawnq: VecDeque<(GroupId, Despawn)>,
-    msgs: MsgQ,
-}
-
-impl Ephemeral {
-    fn index_deployables_for_side(
-        &mut self,
-        miz: &Miz,
-        mizidx: &MizIndex,
-        side: Side,
-        repair_crate: Crate,
-        deployables: &[Deployable],
-    ) -> Result<()> {
-        let idx = Arc::make_mut(self.deployable_idx.entry(side).or_default());
-        idx.crates_by_name
-            .insert(repair_crate.name.clone(), repair_crate);
-        for dep in deployables.iter() {
-            miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
-                .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
-            let name = match dep.path.last() {
-                None => bail!("deployable with empty path {:?}", dep),
-                Some(name) => name,
-            };
-            match idx.deployables_by_name.entry(name.clone()) {
-                Entry::Occupied(_) => bail!("deployable with duplicate name {name}"),
-                Entry::Vacant(e) => e.insert(dep.clone()),
-            };
-            if let Some(rep) = dep.repair_crate.as_ref() {
-                match idx.deployables_by_repair.entry(rep.name.clone()) {
-                    Entry::Occupied(_) => {
-                        bail!(
-                            "multiple deployables use the same repair crate {}",
-                            rep.name
-                        )
-                    }
-                    Entry::Vacant(e) => {
-                        if idx.deployables_by_crates.contains_key(&rep.name) {
-                            bail!(
-                                "deployable {} uses repair crate of {}",
-                                &idx.deployables_by_crates[&rep.name],
-                                name
-                            )
-                        }
-                        e.insert(name.clone())
-                    }
-                };
-            }
-            for cr in dep.crates.iter() {
-                match idx.deployables_by_crates.entry(cr.name.clone()) {
-                    Entry::Occupied(_) => bail!("multiple deployables use crate {}", cr.name),
-                    Entry::Vacant(e) => {
-                        if idx.deployables_by_repair.contains_key(&cr.name) {
-                            bail!(
-                                "deployable repair {} uses crate of {}",
-                                &idx.deployables_by_repair[&cr.name],
-                                name
-                            )
-                        }
-                        e.insert(name.clone())
-                    }
-                };
-            }
-            for c in dep.crates.iter().chain(dep.repair_crate.iter()) {
-                match idx.crates_by_name.entry(c.name.clone()) {
-                    Entry::Occupied(_) => bail!("duplicate crate name {}", c.name),
-                    Entry::Vacant(e) => e.insert(c.clone()),
-                };
-            }
-            if let Some(DeployableLogistics {
-                pad_template,
-                ammo_template,
-                fuel_template,
-                barracks_template,
-            }) = &dep.logistics
-            {
-                let mut names = FxHashSet::default();
-                for name in [
-                    &dep.template,
-                    &ammo_template,
-                    &pad_template,
-                    &fuel_template,
-                    &barracks_template,
-                ] {
-                    miz.get_group_by_name(mizidx, GroupKind::Any, side, name)?
-                        .ok_or_else(|| anyhow!("missing farp template {:?} {:?}", side, name))?;
-                    if !names.insert(name) {
-                        bail!("deployables with logistics must use unique templates for each part {name} is reused")
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, cfg: Cfg) -> Result<()> {
-        let check_unit_classification = || -> Result<()> {
-            let mut not_classified = FxHashSet::default();
-            for side in [Side::Blue, Side::Red, Side::Neutral] {
-                let coa = miz.coalition(side)?;
-                for country in coa.countries()? {
-                    let country = country?;
-                    for group in country
-                        .planes()?
-                        .into_iter()
-                        .chain(country.helicopters()?)
-                        .chain(country.vehicles()?)
-                        .chain(country.ships()?)
-                        .chain(country.statics()?)
-                    {
-                        let group = group?;
-                        for unit in group.units()? {
-                            let typ = unit?.typ()?;
-                            if !cfg.unit_classification.contains_key(typ.as_str()) {
-                                not_classified.insert(typ);
-                            }
-                        }
-                    }
-                }
-            }
-            if not_classified.is_empty() {
-                Ok(())
-            } else {
-                bail!("unit types not classified {:?}", not_classified)
-            }
-        };
-        check_unit_classification()?;
-        for (side, template) in cfg.crate_template.iter() {
-            miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?
-                .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
-        }
-        for (side, deployables) in cfg.deployables.iter() {
-            let repair_crate = maybe!(cfg.repair_crate, side, "side repair crate")?.clone();
-            self.index_deployables_for_side(miz, mizidx, *side, repair_crate, deployables)?
-        }
-        for (side, troops) in cfg.troops.iter() {
-            let idx = Arc::make_mut(self.deployable_idx.entry(*side).or_default());
-            for troop in troops {
-                miz.get_group_by_name(mizidx, GroupKind::Any, *side, &troop.template)?
-                    .ok_or_else(|| anyhow!("missing troop template {:?} {:?}", side, troop.name))?;
-                match idx.squads_by_name.entry(troop.name.clone()) {
-                    Entry::Occupied(_) => bail!("duplicate squad name {}", troop.name),
-                    Entry::Vacant(e) => e.insert(troop.clone()),
-                };
-            }
-        }
-        self.cfg = cfg;
-        Ok(())
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct Db {
     persisted: Persisted,
@@ -624,6 +150,10 @@ pub struct Db {
 impl Db {
     pub fn cfg(&self) -> &Cfg {
         &self.ephemeral.cfg
+    }
+
+    pub fn ephemeral(&self) -> &Ephemeral {
+        &self.ephemeral
     }
 
     pub fn load(miz: &Miz, idx: &MizIndex, path: &Path) -> Result<Self> {
@@ -640,74 +170,11 @@ impl Db {
     }
 
     pub fn maybe_snapshot(&mut self) -> Option<Persisted> {
-        if self.ephemeral.dirty {
-            self.ephemeral.dirty = false;
+        if self.ephemeral.take_dirty() {
             Some(self.persisted.clone())
         } else {
             None
         }
-    }
-
-    pub fn respawn_after_load(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
-        for gid in &self.persisted.deployed {
-            self.spawn_group(idx, spctx, group!(self, gid)?)?
-        }
-        for gid in &self.persisted.crates {
-            self.spawn_group(idx, spctx, group!(self, gid)?)?
-        }
-        for gid in &self.persisted.troops {
-            self.spawn_group(idx, spctx, group!(self, gid)?)?
-        }
-        for (_, obj) in &self.persisted.objectives {
-            if let Some(groups) = obj.groups.get(&obj.owner) {
-                for gid in groups {
-                    let group = group!(self, gid)?;
-                    if group.class.is_logi() {
-                        self.spawn_group(idx, spctx, group)?
-                    }
-                }
-            }
-        }
-        let groups = self
-            .persisted
-            .groups
-            .into_iter()
-            .map(|(gid, _)| *gid)
-            .collect::<Vec<_>>();
-        for gid in groups {
-            self.mark_group(&gid)?
-        }
-        let objectives = self
-            .persisted
-            .objectives
-            .into_iter()
-            .map(|(oid, _)| *oid)
-            .collect::<Vec<_>>();
-        for oid in objectives {
-            self.mark_objective(&oid)?
-        }
-        for (uid, unit) in &self.persisted.units {
-            let group = group!(self, unit.group)?;
-            match group.origin {
-                DeployKind::Crate { .. } => (),
-                DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
-                    self.ephemeral
-                        .units_potentially_close_to_enemies
-                        .insert(*uid);
-                }
-                DeployKind::Objective => {
-                    let oid = self.persisted.objectives_by_group[&unit.group];
-                    let obj = &self.persisted.objectives[&oid];
-                    if obj.owner == group.side {
-                        self.ephemeral
-                            .units_potentially_close_to_enemies
-                            .insert(*uid);
-                        self.ephemeral.units_potentially_on_walkabout.insert(*uid);
-                    }
-                }
-            }
-        }
-        Ok(())
     }
 
     pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
@@ -762,29 +229,10 @@ impl Db {
         unit_by_name!(self, name)
     }
 
-    pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {
-        self.ephemeral.players_by_slot.get(&slot)
-    }
-
-    pub fn player_in_unit(&self, id: &DcsOid<ClassUnit>) -> Option<&Ucid> {
-        self.ephemeral
-            .slot_by_object_id
-            .get(id)
-            .and_then(|slot| self.ephemeral.players_by_slot.get(slot))
-    }
-
     pub fn player_deslot(&mut self, ucid: &Ucid) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
-            if let Some((sl, _)) = player.current_slot.take() {
-                self.ephemeral.players_by_slot.remove(&sl);
-                self.ephemeral.cargo.remove(&sl);
-                if let Some(id) = self.ephemeral.object_id_by_slot.remove(&sl) {
-                    self.ephemeral.slot_by_object_id.remove(&id);
-                    if let Some(uid) = self.ephemeral.uid_by_object_id.remove(&id) {
-                        self.ephemeral.object_id_by_uid.remove(&uid);
-                        self.ephemeral.units_able_to_move.remove(&uid);
-                    }
-                }
+            if let Some((slot, _)) = player.current_slot.take() {
+                self.ephemeral.player_deslot(&slot)
             }
         }
     }
@@ -1080,7 +528,7 @@ impl Db {
                 units.push(unit.name);
             }
         }
-        self.ephemeral.dirty = true;
+        self.ephemeral.dirty();
         match group.kind {
             None => {
                 // it's a static, we have to get it's units
@@ -1334,7 +782,7 @@ impl Db {
             .groups_by_side
             .get_or_default_cow(side)
             .insert_cow(gid);
-        self.ephemeral.dirty = true;
+        self.ephemeral.dirty();
         self.mark_group(&gid)?;
         Ok(gid)
     }
@@ -1404,7 +852,7 @@ impl Db {
                 unit.pos = unit.spawn_pos;
                 unit.heading = unit.spawn_heading;
                 unit.position = unit.spawn_position;
-                self.ephemeral.dirty = true;
+                self.ephemeral.dirty();
                 let gid = unit.group;
                 if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
                     self.update_objective_status(&oid, now)?
@@ -1463,43 +911,9 @@ impl Db {
             unit = Some(instance);
         }
         for gid in moved {
-            self.ephemeral.dirty = true;
+            self.ephemeral.dirty();
             self.mark_group(&gid)?;
         }
         Ok(())
-    }
-
-    pub fn slot_miz_unit<'lua>(
-        &self,
-        lua: MizLua<'lua>,
-        idx: &MizIndex,
-        slot: &SlotId,
-    ) -> Result<UnitInfo<'lua>> {
-        let miz = Miz::singleton(lua)?;
-        let uid = slot
-            .as_unit_id()
-            .ok_or_else(|| anyhow!("player is in jtac"))?;
-        miz.get_unit(idx, &uid)?
-            .ok_or_else(|| anyhow!("unknown slot"))
-    }
-
-    pub fn slot_instance_unit<'lua>(&self, lua: MizLua<'lua>, slot: &SlotId) -> Result<Unit<'lua>> {
-        self.ephemeral
-            .object_id_by_slot
-            .get(slot)
-            .ok_or_else(|| anyhow!("unit {:?} not currently in the mission", slot))
-            .and_then(|id| Unit::get_instance(lua, id))
-    }
-
-    pub fn instance_unit<'lua>(&self, lua: MizLua<'lua>, uid: &UnitId) -> Result<Unit<'lua>> {
-        self.ephemeral
-            .object_id_by_uid
-            .get(uid)
-            .ok_or_else(|| anyhow!("unit {:?} not currently in the mission", uid))
-            .and_then(|id| Unit::get_instance(lua, id))
-    }
-
-    pub fn slot_instance_pos(&self, lua: MizLua, slot: &SlotId) -> Result<Position3> {
-        self.slot_instance_unit(lua, slot)?.get_position()
     }
 }

@@ -1,11 +1,11 @@
 use super::{
-    Db, DeployKind, DeployableIndex, GroupId, Objective, ObjectiveId, ObjectiveKind, SpawnedGroup,
+    ephemeral::DeployableIndex, Db, group::{SpawnedGroup, GroupId}, objective::{ObjectiveId, Objective, ObjectiveKind}, 
 };
 use crate::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
-    unit, unit_mut,
+    unit, unit_mut, db::group::DeployKind,
 };
 use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
@@ -13,7 +13,7 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     azumith2d, azumith2d_to, azumith3d, centroid2d,
     coalition::Side,
-    env::miz::MizIndex,
+    env::miz::{Miz, MizIndex, UnitInfo},
     land::Land,
     net::{SlotId, Ucid},
     radians_to_degrees,
@@ -110,7 +110,7 @@ impl SlotStats {
     pub fn get(db: &Db, lua: MizLua, slot: &SlotId) -> Result<Self> {
         let ucid = maybe!(db.ephemeral.players_by_slot, slot, "no such player")?.clone();
         let side = maybe!(db.persisted.players, ucid, "no player for ucid")?.side;
-        let unit = db.slot_instance_unit(lua, slot)?;
+        let unit = db.ephemeral.slot_instance_unit(lua, slot)?;
         let in_air = unit.in_air()?;
         let name = unit.get_name()?;
         let pos = unit.get_position()?;
@@ -129,6 +129,19 @@ impl SlotStats {
             ucid,
         })
     }
+}
+
+pub fn slot_miz_unit<'lua>(
+    lua: MizLua<'lua>,
+    idx: &MizIndex,
+    slot: &SlotId,
+) -> Result<UnitInfo<'lua>> {
+    let miz = Miz::singleton(lua)?;
+    let uid = slot
+        .as_unit_id()
+        .ok_or_else(|| anyhow!("player is in jtac"))?;
+    miz.get_unit(idx, &uid)?
+        .ok_or_else(|| anyhow!("unknown slot"))
 }
 
 impl Db {
@@ -164,7 +177,7 @@ impl Db {
         name: &str,
     ) -> Result<SlotStats> {
         debug!("db spawning crate");
-        if self.slot_instance_unit(lua, slot)?.in_air()? {
+        if self.ephemeral.slot_instance_unit(lua, slot)?.in_air()? {
             bail!("you must land to spawn a crate")
         }
         let st = SlotStats::get(self, lua, slot)?;
@@ -720,7 +733,7 @@ impl Db {
                                 return Ok(Unpakistan::UnpackedFarp(name, oid));
                             }
                             None => {
-                                let pos = self.slot_instance_pos(lua, slot)?;
+                                let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
                                 let spawnloc =
                                     compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
                                 let origin = DeployKind::Deployed {
@@ -763,7 +776,7 @@ impl Db {
                         self.delete_group(&cr.group)?
                     }
                     self.ephemeral.spawnq.push_back(gid);
-                    self.ephemeral.dirty = true;
+                    self.ephemeral.dirty();
                     return Ok(Unpakistan::Repaired(dep, gid));
                 }
             }
@@ -839,7 +852,7 @@ impl Db {
         idx: &MizIndex,
         slot: &SlotId,
     ) -> Result<(CargoConfig, Side, String)> {
-        let uifo = self.slot_miz_unit(lua, idx, slot)?;
+        let uifo = slot_miz_unit(lua, idx, slot)?;
         let side = uifo.side;
         let unit_name = uifo.unit.name()?;
         let cargo_capacity = self.cargo_capacity(&uifo.unit)?;
@@ -893,7 +906,7 @@ impl Db {
         name: &str,
     ) -> Result<Troop> {
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
-        let pos = self.slot_instance_pos(lua, slot)?;
+        let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let _ = self.point_near_logistics(side, point)?;
         let troop_cfg = self
@@ -922,13 +935,13 @@ impl Db {
         if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
             bail!("no troops onboard")
         }
-        let unit = self.slot_instance_unit(lua, slot)?;
+        let unit = self.ephemeral.slot_instance_unit(lua, slot)?;
         if unit.in_air()? {
             bail!("you must land to unload troops")
         }
         let ucid = self.ephemeral.players_by_slot[slot].clone();
         let unit_name = unit.get_name()?;
-        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let side = slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         match self.point_near_logistics(side, point) {
@@ -990,12 +1003,12 @@ impl Db {
         if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
             bail!("no troops onboard")
         }
-        let unit = self.slot_instance_unit(lua, slot)?;
+        let unit = self.ephemeral.slot_instance_unit(lua, slot)?;
         if unit.in_air()? {
             bail!("you must land to return your troops")
         }
         let unit_name = unit.get_name()?;
-        let side = self.slot_miz_unit(lua, idx, slot)?.side;
+        let side = slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         if self.point_near_logistics(side, point).is_err() {
@@ -1011,7 +1024,7 @@ impl Db {
 
     pub fn extract_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
-        let pos = self.slot_instance_pos(lua, slot)?;
+        let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let (gid, troop_cfg) = {
             let max_dist = (self.cfg().crate_load_distance as f64).powi(2);

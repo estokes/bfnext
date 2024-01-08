@@ -1,7 +1,11 @@
-use super::{Db, DeployKind, Map, ObjGroup, Objective, ObjectiveId, ObjectiveKind};
+use super::{group::DeployKind, objective::ObjGroup, Db, Map};
 use crate::{
     cfg::{Cfg, Vehicle},
-    objective_mut,
+    db::{
+        logistics::Warehouse,
+        objective::{Objective, ObjectiveId, ObjectiveKind},
+    },
+    group, objective_mut,
     spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Result};
@@ -9,7 +13,7 @@ use chrono::prelude::*;
 use dcso3::{
     coalition::Side,
     env::miz::{Group, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
-    MizLua, String, Vector2,
+    MizLua, String, Vector2 
 };
 use log::info;
 
@@ -78,6 +82,7 @@ impl Db {
             logi: 0,
             last_change_ts: Utc::now(),
             last_threatened_ts: Utc::now(),
+            warehouse: Warehouse::default(),
             needs_mark: false,
         };
         self.persisted.objectives.insert_cow(id, obj);
@@ -145,8 +150,8 @@ impl Db {
                     match iter.next() {
                         None => {
                             info!("slot {:?} not associated with an objective", slot);
-                            return Ok(())
-                        },
+                            return Ok(());
+                        }
                         Some((id, obj)) => {
                             if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
                                 break *id;
@@ -233,7 +238,69 @@ impl Db {
         for id in ids {
             t.update_objective_status(&id, now)?
         }
-        t.ephemeral.dirty = true;
+        t.ephemeral.dirty();
         Ok(t)
+    }
+
+    pub fn respawn_after_load(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
+        for gid in &self.persisted.deployed {
+            self.spawn_group(idx, spctx, group!(self, gid)?)?
+        }
+        for gid in &self.persisted.crates {
+            self.spawn_group(idx, spctx, group!(self, gid)?)?
+        }
+        for gid in &self.persisted.troops {
+            self.spawn_group(idx, spctx, group!(self, gid)?)?
+        }
+        for (_, obj) in &self.persisted.objectives {
+            if let Some(groups) = obj.groups.get(&obj.owner) {
+                for gid in groups {
+                    let group = group!(self, gid)?;
+                    if group.class.is_logi() {
+                        self.spawn_group(idx, spctx, group)?
+                    }
+                }
+            }
+        }
+        let groups = self
+            .persisted
+            .groups
+            .into_iter()
+            .map(|(gid, _)| *gid)
+            .collect::<Vec<_>>();
+        for gid in groups {
+            self.mark_group(&gid)?
+        }
+        let objectives = self
+            .persisted
+            .objectives
+            .into_iter()
+            .map(|(oid, _)| *oid)
+            .collect::<Vec<_>>();
+        for oid in objectives {
+            self.mark_objective(&oid)?
+        }
+        for (uid, unit) in &self.persisted.units {
+            let group = group!(self, unit.group)?;
+            match group.origin {
+                DeployKind::Crate { .. } => (),
+                DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
+                    self.ephemeral
+                        .units_potentially_close_to_enemies
+                        .insert(*uid);
+                }
+                DeployKind::Objective => {
+                    let oid = self.persisted.objectives_by_group[&unit.group];
+                    let obj = &self.persisted.objectives[&oid];
+                    if obj.owner == group.side {
+                        self.ephemeral
+                            .units_potentially_close_to_enemies
+                            .insert(*uid);
+                        self.ephemeral.units_potentially_on_walkabout.insert(*uid);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }

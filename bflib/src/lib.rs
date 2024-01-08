@@ -13,7 +13,7 @@ use anyhow::{anyhow, bail, Result};
 use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::{player::RegErr, Db, ObjectiveId};
+use db::{objective::ObjectiveId, player::RegErr, Db};
 use dcso3::{
     coalition::Side,
     env::{
@@ -432,7 +432,7 @@ fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
 }
 
 fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
-    if let Some(ucid) = ctx.db.player_in_slot(slot) {
+    if let Some(ucid) = ctx.db.ephemeral().player_in_slot(slot) {
         let ucid = ucid.clone();
         ctx.db.player_deslot(&ucid);
         if let Some(id) = ctx.id_by_ucid.get(&ucid) {
@@ -570,6 +570,7 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
     let uid = slot.as_unit_id().ok_or_else(|| anyhow!("not a unit"))?;
     let ucid = ctx
         .db
+        .ephemeral()
         .player_in_slot(slot)
         .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?
         .clone();

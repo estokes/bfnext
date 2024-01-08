@@ -1,4 +1,4 @@
-use super::{Db, InstancedPlayer, Map, Player, Set};
+use super::{Db, Map, Set, group::GroupId};
 use crate::{
     cfg::{LifeType, Vehicle},
     maybe,
@@ -10,9 +10,10 @@ use dcso3::{
     net::{SlotId, SlotIdKind, Ucid},
     object::DcsObject,
     unit::Unit,
-    MizLua, String, Vector2,
+    MizLua, String, Vector2, Position3, Vector3,
 };
 use log::error;
+use serde_derive::{Serialize, Deserialize};
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone, Copy)]
@@ -27,6 +28,25 @@ pub enum SlotAuth {
 pub enum RegErr {
     AlreadyRegistered(Option<u8>, Side),
     AlreadyOn(Side),
+}
+
+#[derive(Debug, Clone)]
+pub struct InstancedPlayer {
+    pub position: Position3,
+    pub velocity: Vector3,
+    pub typ: Vehicle,
+    pub in_air: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Player {
+    pub name: String,
+    pub side: Side,
+    pub side_switches: Option<u8>,
+    pub lives: Map<LifeType, (DateTime<Utc>, u8)>,
+    pub crates: Set<GroupId>,
+    #[serde(skip)]
+    pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
 }
 
 impl Db {
@@ -65,7 +85,7 @@ impl Db {
                 // paranoia
                 *player_lives -= 1;
             }
-            self.ephemeral.dirty = true;
+            self.ephemeral.dirty();
             Ok(Some(life_type))
         } else {
             Ok(None)
@@ -108,7 +128,7 @@ impl Db {
             if *player_lives >= self.ephemeral.cfg.default_lives[&life_type].0 {
                 player.lives.remove_cow(&life_type);
             }
-            self.ephemeral.dirty = true;
+            self.ephemeral.dirty();
             Some(life_type)
         } else {
             None
@@ -132,7 +152,7 @@ impl Db {
         }
         for lt in lt_to_reset {
             player.lives.remove_cow(&lt);
-            self.ephemeral.dirty = true;
+            self.ephemeral.dirty();
         }
         Ok(())
     }
@@ -183,7 +203,7 @@ impl Db {
                 if objective.captureable() {
                     return SlotAuth::ObjectiveHasNoLogistics;
                 }
-                let life_type = &self.ephemeral.cfg.life_types[&objective.slots[&slot]];
+                let life_type = self.ephemeral.cfg.life_types[&objective.slots[&slot]];
                 macro_rules! yes {
                     () => {
                         player.current_slot = Some((slot.clone(), None));
@@ -192,17 +212,17 @@ impl Db {
                     };
                 }
                 loop {
-                    match player.lives.get(life_type).map(|t| *t) {
+                    match player.lives.get(&life_type).map(|t| *t) {
                         None => {
                             yes!();
                         }
                         Some((reset, n)) => {
                             let reset_after = Duration::seconds(
-                                self.ephemeral.cfg.default_lives[life_type].1 as i64,
+                                self.ephemeral.cfg.default_lives[&life_type].1 as i64,
                             );
                             if time - reset >= reset_after {
-                                player.lives.remove_cow(life_type);
-                                self.ephemeral.dirty = true;
+                                player.lives.remove_cow(&life_type);
+                                self.ephemeral.dirty();
                             } else if n == 0 {
                                 break SlotAuth::NoLives;
                             } else {
@@ -231,7 +251,7 @@ impl Db {
                         current_slot: None,
                     },
                 );
-                self.ephemeral.dirty = true;
+                self.ephemeral.dirty();
                 Ok(())
             }
         }
@@ -255,7 +275,7 @@ impl Db {
                         None => (),
                     }
                     player.side = side;
-                    self.ephemeral.dirty = true;
+                    self.ephemeral.dirty();
                     Ok(())
                 }
             }

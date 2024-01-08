@@ -291,20 +291,24 @@ impl<'lua> FromLua<'lua> for ObjGroup {
 }
 
 impl ObjGroup {
-    fn template(&self, side: Side) -> String {
+    fn template(&self, side: Side) -> (Side, String) {
         let s = match self.0.rsplit_once("-") {
             Some((l, _)) => l,
             None => self.0.as_str(),
         };
-        if s.starts_with("R") || s.starts_with("G") || s.starts_with("N") {
-            s.into()
+        if s.starts_with("R") {
+            (Side::Red, s.into())
+        } else if s.starts_with("B") {
+            (Side::Blue, s.into())
+        } else if s.starts_with("N") {
+            (Side::Neutral, s.into())
         } else {
             let pfx = match side {
                 Side::Red => "R",
                 Side::Blue => "B",
                 Side::Neutral => "N",
             };
-            format_compact!("{}{}", pfx, s).into()
+            (side, format_compact!("{}{}", pfx, s).into())
         }
     }
 }

@@ -99,7 +99,6 @@ impl Db {
         side: Side,
         name: &str,
     ) -> Result<()> {
-        let name = name.parse::<ObjGroup>()?;
         let pos = zone.pos()?;
         let obj = {
             let mut iter = self.persisted.objectives.into_iter();
@@ -124,7 +123,7 @@ impl Db {
                 offset_direction: Vector2::default(),
                 group_heading: 0.,
             },
-            name.template(side).as_str(),
+            name,
             DeployKind::Objective,
         )?;
         objective_mut!(self, obj)?
@@ -202,7 +201,10 @@ impl Db {
                 let zone = zone?;
                 let name = zone.name()?;
                 if let Some(name) = name.strip_prefix("G") {
-                    t.init_objective_group(&spctx, idx, miz, zone, side, name)?
+                    let (template_side, name) = name.parse::<ObjGroup>()?.template(side);
+                    if template_side == side {
+                        t.init_objective_group(&spctx, idx, miz, zone, side, name.as_str())?
+                    }
                 } else if name.starts_with("T") || name.starts_with("O") {
                     () // ignored
                 } else {

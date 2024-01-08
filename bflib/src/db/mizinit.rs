@@ -85,6 +85,9 @@ impl Db {
             warehouse: Warehouse::default(),
             needs_mark: false,
         };
+        if let ObjectiveKind::Logistics = obj.kind {
+            self.persisted.logistics_hubs.insert_cow(id);
+        }
         self.persisted.objectives.insert_cow(id, obj);
         self.persisted.objectives_by_name.insert_cow(name, id);
         Ok(())

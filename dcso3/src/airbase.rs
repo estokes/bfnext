@@ -24,6 +24,10 @@ impl<'lua> Airbase<'lua> {
         Ok(self.t.call_method("destroy", ())?)
     }
 
+    pub fn get_point(&self) -> Result<LuaVec3> {
+        Ok(self.t.call_method("getPoint", ())?)
+    }
+
     pub fn get_callsign(&self) -> Result<String> {
         Ok(self.t.call_method("getCallsign", ())?)
     }

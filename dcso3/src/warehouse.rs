@@ -1,9 +1,9 @@
 use super::as_tbl;
 use crate::{
     airbase::Airbase,
-    cvt_err,
+    cvt_err, lua_err,
     object::{DcsObject, DcsOid},
-    simple_enum, wrapped_table, LuaEnv, MizLua,
+    simple_enum, wrapped_table, LuaEnv, MizLua, String,
 };
 use anyhow::Result;
 use mlua::{prelude::*, Value};
@@ -16,6 +16,46 @@ simple_enum!(LiquidType, u8, [
     MW50 => 2,
     Diesel => 3
 ]);
+
+wrapped_table!(ItemInventory, None);
+
+impl<'lua> ItemInventory<'lua> {
+    pub fn item(&self, name: &str) -> Result<u32> {
+        Ok(self.t.raw_get(name)?)
+    }
+
+    pub fn for_each<F: FnMut(String, u32) -> Result<()>>(&self, mut f: F) -> Result<()> {
+        Ok(self.t.for_each(|k, v| f(k, v).map_err(lua_err))?)
+    }
+}
+
+wrapped_table!(LiquidInventory, None);
+
+impl<'lua> LiquidInventory<'lua> {
+    pub fn item(&self, name: LiquidType) -> Result<f32> {
+        Ok(self.t.raw_get(name)?)
+    }
+
+    pub fn for_each<F: FnMut(LiquidType, f32) -> Result<()>>(&self, mut f: F) -> Result<()> {
+        Ok(self.t.for_each(|k, v| f(k, v).map_err(lua_err))?)
+    }
+}
+
+wrapped_table!(Inventory, None);
+
+impl<'lua> Inventory<'lua> {
+    pub fn weapons(&self) -> Result<ItemInventory<'lua>> {
+        Ok(self.t.raw_get("weapon")?)
+    }
+
+    pub fn aircraft(&self) -> Result<ItemInventory<'lua>> {
+        Ok(self.t.raw_get("aircraft")?)
+    }
+
+    pub fn liquids(&self) -> Result<LiquidInventory<'lua>> {
+        Ok(self.t.raw_get("liquids")?)
+    }
+}
 
 wrapped_table!(Warehouse, Some("Warehouse"));
 
@@ -41,24 +81,24 @@ impl<'lua> Warehouse<'lua> {
         Ok(self.t.call_method("getItemCount", name)?)
     }
 
-    pub fn add_liquid(&self, typ: LiquidType, count: u32) -> Result<()> {
+    pub fn add_liquid(&self, typ: LiquidType, count: f32) -> Result<()> {
         Ok(self.t.call_method("addLiquid", (typ, count))?)
     }
 
-    pub fn remove_liquid(&self, typ: LiquidType, count: u32) -> Result<()> {
+    pub fn remove_liquid(&self, typ: LiquidType, count: f32) -> Result<()> {
         Ok(self.t.call_method("removeLiquid", (typ, count))?)
     }
 
-    pub fn get_liquid_amount(&self, typ: LiquidType) -> Result<u32> {
+    pub fn get_liquid_amount(&self, typ: LiquidType) -> Result<f32> {
         Ok(self.t.call_method("getLiquidAmount", typ)?)
     }
 
-    pub fn set_liquid_amount(&self, typ: LiquidType, count: u32) -> Result<()> {
+    pub fn set_liquid_amount(&self, typ: LiquidType, count: f32) -> Result<()> {
         Ok(self.t.call_method("setLiquidAmount", (typ, count))?)
     }
 
-    pub fn get_inventory(&self) -> Result<LuaTable<'lua>> {
-        Ok(self.t.call_method("getInventory", ())?)
+    pub fn get_inventory(&self, filter: Option<String>) -> Result<Inventory<'lua>> {
+        Ok(self.t.call_method("getInventory", filter)?)
     }
 
     pub fn get_owner(&self) -> Result<Airbase> {

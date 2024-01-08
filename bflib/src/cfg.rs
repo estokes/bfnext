@@ -260,11 +260,26 @@ pub struct CargoConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct WarehouseConfig {
+    /// The fuel transfer crate
+    pub fuel_transfer_crate: FxHashMap<Side, Crate>,
+    /// The supply transfer crate
+    pub supply_transfer_crate: FxHashMap<Side, Crate>,
+    /// The name of the warehouse that is the source of supply every
+    /// restart
+    pub supply_source: FxHashMap<Side, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Cfg {
     /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
     /// The base repair crate
     pub repair_crate: FxHashMap<Side, Crate>,
+    /// If the warehouse system is to be used then this should be specified,
+    /// otherwise warehouses will be ignored and you should set them to unlimited
+    pub warehouse: Option<WarehouseConfig>,
     /// how far must you fly from an objective to spawn deployables
     /// without penalty (Meters)
     pub logistics_exclusion: u32,
@@ -1316,34 +1331,100 @@ fn default_jtac_priority() -> Vec<UnitTags> {
     .collect()
 }
 
+fn default_repair_crate() -> FxHashMap<Side, Crate> {
+    FxHashMap::from_iter([
+        (
+            Side::Blue,
+            Crate {
+                name: "Logistics Repair".into(),
+                weight: 1500,
+                required: 1,
+                pos_unit: None,
+                max_drop_height_agl: 10,
+                max_drop_speed: 50,
+            },
+        ),
+        (
+            Side::Red,
+            Crate {
+                name: "Logistics Repair".into(),
+                weight: 2000,
+                required: 1,
+                pos_unit: None,
+                max_drop_height_agl: 10,
+                max_drop_speed: 50,
+            },
+        ),
+    ])
+}
+
+fn default_fuel_transfer_crate() -> FxHashMap<Side, Crate> {
+    FxHashMap::from_iter([
+        (
+            Side::Blue,
+            Crate {
+                name: "Fuel Transfer".into(),
+                weight: 1500,
+                required: 1,
+                pos_unit: None,
+                max_drop_height_agl: 10,
+                max_drop_speed: 50,
+            },
+        ),
+        (
+            Side::Red,
+            Crate {
+                name: "Fuel Transfer".into(),
+                weight: 2000,
+                required: 1,
+                pos_unit: None,
+                max_drop_height_agl: 10,
+                max_drop_speed: 50,
+            },
+        ),
+    ])
+}
+
+fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
+    FxHashMap::from_iter([
+        (
+            Side::Blue,
+            Crate {
+                name: "Supply Transfer".into(),
+                weight: 1500,
+                required: 1,
+                pos_unit: None,
+                max_drop_height_agl: 10,
+                max_drop_speed: 50,
+            },
+        ),
+        (
+            Side::Red,
+            Crate {
+                name: "Supply Transfer".into(),
+                weight: 2000,
+                required: 1,
+                pos_unit: None,
+                max_drop_height_agl: 10,
+                max_drop_speed: 50,
+            },
+        ),
+    ])
+}
+
 impl Default for Cfg {
     fn default() -> Self {
         Self {
             repair_time: 1800,
-            repair_crate: FxHashMap::from_iter([
-                (
-                    Side::Blue,
-                    Crate {
-                        name: "Logistics Repair".into(),
-                        weight: 1500,
-                        required: 1,
-                        pos_unit: None,
-                        max_drop_height_agl: 10,
-                        max_drop_speed: 50,
-                    },
-                ),
-                (
-                    Side::Red,
-                    Crate {
-                        name: "Logistics Repair".into(),
-                        weight: 2000,
-                        required: 1,
-                        pos_unit: None,
-                        max_drop_height_agl: 10,
-                        max_drop_speed: 50,
-                    },
-                ),
-            ]),
+            repair_crate: default_repair_crate(),
+            warehouse: Some(WarehouseConfig {
+                fuel_transfer_crate: default_fuel_transfer_crate(),
+                supply_transfer_crate: default_supply_transfer_crate(),
+                supply_source: FxHashMap::from_iter([
+                    (Side::Blue, "BINVENTORY".into()),
+                    (Side::Red, "RINVENTORY".into()),
+                ]),
+            }),
             logistics_exclusion: 10000,
             unit_cull_distance: 70000,
             ground_vehicle_cull_distance: 7000,

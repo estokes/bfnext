@@ -83,6 +83,7 @@ impl Transfer {
         Ok(())
     }
 }
+
 struct Needed<'a> {
     oid: &'a ObjectiveId,
     obj: &'a Objective,
@@ -318,13 +319,88 @@ impl Db {
     }
 
     fn balance_logistics_hubs(&mut self) -> Result<()> {
+        struct Needed<'a> {
+            oid: &'a ObjectiveId,
+            obj: &'a Objective,
+            had: u32,
+            have: u32,
+        }
         for side in [Side::Blue, Side::Red, Side::Neutral] {
             let mut transfers: Vec<Transfer> = vec![];
-            let mut needed: SmallVec<[Needed; 16]> = smallvec![];
-            for lid in &self.persisted.logistics_hubs {
-                
+            macro_rules! schedule_transfers {
+                ($typ:expr, $from:ident, $get:ident) => {{
+                    let mut needed: SmallVec<[Needed; 16]> = self
+                        .persisted
+                        .logistics_hubs
+                        .into_iter()
+                        .filter_map(|lid| {
+                            let obj = &self.persisted.objectives[lid];
+                            if obj.owner != side {
+                                None
+                            } else {
+                                Some(Needed {
+                                    oid: lid,
+                                    obj,
+                                    had: 0,
+                                    have: 0,
+                                })
+                            }
+                        })
+                        .collect();
+                    if needed.len() < 2 {
+                        continue;
+                    }
+                    let items = needed[0].obj.warehouse.$from.clone();
+                    for (name, _) in &items {
+                        let mean = {
+                            let sum: u32 = needed
+                                .iter_mut()
+                                .map(|n| {
+                                    n.have = n.obj.$get(name).stored;
+                                    n.had = n.have;
+                                    n.had
+                                })
+                                .sum();
+                            sum / needed.len() as u32
+                        };
+                        if mean >> 2 == 0 {
+                            continue;
+                        }
+                        needed.sort_by(|n0, n1| n0.had.cmp(&n1.had));
+                        let mut take = needed.len() - 1;
+                        for i in 0..needed.len() {
+                            if needed[i].have + 1 >= mean {
+                                break;
+                            }
+                            while needed[i].have + 1 < mean {
+                                while take > i && needed[take].have <= mean {
+                                    take -= 1;
+                                }
+                                if take == i {
+                                    break;
+                                }
+                                let need = mean - needed[i].have;
+                                let available = needed[take].have - mean;
+                                let xfer = min(need, available);
+                                needed[i].have += xfer;
+                                needed[take].have -= xfer;
+                                transfers.push(Transfer {
+                                    source: *needed[take].oid,
+                                    target: *needed[i].oid,
+                                    amount: xfer,
+                                    item: $typ(name.clone()),
+                                });
+                            }
+                        }
+                    }
+                }};
+            }
+            schedule_transfers!(TransferItem::Equipment, equipment, get_equipment);
+            schedule_transfers!(TransferItem::Liquid, liquids, get_liquids);
+            for tr in transfers.drain(..) {
+                tr.execute(self)?
             }
         }
-        unimplemented!()
+        Ok(())
     }
 }

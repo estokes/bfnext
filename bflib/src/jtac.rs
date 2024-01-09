@@ -6,7 +6,7 @@ use crate::{
     },
     menu,
 };
-use anyhow::{anyhow, bail, Result, Context};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -332,7 +332,7 @@ impl Jtacs {
                 for jt in jtx.values_mut() {
                     let dead = match &jt.target {
                         None => false,
-                        Some((_, _, tuid)) => tuid == uid
+                        Some((_, _, tuid)) => tuid == uid,
                     };
                     if dead {
                         jt.remove_target(lua)?
@@ -352,8 +352,10 @@ impl Jtacs {
                     let unit = db.unit(uid)?;
                     if jt.contacts[uid].pos != unit.position.p.0 {
                         jt.contacts[uid].pos = unit.position.p.0;
-                        let spot = Spot::get_instance(lua, spotid)?;
-                        spot.set_point(unit.position.p)?;
+                        let spot =
+                            Spot::get_instance(lua, spotid).context("getting the spot instance")?;
+                        spot.set_point(unit.position.p)
+                            .context("setting the spot position")?;
                     }
                 }
             }

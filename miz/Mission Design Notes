@@ -132,4 +132,8 @@ Verify LUA_LIB is pointed to *\GitHub\bfnext by using command: echo $env:LUA_LIB
 ./setup-build.ps1 (will take a second)
 cargo build --release (will take a long time)
 Once complete, the file will now be in *\GitHub\bfnext\target\release
-Use the copy command to move the file where you need it: cp target/release/bflib.dll 'C:\Users\Adam\Saved Games\DCS.openbeta\Scripts\'
+Use the copy command to move the file where you need it: cp target/release/bflib.dll 'C:\Users\Adam\Documents\GitHub\bfnext\miz'
+
+
+Preferred start time: 530am in summer
+Preferred weather: High Scattered 3

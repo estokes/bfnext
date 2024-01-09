@@ -11,7 +11,7 @@
     },
     "Blue": {
       "name": "Logistics Repair",
-      "weight": 1500,
+      "weight": 1000,
       "required": 1,
       "pos_unit": null,
       "max_drop_height_agl": 10,
@@ -948,7 +948,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 800,
+        "weight": 500,
         "jtac": {
           "range": 8000
         }
@@ -960,7 +960,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 1000,
+        "weight": 500,
         "jtac": {
           "range": 8000
         }
@@ -972,7 +972,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 1200,
+        "weight": 500,
         "jtac": {
           "range": 8000
         }

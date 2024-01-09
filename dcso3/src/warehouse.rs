@@ -32,11 +32,11 @@ impl<'lua> ItemInventory<'lua> {
 wrapped_table!(LiquidInventory, None);
 
 impl<'lua> LiquidInventory<'lua> {
-    pub fn item(&self, name: LiquidType) -> Result<f32> {
+    pub fn item(&self, name: LiquidType) -> Result<u32> {
         Ok(self.t.raw_get(name)?)
     }
 
-    pub fn for_each<F: FnMut(LiquidType, f32) -> Result<()>>(&self, mut f: F) -> Result<()> {
+    pub fn for_each<F: FnMut(LiquidType, u32) -> Result<()>>(&self, mut f: F) -> Result<()> {
         Ok(self.t.for_each(|k, v| f(k, v).map_err(lua_err))?)
     }
 }
@@ -81,19 +81,19 @@ impl<'lua> Warehouse<'lua> {
         Ok(self.t.call_method("getItemCount", name)?)
     }
 
-    pub fn add_liquid(&self, typ: LiquidType, count: f32) -> Result<()> {
+    pub fn add_liquid(&self, typ: LiquidType, count: u32) -> Result<()> {
         Ok(self.t.call_method("addLiquid", (typ, count))?)
     }
 
-    pub fn remove_liquid(&self, typ: LiquidType, count: f32) -> Result<()> {
+    pub fn remove_liquid(&self, typ: LiquidType, count: u32) -> Result<()> {
         Ok(self.t.call_method("removeLiquid", (typ, count))?)
     }
 
-    pub fn get_liquid_amount(&self, typ: LiquidType) -> Result<f32> {
+    pub fn get_liquid_amount(&self, typ: LiquidType) -> Result<u32> {
         Ok(self.t.call_method("getLiquidAmount", typ)?)
     }
 
-    pub fn set_liquid_amount(&self, typ: LiquidType, count: f32) -> Result<()> {
+    pub fn set_liquid_amount(&self, typ: LiquidType, count: u32) -> Result<()> {
         Ok(self.t.call_method("setLiquidAmount", (typ, count))?)
     }
 

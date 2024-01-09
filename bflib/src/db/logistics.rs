@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     db::{ephemeral::ObjLogi, objective::ObjectiveKind},
-    objective_mut,
+    objective, objective_mut,
 };
 use anyhow::{anyhow, bail, Result};
 use dcso3::{
@@ -14,10 +14,12 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
-use fxhash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::ops::{Add, AddAssign, Sub, SubAssign};
+use std::{
+    cmp::{max, min},
+    ops::{Add, AddAssign, Sub, SubAssign},
+};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct Inventory<N> {
@@ -52,13 +54,49 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
+enum TransferItem {
+    Equipment(String),
+    Liquid(LiquidType),
+}
+
+#[derive(Debug, Clone)]
+struct Transfer {
+    source: ObjectiveId,
+    target: ObjectiveId,
+    amount: u32,
+    item: TransferItem,
+}
+
+impl Transfer {
+    fn execute(&self, db: &mut Db) -> Result<()> {
+        let src = objective_mut!(db, self.source)?;
+        match &self.item {
+            TransferItem::Equipment(name) => src.warehouse.equipment[name].stored -= self.amount,
+            TransferItem::Liquid(name) => src.warehouse.liquids[name].stored -= self.amount,
+        }
+        let dst = objective_mut!(db, self.target)?;
+        match &self.item {
+            TransferItem::Equipment(name) => dst.warehouse.equipment[name].stored += self.amount,
+            TransferItem::Liquid(name) => dst.warehouse.liquids[name].stored += self.amount,
+        }
+        Ok(())
+    }
+}
+struct Needed<'a> {
+    oid: &'a ObjectiveId,
+    obj: &'a Objective,
+    demanded: u32,
+    allocated: u32,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Warehouse {
-    base_equipment: Map<String, Inventory<u32>>,
-    equipment: Map<String, Inventory<u32>>,
-    liquids: Map<LiquidType, Inventory<f32>>,
-    supplier: Option<ObjectiveId>,
-    destination: Set<ObjectiveId>,
+    pub(super) base_equipment: Map<String, Inventory<u32>>,
+    pub(super) equipment: Map<String, Inventory<u32>>,
+    pub(super) liquids: Map<LiquidType, Inventory<u32>>,
+    pub(super) supplier: Option<ObjectiveId>,
+    pub(super) destination: Set<ObjectiveId>,
 }
 
 fn sync_from_obj(obj: &Objective, warehouse: warehouse::Warehouse) -> Result<()> {
@@ -82,7 +120,7 @@ fn sync_from_obj(obj: &Objective, warehouse: warehouse::Warehouse) -> Result<()>
     })?;
     liquids.for_each(|name, _| match obj.warehouse.liquids.get(&name) {
         Some(_) => Ok(()),
-        None => warehouse.set_liquid_amount(name, 0.),
+        None => warehouse.set_liquid_amount(name, 0),
     })?;
     for (name, inv) in &obj.warehouse.equipment {
         warehouse.set_item(name.clone(), inv.stored)?
@@ -208,28 +246,81 @@ impl Db {
     }
 
     pub fn deliver_supplies_from_logistics_hubs(&mut self) -> Result<()> {
-        let mut equipment: FxHashMap<Side, SmallVec<[String; 128]>> = FxHashMap::default();
-        let mut liquids: FxHashMap<Side, SmallVec<[LiquidType; 8]>> = FxHashMap::default();
+        let mut transfers: Vec<Transfer> = vec![];
         for lid in &self.persisted.logistics_hubs {
-            let logi = objective_mut!(self, lid)?;
-            let equipment = equipment.entry(logi.owner).or_insert_with(|| {
-                logi.warehouse
-                    .equipment
-                    .into_iter()
-                    .map(|(id, _)| id.clone())
-                    .collect::<SmallVec<_>>()
-            });
-            let liquids = liquids.entry(logi.owner).or_insert_with(|| {
-                logi.warehouse
-                    .liquids
-                    .into_iter()
-                    .map(|(id, _)| *id)
-                    .collect::<SmallVec<_>>()
-            });
-            let mut needed: SmallVec<[ObjectiveId; 64]> = smallvec![];
-            for name in equipment {
-
+            let logi = objective!(self, lid)?;
+            let mut needed: SmallVec<[Needed; 64]> = logi
+                .warehouse
+                .destination
+                .into_iter()
+                .filter_map(|oid| Some((oid, self.persisted.objectives.get(oid)?)))
+                .filter(|(_, obj)| logi.owner == obj.owner)
+                .map(|(oid, obj)| Needed {
+                    oid,
+                    obj,
+                    demanded: 0,
+                    allocated: 0,
+                })
+                .collect();
+            macro_rules! schedule_transfers {
+                ($typ:expr, $from:ident, $get:ident) => {
+                    for (name, inv) in &logi.warehouse.$from {
+                        if inv.stored == 0 {
+                            continue;
+                        }
+                        needed.sort_by(|n0, n1| {
+                            let i0 = n0.obj.$get(name);
+                            let i1 = n1.obj.$get(name);
+                            i0.stored.cmp(&i1.stored)
+                        });
+                        let mut total_demanded = 0;
+                        for n in &mut needed {
+                            let inv = n.obj.$get(name);
+                            let demanded = inv.capacity - inv.stored;
+                            total_demanded += demanded;
+                            n.demanded = demanded;
+                            n.allocated = 0;
+                        }
+                        let mut have = inv.stored;
+                        let mut total_filled = 0;
+                        while have > 0 && total_filled < total_demanded {
+                            for n in &mut needed {
+                                if have == 0 {
+                                    break;
+                                }
+                                let allocation = max(1, have >> 3);
+                                let amount = min(allocation, n.demanded - n.allocated);
+                                n.allocated += amount;
+                                total_filled += amount;
+                                have -= amount;
+                            }
+                        }
+                        for n in &needed {
+                            if n.allocated > 0 {
+                                transfers.push(Transfer {
+                                    source: *lid,
+                                    target: *n.oid,
+                                    amount: n.allocated,
+                                    item: $typ(name.clone()),
+                                })
+                            }
+                        }
+                    }
+                };
             }
+            schedule_transfers!(TransferItem::Equipment, equipment, get_equipment);
+            schedule_transfers!(TransferItem::Liquid, liquids, get_liquids);
+        }
+        for tr in transfers.drain(..) {
+            tr.execute(self)?
+        }
+        Ok(())
+    }
+
+    fn balance_logistics_hubs(&mut self) -> Result<()> {
+        for side in [Side::Blue, Side::Red, Side::Neutral] {
+            let mut transfers: Vec<Transfer> = vec![];
+            let mut needed: SmallVec<[Needed; 16]> = smallvec![];
         }
         unimplemented!()
     }

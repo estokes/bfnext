@@ -1,4 +1,8 @@
-use super::{logistics::Warehouse, Db, Map, Set, group::{GroupId, DeployKind, UnitId}};
+use super::{
+    group::{DeployKind, GroupId, UnitId},
+    logistics::{Inventory, Warehouse},
+    Db, Map, Set,
+};
 use crate::{
     cfg::{Deployable, DeployableLogistics, UnitTag, Vehicle},
     group, group_mut, maybe, objective, objective_mut,
@@ -9,14 +13,15 @@ use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
-    atomic_id, centroid2d,
+    atomic_id, azumith2d_to, centroid2d,
     coalition::Side,
     coord::Coord,
     cvt_err,
     env::miz::{GroupKind, MizIndex},
     land::Land,
     net::SlotId,
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3, azumith2d_to,
+    warehouse::LiquidType,
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error};
@@ -186,6 +191,22 @@ impl Objective {
 
     pub fn owner(&self) -> Side {
         self.owner
+    }
+
+    pub fn get_equipment(&self, name: &str) -> Inventory<u32> {
+        self.warehouse
+            .equipment
+            .get(name)
+            .map(|i| *i)
+            .unwrap_or_default()
+    }
+
+    pub fn get_liquids(&self, name: &LiquidType) -> Inventory<u32> {
+        self.warehouse
+            .liquids
+            .get(name)
+            .map(|i| *i)
+            .unwrap_or_default()
     }
 }
 

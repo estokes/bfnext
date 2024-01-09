@@ -321,6 +321,9 @@ impl Db {
         for side in [Side::Blue, Side::Red, Side::Neutral] {
             let mut transfers: Vec<Transfer> = vec![];
             let mut needed: SmallVec<[Needed; 16]> = smallvec![];
+            for lid in &self.persisted.logistics_hubs {
+                
+            }
         }
         unimplemented!()
     }

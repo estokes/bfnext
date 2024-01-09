@@ -161,6 +161,7 @@ pub struct Objective {
     pub(super) threatened: bool,
     pub(super) last_threatened_ts: DateTime<Utc>,
     pub(super) last_change_ts: DateTime<Utc>,
+    #[serde(default)]
     pub(super) warehouse: Warehouse,
     #[serde(skip)]
     pub(super) spawned: bool,

@@ -1,6 +1,6 @@
 use super::{
     objective::{Objective, ObjectiveId},
-    Db, Map,
+    Db, Map, Set,
 };
 use crate::{
     db::{ephemeral::ObjLogi, objective::ObjectiveKind},
@@ -14,6 +14,7 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
+use fxhash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::ops::{Add, AddAssign, Sub, SubAssign};
@@ -57,6 +58,7 @@ pub struct Warehouse {
     equipment: Map<String, Inventory<u32>>,
     liquids: Map<LiquidType, Inventory<f32>>,
     supplier: Option<ObjectiveId>,
+    destination: Set<ObjectiveId>,
 }
 
 fn sync_from_obj(obj: &Objective, warehouse: warehouse::Warehouse) -> Result<()> {
@@ -92,7 +94,7 @@ fn sync_from_obj(obj: &Objective, warehouse: warehouse::Warehouse) -> Result<()>
 }
 
 impl Db {
-    pub(super) fn init_warehouses(&mut self, lua: MizLua) -> Result<()> {
+    pub(super) fn setup_warehouses_after_load(&mut self, lua: MizLua) -> Result<()> {
         let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
             Some(cfg) => cfg,
             None => return Ok(()), // warehouse system disabled
@@ -160,9 +162,17 @@ impl Db {
                     }
                 }
             }
+            for oid in &self.persisted.logistics_hubs {
+                let obj = objective_mut!(self, oid)?;
+                obj.warehouse.destination = Set::new();
+            }
             for (oid, supplier) in suppliers {
                 let obj = objective_mut!(self, oid)?;
                 obj.warehouse.supplier = supplier;
+                if let Some(id) = supplier {
+                    let logi = objective_mut!(self, id)?;
+                    logi.warehouse.destination.insert_cow(oid);
+                }
             }
             Ok(())
         };
@@ -194,10 +204,33 @@ impl Db {
         };
         deliver_produced_supplies()?;
         self.ephemeral.dirty();
-        self.deliver_supplies()
+        self.deliver_supplies_from_logistics_hubs()
     }
 
-    pub fn deliver_supplies(&mut self) -> Result<()> {
+    pub fn deliver_supplies_from_logistics_hubs(&mut self) -> Result<()> {
+        let mut equipment: FxHashMap<Side, SmallVec<[String; 128]>> = FxHashMap::default();
+        let mut liquids: FxHashMap<Side, SmallVec<[LiquidType; 8]>> = FxHashMap::default();
+        for lid in &self.persisted.logistics_hubs {
+            let logi = objective_mut!(self, lid)?;
+            let equipment = equipment.entry(logi.owner).or_insert_with(|| {
+                logi.warehouse
+                    .equipment
+                    .into_iter()
+                    .map(|(id, _)| id.clone())
+                    .collect::<SmallVec<_>>()
+            });
+            let liquids = liquids.entry(logi.owner).or_insert_with(|| {
+                logi.warehouse
+                    .liquids
+                    .into_iter()
+                    .map(|(id, _)| *id)
+                    .collect::<SmallVec<_>>()
+            });
+            let mut needed: SmallVec<[ObjectiveId; 64]> = smallvec![];
+            for name in equipment {
+
+            }
+        }
         unimplemented!()
     }
 }

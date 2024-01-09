@@ -297,7 +297,7 @@ impl<'lua> UserHooks<'lua> {
     /// f(id, message, all)
     pub fn on_player_try_change_slot<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId, Side, SlotId) -> Result<bool> + 'static,
+        F: Fn(HooksLua, PlayerId, Side, SlotId) -> Result<Option<bool>> + 'static,
     {
         self.on_player_try_change_slot =
             Some(self.lua.create_function(move |lua, (id, side, slot): (PlayerId, Side, SlotId)| {

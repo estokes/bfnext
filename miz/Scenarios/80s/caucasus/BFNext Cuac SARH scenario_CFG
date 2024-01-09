@@ -59,7 +59,9 @@
     "F-15ESE": 36000,
     "Su-25": 21600,
     "AV8BNA": 36000,
-    "MB-339A": 9000
+    "MB-339A": 9000,
+	"J-11A": 36000,
+	"Su-33": 36000
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
@@ -103,7 +105,9 @@
     "F-15ESE": "Standard",
     "Su-25": "Attack",
     "AV8BNA": "Attack",
-    "MB-339A": "Recon"
+    "MB-339A": "Recon",
+	"J-11A": "Standard",
+	"Su-33": "Standard"
   },
   "default_lives": {
     "Standard": [
@@ -1440,6 +1444,39 @@
     ],
     "SA342M": [
       "Helicopter"
+    ],
+    "Su-33": [
+      "Aircraft"
+    ],
+    "J-11A": [
+      "Aircraft"
+    ],
+    "A-10C_2": [
+      "Aircraft"
+    ],
+    "F-14B": [
+      "Aircraft"
+    ],
+    "MiG-29S": [
+      "Aircraft"
+    ],
+    "FA-18C_hornet": [
+      "Aircraft"
+    ],
+    "L-39C": [
+      "Aircraft"
+    ],
+    "JF-17": [
+      "Aircraft"
+    ],
+    "AJS37": [
+      "Aircraft"
+    ],
+    "MB-339A": [
+      "Aircraft"
+    ],
+    "AV8BNA": [
+      "Aircraft"
     ]
   },
   "jtac_priority": [

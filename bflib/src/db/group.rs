@@ -6,11 +6,11 @@ use super::{
 };
 use crate::{
     cfg::{Crate, Deployable, Troop, UnitTags},
-    group, group_by_name, group_mut, maybe,
+    group, group_by_name, group_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
@@ -26,7 +26,7 @@ use dcso3::{
     LuaVec2, MizLua, Position3, String, Vector2,
 };
 use fxhash::FxHashMap;
-use log::{error, info};
+use log::{error, info, warn};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -129,12 +129,14 @@ impl Db {
         spctx: &SpawnCtx,
         group: &SpawnedGroup,
     ) -> Result<()> {
-        let template = spctx.get_template(
-            idx,
-            GroupKind::Any,
-            group.side,
-            group.template_name.as_str(),
-        )?;
+        let template = spctx
+            .get_template(
+                idx,
+                GroupKind::Any,
+                group.side,
+                group.template_name.as_str(),
+            )
+            .with_context(|| format_compact!("getting template {}", group.template_name))?;
         template.group.set("lateActivation", false)?;
         template.group.set("hidden", false)?;
         template.group.set_name(group.name.clone())?;
@@ -178,8 +180,14 @@ impl Db {
                 .iter()
                 .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
                 .fold(0., |acc, d| if d > acc { d } else { acc });
-            spctx.remove_junk(point, radius.sqrt() * 1.10)?;
-            spctx.spawn(template)
+            spctx
+                .remove_junk(point, radius.sqrt() * 1.10)
+                .with_context(|| {
+                    format_compact!("removing junk before spawn of {}", group.template_name)
+                })?;
+            spctx
+                .spawn(template)
+                .with_context(|| format_compact!("spawning template {}", group.template_name))
         } else {
             Ok(())
         }
@@ -644,10 +652,23 @@ impl Db {
                     as Box<dyn Iterator<Item = UnitId>>
             });
         for uid in units {
-            let id = maybe!(self.ephemeral.object_id_by_uid, uid, "object id")?;
+            let id = match self.ephemeral.object_id_by_uid.get(&uid) {
+                Some(id) => id,
+                None => {
+                    warn!("update_unit_positions skipping unknown unit {uid}");
+                    continue;
+                }
+            };
             let instance = match unit.take() {
-                Some(unit) => unit.change_instance(id)?,
-                None => Unit::get_instance(lua, id)?,
+                Some(unit) => unit.change_instance(id),
+                None => Unit::get_instance(lua, id),
+            };
+            let instance = match instance {
+                Ok(i) => i,
+                Err(e) => {
+                    warn!("update_unit_positions skipping invalid instance {uid}, {:?}, {:?}", id, e);
+                    continue;
+                }
             };
             let pos = instance.get_position()?;
             let point = Vector2::new(pos.p.x, pos.p.z);

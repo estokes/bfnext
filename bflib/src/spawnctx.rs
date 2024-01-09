@@ -1,4 +1,5 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
+use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side},
     env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
@@ -8,6 +9,7 @@ use dcso3::{
     DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
+use log::error;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +32,7 @@ pub enum SpawnLoc {
         group_heading: f64,
     },
     /// spawn the group as a direct translation from an original (provided) center
-    /// to a new center. This is useful if you have statics, or multiple groups, 
+    /// to a new center. This is useful if you have statics, or multiple groups,
     /// and you want their relative positions to be preserved
     AtPosWithCenter {
         /// pos is the new center position of the group
@@ -107,31 +109,48 @@ impl<'lua> SpawnCtx<'lua> {
 
     pub fn spawn(&self, template: GroupInfo) -> Result<()> {
         match GroupCategory::from_kind(template.category) {
-            None => {
-                // static objects are not fed to addStaticObject as groups
-                let unit = template.group.units()?.first()?;
-                self.coalition.add_static_object(template.country, unit)?;
-            }
             Some(category) => {
                 self.coalition
-                    .add_group(template.country, category, template.group)?;
+                    .add_group(template.country, category, template.group.clone())
+                    .with_context(|| {
+                        format_compact!("spawning group from template {:?}", template)
+                    })?;
+            }
+            None => {
+                // static objects are not fed to addStaticObject as groups
+                let unit = template
+                    .group
+                    .units()
+                    .context("getting static group units")?
+                    .first()
+                    .context("getting first unit in static group")?;
+                self.coalition
+                    .add_static_object(template.country, unit)
+                    .with_context(|| {
+                        format_compact!("spawning static object from template {:?}", template)
+                    })?;
             }
         }
         Ok(())
     }
 
     pub fn despawn(&self, name: Despawn) -> Result<()> {
-        let r = match name {
+        match name {
             Despawn::Group(name) => {
-                let group = dcso3::group::Group::get_by_name(self.lua, &*name)?;
-                Ok(group.destroy()?)
+                match dcso3::group::Group::get_by_name(self.lua, &*name) {
+                    Ok(group) => group.destroy()?,
+                    Err(e) => error!("attempt to despawn unknown group {} {}", name, e),
+                }
+                Ok(())
             }
             Despawn::Static(name) => {
-                let obj = dcso3::static_object::StaticObject::get_by_name(self.lua, &*name)?;
-                Ok(obj.as_object()?.destroy()?)
+                match dcso3::static_object::StaticObject::get_by_name(self.lua, &*name) {
+                    Ok(obj) => obj.as_object()?.destroy()?,
+                    Err(e) => error!("attempt to despawn unknown static {} {}", name, e),
+                }
+                Ok(())
             }
-        };
-        r
+        }
     }
 
     pub fn remove_junk(&self, point: Vector2, radius: f64) -> Result<()> {

@@ -6,7 +6,7 @@ use crate::{
     },
     menu,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Result, Context};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -326,8 +326,26 @@ impl Jtacs {
         })
     }
 
+    pub fn unit_dead(&mut self, lua: MizLua, db: &Db, id: &DcsOid<ClassUnit>) -> Result<()> {
+        if let Some(uid) = db.ephemeral.get_uid_by_object_id(id) {
+            for jtx in self.0.values_mut() {
+                for jt in jtx.values_mut() {
+                    let dead = match &jt.target {
+                        None => false,
+                        Some((_, _, tuid)) => tuid == uid
+                    };
+                    if dead {
+                        jt.remove_target(lua)?
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn update_target_positions(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {
-        db.update_unit_positions(lua, Some(self.jtac_targets()))?;
+        db.update_unit_positions(lua, Some(self.jtac_targets()))
+            .context("updating the position of jtac targets")?;
         for jtx in self.0.values_mut() {
             for jt in jtx.values_mut() {
                 if let Some((spotid, _, uid)) = &jt.target {

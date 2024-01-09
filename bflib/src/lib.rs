@@ -25,7 +25,7 @@ use dcso3::{
     hooks::UserHooks,
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
-    object::{DcsObject, DcsOid},
+    object::{DcsObject, DcsOid, Object},
     timer::Timer,
     trigger::Trigger,
     unit::{ClassUnit, Unit},
@@ -442,6 +442,21 @@ fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
     }
 }
 
+fn unit_killed(lua: MizLua, ctx: &mut Context, unit: Object) -> Result<()> {
+    if let Ok(unit) = unit.as_unit() {
+        let id = unit.object_id()?;
+        if let Err(e) = ctx.jtac.unit_dead(lua, &ctx.db, &id) {
+            error!("jtac unit dead failed for {:?} {:?}", unit, e)
+        }
+        if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
+            error!("unit dead failed for {:?} {:?}", unit, e);
+        }
+        ctx.recently_landed.remove(&id);
+        force_player_in_slot_to_spectators(ctx, &unit.slot()?);
+    }
+    Ok(())
+}
+
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
     info!("onEvent: {:?}", ev);
@@ -474,20 +489,14 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Some(unit) = e.initiator {
-                if let Ok(unit) = unit.as_unit() {
-                    force_player_in_slot_to_spectators(ctx, &unit.slot()?);
-                    let id = unit.object_id()?;
-                    if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
-                        error!("unit dead failed for {:?} {:?}", unit, e);
-                    }
-                    ctx.recently_landed.remove(&id);
+                if let Err(e) = unit_killed(lua, ctx, unit) {
+                    error!("unit killed failed {}", e)
                 }
             }
         }
         Event::Ejection(e) => {
-            if let Ok(unit) = e.initiator.as_unit() {
-                ctx.recently_landed.remove(&unit.object_id()?);
-                force_player_in_slot_to_spectators(ctx, &unit.slot()?)
+            if let Err(e) = unit_killed(lua, ctx, e.initiator) {
+                error!("unit killed failed {}", e)
             }
         }
         Event::Takeoff(e) | Event::PostponedTakeoff(e) => {
@@ -749,31 +758,31 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let act = Trigger::singleton(lua)?.action()?;
     for id in ctx.force_to_spectators.drain() {
         if let Err(e) = net.force_player_slot(id, Side::Neutral, SlotId::spectator()) {
-            error!("error forcing player {:?} to spectators {e}", id);
+            error!("error forcing player {:?} to spectators {:?}", id, e);
         }
     }
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, ts) {
-        error!("error running slow timed events {e}")
+        error!("error running slow timed events {:?}", e)
     }
     let now = Utc::now();
     let spctx = SpawnCtx::new(lua)?;
     if let Err(e) = ctx.db.process_spawn_queue(ts, &ctx.idx, &spctx) {
-        error!("error processing spawn queue {e}")
+        error!("error processing spawn queue {:?}", e)
     }
     record_perf(&mut perf.spawn_queue, now);
     let now = Utc::now();
     if let Err(e) = advise_captured(ctx, ts) {
-        error!("error advise captured {e}")
+        error!("error advise captured {:?}", e)
     }
     record_perf(&mut perf.advise_captured, now);
     let now = Utc::now();
     if let Err(e) = advise_captureable(ctx) {
-        error!("error advise capturable {e}")
+        error!("error advise capturable {:?}", e)
     }
     record_perf(&mut perf.advise_capturable, now);
     let now = Utc::now();
     if let Err(e) = ctx.jtac.update_target_positions(lua, &mut ctx.db) {
-        error!("error updating jtac target positions {e}")
+        error!("error updating jtac target positions {:?}", e)
     }
     record_perf(&mut perf.jtac_target_positions, now);
     let now = Utc::now();

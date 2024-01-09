@@ -72,6 +72,10 @@ impl Ephemeral {
         &self.cfg
     }
 
+    pub fn get_uid_by_object_id(&self, id: &DcsOid<ClassUnit>) -> Option<&UnitId> {
+        self.uid_by_object_id.get(id)
+    }
+
     fn index_deployables_for_side(
         &mut self,
         miz: &Miz,

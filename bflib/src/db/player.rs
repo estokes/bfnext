@@ -12,7 +12,7 @@ use dcso3::{
     unit::Unit,
     MizLua, Position3, String, Vector2, Vector3,
 };
-use log::error;
+use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
@@ -311,17 +311,25 @@ impl Db {
             if let Some(ucid) = self.ephemeral.players_by_slot.get(slot) {
                 if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
                     let instance = match unit.take() {
-                        Some(unit) => unit.change_instance(id)?,
-                        None => Unit::get_instance(lua, id)?,
+                        Some(unit) => unit.change_instance(id),
+                        None => Unit::get_instance(lua, id),
                     };
-                    let instanced_player = InstancedPlayer {
-                        position: instance.get_position()?,
-                        velocity: instance.get_velocity()?.0,
-                        in_air: instance.in_air()?,
-                        typ: Vehicle::from(instance.get_type_name()?),
-                    };
-                    player.current_slot = Some((slot.clone(), Some(instanced_player)));
-                    unit = Some(instance);
+                    match instance {
+                        Err(e) => warn!(
+                            "updating player positions, skipping invalid unit {:?}, {:?}, player {:?}",
+                            player, id, e
+                        ),
+                        Ok(instance) => {
+                            let instanced_player = InstancedPlayer {
+                                position: instance.get_position()?,
+                                velocity: instance.get_velocity()?.0,
+                                in_air: instance.in_air()?,
+                                typ: Vehicle::from(instance.get_type_name()?),
+                            };
+                            player.current_slot = Some((slot.clone(), Some(instanced_player)));
+                            unit = Some(instance);
+                        }
+                    }
                 }
             }
         }

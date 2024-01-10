@@ -25,7 +25,7 @@ use dcso3::{
     hooks::UserHooks,
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
-    object::{DcsObject, DcsOid, Object},
+    object::{DcsObject, DcsOid},
     timer::Timer,
     trigger::Trigger,
     unit::{ClassUnit, Unit},
@@ -459,20 +459,18 @@ fn on_player_try_change_slot(
     res
 }
 
-fn on_event(lua: MizLua, ev: Event) -> Result<()> {
-    fn unit_killed(lua: MizLua, ctx: &mut Context, unit: Object) -> Result<()> {
-        if let Ok(unit) = unit.as_unit() {
-            let id = unit.object_id()?;
-            ctx.recently_landed.remove(&id);
-            if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
-                error!("jtac unit dead failed for {:?} {:?}", unit, e)
-            }
-            if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
-                error!("unit dead failed for {:?} {:?}", unit, e);
-            }
-        }
-        Ok(())
+fn unit_killed(lua: MizLua, ctx: &mut Context, id: DcsOid<ClassUnit>) -> Result<()> {
+    ctx.recently_landed.remove(&id);
+    if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
+        error!("jtac unit dead failed for {:?} {:?}", id, e)
     }
+    if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
+        error!("unit dead failed for {:?} {:?}", id, e);
+    }
+    Ok(())
+}
+
+fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
     info!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
@@ -504,14 +502,18 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Some(unit) = e.initiator {
-                if let Err(e) = unit_killed(lua, ctx, unit) {
-                    error!("unit killed failed {}", e)
+                if let Ok(unit) = unit.as_unit() {
+                    if let Err(e) = unit_killed(lua, ctx, unit.object_id()?) {
+                        error!("unit killed failed {}", e)
+                    }
                 }
             }
         }
         Event::Ejection(e) => {
-            if let Err(e) = unit_killed(lua, ctx, e.initiator) {
-                error!("unit killed failed {}", e)
+            if let Ok(unit) = e.initiator.as_unit() {
+                if let Err(e) = unit_killed(lua, ctx, unit.object_id()?) {
+                    error!("unit killed failed {}", e)
+                }
             }
         }
         Event::Takeoff(e) | Event::PostponedTakeoff(e) => {
@@ -704,13 +706,21 @@ fn run_slow_timed_events(
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         let start_ts = Utc::now();
-        if let Err(e) = ctx.db.update_unit_positions::<iter::Once<_>>(lua, ts, None) {
-            error!("could not update unit positions {e}")
+        let mut dead = vec![];
+        match ctx.db.update_unit_positions::<iter::Once<_>>(lua, None) {
+            Err(e) => error!("could not update unit positions {e}"),
+            Ok(v) => dead = v,
         }
         record_perf(&mut perf.unit_positions, start_ts);
         let ts = Utc::now();
-        if let Err(e) = ctx.db.update_player_positions(lua, ts) {
-            error!("could not update player positions {e}")
+        match ctx.db.update_player_positions(lua) {
+            Err(e) => error!("could not update player positions {e}"),
+            Ok(mut v) => dead.extend(v.drain(..)),
+        }
+        for id in dead {
+            if let Err(e) = unit_killed(lua, ctx, id.clone()) {
+                error!("unit killed failed {:?} {:?}", id, e)
+            }
         }
         record_perf(&mut perf.player_positions, ts);
         let ts = Utc::now();
@@ -798,8 +808,15 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.advise_capturable, now);
     let now = Utc::now();
-    if let Err(e) = ctx.jtac.update_target_positions(lua, &mut ctx.db, ts) {
-        error!("error updating jtac target positions {:?}", e)
+    match ctx.jtac.update_target_positions(lua, &mut ctx.db) {
+        Err(e) => error!("error updating jtac target positions {:?}", e),
+        Ok(dead) => {
+            for id in dead {
+                if let Err(e) = unit_killed(lua, ctx, id.clone()) {
+                    error!("unit killed failed {:?} {:?}", id, e)
+                }
+            }
+        }
     }
     record_perf(&mut perf.jtac_target_positions, now);
     let now = Utc::now();

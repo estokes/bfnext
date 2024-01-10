@@ -375,9 +375,9 @@ impl Jtacs {
         &mut self,
         lua: MizLua,
         db: &mut Db,
-        now: DateTime<Utc>,
-    ) -> Result<()> {
-        db.update_unit_positions(lua, now, Some(self.jtac_targets()))
+    ) -> Result<Vec<DcsOid<ClassUnit>>> {
+        let dead = db
+            .update_unit_positions(lua, Some(self.jtac_targets()))
             .context("updating the position of jtac targets")?;
         for jtx in self.0.values_mut() {
             for jt in jtx.values_mut() {
@@ -393,7 +393,7 @@ impl Jtacs {
                 }
             }
         }
-        Ok(())
+        Ok(dead)
     }
 
     pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {

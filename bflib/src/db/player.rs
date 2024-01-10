@@ -305,8 +305,8 @@ impl Db {
         }
     }
 
-    pub fn update_player_positions(&mut self, lua: MizLua, now: DateTime<Utc>) -> Result<()> {
-        let mut dead: SmallVec<[DcsOid<ClassUnit>; 16]> = smallvec![];
+    pub fn update_player_positions(&mut self, lua: MizLua) -> Result<Vec<DcsOid<ClassUnit>>> {
+        let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
         let mut unit: Option<Unit> = None;
         for (slot, id) in &self.ephemeral.object_id_by_slot {
             if let Some(ucid) = self.ephemeral.players_by_slot.get(slot) {
@@ -337,10 +337,7 @@ impl Db {
                 }
             }
         }
-        for id in dead {
-            self.unit_dead(&id, now)?
-        }
-        Ok(())
+        Ok(dead)
     }
 
     pub fn player_entered_unit(&mut self, unit: &Unit) -> Result<()> {
@@ -351,16 +348,17 @@ impl Db {
         Ok(())
     }
 
-    pub fn player_left_unit(&mut self, lua: MizLua, unit: &Unit) -> Result<()> {
+    pub fn player_left_unit(&mut self, lua: MizLua, unit: &Unit) -> Result<Vec<DcsOid<ClassUnit>>> {
         let name = unit.get_name()?;
+        let mut dead = vec![];
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             let uid = *uid;
-            if let Err(e) = self.update_unit_positions(lua, Utc::now(), Some(std::iter::once(uid)))
-            {
-                error!("could not sync final CA unit position {e}");
+            match self.update_unit_positions(lua, Some(std::iter::once(uid))) {
+                Ok(v) => dead = v,
+                Err(e) => error!("could not sync final CA unit position {e}"),
             }
             self.ephemeral.units_able_to_move.remove(&uid);
         }
-        Ok(())
+        Ok(dead)
     }
 }

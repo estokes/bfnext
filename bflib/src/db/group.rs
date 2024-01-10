@@ -628,12 +628,11 @@ impl Db {
     pub fn update_unit_positions<'a, I: Iterator<Item = UnitId> + 'a>(
         &'a mut self,
         lua: MizLua,
-        now: DateTime<Utc>,
         units: Option<I>,
-    ) -> Result<()> {
+    ) -> Result<Vec<DcsOid<ClassUnit>>> {
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
-        let mut dead: SmallVec<[DcsOid<ClassUnit>; 16]> = smallvec![];
+        let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
         let units = units
             .map(|i| Box::new(i) as Box<dyn Iterator<Item = UnitId>>)
             .unwrap_or_else(|| {
@@ -684,9 +683,6 @@ impl Db {
             self.ephemeral.dirty();
             self.mark_group(&gid)?;
         }
-        for id in dead {
-            self.unit_dead(&id, now)?;
-        }
-        Ok(())
+        Ok(dead)
     }
 }

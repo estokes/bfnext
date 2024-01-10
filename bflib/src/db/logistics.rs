@@ -100,7 +100,7 @@ pub struct Warehouse {
     pub(super) destination: Set<ObjectiveId>,
 }
 
-fn sync_from_obj(obj: &Objective, warehouse: warehouse::Warehouse) -> Result<()> {
+fn sync_from_obj(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
     let inventory = warehouse.get_inventory(None)?;
     let weapons = inventory.weapons()?;
     let aircraft = inventory.aircraft()?;
@@ -111,18 +111,17 @@ fn sync_from_obj(obj: &Objective, warehouse: warehouse::Warehouse) -> Result<()>
             obj.name
         )
     }
-    weapons.for_each(|name, _| match obj.warehouse.equipment.get(name.as_str()) {
-        Some(_) => Ok(()),
-        None => warehouse.set_item(name, 0),
-    })?;
-    aircraft.for_each(|name, _| match obj.warehouse.equipment.get(name.as_str()) {
-        Some(_) => Ok(()),
-        None => warehouse.set_item(name, 0),
-    })?;
-    liquids.for_each(|name, _| match obj.warehouse.liquids.get(&name) {
-        Some(_) => Ok(()),
-        None => warehouse.set_liquid_amount(name, 0),
-    })?;
+    macro_rules! zero {
+        ($src:ident, $dst:ident, $set:ident) => {
+            $src.for_each(|name, _| match obj.warehouse.$dst.get(&name) {
+                Some(_) => Ok(()),
+                None => warehouse.$set(name, 0),
+            })?;
+        };
+    }
+    zero!(weapons, equipment, set_item);
+    zero!(aircraft, equipment, set_item);
+    zero!(liquids, liquids, set_liquid_amount);
     for (name, inv) in &obj.warehouse.equipment {
         warehouse.set_item(name.clone(), inv.stored)?
     }
@@ -132,7 +131,36 @@ fn sync_from_obj(obj: &Objective, warehouse: warehouse::Warehouse) -> Result<()>
     Ok(())
 }
 
+fn sync_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
+    let inventory = warehouse.get_inventory(None)?;
+    let weapons = inventory.weapons()?;
+    let aircraft = inventory.aircraft()?;
+    let liquids = inventory.liquids()?;
+    macro_rules! sync {
+        ($src:ident, $dst:ident) => {
+            $src.for_each(|name, qty| {
+                let inv = obj.warehouse.$dst.get_or_default_cow(name);
+                inv.stored = qty;
+                Ok(())
+            })?;
+        };
+    }
+    sync!(weapons, equipment);
+    sync!(aircraft, equipment);
+    sync!(liquids, liquids);
+    Ok(())
+}
+
 impl Db {
+    pub(super) fn init_warehouses(&mut self, lua: MizLua) -> Result<()> {
+        let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
+            Some(cfg) => cfg,
+            None => return Ok(()),
+        };
+        let world = World::singleton(lua)?;
+        unimplemented!()
+    }
+
     pub(super) fn setup_warehouses_after_load(&mut self, lua: MizLua) -> Result<()> {
         let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
             Some(cfg) => cfg,
@@ -167,7 +195,6 @@ impl Db {
                         warehouse: warehouse.object_id()?,
                     },
                 );
-                sync_from_obj(obj, warehouse)?;
             }
             Ok(())
         };
@@ -246,6 +273,40 @@ impl Db {
         self.deliver_supplies_from_logistics_hubs()
     }
 
+    pub fn sync_objectives_from_warehouses(&mut self, lua: MizLua) -> Result<()> {
+        let oids: SmallVec<[ObjectiveId; 64]> = self
+            .persisted
+            .objectives
+            .into_iter()
+            .map(|(oid, _)| *oid)
+            .collect();
+        for oid in &oids {
+            let obj = objective_mut!(self, oid)?;
+            let warehouse = &self.ephemeral.logistics_by_oid[oid].warehouse;
+            let warehouse = warehouse::Warehouse::get_instance(lua, warehouse)?;
+            sync_to_obj(obj, &warehouse)?
+        }
+        self.ephemeral.dirty();
+        Ok(())
+    }
+
+    pub fn sync_warehouses_from_objectives(&mut self, lua: MizLua) -> Result<()> {
+        let oids: SmallVec<[ObjectiveId; 64]> = self
+            .persisted
+            .objectives
+            .into_iter()
+            .map(|(oid, _)| *oid)
+            .collect();
+        for oid in &oids {
+            let obj = objective_mut!(self, oid)?;
+            let warehouse = &self.ephemeral.logistics_by_oid[oid].warehouse;
+            let warehouse = warehouse::Warehouse::get_instance(lua, warehouse)?;
+            sync_from_obj(obj, &warehouse)?
+        }
+        self.ephemeral.dirty();
+        Ok(())
+    }
+
     pub fn deliver_supplies_from_logistics_hubs(&mut self) -> Result<()> {
         let mut transfers: Vec<Transfer> = vec![];
         for lid in &self.persisted.logistics_hubs {
@@ -315,7 +376,7 @@ impl Db {
         for tr in transfers.drain(..) {
             tr.execute(self)?
         }
-        Ok(())
+        self.balance_logistics_hubs()
     }
 
     fn balance_logistics_hubs(&mut self) -> Result<()> {

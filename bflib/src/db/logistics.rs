@@ -157,8 +157,39 @@ impl Db {
             Some(cfg) => cfg,
             None => return Ok(()),
         };
-        let world = World::singleton(lua)?;
-        unimplemented!()
+        for side in [Side::Red, Side::Blue, Side::Neutral] {
+            let oids: SmallVec<[ObjectiveId; 64]> = self
+                .persisted
+                .objectives
+                .into_iter()
+                .filter_map(|(oid, obj)| if obj.owner == side { Some(*oid) } else { None })
+                .collect();
+            let template = match whcfg.supply_source.get(&side) {
+                Some(tmpl) => tmpl,
+                None => continue, // side didn't produce anything, bummer
+            };
+            let w =
+                warehouse::Warehouse::get_by_name(lua, template.clone())?.get_inventory(None)?;
+            macro_rules! dist {
+                ($src:ident, $dst:ident) => {{
+                    w.$src()?.for_each(|name, qty| {
+                        for oid in &oids {
+                            let hub = self.persisted.logistics_hubs.contains(oid);
+                            let obj = objective_mut!(self, oid)?;
+                            let capacity = qty * if hub { whcfg.hub_max } else { whcfg.airbase_max };
+                            let inv = Inventory { stored: capacity, capacity };
+                            obj.warehouse.$dst.insert_cow(name.clone(), inv);
+                        }
+                        Ok(())
+                    })?;
+                }}
+            }
+            dist!(weapons, equipment);
+            dist!(aircraft, equipment);
+            dist!(liquids, liquids);
+        }
+        self.ephemeral.dirty();
+        Ok(())
     }
 
     pub(super) fn setup_warehouses_after_load(&mut self, lua: MizLua) -> Result<()> {
@@ -177,7 +208,7 @@ impl Db {
                     let radius2 = obj.radius.powi(2);
                     na::distance_squared(&pos.into(), &obj.pos.into()) <= radius2
                 });
-                let (oid, obj) = match oid {
+                let (oid, _) = match oid {
                     Some((oid, obj)) => {
                         airbase.set_coalition(obj.owner)?;
                         (*oid, obj)
@@ -269,8 +300,9 @@ impl Db {
             unimplemented!()
         };
         deliver_produced_supplies()?;
+        self.deliver_supplies_from_logistics_hubs()?;
         self.ephemeral.dirty();
-        self.deliver_supplies_from_logistics_hubs()
+        self.sync_warehouses_from_objectives(lua)
     }
 
     pub fn sync_objectives_from_warehouses(&mut self, lua: MizLua) -> Result<()> {
@@ -461,6 +493,7 @@ impl Db {
             for tr in transfers.drain(..) {
                 tr.execute(self)?
             }
+            self.ephemeral.dirty();
         }
         Ok(())
     }

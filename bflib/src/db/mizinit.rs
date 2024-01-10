@@ -241,6 +241,7 @@ impl Db {
         for id in ids {
             t.update_objective_status(&id, now)?
         }
+        t.init_warehouses(lua)?;
         t.ephemeral.dirty();
         Ok(t)
     }

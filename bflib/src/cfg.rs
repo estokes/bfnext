@@ -261,6 +261,12 @@ pub struct CargoConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WarehouseConfig {
+    /// Logistics hub max supply stock as a multiple of the delivery amount
+    pub hub_max: u32,
+    /// Airbase max supply stock as a multiple of the delivery amount
+    pub airbase_max: u32,
+    /// Logistics tick in minutes. Supplies move automatically every tick
+    pub tick: u32,
     /// The fuel transfer crate
     pub fuel_transfer_crate: FxHashMap<Side, Crate>,
     /// The supply transfer crate
@@ -1418,6 +1424,9 @@ impl Default for Cfg {
             repair_time: 1800,
             repair_crate: default_repair_crate(),
             warehouse: Some(WarehouseConfig {
+                hub_max: 25,
+                airbase_max: 5,
+                tick: 10,
                 fuel_transfer_crate: default_fuel_transfer_crate(),
                 supply_transfer_crate: default_supply_transfer_crate(),
                 supply_source: FxHashMap::from_iter([

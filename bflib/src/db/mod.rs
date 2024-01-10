@@ -29,8 +29,8 @@ pub mod objective;
 pub mod persisted;
 pub mod player;
 
-pub type Map<K, V> = immutable_chunkmap::map::Map<K, V, 32>;
-pub type Set<K> = immutable_chunkmap::set::Set<K, 32>;
+pub type Map<K, V> = immutable_chunkmap::map::Map<K, V, 256>;
+pub type Set<K> = immutable_chunkmap::set::Set<K, 256>;
 
 #[macro_export]
 macro_rules! maybe {

@@ -36,7 +36,7 @@ use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
 use hdrhistogram::Histogram;
 use jtac::Jtacs;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
 use smallvec::{smallvec, SmallVec};
@@ -445,14 +445,17 @@ fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
 fn unit_killed(lua: MizLua, ctx: &mut Context, unit: Object) -> Result<()> {
     if let Ok(unit) = unit.as_unit() {
         let id = unit.object_id()?;
-        if let Err(e) = ctx.jtac.unit_dead(lua, &ctx.db, &id) {
+        ctx.recently_landed.remove(&id);
+        match unit.slot() {
+            Ok(slot) => force_player_in_slot_to_spectators(ctx, &slot),
+            Err(e) => warn!("could not get dead unit slot {:?} {:?}", id, e),
+        }
+        if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
             error!("jtac unit dead failed for {:?} {:?}", unit, e)
         }
         if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
             error!("unit dead failed for {:?} {:?}", unit, e);
         }
-        ctx.recently_landed.remove(&id);
-        force_player_in_slot_to_spectators(ctx, &unit.slot()?);
     }
     Ok(())
 }

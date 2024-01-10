@@ -302,12 +302,28 @@ where
 #[macro_export]
 macro_rules! wrapped_table {
     ($name:ident, $class:expr) => {
-        #[derive(Debug, Clone, Serialize)]
+        #[derive(Clone, Serialize)]
         pub struct $name<'lua> {
             t: mlua::Table<'lua>,
             #[allow(dead_code)]
             #[serde(skip)]
             lua: &'lua Lua,
+        }
+
+        impl<'lua> std::fmt::Debug for $name<'lua> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self.t.raw_get::<&str, Value>("id_") {
+                    Ok(v) => {
+                        let class: String = self
+                            .t
+                            .get_metatable()
+                            .and_then(|mt| mt.raw_get("className_").ok())
+                            .unwrap_or(String::from("unknown"));
+                        write!(f, "class {} id {:?}", class, v)
+                    },
+                    Err(_) => write!(f, "{:?}", self.t),
+                }
+            }
         }
 
         impl<'lua> Deref for $name<'lua> {

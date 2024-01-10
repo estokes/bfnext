@@ -34,6 +34,7 @@ pub struct Persisted {
     pub(super) objectives_by_slot: Map<SlotId, ObjectiveId>,
     pub(super) objectives_by_name: Map<String, ObjectiveId>,
     pub(super) objectives_by_group: Map<GroupId, ObjectiveId>,
+    #[serde(default)]
     pub(super) logistics_hubs: Set<ObjectiveId>,
     pub(super) players: Map<Ucid, Player>,
     pub(super) warehouse: Map<Side, Warehouse>,

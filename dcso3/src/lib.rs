@@ -319,7 +319,7 @@ macro_rules! wrapped_table {
                             .get_metatable()
                             .and_then(|mt| mt.raw_get("className_").ok())
                             .unwrap_or(String::from("unknown"));
-                        write!(f, "class {} id {:?}", class, v)
+                        write!(f, "{{ class: {}, id: {:?} }}", class, v)
                     },
                     Err(_) => write!(f, "{:?}", self.t),
                 }

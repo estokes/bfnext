@@ -41,7 +41,7 @@ use mlua::prelude::*;
 use msgq::MsgTyp;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, iter};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
@@ -692,15 +692,12 @@ fn run_slow_timed_events(
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         let start_ts = Utc::now();
-        if let Err(e) = ctx
-            .db
-            .update_unit_positions::<std::iter::Once<_>>(lua, None)
-        {
+        if let Err(e) = ctx.db.update_unit_positions::<iter::Once<_>>(lua, ts, None) {
             error!("could not update unit positions {e}")
         }
         record_perf(&mut perf.unit_positions, start_ts);
         let ts = Utc::now();
-        if let Err(e) = ctx.db.update_player_positions(lua) {
+        if let Err(e) = ctx.db.update_player_positions(lua, ts) {
             error!("could not update player positions {e}")
         }
         record_perf(&mut perf.player_positions, ts);
@@ -784,7 +781,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.advise_capturable, now);
     let now = Utc::now();
-    if let Err(e) = ctx.jtac.update_target_positions(lua, &mut ctx.db) {
+    if let Err(e) = ctx.jtac.update_target_positions(lua, &mut ctx.db, ts) {
         error!("error updating jtac target positions {:?}", e)
     }
     record_perf(&mut perf.jtac_target_positions, now);
@@ -869,8 +866,9 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
 
 fn init_hooks(lua: HooksLua) -> Result<()> {
     info!("setting user hooks");
+    //.on_player_change_slot(on_player_change_slot)?
     UserHooks::new(lua)
-        .on_player_change_slot(on_player_change_slot)?
+        .on_player_try_change_slot(on_player_try_change_slot)?
         .on_mission_load_end(on_mission_load_end)?
         .on_player_try_connect(on_player_try_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?

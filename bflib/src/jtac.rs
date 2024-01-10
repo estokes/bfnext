@@ -371,8 +371,13 @@ impl Jtacs {
         Ok(())
     }
 
-    pub fn update_target_positions(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {
-        db.update_unit_positions(lua, Some(self.jtac_targets()))
+    pub fn update_target_positions(
+        &mut self,
+        lua: MizLua,
+        db: &mut Db,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        db.update_unit_positions(lua, now, Some(self.jtac_targets()))
             .context("updating the position of jtac targets")?;
         for jtx in self.0.values_mut() {
             for jt in jtx.values_mut() {

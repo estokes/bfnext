@@ -1,4 +1,8 @@
-use super::{cargo::Cargo, group::{GroupId, UnitId}, objective::ObjectiveId};
+use super::{
+    cargo::Cargo,
+    group::{GroupId, UnitId},
+    objective::ObjectiveId,
+};
 use crate::{
     cfg::{Cfg, Crate, Deployable, DeployableLogistics, Troop},
     maybe,
@@ -19,6 +23,7 @@ use dcso3::{
     MizLua, Position3, String,
 };
 use fxhash::{FxHashMap, FxHashSet};
+use log::info;
 use smallvec::SmallVec;
 use std::{
     collections::{hash_map::Entry, BTreeMap, VecDeque},
@@ -193,16 +198,45 @@ impl Ephemeral {
         self.slot_instance_unit(lua, slot)?.get_position()
     }
 
-    pub(super) fn player_deslot(&mut self, slot: &SlotId) {
-        self.players_by_slot.remove(slot);
-        self.cargo.remove(slot);
-        if let Some(id) = self.object_id_by_slot.remove(slot) {
-            self.slot_by_object_id.remove(&id);
-            if let Some(uid) = self.uid_by_object_id.remove(&id) {
-                self.object_id_by_uid.remove(&uid);
-                self.units_able_to_move.remove(&uid);
+    pub(super) fn player_deslot(&mut self, slot: &SlotId) -> Option<(UnitId, Ucid)> {
+        if let Some(ucid) = self.players_by_slot.remove(slot) {
+            self.cargo.remove(slot);
+            if let Some(id) = self.object_id_by_slot.remove(slot) {
+                self.slot_by_object_id.remove(&id);
+                if let Some(uid) = self.uid_by_object_id.remove(&id) {
+                    self.object_id_by_uid.remove(&uid);
+                    self.units_able_to_move.remove(&uid);
+                    return Some((uid, ucid));
+                }
             }
         }
+        None
+    }
+
+    pub(super) fn unit_dead(&mut self, id: &DcsOid<ClassUnit>) -> Option<(UnitId, Option<Ucid>)> {
+        let (uid, ucid) = match self.slot_by_object_id.remove(&id) {
+            None => match self.uid_by_object_id.remove(&id) {
+                Some(uid) => {
+                    self.object_id_by_uid.remove(&uid);
+                    (uid, None)
+                }
+                None => {
+                    info!("no uid for object id {:?}", id);
+                    return None;
+                }
+            },
+            Some(slot) => match self.player_deslot(&slot) {
+                Some((uid, ucid)) => (uid, Some(ucid)),
+                None => {
+                    info!("deslot player in slot {:?} failed", slot);
+                    return None;
+                }
+            },
+        };
+        self.units_potentially_close_to_enemies.remove(&uid);
+        self.units_potentially_on_walkabout.remove(&uid);
+        self.units_able_to_move.remove(&uid);
+        Some((uid, ucid))
     }
 
     pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {

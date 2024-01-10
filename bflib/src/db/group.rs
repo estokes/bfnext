@@ -586,28 +586,15 @@ impl Db {
     }
 
     pub fn unit_dead(&mut self, id: &DcsOid<ClassUnit>, now: DateTime<Utc>) -> Result<()> {
-        if let Some(slot) = self.ephemeral.slot_by_object_id.remove(&id) {
-            self.ephemeral.object_id_by_slot.remove(&slot);
-            self.ephemeral.cargo.remove(&slot);
-            if let Some(ucid) = self.ephemeral.players_by_slot.remove(&slot) {
-                self.persisted.players[&ucid].current_slot = None;
-            }
-        }
-        let uid = match self.ephemeral.uid_by_object_id.remove(&id) {
-            None => {
-                info!("no uid for object id {:?}", id);
-                return Ok(());
-            }
-            Some(uid) => {
-                self.ephemeral.object_id_by_uid.remove(&uid);
+        let uid = match self.ephemeral.unit_dead(id) {
+            None => return Ok(()),
+            Some((uid, ucid)) => {
+                if let Some(ucid) = ucid {
+                    self.persisted.players[&ucid].current_slot = None;
+                }
                 uid
             }
         };
-        self.ephemeral
-            .units_potentially_close_to_enemies
-            .remove(&uid);
-        self.ephemeral.units_potentially_on_walkabout.remove(&uid);
-        self.ephemeral.units_able_to_move.remove(&uid);
         match self.persisted.units.get_mut_cow(&uid) {
             None => error!("unit_dead: missing unit {:?}", uid),
             Some(unit) => {
@@ -641,10 +628,12 @@ impl Db {
     pub fn update_unit_positions<'a, I: Iterator<Item = UnitId> + 'a>(
         &'a mut self,
         lua: MizLua,
+        now: DateTime<Utc>,
         units: Option<I>,
     ) -> Result<()> {
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
+        let mut dead: SmallVec<[DcsOid<ClassUnit>; 16]> = smallvec![];
         let units = units
             .map(|i| Box::new(i) as Box<dyn Iterator<Item = UnitId>>)
             .unwrap_or_else(|| {
@@ -666,7 +655,12 @@ impl Db {
             let instance = match instance {
                 Ok(i) => i,
                 Err(e) => {
-                    warn!("update_unit_positions skipping invalid instance {uid}, {:?}, {:?}", id, e);
+                    warn!(
+                        "update_unit_positions skipping invalid instance {uid}, {:?}, {:?}",
+                        unit!(self, uid),
+                        e
+                    );
+                    dead.push(id.clone());
                     continue;
                 }
             };
@@ -689,6 +683,9 @@ impl Db {
         for gid in moved {
             self.ephemeral.dirty();
             self.mark_group(&gid)?;
+        }
+        for id in dead {
+            self.unit_dead(&id, now)?;
         }
         Ok(())
     }

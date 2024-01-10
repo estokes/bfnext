@@ -1,6 +1,5 @@
 use super::{
     group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
-    logistics::Warehouse,
     objective::{Objective, ObjectiveId},
     player::Player,
     Map, Set,
@@ -34,10 +33,9 @@ pub struct Persisted {
     pub(super) objectives_by_slot: Map<SlotId, ObjectiveId>,
     pub(super) objectives_by_name: Map<String, ObjectiveId>,
     pub(super) objectives_by_group: Map<GroupId, ObjectiveId>,
+    pub(super) players: Map<Ucid, Player>,
     #[serde(default)]
     pub(super) logistics_hubs: Set<ObjectiveId>,
-    pub(super) players: Map<Ucid, Player>,
-    pub(super) warehouse: Map<Side, Warehouse>,
 }
 
 impl Persisted {

@@ -59,6 +59,7 @@ pub struct Ephemeral {
     pub(super) object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
     pub(super) slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
     pub(super) logistics_by_oid: FxHashMap<ObjectiveId, ObjLogi>,
+    force_to_spectators: FxHashSet<Ucid>,
     pub(super) units_able_to_move: FxHashSet<UnitId>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
     pub(super) units_potentially_on_walkabout: FxHashSet<UnitId>,
@@ -198,8 +199,13 @@ impl Ephemeral {
         self.slot_instance_unit(lua, slot)?.get_position()
     }
 
+    pub fn players_to_force_to_spectators<'a>(&'a mut self) -> impl Iterator<Item = Ucid> + 'a {
+        self.force_to_spectators.drain()
+    }
+
     pub(super) fn player_deslot(&mut self, slot: &SlotId) -> Option<(UnitId, Ucid)> {
         if let Some(ucid) = self.players_by_slot.remove(slot) {
+            self.force_to_spectators.insert(ucid.clone());
             self.cargo.remove(slot);
             if let Some(id) = self.object_id_by_slot.remove(slot) {
                 self.slot_by_object_id.remove(&id);

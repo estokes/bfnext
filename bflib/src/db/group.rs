@@ -26,7 +26,7 @@ use dcso3::{
     LuaVec2, MizLua, Position3, String, Vector2,
 };
 use fxhash::FxHashMap;
-use log::{error, info, warn};
+use log::{error, warn};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};

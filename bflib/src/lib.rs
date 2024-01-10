@@ -41,7 +41,7 @@ use mlua::prelude::*;
 use msgq::MsgTyp;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{path::PathBuf, sync::Arc, iter};
+use std::{iter, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
@@ -163,7 +163,6 @@ struct Context {
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
-    force_to_spectators: FxHashSet<PlayerId>,
     last_slow_timed_events: DateTime<Utc>,
     ewr: Ewr,
     jtac: Jtacs,
@@ -374,11 +373,31 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
     }
 }
 
-fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
+/*
+fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
+    let start_ts = Utc::now();
+    let ctx = unsafe { Context::get_mut() };
+    let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
+    let net = Net::singleton(lua)?;
+    match try_occupy_slot(lua, &net, id, &ifo) {
+        Err(e) => {
+            error!("error checking slot {:?}", e);
+            ctx.db.player_deslot(&ifo.ucid)
+        }
+        Ok(false) => ctx.db.player_deslot(&ifo.ucid),
+        Ok(true) => (),
+    }
+    record_perf(
+        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+        start_ts,
+    );
+    Ok(())
+}
+*/
+
+fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> Result<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = net.get_slot(id)?;
-    let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::NoLives => Ok(false),
         SlotAuth::ObjectiveHasNoLogistics => {
@@ -407,60 +426,53 @@ fn try_occupy_slot(lua: HooksLua, net: &Net, id: PlayerId) -> Result<bool> {
     }
 }
 
-fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
+fn on_player_try_change_slot(
+    lua: HooksLua,
+    id: PlayerId,
+    side: Side,
+    slot: SlotId,
+) -> Result<Option<bool>> {
+    info!("onPlayerTryChangeSlot: {:?}", id);
+    if slot.is_spectator() {
+        return Ok(None);
+    }
     let start_ts = Utc::now();
-    info!("onPlayerChangeSlot: {:?}", id);
     let ctx = unsafe { Context::get_mut() };
-    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
-        ctx.db.player_deslot(&ifo.ucid);
-    }
-    let net = Net::singleton(lua)?;
-    match try_occupy_slot(lua, &net, id) {
+    let res = match get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id) {
         Err(e) => {
-            error!("error checking slot {:?}", e);
-            ctx.force_to_spectators.insert(id);
+            error!("failed to get player info for {:?} {:?}", id, e);
+            Ok(Some(false))
         }
-        Ok(false) => {
-            ctx.force_to_spectators.insert(id);
-        }
-        Ok(true) => (),
-    }
+        Ok(ifo) => match try_occupy_slot(id, &ifo, side, slot) {
+            Err(e) => {
+                error!("error checking slot {:?}", e);
+                Ok(Some(false))
+            }
+            Ok(false) => Ok(Some(false)),
+            Ok(true) => Ok(None),
+        },
+    };
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
         start_ts,
     );
-    Ok(())
-}
-
-fn force_player_in_slot_to_spectators(ctx: &mut Context, slot: &SlotId) {
-    if let Some(ucid) = ctx.db.ephemeral.player_in_slot(slot) {
-        let ucid = ucid.clone();
-        ctx.db.player_deslot(&ucid);
-        if let Some(id) = ctx.id_by_ucid.get(&ucid) {
-            ctx.force_to_spectators.insert(*id);
-        }
-    }
-}
-
-fn unit_killed(lua: MizLua, ctx: &mut Context, unit: Object) -> Result<()> {
-    if let Ok(unit) = unit.as_unit() {
-        let id = unit.object_id()?;
-        ctx.recently_landed.remove(&id);
-        match unit.slot() {
-            Ok(slot) => force_player_in_slot_to_spectators(ctx, &slot),
-            Err(e) => warn!("could not get dead unit slot {:?} {:?}", id, e),
-        }
-        if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
-            error!("jtac unit dead failed for {:?} {:?}", unit, e)
-        }
-        if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
-            error!("unit dead failed for {:?} {:?}", unit, e);
-        }
-    }
-    Ok(())
+    res
 }
 
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
+    fn unit_killed(lua: MizLua, ctx: &mut Context, unit: Object) -> Result<()> {
+        if let Ok(unit) = unit.as_unit() {
+            let id = unit.object_id()?;
+            ctx.recently_landed.remove(&id);
+            if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
+                error!("jtac unit dead failed for {:?} {:?}", unit, e)
+            }
+            if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
+                error!("unit dead failed for {:?} {:?}", unit, e);
+            }
+        }
+        Ok(())
+    }
     let start_ts = Utc::now();
     info!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
@@ -756,9 +768,14 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     return_lives(lua, ctx, ts);
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
-    for id in ctx.force_to_spectators.drain() {
-        if let Err(e) = net.force_player_slot(id, Side::Neutral, SlotId::spectator()) {
-            error!("error forcing player {:?} to spectators {:?}", id, e);
+    for ucid in ctx.db.ephemeral.players_to_force_to_spectators() {
+        match ctx.id_by_ucid.get(&ucid) {
+            None => warn!("no id for player ucid {:?}", ucid),
+            Some(id) => {
+                if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::spectator()) {
+                    error!("error forcing player {:?} to spectators {:?}", id, e);
+                }
+            }
         }
     }
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, ts) {

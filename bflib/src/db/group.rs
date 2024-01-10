@@ -10,7 +10,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
@@ -123,76 +123,6 @@ impl Db {
             .filter_map(|(uid, sp)| self.ephemeral.object_id_by_uid.get(uid).map(|id| (sp, id)))
     }
 
-    pub(super) fn spawn_group<'lua>(
-        &self,
-        idx: &MizIndex,
-        spctx: &SpawnCtx,
-        group: &SpawnedGroup,
-    ) -> Result<()> {
-        let template = spctx
-            .get_template(
-                idx,
-                GroupKind::Any,
-                group.side,
-                group.template_name.as_str(),
-            )
-            .with_context(|| format_compact!("getting template {}", group.template_name))?;
-        template.group.set("lateActivation", false)?;
-        template.group.set("hidden", false)?;
-        template.group.set_name(group.name.clone())?;
-        let mut points: SmallVec<[Vector2; 16]> = smallvec![];
-        let by_tname: FxHashMap<&str, &SpawnedUnit> = group
-            .units
-            .into_iter()
-            .filter_map(|uid| {
-                self.persisted.units.get(uid).and_then(|u| {
-                    points.push(u.pos);
-                    if u.dead {
-                        None
-                    } else {
-                        Some((u.template_name.as_str(), u))
-                    }
-                })
-            })
-            .collect();
-        let alive = {
-            let units = template.group.units()?;
-            let mut i = 1;
-            while i as usize <= units.len() {
-                let unit = units.get(i)?;
-                match by_tname.get(unit.name()?.as_str()) {
-                    None => units.remove(i)?,
-                    Some(su) => {
-                        unit.raw_remove("unitId")?;
-                        template.group.set_pos(su.pos)?;
-                        unit.set_pos(su.pos)?;
-                        unit.set_heading(su.heading)?;
-                        unit.set_name(su.name.clone())?;
-                        i += 1;
-                    }
-                }
-            }
-            units.len() > 0
-        };
-        if alive {
-            let point = centroid2d(points.iter().map(|p| *p));
-            let radius = points
-                .iter()
-                .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
-                .fold(0., |acc, d| if d > acc { d } else { acc });
-            spctx
-                .remove_junk(point, radius.sqrt() * 1.10)
-                .with_context(|| {
-                    format_compact!("removing junk before spawn of {}", group.template_name)
-                })?;
-            spctx
-                .spawn(template)
-                .with_context(|| format_compact!("spawning template {}", group.template_name))
-        } else {
-            Ok(())
-        }
-    }
-
     pub(super) fn mark_group(&mut self, gid: &GroupId) -> Result<()> {
         if let Some(id) = self.ephemeral.group_marks.remove(gid) {
             self.ephemeral.msgs.delete_mark(id)
@@ -241,7 +171,6 @@ impl Db {
     }
 
     pub(super) fn delete_group(&mut self, gid: &GroupId) -> Result<()> {
-        self.ephemeral.spawnq.retain(|id| id != gid);
         let group = self
             .persisted
             .groups
@@ -297,15 +226,13 @@ impl Db {
                 // it's a static, we have to get it's units
                 for unit in &units {
                     self.ephemeral
-                        .despawnq
-                        .push_back((*gid, Despawn::Static(unit.clone())));
+                        .push_despawn(*gid, Despawn::Static(unit.clone()))
                 }
             }
             Some(_) => {
                 // it's a normal group
                 self.ephemeral
-                    .despawnq
-                    .push_back((*gid, Despawn::Group(group.name.clone())));
+                    .push_despawn(*gid, Despawn::Group(group.name.clone()));
             }
         }
         Ok(())
@@ -562,7 +489,7 @@ impl Db {
     ) -> Result<GroupId> {
         let gid = self.add_group(&spctx, idx, side, location, template_name, origin)?;
         match delay {
-            None => self.ephemeral.spawnq.push_back(gid),
+            None => self.ephemeral.push_spawn(gid),
             Some(at) => self.ephemeral.delayspawnq.entry(at).or_default().push(gid),
         }
         Ok(gid)

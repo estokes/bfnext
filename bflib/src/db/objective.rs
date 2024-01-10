@@ -418,13 +418,7 @@ impl Db {
         Ok(())
     }
 
-    fn repair_objective(
-        &mut self,
-        idx: &MizIndex,
-        spctx: &SpawnCtx,
-        oid: ObjectiveId,
-        now: DateTime<Utc>,
-    ) -> Result<()> {
+    fn repair_objective(&mut self, oid: ObjectiveId, now: DateTime<Utc>) -> Result<()> {
         let obj = self
             .persisted
             .objectives
@@ -466,7 +460,7 @@ impl Db {
                             unit_mut!(self, uid)?.dead = false;
                         }
                         if class == ObjGroupClass::Logi || obj.spawned {
-                            self.spawn_group(idx, spctx, group)?;
+                            self.ephemeral.push_spawn(gid)
                         }
                         self.update_objective_status(&oid, now)?;
                         self.ephemeral.dirty();
@@ -530,8 +524,7 @@ impl Db {
         let mut check_close_units = |obj: &Objective, spawn: &mut bool, threat: &mut bool| {
             for uid in &self.ephemeral.units_potentially_close_to_enemies {
                 let unit = unit!(self, uid)?;
-                let group = group!(self, unit.group)?;
-                if obj.owner != group.side {
+                if obj.owner != unit.side {
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
                     if dist <= ground_cull_distance {
                         *spawn = true;
@@ -612,6 +605,7 @@ impl Db {
                     became_clear.push(*oid);
                 }
                 obj.threatened = false;
+                self.ephemeral.dirty()
             }
         }
         for oid in to_spawn {
@@ -625,7 +619,7 @@ impl Db {
                     .into_iter()
                     .any(|u| self.ephemeral.units_potentially_on_walkabout.contains(u));
                 if !logi && !walkabout {
-                    self.ephemeral.spawnq.push_back(*gid);
+                    self.ephemeral.push_spawn(*gid);
                 }
             }
         }
@@ -643,14 +637,12 @@ impl Db {
                     match group.kind {
                         Some(_) => self
                             .ephemeral
-                            .despawnq
-                            .push_back((*gid, Despawn::Group(group.name.clone()))),
+                            .push_despawn(*gid, Despawn::Group(group.name.clone())),
                         None => {
                             for uid in &group.units {
                                 let unit = unit!(self, uid)?;
                                 self.ephemeral
-                                    .despawnq
-                                    .push_back((*gid, Despawn::Static(unit.name.clone())))
+                                    .push_despawn(*gid, Despawn::Static(unit.name.clone()))
                             }
                         }
                     }
@@ -687,20 +679,14 @@ impl Db {
                             unit.dead = true;
                         }
                     }
-                    self.ephemeral.spawnq.push_back(*gid);
+                    self.ephemeral.push_spawn(*gid);
                 }
             }
         }
         self.update_objective_status(&oid, now)
     }
 
-    pub fn maybe_do_repairs(
-        &mut self,
-        lua: MizLua,
-        idx: &MizIndex,
-        now: DateTime<Utc>,
-    ) -> Result<()> {
-        let spctx = SpawnCtx::new(lua)?;
+    pub fn maybe_do_repairs(&mut self, now: DateTime<Utc>) -> Result<()> {
         let to_repair = self
             .persisted
             .objectives
@@ -721,7 +707,7 @@ impl Db {
             })
             .collect::<Vec<_>>();
         for oid in to_repair {
-            self.repair_objective(idx, &spctx, oid, now)?
+            self.repair_objective(oid, now)?
         }
         Ok(())
     }

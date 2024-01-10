@@ -1,16 +1,18 @@
 use super::{
     cargo::Cargo,
-    group::{GroupId, UnitId},
+    group::{GroupId, UnitId, SpawnedGroup, SpawnedUnit},
     objective::ObjectiveId,
+    persisted::Persisted,
 };
 use crate::{
     cfg::{Cfg, Crate, Deployable, DeployableLogistics, Troop},
     maybe,
     msgq::MsgQ,
-    spawnctx::Despawn,
+    spawnctx::{Despawn, SpawnCtx},
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Result, Context};
 use chrono::prelude::*;
+use compact_str::format_compact;
 use dcso3::{
     airbase::ClassAirbase,
     coalition::Side,
@@ -20,12 +22,13 @@ use dcso3::{
     trigger::MarkId,
     unit::{ClassUnit, Unit},
     warehouse::ClassWarehouse,
-    MizLua, Position3, String,
+    MizLua, Position3, String, Vector2, centroid2d,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::info;
-use smallvec::SmallVec;
+use smallvec::{SmallVec, smallvec};
 use std::{
+    cmp::max,
     collections::{hash_map::Entry, BTreeMap, VecDeque},
     sync::Arc,
 };
@@ -64,12 +67,87 @@ pub struct Ephemeral {
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
     pub(super) units_potentially_on_walkabout: FxHashSet<UnitId>,
     pub(super) delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
-    pub(super) spawnq: VecDeque<GroupId>,
-    pub(super) despawnq: VecDeque<(GroupId, Despawn)>,
+    spawnq: VecDeque<GroupId>,
+    despawnq: VecDeque<(GroupId, Despawn)>,
     pub(super) msgs: MsgQ,
 }
 
 impl Ephemeral {
+    pub fn push_despawn(&mut self, gid: GroupId, ds: Despawn) {
+        let mut queued_spawn = false;
+        self.spawnq.retain(|sp_gid| {
+            let qs = &gid == sp_gid;
+            queued_spawn |= qs;
+            !qs
+        });
+        if !queued_spawn {
+            self.despawnq.push_back((gid, ds))
+        }
+    }
+
+    pub fn push_spawn(&mut self, gid: GroupId) {
+        let mut queued_despawn = false;
+        self.despawnq.retain(|(ds_gid, _)| {
+            let qs = &gid == ds_gid;
+            queued_despawn |= qs;
+            !qs
+        });
+        if !queued_despawn {
+            self.spawnq.push_back(gid)
+        }
+    }
+
+    pub fn process_spawn_queue(
+        &mut self,
+        persisted: &Persisted,
+        now: DateTime<Utc>,
+        idx: &MizIndex,
+        spctx: &SpawnCtx,
+    ) -> Result<()> {
+        let mut delayed: SmallVec<[GroupId; 16]> = smallvec![];
+        while let Some((at, gids)) = self.delayspawnq.first_key_value() {
+            if now < *at {
+                break;
+            } else {
+                for gid in gids {
+                    delayed.push(*gid);
+                }
+                let at = *at;
+                self.delayspawnq.remove(&at);
+            }
+        }
+        for gid in delayed {
+            self.push_spawn(gid)
+        }
+        let dlen = self.despawnq.len();
+        let slen = self.spawnq.len();
+        if dlen > 0 {
+            for _ in 0..max(2, dlen >> 2) {
+                if let Some((gid, name)) = self.despawnq.pop_front() {
+                    if let Some(group) = persisted.groups.get(&gid) {
+                        for uid in &group.units {
+                            self.units_able_to_move.remove(uid);
+                            self.units_potentially_close_to_enemies.remove(uid);
+                            self.units_potentially_on_walkabout.remove(uid);
+                            if let Some(id) = self.object_id_by_uid.remove(uid) {
+                                self.uid_by_object_id.remove(&id);
+                            }
+                        }
+                    }
+                    spctx.despawn(name)?
+                }
+            }
+        } else if slen > 0 {
+            for _ in 0..max(2, slen >> 2) {
+                if let Some(gid) = self.spawnq.pop_front() {
+                    let group = maybe!(persisted.groups, gid, "group")?;
+                    spawn_group(persisted, idx, spctx, group)?
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn msgs(&mut self) -> &mut MsgQ {
         &mut self.msgs
     }
@@ -307,6 +385,76 @@ impl Ephemeral {
             }
         }
         self.cfg = cfg;
+        Ok(())
+    }
+}
+
+fn spawn_group<'lua>(
+    persisted: &Persisted,
+    idx: &MizIndex,
+    spctx: &SpawnCtx,
+    group: &SpawnedGroup,
+) -> Result<()> {
+    let template = spctx
+        .get_template(
+            idx,
+            GroupKind::Any,
+            group.side,
+            group.template_name.as_str(),
+        )
+        .with_context(|| format_compact!("getting template {}", group.template_name))?;
+    template.group.set("lateActivation", false)?;
+    template.group.set("hidden", false)?;
+    template.group.set_name(group.name.clone())?;
+    let mut points: SmallVec<[Vector2; 16]> = smallvec![];
+    let by_tname: FxHashMap<&str, &SpawnedUnit> = group
+        .units
+        .into_iter()
+        .filter_map(|uid| {
+            persisted.units.get(uid).and_then(|u| {
+                points.push(u.pos);
+                if u.dead {
+                    None
+                } else {
+                    Some((u.template_name.as_str(), u))
+                }
+            })
+        })
+        .collect();
+    let alive = {
+        let units = template.group.units()?;
+        let mut i = 1;
+        while i as usize <= units.len() {
+            let unit = units.get(i)?;
+            match by_tname.get(unit.name()?.as_str()) {
+                None => units.remove(i)?,
+                Some(su) => {
+                    unit.raw_remove("unitId")?;
+                    template.group.set_pos(su.pos)?;
+                    unit.set_pos(su.pos)?;
+                    unit.set_heading(su.heading)?;
+                    unit.set_name(su.name.clone())?;
+                    i += 1;
+                }
+            }
+        }
+        units.len() > 0
+    };
+    if alive {
+        let point = centroid2d(points.iter().map(|p| *p));
+        let radius = points
+            .iter()
+            .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
+            .fold(0., |acc, d| if d > acc { d } else { acc });
+        spctx
+            .remove_junk(point, radius.sqrt() * 1.10)
+            .with_context(|| {
+                format_compact!("removing junk before spawn of {}", group.template_name)
+            })?;
+        spctx
+            .spawn(template)
+            .with_context(|| format_compact!("spawning template {}", group.template_name))
+    } else {
         Ok(())
     }
 }

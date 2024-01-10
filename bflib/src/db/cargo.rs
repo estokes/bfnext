@@ -779,7 +779,7 @@ impl Db {
                     for cr in &have {
                         self.delete_group(&cr.group)?
                     }
-                    self.ephemeral.spawnq.push_back(gid);
+                    self.ephemeral.push_spawn(gid);
                     self.ephemeral.dirty();
                     return Ok(Unpakistan::Repaired(dep, gid));
                 }

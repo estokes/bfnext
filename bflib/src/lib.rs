@@ -209,7 +209,7 @@ impl Context {
 
     fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
-        self.db.respawn_after_load(&self.idx, &spctx)
+        self.db.respawn_after_load(&spctx)
     }
 
     fn log_perf(&mut self, now: DateTime<Utc>) {
@@ -771,7 +771,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
-    if let Err(e) = ctx.db.maybe_do_repairs(lua, &ctx.idx, ts) {
+    if let Err(e) = ctx.db.maybe_do_repairs(ts) {
         error!("error doing repairs {:?}", e)
     }
     record_perf(&mut perf.do_repairs, ts);
@@ -793,7 +793,11 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     let now = Utc::now();
     let spctx = SpawnCtx::new(lua)?;
-    if let Err(e) = ctx.db.process_spawn_queue(ts, &ctx.idx, &spctx) {
+    if let Err(e) = ctx
+        .db
+        .ephemeral
+        .process_spawn_queue(&ctx.db.persisted, ts, &ctx.idx, &spctx)
+    {
         error!("error processing spawn queue {:?}", e)
     }
     record_perf(&mut perf.spawn_queue, now);

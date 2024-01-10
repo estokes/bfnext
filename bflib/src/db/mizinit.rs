@@ -246,23 +246,23 @@ impl Db {
         Ok(t)
     }
 
-    pub fn respawn_after_load(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
-        let spawn_deployed_and_logistics = || -> Result<()> {
+    pub fn respawn_after_load(&mut self, spctx: &SpawnCtx) -> Result<()> {
+        let mut spawn_deployed_and_logistics = || -> Result<()> {
             for gid in &self.persisted.deployed {
-                self.spawn_group(idx, spctx, group!(self, gid)?)?
+                self.ephemeral.push_spawn(*gid);
             }
             for gid in &self.persisted.crates {
-                self.spawn_group(idx, spctx, group!(self, gid)?)?
+                self.ephemeral.push_spawn(*gid);
             }
             for gid in &self.persisted.troops {
-                self.spawn_group(idx, spctx, group!(self, gid)?)?
+                self.ephemeral.push_spawn(*gid);
             }
             for (_, obj) in &self.persisted.objectives {
                 if let Some(groups) = obj.groups.get(&obj.owner) {
                     for gid in groups {
                         let group = group!(self, gid)?;
                         if group.class.is_logi() {
-                            self.spawn_group(idx, spctx, group)?
+                            self.ephemeral.push_spawn(*gid)
                         }
                     }
                 }

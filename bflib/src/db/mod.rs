@@ -6,10 +6,8 @@ use self::{
 use crate::{
     cfg::{Cfg, Deployable, DeployableEwr, DeployableJtac, Troop},
     db::ephemeral::Ephemeral,
-    spawnctx::SpawnCtx,
 };
 use anyhow::{anyhow, Result};
-use chrono::prelude::*;
 use dcso3::{
     centroid3d,
     coalition::Side,
@@ -18,7 +16,7 @@ use dcso3::{
     unit::ClassUnit,
     Vector3,
 };
-use std::{cmp::max, fs::File, path::Path};
+use std::{fs::File, path::Path};
 
 pub mod cargo;
 pub mod ephemeral;
@@ -214,52 +212,5 @@ impl Db {
                 | DeployKind::Deployed { .. } => None,
             }
         })
-    }
-
-    pub fn process_spawn_queue(
-        &mut self,
-        now: DateTime<Utc>,
-        idx: &MizIndex,
-        spctx: &SpawnCtx,
-    ) -> Result<()> {
-        while let Some((at, gids)) = self.ephemeral.delayspawnq.first_key_value() {
-            if now < *at {
-                break;
-            } else {
-                for gid in gids {
-                    self.ephemeral.spawnq.push_back(*gid);
-                }
-                let at = *at;
-                self.ephemeral.delayspawnq.remove(&at);
-            }
-        }
-        let dlen = self.ephemeral.despawnq.len();
-        let slen = self.ephemeral.spawnq.len();
-        if dlen > 0 {
-            for _ in 0..max(2, dlen >> 2) {
-                if let Some((gid, name)) = self.ephemeral.despawnq.pop_front() {
-                    if let Some(group) = self.persisted.groups.get(&gid) {
-                        for uid in &group.units {
-                            self.ephemeral.units_able_to_move.remove(uid);
-                            self.ephemeral
-                                .units_potentially_close_to_enemies
-                                .remove(uid);
-                            self.ephemeral.units_potentially_on_walkabout.remove(uid);
-                            if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
-                                self.ephemeral.uid_by_object_id.remove(&id);
-                            }
-                        }
-                    }
-                    spctx.despawn(name)?
-                }
-            }
-        } else if slen > 0 {
-            for _ in 0..max(2, slen >> 2) {
-                if let Some(gid) = self.ephemeral.spawnq.pop_front() {
-                    self.spawn_group(idx, spctx, group!(self, gid)?)?
-                }
-            }
-        }
-        Ok(())
     }
 }

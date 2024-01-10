@@ -211,12 +211,11 @@ impl Db {
                 SlotAuth::Yes
             }
             SlotIdKind::Normal => {
-                let objective = match self
-                    .persisted
-                    .objectives_by_slot
-                    .get(&slot)
-                    .and_then(|id| self.persisted.objectives.get(id))
-                {
+                let oid = match self.persisted.objectives_by_slot.get(&slot) {
+                    None => return SlotAuth::Yes, // it's a multicrew slot
+                    Some(oid) => oid,
+                };
+                let objective = match self.persisted.objectives.get(oid) {
                     Some(o) if o.owner != Side::Neutral => o,
                     Some(_) | None => return SlotAuth::ObjectiveNotOwned(player.side),
                 };

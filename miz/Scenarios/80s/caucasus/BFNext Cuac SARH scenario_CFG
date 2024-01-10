@@ -20,7 +20,7 @@
   },
   "logistics_exclusion": 10000,
   "unit_cull_distance": 70000,
-  "ground_vehicle_cull_distance": 7000,
+  "ground_vehicle_cull_distance": 20000,
   "slow_timed_events_freq": 10,
   "threatened_distance": {
     "Mirage-F1EE": 14400,

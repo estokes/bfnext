@@ -9,7 +9,7 @@ pub mod spawnctx;
 
 extern crate nalgebra as na;
 use crate::{cfg::Cfg, db::player::SlotAuth};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Result, Context};
 use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -900,10 +900,10 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     info!("indexing the miz");
     let miz = Miz::singleton(lua)?;
-    ctx.idx = miz.index()?;
+    ctx.idx = miz.index().context("indexing the mission")?;
     info!("adding event handlers");
-    World::singleton(lua)?.add_event_handler(on_event)?;
-    let sortie = miz.sortie()?;
+    World::singleton(lua)?.add_event_handler(on_event).context("adding event handlers")?;
+    let sortie = miz.sortie().context("getting the sortie")?;
     debug!("sortie is {:?}", sortie);
     let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
         "" => bail!("missing sortie in miz file"),
@@ -914,17 +914,17 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     if !path.exists() {
         debug!("saved state doesn't exist, starting from default");
         let cfg = Cfg::load(&path)?;
-        ctx.db = Db::init(lua, cfg, &ctx.idx, &miz)?;
+        ctx.db = Db::init(lua, cfg, &ctx.idx, &miz).context("initalizing the mission")?;
     } else {
         debug!("saved state exists, loading it");
-        ctx.db = Db::load(&miz, &ctx.idx, &path)?;
+        ctx.db = Db::load(&miz, &ctx.idx, &path).context("loading the saved state")?;
     }
     info!("spawning units");
-    ctx.respawn_groups(lua)?;
+    ctx.respawn_groups(lua).context("setting up the mission after load")?;
     info!("initializing menus");
-    menu::init(&ctx, lua)?;
+    menu::init(&ctx, lua).context("initalizing the menus")?;
     info!("starting timed events");
-    start_timed_events(lua, path)?;
+    start_timed_events(lua, path).context("starting the timed events loop")?;
     Ok(())
 }
 

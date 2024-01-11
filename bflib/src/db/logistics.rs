@@ -6,7 +6,8 @@ use crate::{
     db::{ephemeral::ObjLogi, objective::ObjectiveKind},
     objective, objective_mut,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
+use compact_str::format_compact;
 use dcso3::{
     coalition::Side,
     object::DcsObject,
@@ -101,10 +102,10 @@ pub struct Warehouse {
 }
 
 fn sync_from_obj(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
-    let inventory = warehouse.get_inventory(None)?;
-    let weapons = inventory.weapons()?;
-    let aircraft = inventory.aircraft()?;
-    let liquids = inventory.liquids()?;
+    let inventory = warehouse.get_inventory(None).context("getting inventory")?;
+    let weapons = inventory.weapons().context("getting weapons")?;
+    let aircraft = inventory.aircraft().context("getting aircraft")?;
+    let liquids = inventory.liquids().context("getting liquids")?;
     if weapons.is_empty() || aircraft.is_empty() || liquids.is_empty() {
         bail!(
             "objective {} has warehouse categories set to unlimited",
@@ -116,33 +117,39 @@ fn sync_from_obj(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()
             $src.for_each(|name, _| match obj.warehouse.$dst.get(&name) {
                 Some(_) => Ok(()),
                 None => warehouse.$set(name, 0),
-            })?;
+            })
+            .context("zeroing")?;
         };
     }
     zero!(weapons, equipment, set_item);
     zero!(aircraft, equipment, set_item);
     zero!(liquids, liquids, set_liquid_amount);
     for (name, inv) in &obj.warehouse.equipment {
-        warehouse.set_item(name.clone(), inv.stored)?
+        warehouse
+            .set_item(name.clone(), inv.stored)
+            .context("setting item")?
     }
     for (name, inv) in &obj.warehouse.liquids {
-        warehouse.set_liquid_amount(*name, inv.stored)?
+        warehouse
+            .set_liquid_amount(*name, inv.stored)
+            .context("setting liquid")?
     }
     Ok(())
 }
 
 fn sync_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
-    let inventory = warehouse.get_inventory(None)?;
-    let weapons = inventory.weapons()?;
-    let aircraft = inventory.aircraft()?;
-    let liquids = inventory.liquids()?;
+    let inventory = warehouse.get_inventory(None).context("getting inventory")?;
+    let weapons = inventory.weapons().context("getting weapons")?;
+    let aircraft = inventory.aircraft().context("getting aircraft")?;
+    let liquids = inventory.liquids().context("getting liquids")?;
     macro_rules! sync {
         ($src:ident, $dst:ident) => {
             $src.for_each(|name, qty| {
                 let inv = obj.warehouse.$dst.get_or_default_cow(name);
                 inv.stored = qty;
                 Ok(())
-            })?;
+            })
+            .context("syncing")?;
         };
     }
     sync!(weapons, equipment);
@@ -168,28 +175,33 @@ impl Db {
                 Some(tmpl) => tmpl,
                 None => continue, // side didn't produce anything, bummer
             };
-            let w =
-                warehouse::Warehouse::get_by_name(lua, template.clone())?.get_inventory(None)?;
+            let w = warehouse::Warehouse::get_by_name(lua, template.clone())
+                .with_context(|| format_compact!("getting warehouse {}", template))?
+                .get_inventory(None)
+                .context("getting inventory")?;
             macro_rules! dist {
                 ($src:ident, $dst:ident) => {{
-                    w.$src()?.for_each(|name, qty| {
-                        for oid in &oids {
-                            let hub = self.persisted.logistics_hubs.contains(oid);
-                            let obj = objective_mut!(self, oid)?;
-                            let capacity = qty
-                                * if hub {
-                                    whcfg.hub_max
-                                } else {
-                                    whcfg.airbase_max
+                    w.$src()
+                        .with_context(|| format_compact!("getting {}", stringify!($src)))?
+                        .for_each(|name, qty| {
+                            for oid in &oids {
+                                let hub = self.persisted.logistics_hubs.contains(oid);
+                                let obj = objective_mut!(self, oid)?;
+                                let capacity = qty
+                                    * if hub {
+                                        whcfg.hub_max
+                                    } else {
+                                        whcfg.airbase_max
+                                    };
+                                let inv = Inventory {
+                                    stored: capacity,
+                                    capacity,
                                 };
-                            let inv = Inventory {
-                                stored: capacity,
-                                capacity,
-                            };
-                            obj.warehouse.$dst.insert_cow(name.clone(), inv);
-                        }
-                        Ok(())
-                    })?;
+                                obj.warehouse.$dst.insert_cow(name.clone(), inv);
+                            }
+                            Ok(())
+                        })
+                        .context("distributing")?;
                 }};
             }
             dist!(weapons, equipment);
@@ -204,41 +216,51 @@ impl Db {
         if self.ephemeral.cfg.warehouse.is_none() {
             return Ok(()); // warehouse system disabled
         }
-        let world = World::singleton(lua)?;
+        let world = World::singleton(lua).context("getting world")?;
         let mut load_and_sync_airbases = || -> Result<()> {
-            for airbase in world.get_airbases()? {
-                let airbase = airbase?;
-                let pos3 = airbase.get_point()?;
+            for airbase in world.get_airbases().context("getting airbases")? {
+                let airbase = airbase.context("getting airbase")?;
+                let pos3 = airbase.get_point().context("getting airbase position")?;
                 let pos = Vector2::new(pos3.x, pos3.z);
-                airbase.auto_capture(false)?;
+                airbase
+                    .auto_capture(false)
+                    .context("setting airbase autocapture")?;
                 let oid = self.persisted.objectives.into_iter().find(|(_, obj)| {
                     let radius2 = obj.radius.powi(2);
                     na::distance_squared(&pos.into(), &obj.pos.into()) <= radius2
                 });
                 let (oid, _) = match oid {
                     Some((oid, obj)) => {
-                        airbase.set_coalition(obj.owner)?;
+                        airbase
+                            .set_coalition(obj.owner)
+                            .context("setting airbase owner")?;
                         (*oid, obj)
                     }
                     None => {
-                        airbase.set_coalition(Side::Neutral)?;
+                        airbase
+                            .set_coalition(Side::Neutral)
+                            .context("setting airbase owner neutral")?;
                         continue;
                     }
                 };
-                let warehouse = airbase.get_warehouse()?;
+                let warehouse = airbase.get_warehouse().context("getting warehouse")?;
                 self.ephemeral.logistics_by_oid.insert(
                     oid,
                     ObjLogi {
-                        warehouse: warehouse.object_id()?,
+                        warehouse: warehouse
+                            .object_id()
+                            .context("getting warehouse object_id")?,
                     },
                 );
             }
             Ok(())
         };
-        load_and_sync_airbases()?;
-        self.deliver_production(lua)?;
+        load_and_sync_airbases().context("loading and syncing airbases")?;
+        self.deliver_production(lua)
+            .context("delivering production")?;
         self.ephemeral.dirty();
         self.sync_warehouses_from_objectives(lua)
+            .context("syncing warehouses from objectives")
     }
 
     pub fn deliver_production(&mut self, lua: MizLua) -> Result<()> {
@@ -289,7 +311,7 @@ impl Db {
             }
             Ok(())
         };
-        setup_supply_lines()?;
+        setup_supply_lines().context("setting up supplylines")?;
         let mut deliver_produced_supplies = || -> Result<()> {
             for side in [Side::Red, Side::Blue, Side::Neutral] {
                 macro_rules! dlvr {
@@ -307,16 +329,28 @@ impl Db {
                     Some(tmpl) => tmpl,
                     None => continue, // side didn't produce anything, bummer
                 };
-                let w = warehouse::Warehouse::get_by_name(lua, template.clone())?
-                    .get_inventory(None)?;
-                w.weapons()?.for_each(|n, q| dlvr!(equipment, n, q))?;
-                w.aircraft()?.for_each(|n, q| dlvr!(equipment, n, q))?;
-                w.liquids()?.for_each(|n, q| dlvr!(liquids, n, q))?;
+                let w = warehouse::Warehouse::get_by_name(lua, template.clone())
+                    .with_context(|| format_compact!("getting warehouse {}", template))?
+                    .get_inventory(None)
+                    .context("getting inventory")?;
+                w.weapons()
+                    .context("getting weapons")?
+                    .for_each(|n, q| dlvr!(equipment, n, q))
+                    .context("delivering weapons")?;
+                w.aircraft()
+                    .context("getting aircraft")?
+                    .for_each(|n, q| dlvr!(equipment, n, q))
+                    .context("delivering aircraft")?;
+                w.liquids()
+                    .context("getting liquids")?
+                    .for_each(|n, q| dlvr!(liquids, n, q))
+                    .context("delivering liquids")?
             }
             Ok(())
         };
-        deliver_produced_supplies()?;
-        self.deliver_supplies_from_logistics_hubs()?;
+        deliver_produced_supplies().context("delivering produced supplies")?;
+        self.deliver_supplies_from_logistics_hubs()
+            .context("delivering supplies from logistics hubs")?;
         Ok(())
     }
 
@@ -330,8 +364,9 @@ impl Db {
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
             let warehouse = &self.ephemeral.logistics_by_oid[oid].warehouse;
-            let warehouse = warehouse::Warehouse::get_instance(lua, warehouse)?;
-            sync_to_obj(obj, &warehouse)?
+            let warehouse =
+                warehouse::Warehouse::get_instance(lua, warehouse).context("getting warehouse")?;
+            sync_to_obj(obj, &warehouse).context("syncing warehouse to objective")?
         }
         self.ephemeral.dirty();
         Ok(())
@@ -347,8 +382,9 @@ impl Db {
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
             let warehouse = &self.ephemeral.logistics_by_oid[oid].warehouse;
-            let warehouse = warehouse::Warehouse::get_instance(lua, warehouse)?;
-            sync_from_obj(obj, &warehouse)?
+            let warehouse =
+                warehouse::Warehouse::get_instance(lua, warehouse).context("getting warehouse")?;
+            sync_from_obj(obj, &warehouse).context("syncing warehouse from objective")?
         }
         self.ephemeral.dirty();
         Ok(())
@@ -421,7 +457,8 @@ impl Db {
             schedule_transfers!(TransferItem::Liquid, liquids, get_liquids);
         }
         for tr in transfers.drain(..) {
-            tr.execute(self)?
+            tr.execute(self)
+                .with_context(|| format_compact!("executing transfer {:?}", tr))?
         }
         self.balance_logistics_hubs()
     }
@@ -506,7 +543,8 @@ impl Db {
             schedule_transfers!(TransferItem::Equipment, equipment, get_equipment);
             schedule_transfers!(TransferItem::Liquid, liquids, get_liquids);
             for tr in transfers.drain(..) {
-                tr.execute(self)?
+                tr.execute(self)
+                    .with_context(|| format_compact!("executing transfer {:?}", tr))?
             }
             self.ephemeral.dirty();
         }

@@ -8,7 +8,7 @@ use crate::{
     group, objective_mut,
     spawnctx::{SpawnCtx, SpawnLoc},
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Result, Context};
 use chrono::prelude::*;
 use dcso3::{
     coalition::Side,
@@ -241,7 +241,7 @@ impl Db {
         for id in ids {
             t.update_objective_status(&id, now)?
         }
-        t.init_warehouses(lua)?;
+        t.init_warehouses(lua).context("initializing warehouses")?;
         t.ephemeral.dirty();
         Ok(t)
     }
@@ -311,6 +311,6 @@ impl Db {
             Ok(())
         };
         queue_check_walkabout_and_close_enemies()?;
-        self.setup_warehouses_after_load(spctx.lua())
+        self.setup_warehouses_after_load(spctx.lua()).context("setting up warehouses")
     }
 }

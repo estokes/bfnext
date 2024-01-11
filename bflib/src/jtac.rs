@@ -384,7 +384,13 @@ impl Jtacs {
                 if let Some((spotid, _, uid)) = &jt.target {
                     let unit = db.unit(uid)?;
                     if jt.contacts[uid].pos != unit.position.p.0 {
-                        jt.contacts[uid].pos = unit.position.p.0;
+                        let v = db
+                            .ephemeral
+                            .get_object_id_by_uid(uid)
+                            .and_then(|oid| Unit::get_instance(lua, oid).ok())
+                            .and_then(|unit| unit.get_velocity().ok())
+                            .unwrap_or(LuaVec3(Vector3::default()));
+                        jt.contacts[uid].pos = unit.position.p.0 + v.0 * 0.5;
                         let spot =
                             Spot::get_instance(lua, spotid).context("getting the spot instance")?;
                         spot.set_point(unit.position.p)

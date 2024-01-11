@@ -1,6 +1,6 @@
 use super::{
     cargo::Cargo,
-    group::{GroupId, UnitId, SpawnedGroup, SpawnedUnit},
+    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
     objective::ObjectiveId,
     persisted::Persisted,
 };
@@ -10,10 +10,11 @@ use crate::{
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx},
 };
-use anyhow::{anyhow, bail, Result, Context};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
+    centroid2d,
     coalition::Side,
     env::miz::{GroupKind, Miz, MizIndex},
     net::{SlotId, Ucid},
@@ -21,11 +22,11 @@ use dcso3::{
     trigger::MarkId,
     unit::{ClassUnit, Unit},
     warehouse::ClassWarehouse,
-    MizLua, Position3, String, Vector2, centroid2d,
+    MizLua, Position3, String, Vector2,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::info;
-use smallvec::{SmallVec, smallvec};
+use smallvec::{smallvec, SmallVec};
 use std::{
     cmp::max,
     collections::{hash_map::Entry, BTreeMap, VecDeque},
@@ -156,6 +157,10 @@ impl Ephemeral {
 
     pub fn get_uid_by_object_id(&self, id: &DcsOid<ClassUnit>) -> Option<&UnitId> {
         self.uid_by_object_id.get(id)
+    }
+
+    pub fn get_object_id_by_uid(&self, id: &UnitId) -> Option<&DcsOid<ClassUnit>> {
+        self.object_id_by_uid.get(id)
     }
 
     fn index_deployables_for_side(
@@ -428,7 +433,6 @@ fn spawn_group<'lua>(
                 None => units.remove(i)?,
                 Some(su) => {
                     unit.raw_remove("unitId")?;
-                    template.group.set_pos(su.pos)?;
                     unit.set_pos(su.pos)?;
                     unit.set_heading(su.heading)?;
                     unit.set_name(su.name.clone())?;
@@ -440,6 +444,7 @@ fn spawn_group<'lua>(
     };
     if alive {
         let point = centroid2d(points.iter().map(|p| *p));
+        template.group.set_pos(point)?;
         let radius = points
             .iter()
             .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))

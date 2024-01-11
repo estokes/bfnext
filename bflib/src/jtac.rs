@@ -395,6 +395,7 @@ impl Jtacs {
                             Spot::get_instance(lua, spotid).context("getting the spot instance")?;
                         spot.set_point(unit.position.p)
                             .context("setting the spot position")?;
+                        jt.mark_target(lua).context("marking moved target")?
                     }
                 }
             }

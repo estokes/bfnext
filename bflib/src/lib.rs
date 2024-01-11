@@ -70,6 +70,7 @@ struct Perf {
     jtac_target_positions: Histogram<u64>,
     process_messages: Histogram<u64>,
     snapshot: Histogram<u64>,
+    logistics: Histogram<u64>,
 }
 
 static mut PERF: Option<Arc<Perf>> = None;
@@ -95,6 +96,7 @@ impl Default for Perf {
             jtac_target_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             process_messages: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             snapshot: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            logistics: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
         }
     }
 }
@@ -147,7 +149,8 @@ impl Perf {
         log_histogram(&self.advise_capturable, "advise capturable: ");
         log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
         log_histogram(&self.process_messages, "process messages:  ");
-        log_histogram(&self.snapshot, "snapshot:          ")
+        log_histogram(&self.snapshot,  "snapshot:          ");
+        log_histogram(&self.logistics, "logistics:         ")
     }
 }
 
@@ -164,6 +167,8 @@ struct Context {
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
     last_slow_timed_events: DateTime<Utc>,
+    last_logistics_tick: DateTime<Utc>,
+    logistics_ticks_since_delivery: u32,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -696,6 +701,41 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
     Ok(())
 }
 
+fn run_logistics_events(
+    lua: MizLua,
+    ctx: &mut Context,
+    perf: &mut Perf,
+    ts: DateTime<Utc>,
+) -> Result<()> {
+    if let Some(wcfg) = ctx.db.ephemeral.cfg().warehouse.as_ref() {
+        let freq = Duration::seconds(wcfg.tick as i64);
+        let ticks_per_delivery = wcfg.ticks_per_delivery;
+        if ts - ctx.last_logistics_tick >= freq {
+            let start_ts = Utc::now();
+            ctx.last_logistics_tick = ts;
+            if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
+                error!("failed to sync objectives from warehouses {:?}", e)
+            }
+            if ctx.logistics_ticks_since_delivery >= ticks_per_delivery {
+                ctx.logistics_ticks_since_delivery = 0;
+                if let Err(e) = ctx.db.deliver_production(lua) {
+                    error!("failed to deliver production {:?}", e)
+                }
+            } else {
+                ctx.logistics_ticks_since_delivery += 1;
+                if let Err(e) = ctx.db.deliver_supplies_from_logistics_hubs() {
+                    error!("failed to deliver supplies from hubs {:?}", e)
+                }
+            }
+            if let Err(e) = ctx.db.sync_warehouses_from_objectives(lua) {
+                error!("failed to sync warehouses from objectives {:?}", e)
+            }
+            record_perf(&mut perf.logistics, start_ts);
+        }
+    }
+    Ok(())
+}
+
 fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
@@ -831,6 +871,9 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
     }
     record_perf(&mut perf.snapshot, now);
+    if let Err(e) = run_logistics_events(lua, ctx, perf, ts) {
+        error!("error running logistics events {:?}", e)
+    }
     record_perf(&mut perf.timed_events, ts);
     ctx.log_perf(now);
     Ok(())

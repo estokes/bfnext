@@ -14,7 +14,6 @@ use anyhow::{anyhow, bail, Result, Context};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    airbase::ClassAirbase,
     coalition::Side,
     env::miz::{GroupKind, Miz, MizIndex},
     net::{SlotId, Ucid},
@@ -35,7 +34,6 @@ use std::{
 
 #[derive(Debug, Clone)]
 pub(super) struct ObjLogi {
-    pub(super) airbase: DcsOid<ClassAirbase>,
     pub(super) warehouse: DcsOid<ClassWarehouse>,
 }
 

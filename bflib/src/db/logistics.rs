@@ -176,13 +176,21 @@ impl Db {
                         for oid in &oids {
                             let hub = self.persisted.logistics_hubs.contains(oid);
                             let obj = objective_mut!(self, oid)?;
-                            let capacity = qty * if hub { whcfg.hub_max } else { whcfg.airbase_max };
-                            let inv = Inventory { stored: capacity, capacity };
+                            let capacity = qty
+                                * if hub {
+                                    whcfg.hub_max
+                                } else {
+                                    whcfg.airbase_max
+                                };
+                            let inv = Inventory {
+                                stored: capacity,
+                                capacity,
+                            };
                             obj.warehouse.$dst.insert_cow(name.clone(), inv);
                         }
                         Ok(())
                     })?;
-                }}
+                }};
             }
             dist!(weapons, equipment);
             dist!(aircraft, equipment);
@@ -193,10 +201,9 @@ impl Db {
     }
 
     pub(super) fn setup_warehouses_after_load(&mut self, lua: MizLua) -> Result<()> {
-        let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
-            Some(cfg) => cfg,
-            None => return Ok(()), // warehouse system disabled
-        };
+        if self.ephemeral.cfg.warehouse.is_none() {
+            return Ok(()); // warehouse system disabled
+        }
         let world = World::singleton(lua)?;
         let mut load_and_sync_airbases = || -> Result<()> {
             for airbase in world.get_airbases()? {
@@ -222,7 +229,6 @@ impl Db {
                 self.ephemeral.logistics_by_oid.insert(
                     oid,
                     ObjLogi {
-                        airbase: airbase.object_id()?,
                         warehouse: warehouse.object_id()?,
                     },
                 );
@@ -230,6 +236,16 @@ impl Db {
             Ok(())
         };
         load_and_sync_airbases()?;
+        self.deliver_production(lua)?;
+        self.ephemeral.dirty();
+        self.sync_warehouses_from_objectives(lua)
+    }
+
+    pub fn deliver_production(&mut self, lua: MizLua) -> Result<()> {
+        let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
+            Some(cfg) => cfg,
+            None => return Ok(()), // warehouse system disabled
+        };
         let mut setup_supply_lines = || -> Result<()> {
             let mut suppliers: SmallVec<[(ObjectiveId, Option<ObjectiveId>); 64]> = smallvec![];
             for (oid, obj) in &self.persisted.objectives {
@@ -297,12 +313,11 @@ impl Db {
                 w.aircraft()?.for_each(|n, q| dlvr!(equipment, n, q))?;
                 w.liquids()?.for_each(|n, q| dlvr!(liquids, n, q))?;
             }
-            unimplemented!()
+            Ok(())
         };
         deliver_produced_supplies()?;
         self.deliver_supplies_from_logistics_hubs()?;
-        self.ephemeral.dirty();
-        self.sync_warehouses_from_objectives(lua)
+        Ok(())
     }
 
     pub fn sync_objectives_from_warehouses(&mut self, lua: MizLua) -> Result<()> {

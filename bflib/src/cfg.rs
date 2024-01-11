@@ -267,6 +267,9 @@ pub struct WarehouseConfig {
     pub airbase_max: u32,
     /// Logistics tick in minutes. Supplies move automatically every tick
     pub tick: u32,
+    /// How many logistics ticks does it take before supplies are delivered 
+    /// from outside
+    pub ticks_per_delivery: u32,
     /// The fuel transfer crate
     pub fuel_transfer_crate: FxHashMap<Side, Crate>,
     /// The supply transfer crate
@@ -1427,6 +1430,7 @@ impl Default for Cfg {
                 hub_max: 25,
                 airbase_max: 5,
                 tick: 10,
+                ticks_per_delivery: 6,
                 fuel_transfer_crate: default_fuel_transfer_crate(),
                 supply_transfer_crate: default_supply_transfer_crate(),
                 supply_source: FxHashMap::from_iter([

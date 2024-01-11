@@ -384,7 +384,8 @@ impl Db {
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.ephemeral.dirty();
-        self.ephemeral.create_objective_markup(objective!(self, oid)?);
+        self.ephemeral
+            .create_objective_markup(objective!(self, oid)?, &self.persisted);
         Ok(oid)
     }
 
@@ -766,7 +767,7 @@ impl Db {
         Ok(actually_captured)
     }
 
-    /* 
+    /*
     pub fn mark_objective(&mut self, oid: &ObjectiveId) -> Result<()> {
         if let Some((id0, id1)) = self.ephemeral.objective_marks.remove(oid) {
             self.ephemeral.msgs.delete_mark(id0);
@@ -813,7 +814,7 @@ impl Db {
     }
     */
 
-    /* 
+    /*
     pub fn remark_objectives(&mut self) -> Result<()> {
         let objectives = self
             .persisted

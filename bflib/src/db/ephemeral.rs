@@ -1,7 +1,7 @@
 use super::{
     cargo::Cargo,
     group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
-    objective::{Objective, ObjectiveId},
+    objective::{Objective, ObjectiveId, ObjectiveKind},
     persisted::Persisted,
 };
 use crate::{
@@ -19,7 +19,7 @@ use dcso3::{
     env::miz::{GroupKind, Miz, MizIndex},
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
-    trigger::{CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec},
+    trigger::{ArrowSpec, CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec},
     unit::{ClassUnit, Unit},
     warehouse::ClassWarehouse,
     Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
@@ -50,8 +50,6 @@ pub(super) struct DeployableIndex {
 #[derive(Debug, Clone, Default)]
 pub(super) struct ObjectiveMarkup {
     owner_ring: MarkId,
-    owner_background: MarkId,
-    other_background: MarkId,
     name: MarkId,
     health_label: MarkId,
     healthbar: [MarkId; 5],
@@ -66,8 +64,6 @@ impl ObjectiveMarkup {
     fn remove(self, msgq: &mut MsgQ) {
         let ObjectiveMarkup {
             owner_ring,
-            owner_background,
-            other_background,
             name,
             health_label,
             healthbar,
@@ -78,8 +74,6 @@ impl ObjectiveMarkup {
             supply_connections,
         } = self;
         msgq.delete_mark(owner_ring);
-        msgq.delete_mark(owner_background);
-        msgq.delete_mark(other_background);
         msgq.delete_mark(name);
         msgq.delete_mark(health_label);
         for id in healthbar {
@@ -98,17 +92,28 @@ impl ObjectiveMarkup {
         }
     }
 
-    fn new(msgq: &mut MsgQ, obj: &Objective) -> Self {
+    fn new(msgq: &mut MsgQ, obj: &Objective, persisted: &Persisted) -> Self {
+        let text_color = |a| match obj.owner {
+            Side::Red => Color::red(a),
+            Side::Blue => Color::blue(a),
+            Side::Neutral => Color::white(a),
+        };
+        let all_spec = match obj.kind {
+            ObjectiveKind::Airbase | ObjectiveKind::Fob | ObjectiveKind::Logistics => {
+                SideFilter::All
+            }
+            ObjectiveKind::Farp(_) => obj.owner.into(),
+        };
         let bar_with_label =
             |msgq: &mut MsgQ, pos3: Vector3, label: MarkId, text: &str, marks: &[MarkId; 5]| {
                 msgq.text_to_all(
                     obj.owner.into(),
                     label,
                     TextSpec {
-                        pos: LuaVec3(pos3),
-                        color: Color::black(1.),
-                        fill_color: Color::white(1.),
-                        font_size: 18,
+                        pos: LuaVec3(Vector3::new(pos3.x + 200., 0., pos3.z)),
+                        color: text_color(0.75),
+                        fill_color: Color::black(0.),
+                        font_size: 12,
                         read_only: true,
                         text: text.into(),
                     },
@@ -119,8 +124,8 @@ impl ObjectiveMarkup {
                         obj.owner.into(),
                         *id,
                         RectSpec {
-                            start: LuaVec3(Vector3::new(pos3.x - i * 50., 0., pos3.z)),
-                            end: LuaVec3(Vector3::new(pos3.x - i * 50. + 40., 0., pos3.z - 40.)),
+                            start: LuaVec3(Vector3::new(pos3.x, 0., pos3.z + i * 500.)),
+                            end: LuaVec3(Vector3::new(pos3.x - 400., 0., pos3.z + i * 500. + 400.)),
                             color: Color::black(1.),
                             fill_color: Color::green(0.5),
                             line_type: LineType::Solid,
@@ -130,73 +135,68 @@ impl ObjectiveMarkup {
                     );
                 }
             };
-        let t = ObjectiveMarkup::default();
+        let mut t = ObjectiveMarkup::default();
         let mut pos3 = Vector3::new(obj.pos.x, 0., obj.pos.y);
         msgq.circle_to_all(
-            SideFilter::All,
+            all_spec,
             t.owner_ring,
             CircleSpec {
                 center: LuaVec3(pos3),
                 radius: obj.radius,
-                color: match obj.owner {
-                    Side::Neutral => Color::white(1.),
-                    Side::Red => Color::red(1.),
-                    Side::Blue => Color::blue(1.),
-                },
+                color: text_color(1.),
                 fill_color: Color::white(0.),
                 line_type: LineType::Dashed,
                 read_only: true,
             },
             None,
         );
-        pos3.x += 1000.;
-        pos3.z += 1000.;
-        msgq.rect_to_all(
-            obj.owner.into(),
-            t.owner_background,
-            RectSpec {
-                start: LuaVec3(pos3),
-                end: LuaVec3(Vector3::new(pos3.x + 300., 0., pos3.z - 500.)),
-                color: Color::black(1.),
-                fill_color: Color::gray(0.25),
-                line_type: LineType::Solid,
-                read_only: true,
-            },
-            None,
-        );
-        msgq.rect_to_all(
-            obj.owner.opposite().into(),
-            t.other_background,
-            RectSpec {
-                start: LuaVec3(pos3),
-                end: LuaVec3(Vector3::new(pos3.x + 300., 0., pos3.z - 100.)),
-                color: Color::black(1.),
-                fill_color: Color::gray(0.25),
-                line_type: LineType::Solid,
-                read_only: true,
-            },
-            None,
-        );
-        pos3.x += 20.;
-        pos3.z -= 10.;
         msgq.text_to_all(
-            SideFilter::All,
+            all_spec,
             t.name,
             TextSpec {
-                pos: LuaVec3(pos3),
-                color: Color::black(1.),
-                fill_color: Color::white(1.),
-                font_size: 18,
+                pos: LuaVec3(Vector3::new(pos3.x + 1500., 1., pos3.z + 1500.)),
+                color: text_color(1.),
+                fill_color: Color::black(0.),
+                font_size: 14,
                 read_only: true,
                 text: obj.name.clone(),
             },
         );
-        pos3.z -= 100.;
+        pos3.x += 5000.;
+        pos3.z -= 5000.;
         bar_with_label(msgq, pos3, t.health_label, "Health", &t.healthbar);
-        pos3.z -= 100.;
+        pos3.x -= 1500.;
         bar_with_label(msgq, pos3, t.logi_label, "Logi", &t.logibar);
-        pos3.z -= 100.;
+        pos3.x -= 1500.;
         bar_with_label(msgq, pos3, t.supply_label, "Supply", &t.supplybar);
+        match obj.kind {
+            ObjectiveKind::Airbase | ObjectiveKind::Farp(_) | ObjectiveKind::Fob => (),
+            ObjectiveKind::Logistics => {
+                let pos = obj.pos;
+                for oid in &obj.warehouse.destination {
+                    let id = MarkId::new();
+                    let dobj = &persisted.objectives[oid];
+                    let dir = (pos - dobj.pos).normalize();
+                    let spos = pos + dir * obj.radius * 1.1;
+                    let rdir = (dobj.pos - pos).normalize();
+                    let dpos = dobj.pos + rdir * dobj.radius * 1.1;
+                    msgq.arrow_to_all(
+                        obj.owner.into(),
+                        id,
+                        ArrowSpec {
+                            start: LuaVec3(Vector3::new(spos.x, 0., spos.y)),
+                            end: LuaVec3(Vector3::new(dpos.x, 0., dpos.y)),
+                            color: Color::gray(0.5),
+                            fill_color: Color::gray(0.5),
+                            line_type: LineType::NoLine,
+                            read_only: true,
+                        },
+                        None,
+                    );
+                    t.supply_connections.push(id);
+                }
+            }
+        }
         t
     }
 }
@@ -226,12 +226,12 @@ pub struct Ephemeral {
 }
 
 impl Ephemeral {
-    pub fn create_objective_markup(&mut self, obj: &Objective) {
+    pub fn create_objective_markup(&mut self, obj: &Objective, persisted: &Persisted) {
         if let Some(mk) = self.objective_markup.remove(&obj.id) {
             mk.remove(&mut self.msgs)
         }
         self.objective_markup
-            .insert(obj.id, ObjectiveMarkup::new(&mut self.msgs, obj));
+            .insert(obj.id, ObjectiveMarkup::new(&mut self.msgs, obj, persisted));
     }
 
     pub fn remove_objective_markup(&mut self, oid: &ObjectiveId) {

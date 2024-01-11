@@ -281,7 +281,7 @@ impl Db {
                 self.mark_group(&gid)?
             }
             for (_, obj) in &self.persisted.objectives {
-                self.ephemeral.create_objective_markup(obj)
+                self.ephemeral.create_objective_markup(obj, &self.persisted)
             }
             Ok(())
         };

@@ -2,7 +2,7 @@ use dcso3::{
     coalition::Side,
     env::miz::{GroupId, UnitId},
     net::{Net, PlayerId},
-    trigger::{Action, CircleSpec, MarkId, RectSpec, SideFilter, TextSpec},
+    trigger::{Action, ArrowSpec, CircleSpec, MarkId, RectSpec, SideFilter, TextSpec},
     LuaVec3, String, Vector2, Vector3,
 };
 use log::{debug, error};
@@ -61,6 +61,12 @@ pub enum Msg {
         id: MarkId,
         to: SideFilter,
         spec: TextSpec,
+    },
+    Arrow {
+        id: MarkId,
+        to: SideFilter,
+        spec: ArrowSpec,
+        message: Option<String>,
     },
 }
 
@@ -237,16 +243,22 @@ impl MsgQ {
         }))
     }
 
-    pub fn text_to_all(
+    pub fn text_to_all(&mut self, to: SideFilter, id: MarkId, spec: TextSpec) {
+        self.0.push_back(Cmd::Send(Msg::Text { id, to, spec }))
+    }
+
+    pub fn arrow_to_all(
         &mut self,
         to: SideFilter,
         id: MarkId,
-        spec: TextSpec,
+        spec: ArrowSpec,
+        message: Option<String>,
     ) {
-        self.0.push_back(Cmd::Send(Msg::Text {
+        self.0.push_back(Cmd::Send(Msg::Arrow {
             id,
             to,
             spec,
+            message,
         }))
     }
 
@@ -295,15 +307,25 @@ impl MsgQ {
                         }
                     },
                 },
-                Cmd::Send(Msg::Circle { id, to, spec, message }) => {
-                    act.circle_to_all(to, id, spec, message)
-                }
-                Cmd::Send(Msg::Rect { id, to, spec, message }) => {
-                    act.rect_to_all(to, id, spec, message)
-                }
-                Cmd::Send(Msg::Text { id, to, spec}) => {
-                    act.text_to_all(to, id, spec)
-                }
+                Cmd::Send(Msg::Circle {
+                    id,
+                    to,
+                    spec,
+                    message,
+                }) => act.circle_to_all(to, id, spec, message),
+                Cmd::Send(Msg::Rect {
+                    id,
+                    to,
+                    spec,
+                    message,
+                }) => act.rect_to_all(to, id, spec, message),
+                Cmd::Send(Msg::Text { id, to, spec }) => act.text_to_all(to, id, spec),
+                Cmd::Send(Msg::Arrow {
+                    id,
+                    to,
+                    spec,
+                    message,
+                }) => act.arrow_to_all(to, id, spec, message),
             };
             if let Err(e) = res {
                 error!("could not send message {:?}", e)

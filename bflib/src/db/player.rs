@@ -358,6 +358,12 @@ impl Db {
             }
             self.ephemeral.units_able_to_move.remove(&uid);
         }
+        let id = unit.object_id()?;
+        if let Some(slot) = self.ephemeral.slot_by_object_id.get(&id) {
+            if let Some(ucid) = self.ephemeral.player_in_slot(slot) {
+                self.player_deslot(&ucid.clone())
+            }
+        }
         Ok(dead)
     }
 }

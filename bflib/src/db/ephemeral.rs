@@ -1,7 +1,7 @@
 use super::{
     cargo::Cargo,
     group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
-    objective::ObjectiveId,
+    objective::{Objective, ObjectiveId},
     persisted::Persisted,
 };
 use crate::{
@@ -19,10 +19,10 @@ use dcso3::{
     env::miz::{GroupKind, Miz, MizIndex},
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
-    trigger::MarkId,
+    trigger::{CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec},
     unit::{ClassUnit, Unit},
     warehouse::ClassWarehouse,
-    MizLua, Position3, String, Vector2,
+    Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::info;
@@ -47,6 +47,160 @@ pub(super) struct DeployableIndex {
     pub(super) squads_by_name: FxHashMap<String, Troop>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(super) struct ObjectiveMarkup {
+    owner_ring: MarkId,
+    owner_background: MarkId,
+    other_background: MarkId,
+    name: MarkId,
+    health_label: MarkId,
+    healthbar: [MarkId; 5],
+    logi_label: MarkId,
+    logibar: [MarkId; 5],
+    supply_label: MarkId,
+    supplybar: [MarkId; 5],
+    supply_connections: SmallVec<[MarkId; 8]>,
+}
+
+impl ObjectiveMarkup {
+    fn remove(self, msgq: &mut MsgQ) {
+        let ObjectiveMarkup {
+            owner_ring,
+            owner_background,
+            other_background,
+            name,
+            health_label,
+            healthbar,
+            logi_label,
+            logibar,
+            supply_label,
+            supplybar,
+            supply_connections,
+        } = self;
+        msgq.delete_mark(owner_ring);
+        msgq.delete_mark(owner_background);
+        msgq.delete_mark(other_background);
+        msgq.delete_mark(name);
+        msgq.delete_mark(health_label);
+        for id in healthbar {
+            msgq.delete_mark(id)
+        }
+        msgq.delete_mark(logi_label);
+        for id in logibar {
+            msgq.delete_mark(id)
+        }
+        msgq.delete_mark(supply_label);
+        for id in supplybar {
+            msgq.delete_mark(id)
+        }
+        for id in supply_connections {
+            msgq.delete_mark(id)
+        }
+    }
+
+    fn new(msgq: &mut MsgQ, obj: &Objective) -> Self {
+        let bar_with_label =
+            |msgq: &mut MsgQ, pos3: Vector3, label: MarkId, text: &str, marks: &[MarkId; 5]| {
+                msgq.text_to_all(
+                    obj.owner.into(),
+                    label,
+                    TextSpec {
+                        pos: LuaVec3(pos3),
+                        color: Color::black(1.),
+                        fill_color: Color::white(1.),
+                        font_size: 18,
+                        read_only: true,
+                        text: text.into(),
+                    },
+                );
+                for (i, id) in marks.iter().enumerate() {
+                    let i = i as f64;
+                    msgq.rect_to_all(
+                        obj.owner.into(),
+                        *id,
+                        RectSpec {
+                            start: LuaVec3(Vector3::new(pos3.x - i * 50., 0., pos3.z)),
+                            end: LuaVec3(Vector3::new(pos3.x - i * 50. + 40., 0., pos3.z - 40.)),
+                            color: Color::black(1.),
+                            fill_color: Color::green(0.5),
+                            line_type: LineType::Solid,
+                            read_only: true,
+                        },
+                        None,
+                    );
+                }
+            };
+        let t = ObjectiveMarkup::default();
+        let mut pos3 = Vector3::new(obj.pos.x, 0., obj.pos.y);
+        msgq.circle_to_all(
+            SideFilter::All,
+            t.owner_ring,
+            CircleSpec {
+                center: LuaVec3(pos3),
+                radius: obj.radius,
+                color: match obj.owner {
+                    Side::Neutral => Color::white(1.),
+                    Side::Red => Color::red(1.),
+                    Side::Blue => Color::blue(1.),
+                },
+                fill_color: Color::white(0.),
+                line_type: LineType::Dashed,
+                read_only: true,
+            },
+            None,
+        );
+        pos3.x += 1000.;
+        pos3.z += 1000.;
+        msgq.rect_to_all(
+            obj.owner.into(),
+            t.owner_background,
+            RectSpec {
+                start: LuaVec3(pos3),
+                end: LuaVec3(Vector3::new(pos3.x + 300., 0., pos3.z - 500.)),
+                color: Color::black(1.),
+                fill_color: Color::gray(0.25),
+                line_type: LineType::Solid,
+                read_only: true,
+            },
+            None,
+        );
+        msgq.rect_to_all(
+            obj.owner.opposite().into(),
+            t.other_background,
+            RectSpec {
+                start: LuaVec3(pos3),
+                end: LuaVec3(Vector3::new(pos3.x + 300., 0., pos3.z - 100.)),
+                color: Color::black(1.),
+                fill_color: Color::gray(0.25),
+                line_type: LineType::Solid,
+                read_only: true,
+            },
+            None,
+        );
+        pos3.x += 20.;
+        pos3.z -= 10.;
+        msgq.text_to_all(
+            SideFilter::All,
+            t.name,
+            TextSpec {
+                pos: LuaVec3(pos3),
+                color: Color::black(1.),
+                fill_color: Color::white(1.),
+                font_size: 18,
+                read_only: true,
+                text: obj.name.clone(),
+            },
+        );
+        pos3.z -= 100.;
+        bar_with_label(msgq, pos3, t.health_label, "Health", &t.healthbar);
+        pos3.z -= 100.;
+        bar_with_label(msgq, pos3, t.logi_label, "Logi", &t.logibar);
+        pos3.z -= 100.;
+        bar_with_label(msgq, pos3, t.supply_label, "Supply", &t.supplybar);
+        t
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Ephemeral {
     dirty: bool,
@@ -55,7 +209,7 @@ pub struct Ephemeral {
     pub(super) cargo: FxHashMap<SlotId, Cargo>,
     pub(super) deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
     pub(super) group_marks: FxHashMap<GroupId, MarkId>,
-    pub(super) objective_marks: FxHashMap<ObjectiveId, (MarkId, Option<MarkId>)>,
+    objective_markup: FxHashMap<ObjectiveId, ObjectiveMarkup>,
     pub(super) object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
     pub(super) uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     pub(super) object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
@@ -72,6 +226,20 @@ pub struct Ephemeral {
 }
 
 impl Ephemeral {
+    pub fn create_objective_markup(&mut self, obj: &Objective) {
+        if let Some(mk) = self.objective_markup.remove(&obj.id) {
+            mk.remove(&mut self.msgs)
+        }
+        self.objective_markup
+            .insert(obj.id, ObjectiveMarkup::new(&mut self.msgs, obj));
+    }
+
+    pub fn remove_objective_markup(&mut self, oid: &ObjectiveId) {
+        if let Some(mk) = self.objective_markup.remove(oid) {
+            mk.remove(&mut self.msgs)
+        }
+    }
+
     pub fn push_despawn(&mut self, gid: GroupId, ds: Despawn) {
         let mut queued_spawn = false;
         self.spawnq.retain(|sp_gid| {

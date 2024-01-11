@@ -280,14 +280,8 @@ impl Db {
             for gid in groups {
                 self.mark_group(&gid)?
             }
-            let objectives = self
-                .persisted
-                .objectives
-                .into_iter()
-                .map(|(oid, _)| *oid)
-                .collect::<Vec<_>>();
-            for oid in objectives {
-                self.mark_objective(&oid)?
+            for (_, obj) in &self.persisted.objectives {
+                self.ephemeral.create_objective_markup(obj)
             }
             Ok(())
         };

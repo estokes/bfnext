@@ -283,12 +283,7 @@ impl Db {
             self.persisted.objectives_by_slot.remove_cow(slot);
         }
         self.persisted.farps.remove_cow(oid);
-        if let Some((fid, eid)) = self.ephemeral.objective_marks.remove(oid) {
-            self.ephemeral.msgs.delete_mark(fid);
-            if let Some(id) = eid {
-                self.ephemeral.msgs.delete_mark(id)
-            }
-        }
+        self.ephemeral.remove_objective_markup(oid);
         Ok(())
     }
 
@@ -389,7 +384,7 @@ impl Db {
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.ephemeral.dirty();
-        self.mark_objective(&oid)?;
+        self.ephemeral.create_objective_markup(objective!(self, oid)?);
         Ok(oid)
     }
 
@@ -771,6 +766,7 @@ impl Db {
         Ok(actually_captured)
     }
 
+    /* 
     pub fn mark_objective(&mut self, oid: &ObjectiveId) -> Result<()> {
         if let Some((id0, id1)) = self.ephemeral.objective_marks.remove(oid) {
             self.ephemeral.msgs.delete_mark(id0);
@@ -815,7 +811,9 @@ impl Db {
         self.ephemeral.objective_marks.insert(*oid, (fid, eid));
         Ok(())
     }
+    */
 
+    /* 
     pub fn remark_objectives(&mut self) -> Result<()> {
         let objectives = self
             .persisted
@@ -832,4 +830,5 @@ impl Db {
         }
         Ok(())
     }
+    */
 }

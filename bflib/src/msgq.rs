@@ -2,7 +2,7 @@ use dcso3::{
     coalition::Side,
     env::miz::{GroupId, UnitId},
     net::{Net, PlayerId},
-    trigger::{Action, MarkId},
+    trigger::{Action, CircleSpec, MarkId, RectSpec, SideFilter, TextSpec},
     LuaVec3, String, Vector2, Vector3,
 };
 use log::{debug, error};
@@ -23,7 +23,7 @@ pub enum MarkDest {
     Group(GroupId),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum MsgTyp {
     Chat(Option<PlayerId>),
     Panel {
@@ -40,9 +40,28 @@ pub enum MsgTyp {
 }
 
 #[derive(Debug, Clone)]
-pub struct Msg {
-    pub typ: MsgTyp,
-    pub text: String,
+pub enum Msg {
+    Message {
+        typ: MsgTyp,
+        text: String,
+    },
+    Circle {
+        id: MarkId,
+        to: SideFilter,
+        spec: CircleSpec,
+        message: Option<String>,
+    },
+    Rect {
+        id: MarkId,
+        to: SideFilter,
+        spec: RectSpec,
+        message: Option<String>,
+    },
+    Text {
+        id: MarkId,
+        to: SideFilter,
+        spec: TextSpec,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +75,7 @@ pub struct MsgQ(VecDeque<Cmd>);
 
 impl MsgQ {
     pub fn send<S: Into<String>>(&mut self, typ: MsgTyp, text: S) {
-        self.0.push_back(Cmd::Send(Msg {
+        self.0.push_back(Cmd::Send(Msg::Message {
             typ,
             text: text.into(),
         }))
@@ -188,6 +207,49 @@ impl MsgQ {
         )
     }
 
+    pub fn circle_to_all(
+        &mut self,
+        to: SideFilter,
+        id: MarkId,
+        spec: CircleSpec,
+        message: Option<String>,
+    ) {
+        self.0.push_back(Cmd::Send(Msg::Circle {
+            id,
+            to,
+            spec,
+            message,
+        }))
+    }
+
+    pub fn rect_to_all(
+        &mut self,
+        to: SideFilter,
+        id: MarkId,
+        spec: RectSpec,
+        message: Option<String>,
+    ) {
+        self.0.push_back(Cmd::Send(Msg::Rect {
+            id,
+            to,
+            spec,
+            message,
+        }))
+    }
+
+    pub fn text_to_all(
+        &mut self,
+        to: SideFilter,
+        id: MarkId,
+        spec: TextSpec,
+    ) {
+        self.0.push_back(Cmd::Send(Msg::Text {
+            id,
+            to,
+            spec,
+        }))
+    }
+
     pub fn process(&mut self, net: &Net, act: &Action) {
         for _ in 0..5 {
             let cmd = match self.0.pop_front() {
@@ -197,42 +259,51 @@ impl MsgQ {
             debug!("server sending {:?}", cmd);
             let res = match cmd {
                 Cmd::DeleteMark(id) => act.remove_mark(id),
-                Cmd::Send(msg) => match msg.typ {
+                Cmd::Send(Msg::Message { typ, text }) => match typ {
                     MsgTyp::Mark {
                         id,
                         to,
                         position,
                         read_only,
                     } => match to {
-                        MarkDest::All => act.mark_to_all(id, msg.text, position, read_only, None),
+                        MarkDest::All => act.mark_to_all(id, text, position, read_only, None),
                         MarkDest::Side(side) => {
-                            act.mark_to_coalition(id, msg.text, position, side, read_only, None)
+                            act.mark_to_coalition(id, text, position, side, read_only, None)
                         }
                         MarkDest::Group(group) => {
-                            act.mark_to_group(id, msg.text, position, group, read_only, None)
+                            act.mark_to_group(id, text, position, group, read_only, None)
                         }
                     },
                     MsgTyp::Chat(to) => match to {
-                        None => net.send_chat(msg.text, true),
-                        Some(id) => net.send_chat_to(msg.text, id, Some(PlayerId::from(1))),
+                        None => net.send_chat(text, true),
+                        Some(id) => net.send_chat_to(text, id, Some(PlayerId::from(1))),
                     },
                     MsgTyp::Panel {
                         to,
                         display_time,
                         clear_view,
                     } => match to {
-                        PanelDest::All => act.out_text(msg.text, display_time, clear_view),
+                        PanelDest::All => act.out_text(text, display_time, clear_view),
                         PanelDest::Group(gid) => {
-                            act.out_text_for_group(gid, msg.text, display_time, clear_view)
+                            act.out_text_for_group(gid, text, display_time, clear_view)
                         }
                         PanelDest::Side(side) => {
-                            act.out_text_for_coalition(side, msg.text, display_time, clear_view)
+                            act.out_text_for_coalition(side, text, display_time, clear_view)
                         }
                         PanelDest::Unit(uid) => {
-                            act.out_text_for_unit(uid, msg.text, display_time, clear_view)
+                            act.out_text_for_unit(uid, text, display_time, clear_view)
                         }
                     },
                 },
+                Cmd::Send(Msg::Circle { id, to, spec, message }) => {
+                    act.circle_to_all(to, id, spec, message)
+                }
+                Cmd::Send(Msg::Rect { id, to, spec, message }) => {
+                    act.rect_to_all(to, id, spec, message)
+                }
+                Cmd::Send(Msg::Text { id, to, spec}) => {
+                    act.text_to_all(to, id, spec)
+                }
             };
             if let Err(e) = res {
                 error!("could not send message {:?}", e)

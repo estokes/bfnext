@@ -793,9 +793,11 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.unit_culling, ts);
         let ts = Utc::now();
+        /* 
         if let Err(e) = ctx.db.remark_objectives() {
             error!("could not remark objectives {e}")
         }
+        */
         record_perf(&mut perf.remark_objectives, ts);
         let ts = Utc::now();
         if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {

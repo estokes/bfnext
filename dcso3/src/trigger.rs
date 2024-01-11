@@ -3,7 +3,7 @@ use crate::{
     coalition::Side,
     cvt_err,
     env::miz::{Country, GroupId, UnitId},
-    simple_enum, wrapped_table, Color, LuaEnv, LuaVec3, MizLua, String
+    simple_enum, wrapped_table, Color, LuaEnv, LuaVec3, MizLua, String,
 };
 use anyhow::Result;
 use mlua::{prelude::*, Value};
@@ -76,6 +76,16 @@ simple_enum!(SideFilter, i8, [
     Red => 1,
     Blue => 2
 ]);
+
+impl From<Side> for SideFilter {
+    fn from(value: Side) -> Self {
+        match value {
+            Side::Blue => SideFilter::Blue,
+            Side::Red => SideFilter::Red,
+            Side::Neutral => SideFilter::Neutral,
+        }
+    }
+}
 
 simple_enum!(LineType, u8, [
     NoLine => 0,

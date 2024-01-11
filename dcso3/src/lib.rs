@@ -199,6 +199,62 @@ pub struct Color {
     a: f32,
 }
 
+impl Color {
+    pub fn black(a: f32) -> Color {
+        Color {
+            r: 0.,
+            g: 0.,
+            b: 0.,
+            a,
+        }
+    }
+
+    pub fn red(a: f32) -> Color {
+        Color {
+            r: 1.,
+            g: 0.,
+            b: 0.,
+            a,
+        }
+    }
+
+    pub fn white(a: f32) -> Color {
+        Color {
+            r: 1.,
+            g: 1.,
+            b: 1.,
+            a,
+        }
+    }
+
+    pub fn blue(a: f32) -> Color {
+        Color {
+            r: 0.,
+            g: 0.,
+            b: 1.,
+            a,
+        }
+    }
+
+    pub fn gray(a: f32) -> Color {
+        Color {
+            r: 0.25,
+            g: 0.25,
+            b: 0.25,
+            a,
+        }
+    }
+
+    pub fn green(a: f32) -> Color {
+        Color {
+            r: 0.,
+            g: 1.,
+            b: 0.,
+            a,
+        }
+    }
+}
+
 impl<'lua> FromLua<'lua> for Color {
     fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Color", None, value).map_err(lua_err)?;
@@ -320,7 +376,7 @@ macro_rules! wrapped_table {
                             .and_then(|mt| mt.raw_get("className_").ok())
                             .unwrap_or(String::from("unknown"));
                         write!(f, "{{ class: {}, id: {:?} }}", class, v)
-                    },
+                    }
                     Err(_) => write!(f, "{:?}", self.t),
                 }
             }

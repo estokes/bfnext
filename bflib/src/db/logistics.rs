@@ -290,8 +290,30 @@ impl Db {
             .context("syncing warehouses from objectives")
     }
 
+    pub(super) fn compute_supplier(&self, obj: &Objective) -> Result<Option<ObjectiveId>> {
+        Ok(self
+            .persisted
+            .logistics_hubs
+            .into_iter()
+            .fold(Ok::<_, anyhow::Error>(None), |acc, id| {
+                let logi = objective!(self, id)?;
+                if logi.owner != obj.owner {
+                    acc
+                } else {
+                    let dist = na::distance_squared(&obj.pos.into(), &logi.pos.into());
+                    match acc {
+                        Err(e) => Err(e),
+                        Ok(None) => Ok(Some((dist, *id))),
+                        Ok(Some((pdist, _))) if dist < pdist => Ok(Some((dist, *id))),
+                        Ok(Some((dist, id))) => Ok(Some((dist, id))),
+                    }
+                }
+            })?
+            .map(|(_, id)| id))
+    }
+
     pub fn deliver_production(&mut self, lua: MizLua) -> Result<()> {
-        let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
+        let whcfg = match self.ephemeral.cfg.warehouse.clone() {
             Some(cfg) => cfg,
             None => return Ok(()), // warehouse system disabled
         };
@@ -301,26 +323,7 @@ impl Db {
                 match obj.kind {
                     ObjectiveKind::Logistics => (),
                     ObjectiveKind::Airbase | ObjectiveKind::Farp(_) | ObjectiveKind::Fob => {
-                        let supplier = self
-                            .persisted
-                            .logistics_hubs
-                            .into_iter()
-                            .fold(None, |acc, id| {
-                                let logi = &self.persisted.objectives[id];
-                                if logi.owner != obj.owner {
-                                    acc
-                                } else {
-                                    let dist =
-                                        na::distance_squared(&obj.pos.into(), &logi.pos.into());
-                                    match acc {
-                                        None => Some((dist, *id)),
-                                        Some((pdist, _)) if dist < pdist => Some((dist, *id)),
-                                        Some((dist, id)) => Some((dist, id)),
-                                    }
-                                }
-                            })
-                            .map(|(_, id)| id);
-                        suppliers.push((*oid, supplier));
+                        suppliers.push((*oid, self.compute_supplier(obj)?));
                     }
                 }
             }

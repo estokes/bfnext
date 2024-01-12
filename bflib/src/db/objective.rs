@@ -377,7 +377,7 @@ impl Db {
                 }
             }
         };
-        let obj = Objective {
+        let mut obj = Objective {
             id: ObjectiveId::new(),
             name: name.clone(),
             groups: Map::from_iter([(side, groups)]),
@@ -397,6 +397,7 @@ impl Db {
             last_change_ts: now,
             needs_mark: false,
         };
+        obj.warehouse.supplier = self.compute_supplier(&obj)?;
         let oid = obj.id;
         for (_, groups) in &obj.groups {
             for gid in groups {

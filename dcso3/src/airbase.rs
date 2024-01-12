@@ -10,10 +10,10 @@ wrapped_table!(Runway, None);
 wrapped_table!(Airbase, Some("Airbase"));
 
 impl<'lua> Airbase<'lua> {
-    pub fn get_by_name(&self, name: String) -> Result<Self> {
-        let globals = self.lua.globals();
-        let class = as_tbl("Airbase", Some("Airbase"), globals.raw_get("Airbase")?)?;
-        Ok(class.call_method("getByName", name)?)
+    pub fn get_by_name(lua: MizLua<'lua>, name: String) -> Result<Self> {
+        let globals = lua.inner().globals();
+        let airbase: LuaTable = globals.raw_get("Airbase")?;
+        Ok(airbase.call_function("getByName", name)?)
     }
 
     pub fn is_exist(&self) -> Result<bool> {

@@ -13,7 +13,7 @@ use dcso3::{
     object::DcsObject,
     warehouse::{self, LiquidType},
     world::World,
-    MizLua, String, Vector2,
+    MizLua, String, Vector2, airbase::Airbase,
 };
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -175,8 +175,10 @@ impl Db {
                 Some(tmpl) => tmpl,
                 None => continue, // side didn't produce anything, bummer
             };
-            let w = warehouse::Warehouse::get_by_name(lua, template.clone())
-                .with_context(|| format_compact!("getting warehouse {}", template))?
+            let w = Airbase::get_by_name(lua, template.clone())
+                .with_context(|| format_compact!("getting airbase {}", template))?
+                .get_warehouse()
+                .context("getting warehouse")?
                 .get_inventory(None)
                 .context("getting inventory")?;
             macro_rules! dist {
@@ -329,8 +331,10 @@ impl Db {
                     Some(tmpl) => tmpl,
                     None => continue, // side didn't produce anything, bummer
                 };
-                let w = warehouse::Warehouse::get_by_name(lua, template.clone())
-                    .with_context(|| format_compact!("getting warehouse {}", template))?
+                let w = Airbase::get_by_name(lua, template.clone())
+                    .with_context(|| format_compact!("getting airbase {}", template))?
+                    .get_warehouse()
+                    .context("getting warehouse")?
                     .get_inventory(None)
                     .context("getting inventory")?;
                 w.weapons()

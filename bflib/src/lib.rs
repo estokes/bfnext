@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -21,11 +21,12 @@ pub mod ewr;
 pub mod jtac;
 pub mod menu;
 pub mod msgq;
+pub mod perf;
 pub mod spawnctx;
 
 extern crate nalgebra as na;
-use crate::{cfg::Cfg, db::player::SlotAuth};
-use anyhow::{anyhow, bail, Result, Context as AnyhowContext};
+use crate::{cfg::Cfg, db::player::SlotAuth, perf::record_perf};
+use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -50,124 +51,28 @@ use dcso3::{
 };
 use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
-use hdrhistogram::Histogram;
 use jtac::Jtacs;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
+use perf::Perf;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
 use std::{iter, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
+#[derive(Debug, Clone)]
+enum AdminCommand {
+    ReduceInventory { airbase: String, amount: f32 },
+    LogisticsTickNow,
+    LogisticsDeliverNow,
+    Tim
+}
+
 #[derive(Debug)]
 struct PlayerInfo {
     name: String,
     ucid: Ucid,
-}
-
-#[derive(Debug, Clone)]
-struct Perf {
-    timed_events: Histogram<u64>,
-    slow_timed: Histogram<u64>,
-    dcs_events: Histogram<u64>,
-    dcs_hooks: Histogram<u64>,
-    unit_positions: Histogram<u64>,
-    player_positions: Histogram<u64>,
-    ewr_tracks: Histogram<u64>,
-    ewr_reports: Histogram<u64>,
-    unit_culling: Histogram<u64>,
-    remark_objectives: Histogram<u64>,
-    update_jtac_contacts: Histogram<u64>,
-    do_repairs: Histogram<u64>,
-    spawn_queue: Histogram<u64>,
-    advise_captured: Histogram<u64>,
-    advise_capturable: Histogram<u64>,
-    jtac_target_positions: Histogram<u64>,
-    process_messages: Histogram<u64>,
-    snapshot: Histogram<u64>,
-    logistics: Histogram<u64>,
-}
-
-static mut PERF: Option<Arc<Perf>> = None;
-
-impl Default for Perf {
-    fn default() -> Self {
-        Perf {
-            timed_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            slow_timed: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            dcs_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            dcs_hooks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            unit_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            player_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            ewr_tracks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            ewr_reports: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            unit_culling: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            remark_objectives: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            update_jtac_contacts: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            do_repairs: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            spawn_queue: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            advise_captured: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            advise_capturable: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            jtac_target_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            process_messages: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            snapshot: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            logistics: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-        }
-    }
-}
-
-fn record_perf(h: &mut Histogram<u64>, start_ts: DateTime<Utc>) {
-    if let Some(ns) = (Utc::now() - start_ts).num_nanoseconds() {
-        if ns >= 1 && ns <= 1_000_000_000 {
-            *h += ns as u64;
-        }
-    }
-}
-
-impl Perf {
-    unsafe fn get_mut() -> &'static mut Arc<Perf> {
-        match PERF.as_mut() {
-            Some(perf) => perf,
-            None => {
-                PERF = Some(Arc::new(Perf::default()));
-                PERF.as_mut().unwrap()
-            }
-        }
-    }
-
-    fn log(&self) {
-        fn log_histogram(h: &Histogram<u64>, name: &str) {
-            let n = h.len();
-            let twenty_five = h.value_at_quantile(0.25);
-            let fifty = h.value_at_quantile(0.5);
-            let ninety = h.value_at_quantile(0.9);
-            let ninety_nine = h.value_at_quantile(0.99);
-            info!(
-                "{name} n: {:>7}, 25th: {:>7}, 50th: {:>7}, 90th: {:>7}, 99th: {:>8}",
-                n, twenty_five, fifty, ninety, ninety_nine
-            );
-        }
-        log_histogram(&self.timed_events, "timed events:      ");
-        log_histogram(&self.slow_timed, "slow timed events: ");
-        log_histogram(&self.dcs_events, "dcs events:        ");
-        log_histogram(&self.dcs_hooks, "dcs hooks:         ");
-        log_histogram(&self.unit_positions, "unit positions:    ");
-        log_histogram(&self.player_positions, "player positions:  ");
-        log_histogram(&self.ewr_tracks, "ewr tracks:        ");
-        log_histogram(&self.ewr_reports, "ewr reports:       ");
-        log_histogram(&self.unit_culling, "unit culling:      ");
-        log_histogram(&self.remark_objectives, "remark objectives: ");
-        log_histogram(&self.update_jtac_contacts, "update jtacs:      ");
-        log_histogram(&self.do_repairs, "do repairs:        ");
-        log_histogram(&self.spawn_queue, "spawn queue:       ");
-        log_histogram(&self.advise_captured, "advise captured:   ");
-        log_histogram(&self.advise_capturable, "advise capturable: ");
-        log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
-        log_histogram(&self.process_messages, "process messages:  ");
-        log_histogram(&self.snapshot,  "snapshot:          ");
-        log_histogram(&self.logistics, "logistics:         ")
-    }
 }
 
 #[derive(Debug, Default)]
@@ -176,6 +81,7 @@ struct Context {
     loaded: bool,
     idx: env::miz::MizIndex,
     db: Db,
+    admin_commands: Vec<AdminCommand>,
     to_background: Option<UnboundedSender<bg::Task>>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
@@ -355,6 +261,8 @@ fn lives_command(id: PlayerId) -> Result<()> {
     Ok(())
 }
 
+fn do_debug_command(cmd: String) {}
+
 fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
     let start_ts = Utc::now();
     info!(
@@ -373,6 +281,9 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
             &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
             start_ts,
         );
+        Ok("".into())
+    } else if msg.starts_with("-debug ") {
+        do_debug_command(msg);
         Ok("".into())
     } else {
         record_perf(
@@ -787,7 +698,7 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.unit_culling, ts);
         let ts = Utc::now();
-        /* 
+        /*
         if let Err(e) = ctx.db.remark_objectives() {
             error!("could not remark objectives {e}")
         }
@@ -896,7 +807,9 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     let miz = Miz::singleton(lua)?;
     ctx.idx = miz.index().context("indexing the mission")?;
     info!("adding event handlers");
-    World::singleton(lua)?.add_event_handler(on_event).context("adding event handlers")?;
+    World::singleton(lua)?
+        .add_event_handler(on_event)
+        .context("adding event handlers")?;
     let sortie = miz.sortie().context("getting the sortie")?;
     debug!("sortie is {:?}", sortie);
     let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
@@ -914,7 +827,8 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         ctx.db = Db::load(&miz, &ctx.idx, &path).context("loading the saved state")?;
     }
     info!("spawning units");
-    ctx.respawn_groups(lua).context("setting up the mission after load")?;
+    ctx.respawn_groups(lua)
+        .context("setting up the mission after load")?;
     info!("initializing menus");
     menu::init(&ctx, lua).context("initalizing the menus")?;
     info!("starting timed events");

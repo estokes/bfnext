@@ -14,9 +14,11 @@ FITNESS FOR A PARTICULAR PURPOSE.
 use super::{as_tbl, event::Event, unit::Unit, wrap_f, String};
 use crate::{
     airbase::Airbase,
-    atomic_id,
+    atomic_id, cvt_err,
+    env::miz::GroupId,
     object::{Object, ObjectCategory},
-    wrapped_table, LuaEnv, LuaVec3, MizLua, Position3, Sequence,
+    trigger::{MarkId, SideFilter},
+    wrapped_table, LuaEnv, LuaVec3, MizLua, Position3, Sequence, Time,
 };
 use anyhow::Result;
 use compact_str::format_compact;
@@ -82,6 +84,41 @@ impl<'lua> IntoLua<'lua> for SearchVolume {
         }
         tbl.raw_set("params", params)?;
         Ok(Value::Table(tbl))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MarkPanel<'lua> {
+    pub id: MarkId,
+    pub time: Time,
+    pub initiator: Option<Unit<'lua>>,
+    pub side: SideFilter,
+    pub group_id: Option<GroupId>,
+    pub text: String,
+    pub pos: LuaVec3,
+}
+
+impl<'lua> FromLua<'lua> for MarkPanel<'lua> {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl = LuaTable::from_lua(value, lua)?;
+        Ok(Self {
+            id: tbl.raw_get("idx")?,
+            time: tbl.raw_get("time")?,
+            initiator: tbl.raw_get("initiator")?,
+            side: match tbl.raw_get::<_, i64>("coalition")? {
+                -1 | 255 => SideFilter::All,
+                0 => SideFilter::Neutral,
+                1 => SideFilter::Red,
+                2 => SideFilter::Blue,
+                _ => return Err(cvt_err("side filter")),
+            },
+            group_id: match tbl.raw_get::<_, i64>("groupID")? {
+                -1 => None,
+                n => Some(GroupId::from(n)),
+            },
+            text: tbl.raw_get("text")?,
+            pos: tbl.raw_get("pos")?,
+        })
     }
 }
 
@@ -166,5 +203,9 @@ impl<'lua> World<'lua> {
 
     pub fn remove_junk(&self, volume: SearchVolume) -> Result<i64> {
         Ok(self.t.call_function("removeJunk", volume)?)
+    }
+
+    pub fn get_mark_panels(&self) -> Result<Sequence<MarkPanel<'lua>>> {
+        Ok(self.t.call_function("getMarkPanels", ())?)
     }
 }

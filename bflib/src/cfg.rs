@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use dcso3::{coalition::Side, err, String};
+use dcso3::{coalition::Side, err, String, net::Ucid};
 use enumflags2::{bitflags, BitFlags};
 use fxhash::FxHashMap;
 use log::error;
@@ -298,6 +298,9 @@ pub struct WarehouseConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {
+    /// ucids in this list are able to run admin commands
+    #[serde(default)]
+    pub admins: Vec<Ucid>,
     /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
     /// The base repair crate
@@ -1440,6 +1443,7 @@ fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
 impl Default for Cfg {
     fn default() -> Self {
         Self {
+            admins: vec![],
             repair_time: 1800,
             repair_crate: default_repair_crate(),
             warehouse: Some(WarehouseConfig {

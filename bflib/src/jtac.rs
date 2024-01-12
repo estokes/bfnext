@@ -132,7 +132,7 @@ impl Jtac {
         let dist = dist / 1000.;
         let mut msg = CompactString::new("");
         write!(msg, "JTAC {} status\n", self.gid)?;
-        match self.target {
+        match &self.target {
             None => write!(msg, "no target\n")?,
             Some(target) => {
                 let unit_typ = db.unit(&target.uid)?.typ.clone();
@@ -514,6 +514,7 @@ impl Jtacs {
         let land = Land::singleton(lua)?;
         let mut saw_jtacs: SmallVec<[GroupId; 32]> = smallvec![];
         let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
+        let mut lost_targets: SmallVec<[(Side, GroupId, Option<UnitId>); 64]> = smallvec![];
         for (mut pos, jtid, group, ifo) in db.jtacs() {
             if !saw_jtacs.contains(&group.id) {
                 saw_jtacs.push(group.id)
@@ -559,12 +560,7 @@ impl Jtacs {
                     match jtac.remove_contact(lua, &unit.id) {
                         Err(e) => warn!("could not remove jtac contact {} {:?}", unit.name, e),
                         Ok(false) => (),
-                        Ok(true) => db.ephemeral.msgs().panel_to_side(
-                            10,
-                            false,
-                            jtac.side,
-                            format_compact!("JTAC {} target lost", jtac.gid),
-                        ),
+                        Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
                     }
                 }
             }
@@ -580,26 +576,31 @@ impl Jtacs {
                 }
             })
         }
-        let mut lost_targets: SmallVec<[(Side, GroupId, UnitId); 16]> = smallvec![];
         for (side, jtx) in self.0.iter_mut() {
             for jtac in jtx.values_mut() {
-                if let Some(target) = &jtac.target {
-                    if !saw_units.contains(&target.uid) {
-                        lost_targets.push((*side, jtac.gid, target.uid));
+                for uid in jtac.contacts.keys() {
+                    if !saw_units.contains(&uid) {
+                        lost_targets.push((*side, jtac.gid, Some(*uid)));
                     }
                 }
             }
         }
         for (side, gid, uid) in lost_targets {
-            if let Err(e) = self.get_mut(&gid)?.remove_contact(lua, &uid) {
-                warn!("3 could not remove jtac target {uid} {:?}", e)
+            match uid {
+                Some(uid) => {
+                    if let Err(e) = self.get_mut(&gid)?.remove_contact(lua, &uid) {
+                        warn!("3 could not remove jtac target {uid} {:?}", e)
+                    }
+                }
+                None => {
+                    db.ephemeral.msgs().panel_to_side(
+                        10,
+                        false,
+                        side,
+                        format_compact!("JTAC {gid} target lost"),
+                    );
+                }
             }
-            db.ephemeral.msgs().panel_to_side(
-                10,
-                false,
-                side,
-                format_compact!("JTAC {gid} target lost"),
-            );
         }
         let mut new_contacts: SmallVec<[&Jtac; 32]> = smallvec![];
         for j in self.0.values_mut() {

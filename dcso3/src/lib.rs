@@ -266,7 +266,7 @@ impl Color {
             a,
         }
     }
-
+    
     pub fn yellow(a: f32) -> Color {
         Color {
             r: 0.75,

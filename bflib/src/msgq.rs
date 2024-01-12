@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -19,7 +19,7 @@ use dcso3::{
     env::miz::{GroupId, UnitId},
     net::{Net, PlayerId},
     trigger::{Action, ArrowSpec, CircleSpec, MarkId, RectSpec, SideFilter, TextSpec},
-    LuaVec3, String, Vector2, Vector3,
+    Color, LuaVec3, String, Vector2, Vector3,
 };
 use log::{debug, error};
 use std::collections::VecDeque;
@@ -83,6 +83,14 @@ pub enum Msg {
         to: SideFilter,
         spec: ArrowSpec,
         message: Option<String>,
+    },
+    SetMarkupColor {
+        id: MarkId,
+        color: Color,
+    },
+    SetMarkupFillColor {
+        id: MarkId,
+        color: Color,
     },
 }
 
@@ -278,6 +286,16 @@ impl MsgQ {
         }))
     }
 
+    pub fn set_markup_color(&mut self, id: MarkId, color: Color) {
+        self.0
+            .push_back(Cmd::Send(Msg::SetMarkupColor { id, color }))
+    }
+
+    pub fn set_markup_fill_color(&mut self, id: MarkId, color: Color) {
+        self.0
+            .push_back(Cmd::Send(Msg::SetMarkupFillColor { id, color }))
+    }
+
     pub fn process(&mut self, net: &Net, act: &Action) {
         for _ in 0..5 {
             let cmd = match self.0.pop_front() {
@@ -342,6 +360,10 @@ impl MsgQ {
                     spec,
                     message,
                 }) => act.arrow_to_all(to, id, spec, message),
+                Cmd::Send(Msg::SetMarkupColor { id, color }) => act.set_markup_color(id, color),
+                Cmd::Send(Msg::SetMarkupFillColor { id, color }) => {
+                    act.set_markup_fill_color(id, color)
+                }
             };
             if let Err(e) = res {
                 error!("could not send message {:?}", e)

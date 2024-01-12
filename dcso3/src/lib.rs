@@ -266,6 +266,15 @@ impl Color {
             a,
         }
     }
+
+    pub fn yellow(a: f32) -> Color {
+        Color {
+            r: 0.75,
+            g: 1.,
+            b: 0.,
+            a,
+        }
+    }
 }
 
 impl<'lua> FromLua<'lua> for Color {

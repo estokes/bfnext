@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -37,20 +37,25 @@ use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
     cmp::{max, min},
-    ops::{Add, AddAssign, Sub, SubAssign},
+    ops::{AddAssign, SubAssign},
 };
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct Inventory<N> {
-    stored: N,
-    capacity: N,
+pub struct Inventory {
+    stored: u32,
+    capacity: u32,
 }
 
-impl<N> AddAssign<N> for Inventory<N>
-where
-    N: Add<Output = N> + PartialOrd + Copy,
-{
-    fn add_assign(&mut self, rhs: N) {
+impl Inventory {
+    pub fn percent(&self) -> u8 {
+        let stored: f32 = self.stored as f32;
+        let capacity: f32 = self.capacity as f32;
+        ((stored / capacity) * 100.) as u8
+    }
+}
+
+impl AddAssign<u32> for Inventory {
+    fn add_assign(&mut self, rhs: u32) {
         let qty = self.stored + rhs;
         if qty > self.capacity {
             self.stored = self.capacity
@@ -60,13 +65,10 @@ where
     }
 }
 
-impl<N> SubAssign<N> for Inventory<N>
-where
-    N: Sub<Output = N> + PartialOrd + Copy + Default,
-{
-    fn sub_assign(&mut self, rhs: N) {
+impl SubAssign<u32> for Inventory {
+    fn sub_assign(&mut self, rhs: u32) {
         if rhs > self.stored {
-            self.stored = N::default()
+            self.stored = 0
         } else {
             self.stored = self.stored - rhs;
         }
@@ -112,9 +114,9 @@ struct Needed<'a> {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Warehouse {
-    pub(super) base_equipment: Map<String, Inventory<u32>>,
-    pub(super) equipment: Map<String, Inventory<u32>>,
-    pub(super) liquids: Map<LiquidType, Inventory<u32>>,
+    pub(super) base_equipment: Map<String, Inventory>,
+    pub(super) equipment: Map<String, Inventory>,
+    pub(super) liquids: Map<LiquidType, Inventory>,
     pub(super) supplier: Option<ObjectiveId>,
     pub(super) destination: Set<ObjectiveId>,
 }
@@ -146,7 +148,11 @@ fn sync_from_obj(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()
             .set_liquid_amount(*name, inv.stored)
             .context("setting liquid")?
     }
-    debug!("{} warehouse: {:?}", obj.name, warehouse.get_inventory(None)?);
+    debug!(
+        "{} warehouse: {:?}",
+        obj.name,
+        warehouse.get_inventory(None)?
+    );
     Ok(())
 }
 
@@ -575,6 +581,35 @@ impl Db {
             }
             self.ephemeral.dirty();
         }
+        self.update_supply_status()?;
+        Ok(())
+    }
+
+    fn update_supply_status(&mut self) -> Result<()> {
+        let oids: SmallVec<[ObjectiveId; 64]> = self
+            .persisted
+            .objectives
+            .into_iter()
+            .map(|(id, _)| *id)
+            .collect();
+        for oid in oids {
+            let obj = objective_mut!(self, oid)?;
+            let mut n = 0;
+            let mut sum: u32 = 0;
+            for (_, inv) in &obj.warehouse.equipment {
+                sum += inv.percent() as u32;
+                n += 1;
+            }
+            obj.supply = (sum / n) as u8;
+            n = 0;
+            sum = 0;
+            for (_, inv) in &obj.warehouse.liquids {
+                sum += inv.percent() as u32;
+                n += 1;
+            }
+            obj.fuel = (sum / n) as u8;
+        }
+        self.ephemeral.dirty();
         Ok(())
     }
 }

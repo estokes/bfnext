@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -65,7 +65,14 @@ pub(super) struct DeployableIndex {
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct ObjectiveMarkup {
+    side: Side,
+    threatened: bool,
+    health: u8,
+    logi: u8,
+    supply: u8,
+    fuel: u8,
     owner_ring: MarkId,
+    threatened_ring: MarkId,
     name: MarkId,
     health_label: MarkId,
     healthbar: [MarkId; 5],
@@ -74,12 +81,29 @@ pub(super) struct ObjectiveMarkup {
     supply_label: MarkId,
     supplybar: [MarkId; 5],
     supply_connections: SmallVec<[MarkId; 8]>,
+    fuel_label: MarkId,
+    fuelbar: [MarkId; 5],
+}
+
+fn text_color(side: Side, a: f32) -> Color {
+    match side {
+        Side::Red => Color::red(a),
+        Side::Blue => Color::blue(a),
+        Side::Neutral => Color::white(a),
+    }
 }
 
 impl ObjectiveMarkup {
     fn remove(self, msgq: &mut MsgQ) {
         let ObjectiveMarkup {
+            side: _,
+            threatened: _,
+            health: _,
+            logi: _,
+            supply: _,
+            fuel: _,
             owner_ring,
+            threatened_ring,
             name,
             health_label,
             healthbar,
@@ -88,8 +112,11 @@ impl ObjectiveMarkup {
             supply_label,
             supplybar,
             supply_connections,
+            fuel_label,
+            fuelbar,
         } = self;
         msgq.delete_mark(owner_ring);
+        msgq.delete_mark(threatened_ring);
         msgq.delete_mark(name);
         msgq.delete_mark(health_label);
         for id in healthbar {
@@ -103,17 +130,72 @@ impl ObjectiveMarkup {
         for id in supplybar {
             msgq.delete_mark(id)
         }
+        msgq.delete_mark(fuel_label);
+        for id in fuelbar {
+            msgq.delete_mark(id)
+        }
         for id in supply_connections {
             msgq.delete_mark(id)
         }
     }
 
-    fn new(msgq: &mut MsgQ, obj: &Objective, persisted: &Persisted) -> Self {
-        let text_color = |a| match obj.owner {
-            Side::Red => Color::red(a),
-            Side::Blue => Color::blue(a),
-            Side::Neutral => Color::white(a),
-        };
+    fn update(&mut self, msgq: &mut MsgQ, obj: &Objective) {
+        if obj.owner != self.side {
+            let text_color = |a| text_color(obj.owner, a);
+            self.side = obj.owner;
+            msgq.set_markup_color(self.name, text_color(0.75));
+            msgq.set_markup_color(self.owner_ring, text_color(1.));
+            msgq.set_markup_color(self.health_label, text_color(0.75));
+            msgq.set_markup_color(self.logi_label, text_color(0.75));
+            msgq.set_markup_color(self.supply_label, text_color(0.75));
+            msgq.set_markup_color(self.fuel_label, text_color(0.75));
+            for id in self.supply_connections.drain(..) {
+                msgq.delete_mark(id);
+            }
+        }
+        if obj.threatened != self.threatened {
+            self.threatened = obj.threatened;
+            msgq.set_markup_color(
+                self.threatened_ring,
+                Color::yellow(if self.threatened { 0.75 } else { 0. }),
+            );
+        }
+        if self.health != obj.health {
+            self.health = obj.health;
+            for (i, id) in self.healthbar.iter().enumerate() {
+                let i = (i + 1) as u8;
+                let a = if obj.health / i * 20 > 0 { 0.5 } else { 0. };
+                msgq.set_markup_fill_color(*id, Color::green(a));
+            }
+        }
+        if self.logi != obj.logi {
+            self.logi = obj.logi;
+            for (i, id) in self.logibar.iter().enumerate() {
+                let i = (i + 1) as u8;
+                let a = if obj.logi / i * 20 > 0 { 0.5 } else { 0. };
+                msgq.set_markup_fill_color(*id, Color::green(a));
+            }
+        }
+        if self.supply != obj.supply {
+            self.supply = obj.supply;
+            for (i, id) in self.supplybar.iter().enumerate() {
+                let i = (i + 1) as u8;
+                let a = if obj.supply / i * 20 > 0 { 0.5 } else { 0. };
+                msgq.set_markup_fill_color(*id, Color::green(a));
+            }
+        }
+        if self.fuel != obj.fuel {
+            self.fuel = obj.fuel;
+            for (i, id) in self.fuelbar.iter().enumerate() {
+                let i = (i + 1) as u8;
+                let a = if obj.fuel / i * 20 > 0 { 0.5 } else { 0. };
+                msgq.set_markup_fill_color(*id, Color::green(a));
+            }
+        }
+    }
+
+    fn new(cfg: &Cfg, msgq: &mut MsgQ, obj: &Objective, persisted: &Persisted) -> Self {
+        let text_color = |a| text_color(obj.owner, a);
         let all_spec = match obj.kind {
             ObjectiveKind::Airbase | ObjectiveKind::Fob | ObjectiveKind::Logistics => {
                 SideFilter::All
@@ -121,7 +203,7 @@ impl ObjectiveMarkup {
             ObjectiveKind::Farp(_) => obj.owner.into(),
         };
         let bar_with_label =
-            |msgq: &mut MsgQ, pos3: Vector3, label: MarkId, text: &str, marks: &[MarkId; 5]| {
+            |msgq: &mut MsgQ, pos3: Vector3, label: MarkId, text: &str, marks: &[MarkId; 5], val: u8| {
                 msgq.text_to_all(
                     obj.owner.into(),
                     label,
@@ -135,7 +217,9 @@ impl ObjectiveMarkup {
                     },
                 );
                 for (i, id) in marks.iter().enumerate() {
+                    let j = (i + 1) as u8;
                     let i = i as f64;
+                    let a = if val / j * 20 > 1 { 0.5 } else { 0. };
                     msgq.rect_to_all(
                         obj.owner.into(),
                         *id,
@@ -143,7 +227,7 @@ impl ObjectiveMarkup {
                             start: LuaVec3(Vector3::new(pos3.x, 0., pos3.z + i * 500.)),
                             end: LuaVec3(Vector3::new(pos3.x - 400., 0., pos3.z + i * 500. + 400.)),
                             color: Color::black(1.),
-                            fill_color: Color::green(0.5),
+                            fill_color: Color::green(a),
                             line_type: LineType::Solid,
                             read_only: true,
                         },
@@ -152,6 +236,11 @@ impl ObjectiveMarkup {
                 }
             };
         let mut t = ObjectiveMarkup::default();
+        t.side = obj.owner;
+        t.threatened = obj.threatened;
+        t.health = obj.health;
+        t.logi = obj.logi;
+        t.supply = obj.supply;
         let mut pos3 = Vector3::new(obj.pos.x, 0., obj.pos.y);
         msgq.circle_to_all(
             all_spec,
@@ -162,6 +251,19 @@ impl ObjectiveMarkup {
                 color: text_color(1.),
                 fill_color: Color::white(0.),
                 line_type: LineType::Dashed,
+                read_only: true,
+            },
+            None,
+        );
+        msgq.circle_to_all(
+            obj.owner.into(),
+            t.threatened_ring,
+            CircleSpec {
+                center: LuaVec3(pos3),
+                radius: cfg.logistics_exclusion as f64,
+                color: Color::yellow(if obj.threatened { 0.75 } else { 0. }),
+                fill_color: Color::white(0.),
+                line_type: LineType::Solid,
                 read_only: true,
             },
             None,
@@ -180,11 +282,13 @@ impl ObjectiveMarkup {
         );
         pos3.x += 5000.;
         pos3.z -= 5000.;
-        bar_with_label(msgq, pos3, t.health_label, "Health", &t.healthbar);
+        bar_with_label(msgq, pos3, t.health_label, "Health", &t.healthbar, obj.health);
         pos3.x -= 1500.;
-        bar_with_label(msgq, pos3, t.logi_label, "Logi", &t.logibar);
+        bar_with_label(msgq, pos3, t.logi_label, "Logi", &t.logibar, obj.logi);
         pos3.x -= 1500.;
-        bar_with_label(msgq, pos3, t.supply_label, "Supply", &t.supplybar);
+        bar_with_label(msgq, pos3, t.supply_label, "Supply", &t.supplybar, obj.supply);
+        pos3.x -= 1500.;
+        bar_with_label(msgq, pos3, t.fuel_label, "Fuel", &t.fuelbar, obj.fuel);
         match obj.kind {
             ObjectiveKind::Airbase | ObjectiveKind::Farp(_) | ObjectiveKind::Fob => (),
             ObjectiveKind::Logistics => {
@@ -192,9 +296,9 @@ impl ObjectiveMarkup {
                 for oid in &obj.warehouse.destination {
                     let id = MarkId::new();
                     let dobj = &persisted.objectives[oid];
-                    let dir = (pos - dobj.pos).normalize();
+                    let dir = (dobj.pos - pos).normalize();
                     let spos = pos + dir * obj.radius * 1.1;
-                    let rdir = (dobj.pos - pos).normalize();
+                    let rdir = (pos - dobj.pos).normalize();
                     let dpos = dobj.pos + rdir * dobj.radius * 1.1;
                     msgq.arrow_to_all(
                         obj.owner.into(),
@@ -246,8 +350,16 @@ impl Ephemeral {
         if let Some(mk) = self.objective_markup.remove(&obj.id) {
             mk.remove(&mut self.msgs)
         }
-        self.objective_markup
-            .insert(obj.id, ObjectiveMarkup::new(&mut self.msgs, obj, persisted));
+        self.objective_markup.insert(
+            obj.id,
+            ObjectiveMarkup::new(&self.cfg, &mut self.msgs, obj, persisted),
+        );
+    }
+
+    pub fn update_objective_markup(&mut self, obj: &Objective) {
+        if let Some(mk) = self.objective_markup.get_mut(&obj.id) {
+            mk.update(&mut self.msgs, obj)
+        }
     }
 
     pub fn remove_objective_markup(&mut self, oid: &ObjectiveId) {
@@ -263,8 +375,9 @@ impl Ephemeral {
             queued_spawn |= qs;
             !qs
         });
-        if !queued_spawn {
-            self.despawnq.push_back((gid, ds))
+        let e = (gid, ds);
+        if !queued_spawn && !self.despawnq.contains(&e) {
+            self.despawnq.push_back(e)
         }
     }
 
@@ -275,7 +388,7 @@ impl Ephemeral {
             queued_despawn |= qs;
             !qs
         });
-        if !queued_despawn {
+        if !queued_despawn && !self.spawnq.contains(&gid) {
             self.spawnq.push_back(gid)
         }
     }

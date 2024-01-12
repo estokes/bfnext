@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -14,7 +14,11 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{group::DeployKind, objective::ObjGroup, Db, Map};
+use super::{
+    group::{DeployKind, UnitId},
+    objective::ObjGroup,
+    Db, Map,
+};
 use crate::{
     cfg::{Cfg, Vehicle},
     db::{
@@ -23,8 +27,9 @@ use crate::{
     },
     group, objective_mut,
     spawnctx::{SpawnCtx, SpawnLoc},
+    unit,
 };
-use anyhow::{anyhow, bail, Result, Context};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use dcso3::{
     coalition::Side,
@@ -32,6 +37,7 @@ use dcso3::{
     MizLua, String, Vector2,
 };
 use log::info;
+use smallvec::SmallVec;
 
 impl Db {
     /// objectives are just trigger zones named according to type codes
@@ -96,6 +102,8 @@ impl Db {
             groups: Map::new(),
             health: 0,
             logi: 0,
+            supply: 0,
+            fuel: 0,
             last_change_ts: Utc::now(),
             last_threatened_ts: Utc::now(),
             warehouse: Warehouse::default(),
@@ -285,7 +293,9 @@ impl Db {
             }
             Ok(())
         };
-        spawn_deployed_and_logistics()?;
+        spawn_deployed_and_logistics().context("spawning deployed and logistics")?;
+        self.setup_warehouses_after_load(spctx.lua())
+            .context("setting up warehouses")?;
         let mut mark_deployed_and_logistics = || -> Result<()> {
             let groups = self
                 .persisted
@@ -301,7 +311,7 @@ impl Db {
             }
             Ok(())
         };
-        mark_deployed_and_logistics()?;
+        mark_deployed_and_logistics().context("marking deployed and logistics")?;
         let mut queue_check_walkabout_and_close_enemies = || -> Result<()> {
             for (uid, unit) in &self.persisted.units {
                 let group = group!(self, unit.group)?;
@@ -326,7 +336,22 @@ impl Db {
             }
             Ok(())
         };
-        queue_check_walkabout_and_close_enemies()?;
-        self.setup_warehouses_after_load(spctx.lua()).context("setting up warehouses")
+        queue_check_walkabout_and_close_enemies().context("queuing unit pos checks")?;
+        self.cull_or_respawn_objectives(spctx.lua(), Utc::now())
+            .context("initial cull or respawn")?;
+        let mut spawn_units_on_walkabout = || -> Result<()> {
+            let on_walkabout: SmallVec<[UnitId; 64]> = self
+                .ephemeral
+                .units_potentially_on_walkabout
+                .iter()
+                .map(|u| *u)
+                .collect();
+            for uid in on_walkabout {
+                let gid = unit!(self, uid)?.group;
+                self.ephemeral.push_spawn(gid);
+            }
+            Ok(())
+        };
+        spawn_units_on_walkabout().context("spawning units on walkabout")
     }
 }

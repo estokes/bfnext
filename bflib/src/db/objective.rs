@@ -174,6 +174,10 @@ pub struct Objective {
     pub(super) groups: Map<Side, Set<GroupId>>,
     pub(super) health: u8,
     pub(super) logi: u8,
+    #[serde(default)]
+    pub(super) supply: u8,
+    #[serde(default)]
+    pub(super) fuel: u8,
     pub(super) threatened: bool,
     pub(super) last_threatened_ts: DateTime<Utc>,
     pub(super) last_change_ts: DateTime<Utc>,
@@ -210,7 +214,7 @@ impl Objective {
         self.owner
     }
 
-    pub fn get_equipment(&self, name: &str) -> Inventory<u32> {
+    pub fn get_equipment(&self, name: &str) -> Inventory {
         self.warehouse
             .equipment
             .get(name)
@@ -218,7 +222,7 @@ impl Objective {
             .unwrap_or_default()
     }
 
-    pub fn get_liquids(&self, name: &LiquidType) -> Inventory<u32> {
+    pub fn get_liquids(&self, name: &LiquidType) -> Inventory {
         self.warehouse
             .liquids
             .get(name)
@@ -384,6 +388,8 @@ impl Db {
             slots: Map::new(),
             health: 100,
             logi: 100,
+            supply: 0,
+            fuel: 0,
             spawned: true,
             threatened: true,
             warehouse: Warehouse::default(),

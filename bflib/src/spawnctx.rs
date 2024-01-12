@@ -69,7 +69,7 @@ pub struct SpawnCtx<'lua> {
     lua: MizLua<'lua>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Despawn {
     Group(String),
     Static(String),

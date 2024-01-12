@@ -394,28 +394,6 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
     }
 }
 
-/*
-fn on_player_change_slot(lua: HooksLua, id: PlayerId) -> Result<()> {
-    let start_ts = Utc::now();
-    let ctx = unsafe { Context::get_mut() };
-    let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
-    let net = Net::singleton(lua)?;
-    match try_occupy_slot(lua, &net, id, &ifo) {
-        Err(e) => {
-            error!("error checking slot {:?}", e);
-            ctx.db.player_deslot(&ifo.ucid)
-        }
-        Ok(false) => ctx.db.player_deslot(&ifo.ucid),
-        Ok(true) => (),
-    }
-    record_perf(
-        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
-        start_ts,
-    );
-    Ok(())
-}
-*/
-
 fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> Result<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
@@ -965,7 +943,6 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
 
 fn init_hooks(lua: HooksLua) -> Result<()> {
     info!("setting user hooks");
-    //.on_player_change_slot(on_player_change_slot)?
     UserHooks::new(lua)
         .on_player_try_change_slot(on_player_try_change_slot)?
         .on_mission_load_end(on_mission_load_end)?

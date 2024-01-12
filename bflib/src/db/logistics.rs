@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     db::{ephemeral::ObjLogi, objective::ObjectiveKind},
-    objective, objective_mut,
+    maybe, objective, objective_mut,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use compact_str::format_compact;
@@ -16,7 +16,6 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
-use log::debug;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -160,10 +159,6 @@ impl Db {
             Some(cfg) => cfg,
             None => return Ok(()),
         };
-        for ab in World::singleton(lua)?.get_airbases()? {
-            let ab = ab?;
-            debug!("{}", ab.as_object()?.get_name()?)
-        }
         for side in [Side::Red, Side::Blue, Side::Neutral] {
             let oids: SmallVec<[ObjectiveId; 64]> = self
                 .persisted
@@ -251,6 +246,15 @@ impl Db {
                         airbase: airbase.object_id().context("getting airbase object_id")?,
                     },
                 );
+            }
+            let mut missing = vec![];
+            for (oid, obj) in &self.persisted.objectives {
+                if !self.ephemeral.logistics_by_oid.contains_key(oid) {
+                    missing.push(obj.name.clone());
+                }
+            }
+            if !missing.is_empty() {
+                bail!("objectives missing a warehouse {:?}", missing)
             }
             Ok(())
         };
@@ -364,7 +368,7 @@ impl Db {
             .collect();
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
-            let airbase = &self.ephemeral.logistics_by_oid[oid].airbase;
+            let airbase = &maybe!(self.ephemeral.logistics_by_oid, oid, "airbase")?.airbase;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
@@ -384,7 +388,7 @@ impl Db {
             .collect();
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
-            let airbase = &self.ephemeral.logistics_by_oid[oid].airbase;
+            let airbase = &maybe!(self.ephemeral.logistics_by_oid, oid, "airbase")?.airbase;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()

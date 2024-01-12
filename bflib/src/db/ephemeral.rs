@@ -304,8 +304,8 @@ impl ObjectiveMarkup {
                         obj.owner.into(),
                         id,
                         ArrowSpec {
-                            start: LuaVec3(Vector3::new(spos.x, 0., spos.y)),
-                            end: LuaVec3(Vector3::new(dpos.x, 0., dpos.y)),
+                            start: LuaVec3(Vector3::new(dpos.x, 0., dpos.y)),
+                            end: LuaVec3(Vector3::new(spos.x, 0., spos.y)),
                             color: Color::gray(0.5),
                             fill_color: Color::gray(0.5),
                             line_type: LineType::NoLine,

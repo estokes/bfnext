@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -25,7 +25,7 @@ use crate::{
     ewr::{self, EwrUnits},
     Context,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -79,17 +79,18 @@ where
 fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, SlotId)> {
     let miz = Miz::singleton(lua)?;
     let group = miz
-        .get_group(&ctx.idx, gid)?
+        .get_group(&ctx.idx, gid)
+        .with_context(|| format_compact!("getting group {:?} from miz", gid))?
         .ok_or_else(|| anyhow!("no such group {:?}", gid))?;
-    let units = group.group.units()?;
+    let units = group.group.units().context("getting units")?;
     if units.len() > 1 {
         bail!(
             "groups with more than one member can't spawn crates {:?}",
             gid
         )
     }
-    let unit = units.first()?;
-    Ok((group.side, unit.slot()?))
+    let unit = units.first().context("getting first unit")?;
+    Ok((group.side, unit.slot().context("getting unit slot")?))
 }
 
 fn player_name(db: &Db, slot: &SlotId) -> String {
@@ -101,7 +102,7 @@ fn player_name(db: &Db, slot: &SlotId) -> String {
 
 fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     match ctx.db.unpakistan(lua, &ctx.idx, &slot) {
         Ok(unpakistan) => {
             let player = player_name(&ctx.db, &slot);
@@ -118,14 +119,17 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     match ctx.db.load_nearby_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
             let (dep_name, dep) = ctx
                 .db
                 .deployable_by_crate(&side, &cr.name)
                 .ok_or_else(|| anyhow!("unknown deployable for crate {}", cr.name))?;
-            let (n, oldest) = ctx.db.number_deployed(side, dep_name.as_str())?;
+            let (n, oldest) = ctx
+                .db
+                .number_deployed(side, dep_name.as_str())
+                .with_context(|| format_compact!("getting number of {} deployed", dep_name))?;
             let enforce = match dep.limit_enforce {
                 LimitEnforceTyp::DenyCrate => {
                     format_compact!("unpacking will be denied when the limit is exceeded")
@@ -167,7 +171,7 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     match ctx.db.unload_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
             let msg = format_compact!("{} crate unloaded", cr.name);
@@ -184,8 +188,11 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 pub(super) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId) -> Result<()> {
     let cargo = Cargo::default();
     let cargo = ctx.db.list_cargo(&slot).unwrap_or(&cargo);
-    let uinfo = db::cargo::slot_miz_unit(lua, &ctx.idx, &slot)?;
-    let capacity = ctx.db.cargo_capacity(&uinfo.unit)?;
+    let uinfo = db::cargo::slot_miz_unit(lua, &ctx.idx, &slot).context("getting slot miz unit")?;
+    let capacity = ctx
+        .db
+        .cargo_capacity(&uinfo.unit)
+        .context("getting unit cargo capacity")?;
     let mut msg = CompactString::new("Current Cargo\n----------------------------\n");
     msg.push_str(&format_compact!(
         "troops: {} of {}\n",
@@ -233,15 +240,18 @@ pub(super) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId)
 
 pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     list_cargo_for_slot(lua, ctx, &slot)
 }
 
 fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
-    let st = SlotStats::get(&ctx.db, lua, &slot)?;
-    let nearby = ctx.db.list_nearby_crates(&st)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
+    let st = SlotStats::get(&ctx.db, lua, &slot).context("getting slot stats")?;
+    let nearby = ctx
+        .db
+        .list_nearby_crates(&st)
+        .context("listing nearby crates")?;
     if nearby.len() > 0 {
         let mut msg = CompactString::new("");
         for nc in nearby {
@@ -265,7 +275,7 @@ fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     if let Err(e) = ctx.db.destroy_nearby_crate(lua, &slot) {
         ctx.db
             .ephemeral
@@ -277,7 +287,7 @@ fn destroy_nearby_crate(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn spawn_crate(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_side, slot) = slot_for_group(lua, ctx, &arg.fst)?;
+    let (_side, slot) = slot_for_group(lua, ctx, &arg.fst).context("getting slot for group")?;
     match ctx.db.spawn_crate(lua, &ctx.idx, &slot, &arg.snd) {
         Err(e) => {
             ctx.db
@@ -287,7 +297,10 @@ fn spawn_crate(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
         }
         Ok(st) => {
             if let Some(max_crates) = ctx.db.ephemeral.cfg().max_crates {
-                let (n, oldest) = ctx.db.number_crates_deployed(&st)?;
+                let (n, oldest) = ctx
+                    .db
+                    .number_crates_deployed(&st)
+                    .context("getting number of deployed crates")?;
                 let msg = match oldest {
                     None => format_compact!("{n} of {max_crates} crates spawned"),
                     Some(gid) => format_compact!(
@@ -306,10 +319,13 @@ fn spawn_crate(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
 
 fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = slot_for_group(lua, ctx, &arg.fst)?;
+    let (side, slot) = slot_for_group(lua, ctx, &arg.fst).context("getting slot for group")?;
     match ctx.db.load_troops(lua, &ctx.idx, &slot, &arg.snd) {
         Ok(tr) => {
-            let (n, oldest) = ctx.db.number_troops_deployed(side, &tr.name)?;
+            let (n, oldest) = ctx
+                .db
+                .number_troops_deployed(side, &tr.name)
+                .context("getting number of deployed troops")?;
             let player = player_name(&ctx.db, &slot);
             let enforce = match tr.limit_enforce {
                 LimitEnforceTyp::DenyCrate => {
@@ -347,7 +363,7 @@ fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
 
 fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     match ctx.db.unload_troops(lua, &ctx.idx, &slot) {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
@@ -365,7 +381,7 @@ fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     match ctx.db.extract_troops(lua, &ctx.idx, &slot) {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
@@ -383,7 +399,7 @@ fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (side, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     match ctx.db.return_troops(lua, &ctx.idx, &slot) {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
@@ -401,7 +417,7 @@ fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn toggle_ewr(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (_, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         let st = if ctx.ewr.toggle(ucid) {
             "enabled"
@@ -420,7 +436,7 @@ fn toggle_ewr(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (_, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     let mut report = format_compact!("Bandits BRAA\n");
     if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
@@ -444,7 +460,7 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (_, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     let mut report = format_compact!("Friendlies BRAA\n");
     if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         if let Some(player) = ctx.db.player(ucid) {
@@ -468,7 +484,7 @@ fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn ewr_units_imperial(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (_, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         ctx.ewr.set_units(ucid, EwrUnits::Imperial);
         ctx.db
@@ -481,7 +497,7 @@ fn ewr_units_imperial(lua: MizLua, gid: GroupId) -> Result<()> {
 
 fn ewr_units_metric(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let (_, slot) = slot_for_group(lua, ctx, &gid)?;
+    let (_, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
         ctx.ewr.set_units(ucid, EwrUnits::Imperial);
         ctx.db
@@ -684,7 +700,10 @@ fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
 fn jtac_status(_: MizLua, gid: DbGid) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let side = ctx.db.group(&gid)?.side;
-    let msg = ctx.jtac.jtac_status(&ctx.db, &gid)?;
+    let msg = ctx
+        .jtac
+        .jtac_status(&ctx.db, &gid)
+        .context("getting jtac status")?;
     ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg);
     Ok(())
 }
@@ -692,7 +711,9 @@ fn jtac_status(_: MizLua, gid: DbGid) -> Result<()> {
 fn jtac_toggle_auto_laser(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
-        ctx.jtac.toggle_auto_laser(lua, &gid)?;
+        ctx.jtac
+            .toggle_auto_laser(lua, &gid)
+            .context("toggling jtac auto laser")?;
     }
     jtac_status(lua, gid)
 }
@@ -705,7 +726,9 @@ fn jtac_toggle_ir_pointer(lua: MizLua, gid: DbGid) -> Result<()> {
 fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
-        ctx.jtac.smoke_target(&gid)?;
+        ctx.jtac
+            .smoke_target(lua, &gid)
+            .context("smoking jtac target")?;
     }
     jtac_status(lua, gid)
 }
@@ -713,14 +736,16 @@ fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
 fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
-        ctx.jtac.shift(lua, &gid)?;
+        ctx.jtac.shift(lua, &gid).context("shifting jtac target")?;
     }
     jtac_status(lua, gid)
 }
 
 fn jtac_clear_filter(lua: MizLua, gid: DbGid) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    ctx.jtac.clear_filter(lua, &gid)?;
+    ctx.jtac
+        .clear_filter(lua, &gid)
+        .context("clearing jtac target filter")?;
     Ok(())
 }
 
@@ -729,7 +754,9 @@ fn jtac_filter(lua: MizLua, arg: ArgTuple<DbGid, u64>) -> Result<()> {
     let filter =
         BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
     for tag in filter.iter() {
-        ctx.jtac.add_filter(lua, &arg.fst, tag)?;
+        ctx.jtac
+            .add_filter(lua, &arg.fst, tag)
+            .context("setting jtac target filter")?;
     }
     Ok(())
 }
@@ -737,7 +764,9 @@ fn jtac_filter(lua: MizLua, arg: ArgTuple<DbGid, u64>) -> Result<()> {
 fn jtac_set_code(lua: MizLua, arg: ArgTuple<DbGid, u16>) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
-        ctx.jtac.set_code_part(lua, &arg.fst, arg.snd)?;
+        ctx.jtac
+            .set_code_part(lua, &arg.fst, arg.snd)
+            .context("setting jtac laser code")?;
     }
     jtac_status(lua, arg.fst)
 }

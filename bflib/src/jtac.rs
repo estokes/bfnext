@@ -22,10 +22,9 @@ use crate::{
         Db,
     },
     menu,
-    msgq::{self, MsgQ},
 };
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::prelude::*;
+use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
@@ -33,14 +32,15 @@ use dcso3::{
     object::{DcsObject, DcsOid},
     radians_to_degrees,
     spot::{ClassSpot, Spot},
-    trigger::{MarkId, Trigger},
+    trigger::{MarkId, SmokeColor, Trigger},
     unit::{ClassUnit, Unit},
-    LuaVec3, MizLua, String, Vector3,
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{error, warn};
+use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
 
 fn ui_jtac_dead(db: &mut Ephemeral, lua: MizLua, side: Side, gid: GroupId) {
@@ -105,6 +105,7 @@ struct Jtac {
     autolase: bool,
     ir_pointer: bool,
     code: u16,
+    last_smoke: DateTime<Utc>,
 }
 
 impl Jtac {
@@ -120,6 +121,7 @@ impl Jtac {
             autolase: true,
             ir_pointer: false,
             code: 1688,
+            last_smoke: DateTime::<Utc>::default(),
         }
     }
 
@@ -224,19 +226,40 @@ impl Jtac {
         let uid = *uid;
         let pos = ct.pos;
         match &self.target {
-            Some((_, _, tuid)) if tuid == &uid => Ok(false),
+            Some(target) if target.uid == uid => Ok(false),
             Some(_) | None => {
                 self.remove_target(lua)?;
-                let jt = Unit::get_instance(lua, &self.id)?;
+                let jt = Unit::get_instance(lua, &self.id).context("getting unit instance")?;
                 let spot = Spot::create_laser(
                     lua,
                     jt.as_object()?,
-                    Some(LuaVec3(Vector3::new(0., 1., 0.))),
+                    Some(LuaVec3(Vector3::new(0., 2., 0.))),
                     LuaVec3(pos),
                     self.code,
-                )?;
-                self.target = Some((spot.object_id()?, None, uid));
-                self.mark_target(lua)?;
+                )
+                .context("creating laser spot")?
+                .object_id()?;
+                let ir_pointer = if self.ir_pointer {
+                    Some(
+                        Spot::create_infra_red(
+                            lua,
+                            jt.as_object()?,
+                            Some(LuaVec3(Vector3::new(0., 2., 0.))),
+                            LuaVec3(pos),
+                        )
+                        .context("creating ir pointer spot")?
+                        .object_id()?,
+                    )
+                } else {
+                    None
+                };
+                self.target = Some(JtacTarget {
+                    spot,
+                    ir_pointer,
+                    mark: None,
+                    uid,
+                });
+                self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }
         }
@@ -260,10 +283,10 @@ impl Jtac {
             let c = self.code / 10;
             self.code = 10 * c + code_part;
         }
-        if let Some((id, _, _)) = &self.target {
-            let spot = Spot::get_instance(lua, id)?;
-            spot.set_code(self.code)?;
-            self.mark_target(lua)?
+        if let Some(target) = &self.target {
+            let spot = Spot::get_instance(lua, &target.spot).context("getting laser spot")?;
+            spot.set_code(self.code).context("setting laser code")?;
+            self.mark_target(lua).context("marking target")?
         }
         Ok(())
     }
@@ -271,7 +294,7 @@ impl Jtac {
     fn shift(&mut self, lua: MizLua) -> Result<bool> {
         let i = match &self.target {
             None => 0,
-            Some((_, _, uid)) => match self.contacts.get_index_of(uid) {
+            Some(target) => match self.contacts.get_index_of(&target.uid) {
                 None => 0,
                 Some(i) => {
                     if i < self.contacts.len() - 1 {
@@ -282,14 +305,14 @@ impl Jtac {
                 }
             },
         };
-        self.set_target(lua, i)
+        self.set_target(lua, i).context("setting target")
     }
 
     fn remove_contact(&mut self, lua: MizLua, uid: &UnitId) -> Result<bool> {
         if let Some(_) = self.contacts.swap_remove(uid) {
-            if let Some((_, _, tuid)) = &self.target {
-                if tuid == uid {
-                    self.remove_target(lua)?;
+            if let Some(target) = &self.target {
+                if &target.uid == uid {
+                    self.remove_target(lua).context("removing target")?;
                     return Ok(true);
                 }
             }
@@ -310,9 +333,37 @@ impl Jtac {
         self.contacts
             .sort_by(|_, ct0, _, ct1| priority(ct0.tags).cmp(&priority(ct1.tags)));
         if self.autolase && !self.contacts.is_empty() {
-            return self.set_target(lua, 0);
+            return self.set_target(lua, 0).context("setting target");
         }
         Ok(false)
+    }
+
+    fn smoke_target(&mut self, lua: MizLua) -> Result<()> {
+        if let Some(target) = &self.target {
+            if let Some(ct) = self.contacts.get(&target.uid) {
+                let now = Utc::now();
+                if now - self.last_smoke < Duration::seconds(150) {
+                    let rdy = (now - self.last_smoke).num_seconds();
+                    bail!("smoke will not be ready for another {}s", rdy)
+                }
+                self.last_smoke = now;
+                let mut rng = thread_rng();
+                let act = Trigger::singleton(lua)?.action()?;
+                let land = Land::singleton(lua)?;
+                let pos = Vector2::new(
+                    ct.pos.x + rng.gen_range(0. ..10.),
+                    ct.pos.z + rng.gen_range(0. ..10.),
+                );
+                let pos = Vector3::new(pos.x, land.get_height(LuaVec2(pos))?, pos.y);
+                let color = match self.side {
+                    Side::Blue => SmokeColor::Red,
+                    Side::Red => SmokeColor::Blue,
+                    Side::Neutral => SmokeColor::Green,
+                };
+                act.smoke(LuaVec3(pos), color).context("creating smoke")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -349,14 +400,24 @@ impl Jtacs {
         Ok(())
     }
 
-    pub fn toggle_smoke_target(&mut self, gid: &GroupId) -> Result<()> {
+    pub fn toggle_ir_pointer(&mut self, lua: MizLua, gid: &GroupId) -> Result<()> {
         let jtac = self.get_mut(gid)?;
-        jtac.smoketarget = !jtac.smoketarget;
+        jtac.ir_pointer = !jtac.ir_pointer;
+        if let Some(target) = &jtac.target {
+            if let Some(i) = jtac.contacts.get_index_of(&target.uid) {
+                jtac.set_target(lua, i).context("setting jtac target")?;
+            }
+        }
         Ok(())
+    }
+
+    pub fn smoke_target(&mut self, lua: MizLua, gid: &GroupId) -> Result<()> {
+        self.get_mut(gid)?.smoke_target(lua)
     }
 
     pub fn shift(&mut self, lua: MizLua, gid: &GroupId) -> Result<bool> {
         let jtac = self.get_mut(gid)?;
+        jtac.autolase = false;
         jtac.shift(lua)
     }
 
@@ -382,7 +443,7 @@ impl Jtacs {
     pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = UnitId> + 'a {
         self.0.values().flat_map(|j| {
             j.values()
-                .filter_map(|jt| jt.target.as_ref().map(|(_, _, uid)| *uid))
+                .filter_map(|jt| jt.target.as_ref().map(|target| target.uid))
         })
     }
 
@@ -403,7 +464,7 @@ impl Jtacs {
                     }
                     let dead = match &jt.target {
                         None => false,
-                        Some((_, _, tuid)) => tuid == &uid,
+                        Some(target) => target.uid == uid,
                     };
                     if dead {
                         if let Err(e) = jt.remove_target(lua) {
@@ -427,18 +488,18 @@ impl Jtacs {
             .context("updating the position of jtac targets")?;
         for jtx in self.0.values_mut() {
             for jt in jtx.values_mut() {
-                if let Some((spotid, _, uid)) = &jt.target {
-                    let unit = db.unit(uid)?;
-                    if jt.contacts[uid].pos != unit.position.p.0 {
+                if let Some(target) = &jt.target {
+                    let unit = db.unit(&target.uid)?;
+                    if jt.contacts[&target.uid].pos != unit.position.p.0 {
                         let v = db
                             .ephemeral
-                            .get_object_id_by_uid(uid)
+                            .get_object_id_by_uid(&target.uid)
                             .and_then(|oid| Unit::get_instance(lua, oid).ok())
                             .and_then(|unit| unit.get_velocity().ok())
                             .unwrap_or(LuaVec3(Vector3::default()));
-                        jt.contacts[uid].pos = unit.position.p.0 + v.0;
-                        let spot =
-                            Spot::get_instance(lua, spotid).context("getting the spot instance")?;
+                        jt.contacts[&target.uid].pos = unit.position.p.0 + v.0;
+                        let spot = Spot::get_instance(lua, &target.spot)
+                            .context("getting the spot instance")?;
                         spot.set_point(unit.position.p)
                             .context("setting the spot position")?;
                         jt.mark_target(lua).context("marking moved target")?
@@ -458,7 +519,7 @@ impl Jtacs {
                 saw_jtacs.push(group.id)
             }
             let range = (ifo.range as f64).powi(2);
-            pos.y += 2.;
+            pos.y += 2.; // adjust for unit height and ability to look over terrain
             let jtac = self
                 .0
                 .entry(group.side)
@@ -495,8 +556,15 @@ impl Jtacs {
                 if dist <= range && land.is_visible(LuaVec3(pos), unit.position.p)? {
                     jtac.add_contact(unit)
                 } else {
-                    if let Err(e) = jtac.remove_contact(lua, &unit.id) {
-                        warn!("could not remove jtac contact {} {:?}", unit.name, e)
+                    match jtac.remove_contact(lua, &unit.id) {
+                        Err(e) => warn!("could not remove jtac contact {} {:?}", unit.name, e),
+                        Ok(false) => (),
+                        Ok(true) => db.ephemeral.msgs().panel_to_side(
+                            10,
+                            false,
+                            jtac.side,
+                            format_compact!("JTAC {} target lost", jtac.gid),
+                        ),
                     }
                 }
             }
@@ -512,17 +580,17 @@ impl Jtacs {
                 }
             })
         }
-        let mut killed_targets: SmallVec<[(Side, GroupId, UnitId); 16]> = smallvec![];
+        let mut lost_targets: SmallVec<[(Side, GroupId, UnitId); 16]> = smallvec![];
         for (side, jtx) in self.0.iter_mut() {
             for jtac in jtx.values_mut() {
-                for (uid, _) in &jtac.contacts {
-                    if !saw_units.contains(uid) {
-                        killed_targets.push((*side, jtac.gid, *uid));
+                if let Some(target) = &jtac.target {
+                    if !saw_units.contains(&target.uid) {
+                        lost_targets.push((*side, jtac.gid, target.uid));
                     }
                 }
             }
         }
-        for (side, gid, uid) in killed_targets {
+        for (side, gid, uid) in lost_targets {
             if let Err(e) = self.get_mut(&gid)?.remove_contact(lua, &uid) {
                 warn!("3 could not remove jtac target {uid} {:?}", e)
             }
@@ -530,7 +598,7 @@ impl Jtacs {
                 10,
                 false,
                 side,
-                format_compact!("JTAC {gid} target destroyed"),
+                format_compact!("JTAC {gid} target lost"),
             );
         }
         let mut new_contacts: SmallVec<[&Jtac; 32]> = smallvec![];

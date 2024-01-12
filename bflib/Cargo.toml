@@ -30,3 +30,4 @@ paste = { workspace = true }
 smallvec = { workspace = true }
 indexmap = { workspace = true }
 hdrhistogram = { workspace = true }
+rand = { workspace = true }

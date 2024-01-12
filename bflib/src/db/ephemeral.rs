@@ -14,6 +14,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
+    airbase::ClassAirbase,
     centroid2d,
     coalition::Side,
     env::miz::{GroupKind, Miz, MizIndex},
@@ -21,7 +22,6 @@ use dcso3::{
     object::{DcsObject, DcsOid},
     trigger::{ArrowSpec, CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec},
     unit::{ClassUnit, Unit},
-    warehouse::ClassWarehouse,
     Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use fxhash::{FxHashMap, FxHashSet};
@@ -35,7 +35,7 @@ use std::{
 
 #[derive(Debug, Clone)]
 pub(super) struct ObjLogi {
-    pub(super) warehouse: DcsOid<ClassWarehouse>,
+    pub(super) airbase: DcsOid<ClassAirbase>,
 }
 
 #[derive(Debug, Clone, Default)]

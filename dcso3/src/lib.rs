@@ -369,6 +369,11 @@ macro_rules! wrapped_table {
         impl<'lua> std::fmt::Debug for $name<'lua> {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self.t.raw_get::<&str, Value>("id_") {
+                    Ok(Value::Nil) => {
+                        let mut tbl = fxhash::FxHashMap::default();
+                        let v = crate::value_to_json(&mut tbl, None, &Value::Table(self.t.clone()));
+                        write!(f, "{v}")
+                    },
                     Ok(v) => {
                         let class: String = self
                             .t

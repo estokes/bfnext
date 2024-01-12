@@ -9,12 +9,14 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use compact_str::format_compact;
 use dcso3::{
+    airbase::Airbase,
     coalition::Side,
     object::DcsObject,
     warehouse::{self, LiquidType},
     world::World,
-    MizLua, String, Vector2, airbase::Airbase,
+    MizLua, String, Vector2,
 };
+use log::debug;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -106,12 +108,6 @@ fn sync_from_obj(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()
     let weapons = inventory.weapons().context("getting weapons")?;
     let aircraft = inventory.aircraft().context("getting aircraft")?;
     let liquids = inventory.liquids().context("getting liquids")?;
-    if weapons.is_empty() || aircraft.is_empty() || liquids.is_empty() {
-        bail!(
-            "objective {} has warehouse categories set to unlimited",
-            obj.name
-        )
-    }
     macro_rules! zero {
         ($src:ident, $dst:ident, $set:ident) => {
             $src.for_each(|name, _| match obj.warehouse.$dst.get(&name) {
@@ -164,6 +160,10 @@ impl Db {
             Some(cfg) => cfg,
             None => return Ok(()),
         };
+        for ab in World::singleton(lua)?.get_airbases()? {
+            let ab = ab?;
+            debug!("{}", ab.as_object()?.get_name()?)
+        }
         for side in [Side::Red, Side::Blue, Side::Neutral] {
             let oids: SmallVec<[ObjectiveId; 64]> = self
                 .persisted
@@ -245,13 +245,10 @@ impl Db {
                         continue;
                     }
                 };
-                let warehouse = airbase.get_warehouse().context("getting warehouse")?;
                 self.ephemeral.logistics_by_oid.insert(
                     oid,
                     ObjLogi {
-                        warehouse: warehouse
-                            .object_id()
-                            .context("getting warehouse object_id")?,
+                        airbase: airbase.object_id().context("getting airbase object_id")?,
                     },
                 );
             }
@@ -367,9 +364,11 @@ impl Db {
             .collect();
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
-            let warehouse = &self.ephemeral.logistics_by_oid[oid].warehouse;
-            let warehouse =
-                warehouse::Warehouse::get_instance(lua, warehouse).context("getting warehouse")?;
+            let airbase = &self.ephemeral.logistics_by_oid[oid].airbase;
+            let warehouse = Airbase::get_instance(lua, airbase)
+                .context("getting airbase")?
+                .get_warehouse()
+                .context("getting warehouse")?;
             sync_to_obj(obj, &warehouse).context("syncing warehouse to objective")?
         }
         self.ephemeral.dirty();
@@ -385,9 +384,11 @@ impl Db {
             .collect();
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
-            let warehouse = &self.ephemeral.logistics_by_oid[oid].warehouse;
-            let warehouse =
-                warehouse::Warehouse::get_instance(lua, warehouse).context("getting warehouse")?;
+            let airbase = &self.ephemeral.logistics_by_oid[oid].airbase;
+            let warehouse = Airbase::get_instance(lua, airbase)
+                .context("getting airbase")?
+                .get_warehouse()
+                .context("getting warehouse")?;
             sync_from_obj(obj, &warehouse).context("syncing warehouse from objective")?
         }
         self.ephemeral.dirty();

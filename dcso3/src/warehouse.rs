@@ -1,14 +1,11 @@
 use super::as_tbl;
 use crate::{
-    airbase::Airbase,
-    cvt_err, lua_err,
-    object::{DcsObject, DcsOid},
-    simple_enum, wrapped_table, LuaEnv, MizLua, String,
+    airbase::Airbase, cvt_err, lua_err, simple_enum, wrapped_table, LuaEnv, MizLua, String,
 };
 use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::{marker::PhantomData, ops::Deref};
+use std::ops::Deref;
 
 simple_enum!(LiquidType, u8, [
     JetFuel => 0,
@@ -103,44 +100,5 @@ impl<'lua> Warehouse<'lua> {
 
     pub fn get_owner(&self) -> Result<Airbase> {
         Ok(self.t.call_method("getOwner", ())?)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ClassWarehouse;
-
-impl<'lua> DcsObject<'lua> for Warehouse<'lua> {
-    type Class = ClassWarehouse;
-
-    fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self> {
-        let t = lua.inner().create_table()?;
-        t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
-        t.raw_set("id_", id.id)?;
-        let t = Warehouse {
-            t,
-            lua: lua.inner(),
-        };
-        Ok(t)
-    }
-
-    fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
-        id.check_implements(lua, "Warehouse")?;
-        let id = DcsOid {
-            id: id.id,
-            class: id.class.clone(),
-            t: PhantomData,
-        };
-        Self::get_instance(lua, &id)
-    }
-
-    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
-        self.raw_set("id_", id.id)?;
-        Ok(self)
-    }
-
-    fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
-        id.check_implements(MizLua(self.lua), "Warehouse")?;
-        self.t.raw_set("id_", id.id)?;
-        Ok(self)
     }
 }

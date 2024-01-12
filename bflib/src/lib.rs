@@ -9,7 +9,7 @@ pub mod spawnctx;
 
 extern crate nalgebra as na;
 use crate::{cfg::Cfg, db::player::SlotAuth};
-use anyhow::{anyhow, bail, Result, Context};
+use anyhow::{anyhow, bail, Result, Context as AnyhowContext};
 use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};

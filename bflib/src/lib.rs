@@ -215,6 +215,7 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
             .ucid()?
             .ok_or_else(|| anyhow!("player {:?} has no ucid", ifo))?;
         let name = ifo.name()?;
+        info!("player name: '{}', id: {:?}, ucid: {:?}", name, id, ucid);
         rtbl.insert(ucid.clone(), id);
         tbl.insert(id, PlayerInfo { name, ucid });
         Ok(&tbl[&id])

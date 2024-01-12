@@ -16,7 +16,7 @@ for more details.
 
 use dcso3::{coalition::Side, err, String, net::Ucid};
 use enumflags2::{bitflags, BitFlags};
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use log::error;
 use mlua::prelude::*;
 use serde_derive::{Deserialize, Serialize};
@@ -300,7 +300,7 @@ pub struct WarehouseConfig {
 pub struct Cfg {
     /// ucids in this list are able to run admin commands
     #[serde(default)]
-    pub admins: Vec<Ucid>,
+    pub admins: FxHashSet<Ucid>,
     /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
     /// The base repair crate
@@ -1443,7 +1443,7 @@ fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
 impl Default for Cfg {
     fn default() -> Self {
         Self {
-            admins: vec![],
+            admins: FxHashSet::default(),
             repair_time: 1800,
             repair_crate: default_repair_crate(),
             warehouse: Some(WarehouseConfig {

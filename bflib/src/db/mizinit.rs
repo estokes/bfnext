@@ -107,7 +107,6 @@ impl Db {
             last_change_ts: Utc::now(),
             last_threatened_ts: Utc::now(),
             warehouse: Warehouse::default(),
-            needs_mark: false,
         };
         if let ObjectiveKind::Logistics = obj.kind {
             self.persisted.logistics_hubs.insert_cow(id);

@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -185,8 +185,6 @@ pub struct Objective {
     pub(super) warehouse: Warehouse,
     #[serde(skip)]
     pub(super) spawned: bool,
-    #[serde(skip)]
-    pub(super) needs_mark: bool,
 }
 
 impl Objective {
@@ -395,7 +393,6 @@ impl Db {
             warehouse: Warehouse::default(),
             last_threatened_ts: now,
             last_change_ts: now,
-            needs_mark: false,
         };
         obj.warehouse.supplier = self.compute_supplier(&obj)?;
         let oid = obj.id;
@@ -424,7 +421,6 @@ impl Db {
             obj.health = health;
             obj.logi = logi;
             obj.last_change_ts = now;
-            obj.needs_mark = true;
             (obj.kind.clone(), health, logi)
         };
         if let ObjectiveKind::Farp(_) = &kind {
@@ -790,55 +786,7 @@ impl Db {
         Ok(actually_captured)
     }
 
-    /*
-    pub fn mark_objective(&mut self, oid: &ObjectiveId) -> Result<()> {
-        if let Some((id0, id1)) = self.ephemeral.objective_marks.remove(oid) {
-            self.ephemeral.msgs.delete_mark(id0);
-            if let Some(id) = id1 {
-                self.ephemeral.msgs.delete_mark(id);
-            }
-        }
-        let obj = objective!(self, oid)?;
-        let name = &obj.name;
-        let logi = obj.logi;
-        let owner = obj.owner;
-        let cap = if obj.captureable() { " capturable" } else { "" };
-        let friendly_msg = match obj.kind {
-            ObjectiveKind::Airbase => format_compact!("{name} airbase {owner} logi {logi}{cap}"),
-            ObjectiveKind::Fob => format_compact!("{name} fob {owner} logi {logi}{cap}"),
-            ObjectiveKind::Farp(_) => format_compact!("{name} farp {owner} logi {logi}{cap}"),
-            ObjectiveKind::Logistics => {
-                format_compact!("{name} logistics depot {owner} logi {logi}{cap}")
-            }
-        };
-        let enemy_msg = match obj.kind {
-            ObjectiveKind::Airbase => Some(format_compact!("{name} airbase {owner}{cap}")),
-            ObjectiveKind::Fob => Some(format_compact!("{name} fob {owner}{cap}")),
-            ObjectiveKind::Logistics => {
-                Some(format_compact!("{name} logistics depot {owner}{cap}"))
-            }
-            ObjectiveKind::Farp(_) => None,
-        };
-        let fid = self
-            .ephemeral
-            .msgs
-            .mark_to_side(owner, obj.pos, true, friendly_msg);
-        let eid = match enemy_msg {
-            None => None,
-            Some(msg) => Some(self.ephemeral.msgs.mark_to_side(
-                owner.opposite(),
-                obj.pos,
-                true,
-                msg,
-            )),
-        };
-        self.ephemeral.objective_marks.insert(*oid, (fid, eid));
-        Ok(())
-    }
-    */
-
-    /*
-    pub fn remark_objectives(&mut self) -> Result<()> {
+    pub fn update_objectives_markup(&mut self) -> Result<()> {
         let objectives = self
             .persisted
             .objectives
@@ -846,13 +794,9 @@ impl Db {
             .map(|(oid, _)| *oid)
             .collect::<SmallVec<[_; 64]>>();
         for oid in objectives {
-            let obj = objective_mut!(self, oid)?;
-            if obj.needs_mark {
-                obj.needs_mark = false;
-                self.mark_objective(&oid)?
-            }
+            let obj = objective!(self, oid)?;
+            self.ephemeral.update_objective_markup(obj)
         }
         Ok(())
     }
-    */
 }

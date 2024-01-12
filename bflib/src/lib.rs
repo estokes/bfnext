@@ -44,7 +44,7 @@ use dcso3::{
     net::{Net, PlayerId, SlotId, Ucid},
     object::{DcsObject, DcsOid},
     timer::Timer,
-    trigger::Trigger,
+    trigger::{MarkId, Trigger},
     unit::{ClassUnit, Unit},
     world::World,
     HooksLua, LuaEnv, MizLua, String, Vector2,
@@ -58,15 +58,68 @@ use msgq::MsgTyp;
 use perf::Perf;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{iter, path::PathBuf, sync::Arc};
+use std::{iter, path::PathBuf, str::FromStr, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
 enum AdminCommand {
-    ReduceInventory { airbase: String, amount: f32 },
+    Help,
+    ReduceInventory { airbase: String, amount: u8 },
     LogisticsTickNow,
     LogisticsDeliverNow,
-    Tim
+    Tim { key: String, size: usize },
+}
+
+impl AdminCommand {
+    fn help() -> &'static str {
+        "reduce-inventory <airbase> <amount>, logistics-tick-now, logistics-deliver-now, tim <key> [size]"
+    }
+}
+
+impl FromStr for AdminCommand {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let s = s
+            .strip_prefix("-admin ")
+            .ok_or_else(|| anyhow!("not an admin command {s}"))?;
+        if s.trim() == "help" {
+            Ok(Self::Help)
+        } else if s.starts_with("reduce-inventory ") {
+            let s = s.strip_prefix("reduce-inventory ").unwrap();
+            match s.split_once(" ") {
+                None => bail!("reduce-inventory [airbase] [amount]"),
+                Some((airbase, amount)) => {
+                    let amount = amount.parse::<u8>()?;
+                    Ok(Self::ReduceInventory {
+                        airbase: String::from(airbase),
+                        amount,
+                    })
+                }
+            }
+        } else if s.starts_with("logistics-tick-now") {
+            Ok(Self::LogisticsTickNow)
+        } else if s.starts_with("logistics-deliver-now") {
+            Ok(Self::LogisticsDeliverNow)
+        } else if s.starts_with("tim ") {
+            let s = s.strip_prefix("tim ").unwrap();
+            match s.split_once(" ") {
+                None => Ok(Self::Tim {
+                    key: String::from(s),
+                    size: 3000,
+                }),
+                Some((key, size)) => {
+                    let size = size.parse::<usize>()?;
+                    Ok(Self::Tim {
+                        key: String::from(key),
+                        size,
+                    })
+                }
+            }
+        } else {
+            bail!("unknown command {s}")
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -81,7 +134,7 @@ struct Context {
     loaded: bool,
     idx: env::miz::MizIndex,
     db: Db,
-    admin_commands: Vec<AdminCommand>,
+    admin_commands: Vec<(PlayerId, AdminCommand)>,
     to_background: Option<UnboundedSender<bg::Task>>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
@@ -261,7 +314,32 @@ fn lives_command(id: PlayerId) -> Result<()> {
     Ok(())
 }
 
-fn do_debug_command(cmd: String) {}
+fn do_admin_command(id: PlayerId, cmd: String) {
+    let ctx = unsafe { Context::get_mut() };
+    let ifo = match ctx.info_by_player_id.get(&id) {
+        Some(ifo) => ifo,
+        None => return,
+    };
+    if !ctx.db.ephemeral.cfg().admins.contains(&ifo.ucid) {
+        return;
+    }
+    match cmd.parse::<AdminCommand>() {
+        Err(e) => ctx.db.ephemeral.msgs().send(
+            MsgTyp::Chat(Some(id)),
+            format_compact!("parse error {:?}", e),
+        ),
+        Ok(AdminCommand::Help) => {
+            ctx.db
+                .ephemeral
+                .msgs()
+                .send(MsgTyp::Chat(Some(id)), AdminCommand::help());
+        }
+        Ok(cmd) => {
+            info!("queueing admin command {:?} from {:?}", cmd, ifo);
+            ctx.admin_commands.push((id, cmd))
+        }
+    }
+}
 
 fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
     let start_ts = Utc::now();
@@ -282,8 +360,8 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
             start_ts,
         );
         Ok("".into())
-    } else if msg.starts_with("-debug ") {
-        do_debug_command(msg);
+    } else if msg.starts_with("-admin ") {
+        do_admin_command(id, msg);
         Ok("".into())
     } else {
         record_perf(
@@ -519,6 +597,86 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
     Ok(())
 }
 
+fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
+    use std::fmt::Write;
+    for (id, cmd) in ctx.admin_commands.drain(..) {
+        match cmd {
+            AdminCommand::Help => (),
+            AdminCommand::ReduceInventory { airbase, amount } => {
+                match ctx.db.admin_reduce_inventory(lua, airbase.as_str(), amount) {
+                    Err(e) => ctx.db.ephemeral.msgs().send(
+                        MsgTyp::Chat(Some(id)),
+                        format_compact!("reduce inventory failed: {:?}", e),
+                    ),
+                    Ok(()) => ctx
+                        .db
+                        .ephemeral
+                        .msgs()
+                        .send(MsgTyp::Chat(Some(id)), "inventory reduced"),
+                }
+            }
+            AdminCommand::LogisticsTickNow => {
+                let mut msg = CompactString::new("");
+                if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
+                    write!(msg, "failed to sync objectives from warehouses {:?} ", e)?
+                }
+                if let Err(e) = ctx.db.deliver_supplies_from_logistics_hubs() {
+                    write!(msg, "failed to deliver supplies from hubs {:?} ", e)?
+                }
+                if let Err(e) = ctx.db.sync_warehouses_from_objectives(lua) {
+                    write!(msg, "failed to sync warehouses from objectives {:?}", e)?
+                }
+                if msg.is_empty() {
+                    ctx.db
+                        .ephemeral
+                        .msgs()
+                        .send(MsgTyp::Chat(Some(id)), "tick complete")
+                } else {
+                    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg)
+                }
+            }
+            AdminCommand::LogisticsDeliverNow => {
+                let mut msg = CompactString::new("");
+                if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
+                    write!(msg, "failed to sync objectives from warehouses {:?} ", e)?
+                }
+                if let Err(e) = ctx.db.deliver_production(lua) {
+                    error!("failed to deliver production {:?}", e)
+                }
+                if let Err(e) = ctx.db.sync_warehouses_from_objectives(lua) {
+                    write!(msg, "failed to sync warehouses from objectives {:?}", e)?
+                }
+                if msg.is_empty() {
+                    ctx.db
+                        .ephemeral
+                        .msgs()
+                        .send(MsgTyp::Chat(Some(id)), "deliver complete")
+                } else {
+                    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg)
+                }
+            }
+            AdminCommand::Tim { key, size } => {
+                let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
+                let act = Trigger::singleton(lua)?.action()?;
+                for mk in World::singleton(lua)?
+                    .get_mark_panels()
+                    .context("getting marks")?
+                {
+                    let mk = mk?;
+                    if mk.text == key {
+                        to_remove.push(mk.id);
+                        act.explosion(mk.pos, size as f32).context("making boom")?;
+                    }
+                }
+                for id in to_remove {
+                    ctx.db.ephemeral.msgs().delete_mark(id);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     macro_rules! or_false {
         ($e:expr) => {
@@ -698,11 +856,9 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.unit_culling, ts);
         let ts = Utc::now();
-        /*
-        if let Err(e) = ctx.db.remark_objectives() {
+        if let Err(e) = ctx.db.update_objectives_markup() {
             error!("could not remark objectives {e}")
         }
-        */
         record_perf(&mut perf.remark_objectives, ts);
         let ts = Utc::now();
         if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
@@ -780,6 +936,9 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     record_perf(&mut perf.snapshot, now);
     if let Err(e) = run_logistics_events(lua, ctx, perf, ts) {
         error!("error running logistics events {:?}", e)
+    }
+    if let Err(e) = run_admin_commands(ctx, lua) {
+        error!("failed to run admin commands {:?}", e)
     }
     record_perf(&mut perf.timed_events, ts);
     ctx.log_perf(now);

@@ -52,6 +52,10 @@ impl Inventory {
         let capacity: f32 = self.capacity as f32;
         ((stored / capacity) * 100.) as u8
     }
+
+    pub fn reduce(&mut self, percent: f32) {
+        self.stored = (self.stored as f32 * percent) as u32;
+    }
 }
 
 impl AddAssign<u32> for Inventory {
@@ -612,6 +616,50 @@ impl Db {
             }
             obj.fuel = (sum / n) as u8;
         }
+        self.ephemeral.dirty();
+        Ok(())
+    }
+
+    pub fn admin_reduce_inventory(&mut self, lua: MizLua, name: &str, amount: u8) -> Result<()> {
+        let obj = self
+            .persisted
+            .objectives_by_name
+            .get(name)
+            .map(|oid| *oid)
+            .and_then(|oid| self.persisted.objectives.get_mut_cow(&oid))
+            .ok_or_else(|| anyhow!("no such objective {name}"))?;
+        if amount > 99 {
+            bail!("enter a percentage")
+        }
+        let percent = amount as f32 / 100.;
+        let logi = self
+            .ephemeral
+            .logistics_by_oid
+            .get(&obj.id)
+            .ok_or_else(|| anyhow!("no logistics for objective {name}"))?;
+        let warehouse = Airbase::get_instance(lua, &logi.airbase)
+            .context("getting airbase")?
+            .get_warehouse()
+            .context("getting warehouse")?;
+        sync_to_obj(obj, &warehouse).context("syncing warehouse to objective")?;
+        let equip: SmallVec<[String; 128]> = obj
+            .warehouse
+            .equipment
+            .into_iter()
+            .map(|(k, _)| k.clone())
+            .collect();
+        for name in equip {
+            obj.warehouse.equipment[&name].reduce(percent);
+        }
+        for liq in [
+            LiquidType::Avgas,
+            LiquidType::Diesel,
+            LiquidType::JetFuel,
+            LiquidType::MW50,
+        ] {
+            obj.warehouse.liquids[&liq].reduce(percent);
+        }
+        sync_from_obj(obj, &warehouse).context("syncing from warehouse")?;
         self.ephemeral.dirty();
         Ok(())
     }

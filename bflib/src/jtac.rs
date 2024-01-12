@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -22,6 +22,7 @@ use crate::{
         Db,
     },
     menu,
+    msgq::{self, MsgQ},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -63,6 +64,36 @@ struct Contact {
 }
 
 #[derive(Debug, Clone)]
+struct JtacTarget {
+    uid: UnitId,
+    spot: DcsOid<ClassSpot>,
+    ir_pointer: Option<DcsOid<ClassSpot>>,
+    mark: Option<MarkId>,
+}
+
+impl JtacTarget {
+    fn destroy(self, lua: MizLua) -> Result<()> {
+        Spot::get_instance(lua, &self.spot)
+            .context("getting laser spot")?
+            .destroy()
+            .context("destroying laser spot")?;
+        if let Some(ir_pointer) = self.ir_pointer {
+            Spot::get_instance(lua, &ir_pointer)
+                .context("getting ir pointer")?
+                .destroy()
+                .context("destroying ir pointer")?
+        }
+        if let Some(id) = self.mark {
+            Trigger::singleton(lua)?
+                .action()?
+                .remove_mark(id)
+                .context("removing mark")?
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
 struct Jtac {
     gid: GroupId,
     side: Side,
@@ -70,9 +101,9 @@ struct Jtac {
     id: DcsOid<ClassUnit>,
     filter: BitFlags<UnitTag>,
     priority: Vec<UnitTags>,
-    target: Option<(DcsOid<ClassSpot>, Option<MarkId>, UnitId)>,
+    target: Option<JtacTarget>,
     autolase: bool,
-    smoketarget: bool,
+    ir_pointer: bool,
     code: u16,
 }
 
@@ -87,7 +118,7 @@ impl Jtac {
             priority,
             target: None,
             autolase: true,
-            smoketarget: false,
+            ir_pointer: false,
             code: 1688,
         }
     }
@@ -101,9 +132,9 @@ impl Jtac {
         write!(msg, "JTAC {} status\n", self.gid)?;
         match self.target {
             None => write!(msg, "no target\n")?,
-            Some((_, mid, uid)) => {
-                let unit_typ = db.unit(&uid)?.typ.clone();
-                let mid = match mid {
+            Some(target) => {
+                let unit_typ = db.unit(&target.uid)?.typ.clone();
+                let mid = match target.mark {
                     None => format_compact!("none"),
                     Some(mid) => format_compact!("{mid}"),
                 };
@@ -131,8 +162,8 @@ impl Jtac {
         }
         write!(
             msg,
-            "\n\nautolase: {}, smoke: {}",
-            self.autolase, self.smoketarget
+            "\n\nautolase: {}, ir_pointer: {}",
+            self.autolase, self.ir_pointer
         )?;
         write!(msg, "\nfilter: [")?;
         let len = self.filter.len();
@@ -156,32 +187,31 @@ impl Jtac {
     }
 
     fn remove_target(&mut self, lua: MizLua) -> Result<()> {
-        if let Some((id, mid, _)) = self.target.take() {
-            let spot = Spot::get_instance(lua, &id)?;
-            spot.destroy()?;
-            if let Some(mid) = mid {
-                Trigger::singleton(lua)?.action()?.remove_mark(mid)?
-            }
+        if let Some(target) = self.target.take() {
+            target
+                .destroy(lua)
+                .with_context(|| format_compact!("destroying mark for jtac {}", self.gid))?
         }
         Ok(())
     }
 
     fn mark_target(&mut self, lua: MizLua) -> Result<()> {
-        if let Some((_, mid, uid)) = &mut self.target {
+        if let Some(target) = &mut self.target {
             let act = Trigger::singleton(lua)?.action()?;
-            if let Some(mid) = mid.take() {
-                act.remove_mark(mid)?;
+            if let Some(mid) = target.mark.take() {
+                act.remove_mark(mid).context("removing mark")?;
             }
             let new_mid = MarkId::new();
-            let ct = &self.contacts[&*uid];
+            let ct = &self.contacts[&target.uid];
             let msg = format_compact!(
                 "JTAC {} target {} marked by code {}",
                 self.gid,
                 ct.typ,
                 self.code
             );
-            act.mark_to_coalition(new_mid, msg.into(), LuaVec3(ct.pos), self.side, true, None)?;
-            *mid = Some(new_mid);
+            act.mark_to_coalition(new_mid, msg.into(), LuaVec3(ct.pos), self.side, true, None)
+                .context("marking target")?;
+            target.mark = Some(new_mid);
         }
         Ok(())
     }

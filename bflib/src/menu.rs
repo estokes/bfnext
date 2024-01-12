@@ -697,10 +697,15 @@ fn jtac_toggle_auto_laser(lua: MizLua, gid: DbGid) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_toggle_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_toggle_ir_pointer(lua: MizLua, gid: DbGid) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    ctx.jtac.toggle_ir_pointer(lua, &gid)
+}
+
+fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
-        ctx.jtac.toggle_smoke_target(&gid)?;
+        ctx.jtac.smoke_target(&gid)?;
     }
     jtac_status(lua, gid)
 }
@@ -765,9 +770,16 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
     )?;
     mc.add_command_for_coalition(
         side,
-        "Toggle Smoke Target".into(),
+        "Toggle IR Pointer".into(),
         Some(root.clone()),
-        jtac_toggle_smoke_target,
+        jtac_toggle_ir_pointer,
+        group,
+    )?;
+    mc.add_command_for_coalition(
+        side,
+        "Smoke Current Target".into(),
+        Some(root.clone()),
+        jtac_smoke_target,
         group,
     )?;
     mc.add_command_for_coalition(side, "Shift".into(), Some(root.clone()), jtac_shift, group)?;

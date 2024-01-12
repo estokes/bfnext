@@ -16,6 +16,7 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
+use log::debug;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -129,6 +130,7 @@ fn sync_from_obj(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()
             .set_liquid_amount(*name, inv.stored)
             .context("setting liquid")?
     }
+    debug!("{} warehouse: {:?}", obj.name, warehouse.get_inventory(None)?);
     Ok(())
 }
 

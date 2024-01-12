@@ -390,7 +390,7 @@ impl Jtacs {
                             .and_then(|oid| Unit::get_instance(lua, oid).ok())
                             .and_then(|unit| unit.get_velocity().ok())
                             .unwrap_or(LuaVec3(Vector3::default()));
-                        jt.contacts[uid].pos = unit.position.p.0 + v.0 * 0.5;
+                        jt.contacts[uid].pos = unit.position.p.0 + v.0;
                         let spot =
                             Spot::get_instance(lua, spotid).context("getting the spot instance")?;
                         spot.set_point(unit.position.p)
@@ -412,7 +412,7 @@ impl Jtacs {
                 saw_jtacs.push(group.id)
             }
             let range = (ifo.range as f64).powi(2);
-            pos.y += 5.;
+            pos.y += 2.;
             let jtac = self
                 .0
                 .entry(group.side)

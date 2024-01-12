@@ -501,6 +501,10 @@ impl Db {
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             self.ephemeral.uid_by_object_id.insert(id.clone(), *uid);
             self.ephemeral.object_id_by_uid.insert(*uid, id.clone());
+            self.ephemeral
+                .units_potentially_close_to_enemies
+                .insert(*uid);
+            self.ephemeral.units_potentially_on_walkabout.insert(*uid);
         }
         let slot = unit.slot()?;
         if self.persisted.objectives_by_slot.get(&slot).is_some() {

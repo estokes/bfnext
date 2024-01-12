@@ -771,11 +771,11 @@ fn run_logistics_events(
     ts: DateTime<Utc>,
 ) -> Result<()> {
     if let Some(wcfg) = ctx.db.ephemeral.cfg().warehouse.as_ref() {
-        let freq = Duration::seconds(wcfg.tick as i64);
+        let freq = Duration::minutes(wcfg.tick as i64);
         let ticks_per_delivery = wcfg.ticks_per_delivery;
         if ts - ctx.last_logistics_tick >= freq {
-            let start_ts = Utc::now();
             ctx.last_logistics_tick = ts;
+            let start_ts = Utc::now();
             if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
                 error!("failed to sync objectives from warehouses {:?}", e)
             }

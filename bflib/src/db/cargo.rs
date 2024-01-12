@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -824,12 +824,23 @@ impl Db {
         let (oid, crate_cfg) = cargo.crates.pop().unwrap();
         let weight = cargo.weight();
         if st.in_air && st.speed > crate_cfg.max_drop_speed as f64 {
+            let max_sp = (crate_cfg.max_drop_speed * 3600) / 1000;
+            let max_al = crate_cfg.max_drop_height_agl;
             cargo.crates.push((oid, crate_cfg));
-            bail!("you are going too fast to unload your cargo")
+            bail!(
+                "you are going too fast to unload your cargo, speed must be at or below {} km/h, and altitude agl must be at or below {} m",
+                max_sp, max_al
+            )
         }
         if st.in_air && st.agl > crate_cfg.max_drop_height_agl as f64 {
+            let max_sp = (crate_cfg.max_drop_speed * 3600) / 1000;
+            let max_al = crate_cfg.max_drop_height_agl;
             cargo.crates.push((oid, crate_cfg));
-            bail!("you are too high to unload your cargo")
+            bail!(
+                "you are too high to unload your cargo, altitude agl must be at or below {} m, and speed must be at or below {} km/h",
+                max_al,
+                max_sp
+            )
         }
         Trigger::singleton(lua)?
             .action()?

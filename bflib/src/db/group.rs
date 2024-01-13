@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -558,18 +558,24 @@ impl Db {
                     || self.persisted.troops.contains(&gid)
                     || self.persisted.crates.contains(&gid)
                 {
-                    let group = group_mut!(self, gid)?;
-                    let mut dead = true;
-                    for uid in &group.units {
-                        dead &= unit!(self, uid)?.dead
-                    }
-                    if dead {
+                    if self.group_health(&gid)?.0 == 0 {
                         self.delete_group(&gid)?
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    pub fn group_health(&self, gid: &GroupId) -> Result<(usize, usize)> {
+        let group = group!(self, gid)?;
+        let mut alive = 0;
+        for uid in &group.units {
+            if !unit!(self, uid)?.dead {
+                alive += 1;
+            }
+        }
+        Ok((alive, group.units.len()))
     }
 
     pub fn update_unit_positions<'a, I: Iterator<Item = UnitId> + 'a>(

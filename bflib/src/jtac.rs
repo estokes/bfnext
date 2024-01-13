@@ -405,6 +405,7 @@ impl Jtacs {
         jtac.ir_pointer = !jtac.ir_pointer;
         if let Some(target) = &jtac.target {
             if let Some(i) = jtac.contacts.get_index_of(&target.uid) {
+                jtac.remove_target(lua)?;
                 jtac.set_target(lua, i).context("setting jtac target")?;
             }
         }
@@ -455,11 +456,14 @@ impl Jtacs {
                     if let Ok(spu) = db.unit(&uid) {
                         let group = spu.group;
                         if &group == gid {
-                            if let Err(e) = jt.remove_target(lua) {
-                                warn!("0 could not remove jtac target {:?}", e)
+                            let alive = db.group_health(gid).unwrap_or((0, 0)).0;
+                            if alive <= 1 {
+                                if let Err(e) = jt.remove_target(lua) {
+                                    warn!("0 could not remove jtac target {:?}", e)
+                                }
+                                ui_jtac_dead(&mut db.ephemeral, lua, *side, *gid);
+                                return false;
                             }
-                            ui_jtac_dead(&mut db.ephemeral, lua, *side, *gid);
-                            return false;
                         }
                     }
                     let dead = match &jt.target {

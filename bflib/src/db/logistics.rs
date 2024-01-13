@@ -47,10 +47,14 @@ pub struct Inventory {
 }
 
 impl Inventory {
-    pub fn percent(&self) -> u8 {
-        let stored: f32 = self.stored as f32;
-        let capacity: f32 = self.capacity as f32;
-        ((stored / capacity) * 100.) as u8
+    pub fn percent(&self) -> Option<u8> {
+        if self.capacity == 0 {
+            None
+        } else {
+            let stored: f32 = self.stored as f32;
+            let capacity: f32 = self.capacity as f32;
+            Some(((stored / capacity) * 100.) as u8)
+        }
     }
 
     pub fn reduce(&mut self, percent: f32) {
@@ -367,7 +371,9 @@ impl Db {
                         for oid in &self.persisted.logistics_hubs {
                             let logi = objective_mut!(self, oid)?;
                             if logi.owner == side {
-                                *logi.warehouse.$dest.get_or_default_cow($name.clone()) += $qty;
+                                if $qty > 0 {
+                                    *logi.warehouse.$dest.get_or_default_cow($name.clone()) += $qty;
+                                }
                             }
                         }
                         Ok(())
@@ -618,15 +624,19 @@ impl Db {
             let mut n = 0;
             let mut sum: u32 = 0;
             for (_, inv) in &obj.warehouse.equipment {
-                sum += inv.percent() as u32;
-                n += 1;
+                if let Some(pct) = inv.percent() {
+                    sum += pct as u32;
+                    n += 1;
+                }
             }
             obj.supply = (sum / n) as u8;
             n = 0;
             sum = 0;
             for (_, inv) in &obj.warehouse.liquids {
-                sum += inv.percent() as u32;
-                n += 1;
+                if let Some(pct) = inv.percent() {
+                    sum += pct as u32;
+                    n += 1;
+                }
             }
             obj.fuel = (sum / n) as u8;
         }

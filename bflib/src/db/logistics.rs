@@ -102,8 +102,18 @@ impl Transfer {
         }
         let dst = objective_mut!(db, self.target)?;
         match &self.item {
-            TransferItem::Equipment(name) => dst.warehouse.equipment[name].stored += self.amount,
-            TransferItem::Liquid(name) => dst.warehouse.liquids[name].stored += self.amount,
+            TransferItem::Equipment(name) => {
+                dst.warehouse
+                    .equipment
+                    .get_or_default_cow(name.clone())
+                    .stored += self.amount
+            }
+            TransferItem::Liquid(name) => {
+                dst.warehouse
+                    .liquids
+                    .get_or_default_cow(name.clone())
+                    .stored += self.amount
+            }
         }
         Ok(())
     }
@@ -168,9 +178,14 @@ fn sync_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<
     macro_rules! sync {
         ($src:ident, $dst:ident) => {
             $src.for_each(|name, qty| {
-                let inv = obj.warehouse.$dst.get_or_default_cow(name);
-                inv.stored = qty;
-                Ok(())
+                if qty == 0 {
+                    obj.warehouse.$dst.remove_cow(&name);
+                    Ok(())
+                } else {
+                    let inv = obj.warehouse.$dst.get_or_default_cow(name);
+                    inv.stored = qty;
+                    Ok(())
+                }
             })
             .context("syncing")?;
         };
@@ -657,7 +672,9 @@ impl Db {
             LiquidType::JetFuel,
             LiquidType::MW50,
         ] {
-            obj.warehouse.liquids[&liq].reduce(percent);
+            if let Some(inv) = obj.warehouse.liquids.get_mut_cow(&liq) {
+                inv.reduce(percent);
+            }
         }
         sync_from_obj(obj, &warehouse).context("syncing from warehouse")?;
         self.update_supply_status()

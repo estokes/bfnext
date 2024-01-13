@@ -164,7 +164,7 @@ impl ObjectiveMarkup {
             self.health = obj.health;
             for (i, id) in self.healthbar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let a = if obj.health / i * 20 > 0 { 0.5 } else { 0. };
+                let a = if (obj.health / (i * 20)) > 0 { 0.5 } else { 0. };
                 msgq.set_markup_fill_color(*id, Color::green(a));
             }
         }
@@ -172,7 +172,7 @@ impl ObjectiveMarkup {
             self.logi = obj.logi;
             for (i, id) in self.logibar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let a = if obj.logi / i * 20 > 0 { 0.5 } else { 0. };
+                let a = if (obj.logi / (i * 20)) > 0 { 0.5 } else { 0. };
                 msgq.set_markup_fill_color(*id, Color::green(a));
             }
         }
@@ -180,7 +180,7 @@ impl ObjectiveMarkup {
             self.supply = obj.supply;
             for (i, id) in self.supplybar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let a = if obj.supply / i * 20 > 0 { 0.5 } else { 0. };
+                let a = if (obj.supply / (i * 20)) > 0 { 0.5 } else { 0. };
                 msgq.set_markup_fill_color(*id, Color::green(a));
             }
         }
@@ -188,7 +188,7 @@ impl ObjectiveMarkup {
             self.fuel = obj.fuel;
             for (i, id) in self.fuelbar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let a = if obj.fuel / i * 20 > 0 { 0.5 } else { 0. };
+                let a = if (obj.fuel / (i * 20)) > 0 { 0.5 } else { 0. };
                 msgq.set_markup_fill_color(*id, Color::green(a));
             }
         }

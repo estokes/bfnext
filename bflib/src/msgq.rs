@@ -22,7 +22,7 @@ use dcso3::{
     Color, LuaVec3, String, Vector2, Vector3,
 };
 use log::{debug, error};
-use std::collections::VecDeque;
+use std::{collections::VecDeque, cmp::max};
 
 #[derive(Debug, Clone, Copy)]
 pub enum PanelDest {
@@ -297,7 +297,7 @@ impl MsgQ {
     }
 
     pub fn process(&mut self, net: &Net, act: &Action) {
-        for _ in 0..5 {
+        for _ in 0..max(5, self.0.len() >> 2) {
             let cmd = match self.0.pop_front() {
                 Some(cmd) => cmd,
                 None => return,

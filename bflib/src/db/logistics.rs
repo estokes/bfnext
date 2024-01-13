@@ -660,6 +660,8 @@ impl Db {
             obj.warehouse.liquids[&liq].reduce(percent);
         }
         sync_from_obj(obj, &warehouse).context("syncing from warehouse")?;
+        self.update_supply_status()
+            .context("updating supply status")?;
         self.ephemeral.dirty();
         Ok(())
     }

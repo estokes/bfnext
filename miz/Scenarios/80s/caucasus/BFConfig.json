@@ -132,9 +132,9 @@
         "min": 45,
         "max": 60
       },
-      "name": "Udarnyy",
+      "name": "Mukhrani",
       "location": [
-        "Udarnyy"
+        "OLOBMukhrani"
       ],
       "linkedFuel": [
         "VODY",
@@ -144,7 +144,30 @@
         "MAYKOP"
       ],
       "pak": 4,
-      "id": "URDANYY"
+      "id": "Mukhrani"
+    },
+    {
+      "initialCoalition": 1,
+      "baseType": "FUELBASE",
+      "initialFuel": 200000,
+      "repairFuel": 10000,
+      "repairTimer": {
+        "min": 45,
+        "max": 60
+      },
+      "name": "Digora",
+      "location": [
+        "OLORDigora"
+      ],
+      "linkedFuel": [
+        "VODY",
+        "NALCHIK",
+        "BESLAN",
+        "MOZDOK",
+        "MAYKOP"
+      ],
+      "pak": 4,
+      "id": "Digora"
     },
     {
       "initialCoalition": 1,

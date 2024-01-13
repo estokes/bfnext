@@ -2,6 +2,7 @@ O means objective (OABRKOBULETI)
 G means group (GLOGI)
 AB means airbase (OABRKOBULETI)
 FARP means FOB (no slots, but place to refuel/rearm/repair/get crates
+LO means logistics obj (OLOBMukhrani)
 B means blue (starting color)
 R means red (starting color)
 N means neutral (starting color)
@@ -124,6 +125,8 @@ OFORVLADIKAVKAZ
 OFONKAZBEGI (REMOVE TREES)
 OFOBZhinvali
 OABTbilisi
+OLOBMukhrani
+OLORDigora
 
 
 ***STEPS TO COMPILE THE DLL (this requires rust and the Visual Studio Build components***

@@ -219,7 +219,7 @@ impl ObjectiveMarkup {
                 for (i, id) in marks.iter().enumerate() {
                     let j = (i + 1) as u8;
                     let i = i as f64;
-                    let a = if val / j * 20 > 1 { 0.5 } else { 0. };
+                    let a = if (val / (j * 20)) > 0 { 0.5 } else { 0. };
                     msgq.rect_to_all(
                         obj.owner.into(),
                         *id,

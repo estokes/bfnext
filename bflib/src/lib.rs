@@ -411,7 +411,10 @@ fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> 
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
-        SlotAuth::Yes => Ok(true),
+        SlotAuth::Yes => {
+            ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
+            Ok(true)
+        },
     }
 }
 

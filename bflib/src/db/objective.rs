@@ -776,10 +776,21 @@ impl Db {
                 let obj = objective_mut!(self, &oid)?;
                 obj.owner = *side;
                 actually_captured.push((*side, oid));
+                for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
+                    let group = group!(self, gid)?;
+                    for uid in &group.units {
+                        if !self.ephemeral.object_id_by_uid.contains_key(uid) {
+                            let unit = unit_mut!(self, uid)?;
+                            unit.dead = true;
+                        }
+                    }
+                }
                 self.repair_one_logi_step(*side, now, oid)?;
                 for (_, gid) in gids {
                     self.delete_group(&gid)?
                 }
+                self.ephemeral
+                    .create_objective_markup(objective!(self, oid)?, &self.persisted);
                 self.ephemeral.dirty();
             }
         }

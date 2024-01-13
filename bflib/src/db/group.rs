@@ -22,7 +22,7 @@ use super::{
 };
 use crate::{
     cfg::{Crate, Deployable, Troop, UnitTags},
-    group, group_by_name, group_mut,
+    group, group_by_name,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
 };

@@ -177,12 +177,9 @@ fn sync_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<
     let liquids = inventory.liquids().context("getting liquids")?;
     macro_rules! sync {
         ($src:ident, $dst:ident) => {
-            $src.for_each(|name, qty| {
-                if qty == 0 {
-                    obj.warehouse.$dst.remove_cow(&name);
-                    Ok(())
-                } else {
-                    let inv = obj.warehouse.$dst.get_or_default_cow(name);
+            $src.for_each(|name, qty| match obj.warehouse.$dst.get_mut_cow(&name) {
+                None => Ok(()),
+                Some(inv) => {
                     inv.stored = qty;
                     Ok(())
                 }
@@ -224,20 +221,22 @@ impl Db {
                     w.$src()
                         .with_context(|| format_compact!("getting {}", stringify!($src)))?
                         .for_each(|name, qty| {
-                            for oid in &oids {
-                                let hub = self.persisted.logistics_hubs.contains(oid);
-                                let obj = objective_mut!(self, oid)?;
-                                let capacity = qty
-                                    * if hub {
-                                        whcfg.hub_max
-                                    } else {
-                                        whcfg.airbase_max
+                            if qty > 0 {
+                                for oid in &oids {
+                                    let hub = self.persisted.logistics_hubs.contains(oid);
+                                    let obj = objective_mut!(self, oid)?;
+                                    let capacity = qty
+                                        * if hub {
+                                            whcfg.hub_max
+                                        } else {
+                                            whcfg.airbase_max
+                                        };
+                                    let inv = Inventory {
+                                        stored: capacity,
+                                        capacity,
                                     };
-                                let inv = Inventory {
-                                    stored: capacity,
-                                    capacity,
-                                };
-                                obj.warehouse.$dst.insert_cow(name.clone(), inv);
+                                    obj.warehouse.$dst.insert_cow(name.clone(), inv);
+                                }
                             }
                             Ok(())
                         })

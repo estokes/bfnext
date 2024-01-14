@@ -51,8 +51,8 @@ use dcso3::{
     timer::Timer,
     trigger::{MarkId, Trigger},
     unit::{ClassUnit, Unit},
-    world::World,
-    HooksLua, LuaEnv, MizLua, String, Vector2,
+    world::{World, MarkPanel},
+    HooksLua, LuaEnv, MizLua, String, Vector2, degrees_to_radians, pointing_towards2,
 };
 use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
@@ -139,7 +139,7 @@ impl FromStr for AdminCommand {
             }
         } else if s.starts_with("troops ") {
             let s = s.strip_prefix("troops ").unwrap();
-            let mut iter = s.split(" ");
+            let mut iter = s.splitn(2, " ");
             let key = iter
                 .next()
                 .ok_or_else(|| anyhow!("troops missing key"))?
@@ -155,7 +155,7 @@ impl FromStr for AdminCommand {
             Ok(Self::Troops { key, side, name })
         } else if s.starts_with("group ") {
             let s = s.strip_prefix("group ").unwrap();
-            let mut iter = s.split(" ");
+            let mut iter = s.splitn(2, " ");
             let key = iter
                 .next()
                 .ok_or_else(|| anyhow!("group missing key"))?
@@ -656,6 +656,19 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
 
 fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     use std::fmt::Write;
+    let compute_loc = |mk: &MarkPanel| {
+        let group_heading = degrees_to_radians(mk
+            .text
+            .split_once(" ")
+            .and_then(|(_, heading)| heading.parse::<f64>().ok())
+            .unwrap_or(0.));
+        let pos = Vector2::new(mk.pos.x, mk.pos.z);
+        SpawnLoc::AtPos {
+            pos,
+            offset_direction: pointing_towards2(group_heading, pos),
+            group_heading,
+        }
+    };
     for (id, cmd) in ctx.admin_commands.drain(..) {
         match cmd {
             AdminCommand::Help => (),
@@ -731,6 +744,7 @@ fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
             }
             AdminCommand::Troops { key, side, name } => {
                 let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
+                let act = Trigger::singleton(lua)?.action()?;
                 let ifo = ctx
                     .info_by_player_id
                     .get(&id)
@@ -752,19 +766,14 @@ fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     .context("getting marks")?
                 {
                     let mk = mk?;
-                    if mk.text == key {
+                    if mk.text.starts_with(key.as_str()) {
                         to_remove.push(mk.id);
-                        let loc = SpawnLoc::AtPos {
-                            pos: Vector2::new(mk.pos.x, mk.pos.z),
-                            offset_direction: Vector2::default(),
-                            group_heading: 0.,
-                        };
                         ctx.db
                             .add_and_queue_group(
                                 &spctx,
                                 &ctx.idx,
                                 side,
-                                loc,
+                                compute_loc(&mk),
                                 &troop_cfg.template,
                                 DeployKind::Troop {
                                     player: ifo.ucid.clone(),
@@ -775,9 +784,13 @@ fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                             .context("adding troop group")?;
                     }
                 }
+                for id in to_remove {
+                    act.remove_mark(id).context("removing mark")?;
+                }
             }
             AdminCommand::Group { key, side, name } => {
                 let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
+                let act = Trigger::singleton(lua)?.action()?;
                 let ifo = ctx
                     .info_by_player_id
                     .get(&id)
@@ -799,19 +812,14 @@ fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     .context("getting marks")?
                 {
                     let mk = mk?;
-                    if mk.text == key {
+                    if mk.text.starts_with(key.as_str()) {
                         to_remove.push(mk.id);
-                        let loc = SpawnLoc::AtPos {
-                            pos: Vector2::new(mk.pos.x, mk.pos.z),
-                            offset_direction: Vector2::default(),
-                            group_heading: 0.,
-                        };
                         ctx.db
                             .add_and_queue_group(
                                 &spctx,
                                 &ctx.idx,
                                 side,
-                                loc,
+                                compute_loc(&mk),
                                 &dep_cfg.template,
                                 DeployKind::Deployed {
                                     player: ifo.ucid.clone(),
@@ -821,6 +829,9 @@ fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                             )
                             .context("adding deployable group")?;
                     }
+                }
+                for id in to_remove {
+                    act.remove_mark(id).context("removing mark")?;
                 }
             }
         }

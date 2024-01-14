@@ -1248,6 +1248,22 @@ pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
     }
 }
 
+/// return a unit vector starting at the specified origin pointing in the 
+/// specified direction heading is in radians
+pub fn pointing_towards2(angle: f64, origin: Vector2) -> Vector2 {
+    let mut point = Vector2::new(origin.x, origin.y + 1.);
+    let sin = angle.sin();
+    let cos = angle.cos();
+    point -= origin;
+    let x = point.x;
+    let y = point.y;
+    point.x = x * cos - y * sin;
+    point.y = x * sin + y * cos;
+    point += origin;
+    point.normalize_mut();
+    point
+}
+
 /// Same as rotate2d, but construct and return a vec containing the rotated points
 /// in the same order as the they appear in the input slice.
 pub fn rotate2d_vec(angle: f64, points: &[Vector2]) -> Vec<Vector2> {

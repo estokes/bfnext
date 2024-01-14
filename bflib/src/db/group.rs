@@ -132,6 +132,14 @@ impl Db {
         unit_by_name!(self, name)
     }
 
+    pub fn first_living_unit(&self, gid: &GroupId) -> Result<&DcsOid<ClassUnit>> {
+        group!(self, gid)?
+            .units
+            .into_iter()
+            .find_map(|uid| self.ephemeral.get_object_id_by_uid(uid))
+            .ok_or_else(|| anyhow!("all units are dead"))
+    }
+
     pub fn instanced_units(&self) -> impl Iterator<Item = (&SpawnedUnit, &DcsOid<ClassUnit>)> {
         self.persisted
             .units

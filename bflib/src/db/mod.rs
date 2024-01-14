@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -28,8 +28,6 @@ use dcso3::{
     centroid3d,
     coalition::Side,
     env::miz::{Miz, MizIndex},
-    object::DcsOid,
-    unit::ClassUnit,
     Vector3,
 };
 use std::{fs::File, path::Path};
@@ -191,15 +189,9 @@ impl Db {
         })
     }
 
-    pub fn jtacs(
-        &self,
-    ) -> impl Iterator<Item = (Vector3, &DcsOid<ClassUnit>, &SpawnedGroup, &DeployableJtac)> {
+    pub fn jtacs(&self) -> impl Iterator<Item = (Vector3, &SpawnedGroup, &DeployableJtac)> {
         self.persisted.jtacs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
-            let id = group
-                .units
-                .into_iter()
-                .find_map(|gid| self.ephemeral.object_id_by_uid.get(gid))?;
             match &group.origin {
                 DeployKind::Troop {
                     spec: Troop {
@@ -220,7 +212,7 @@ impl Db {
                             .into_iter()
                             .map(|u| self.persisted.units[u].position.p.0),
                     );
-                    Some((pos, id, group, jtac))
+                    Some((pos, group, jtac))
                 }
                 DeployKind::Crate { .. }
                 | DeployKind::Objective

@@ -712,15 +712,20 @@ fn jtac_toggle_auto_laser(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
-            .toggle_auto_laser(lua, &gid)
+            .toggle_auto_laser(&ctx.db, lua, &gid)
             .context("toggling jtac auto laser")?;
     }
     jtac_status(lua, gid)
 }
 
 fn jtac_toggle_ir_pointer(lua: MizLua, gid: DbGid) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    ctx.jtac.toggle_ir_pointer(lua, &gid)
+    {
+        let ctx = unsafe { Context::get_mut() };
+        ctx.jtac
+            .toggle_ir_pointer(&ctx.db, lua, &gid)
+            .context("toggling ir pointer")?
+    }
+    jtac_status(lua, gid)
 }
 
 fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
@@ -736,7 +741,7 @@ fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
 fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
-        ctx.jtac.shift(lua, &gid).context("shifting jtac target")?;
+        ctx.jtac.shift(&ctx.db, lua, &gid).context("shifting jtac target")?;
     }
     jtac_status(lua, gid)
 }
@@ -744,7 +749,7 @@ fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
 fn jtac_clear_filter(lua: MizLua, gid: DbGid) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     ctx.jtac
-        .clear_filter(lua, &gid)
+        .clear_filter(&ctx.db, lua, &gid)
         .context("clearing jtac target filter")?;
     Ok(())
 }
@@ -755,7 +760,7 @@ fn jtac_filter(lua: MizLua, arg: ArgTuple<DbGid, u64>) -> Result<()> {
         BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
     for tag in filter.iter() {
         ctx.jtac
-            .add_filter(lua, &arg.fst, tag)
+            .add_filter(&ctx.db, lua, &arg.fst, tag)
             .context("setting jtac target filter")?;
     }
     Ok(())

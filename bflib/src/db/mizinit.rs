@@ -284,7 +284,7 @@ impl Db {
                 if let Some(groups) = obj.groups.get(&obj.owner) {
                     for gid in groups {
                         let group = group!(self, gid)?;
-                        if group.class.is_logi() {
+                        if group.class.is_services() && !obj.kind.is_airbase() {
                             self.ephemeral.push_spawn(*gid)
                         }
                     }

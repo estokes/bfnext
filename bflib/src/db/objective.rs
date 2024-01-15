@@ -58,7 +58,7 @@ impl ObjectiveKind {
     pub fn is_airbase(&self) -> bool {
         match self {
             Self::Airbase => true,
-            Self::Farp(_) | Self::Fob | Self::Logistics => false
+            Self::Farp(_) | Self::Fob | Self::Logistics => false,
         }
     }
 }
@@ -71,14 +71,30 @@ pub enum ObjGroupClass {
     Mr,
     Sr,
     Armor,
+    Services,
     Other,
 }
 
 impl ObjGroupClass {
+    pub fn is_services(&self) -> bool {
+        match self {
+            Self::Services => true,
+            Self::Logi | Self::Aaa | Self::Lr | Self::Mr | Self::Sr | Self::Armor | Self::Other => {
+                false
+            }
+        }
+    }
+
     pub fn is_logi(&self) -> bool {
         match self {
             Self::Logi => true,
-            Self::Aaa | Self::Lr | Self::Mr | Self::Sr | Self::Armor | Self::Other => false,
+            Self::Services
+            | Self::Aaa
+            | Self::Lr
+            | Self::Mr
+            | Self::Sr
+            | Self::Armor
+            | Self::Other => false,
         }
     }
 }
@@ -87,6 +103,7 @@ impl From<&str> for ObjGroupClass {
     fn from(value: &str) -> Self {
         match value {
             "BLOGI" | "RLOGI" | "NLOGI" | "LOGI" => ObjGroupClass::Logi,
+            "BSERVICES" | "RSERVICES" | "NSERVICES" | "SERVICES" => ObjGroupClass::Services,
             s => {
                 if s.starts_with("BAAA")
                     || s.starts_with("RAAA")
@@ -469,6 +486,7 @@ impl Db {
                 )?;
             for class in [
                 ObjGroupClass::Logi,
+                ObjGroupClass::Services,
                 ObjGroupClass::Sr,
                 ObjGroupClass::Aaa,
                 ObjGroupClass::Mr,
@@ -637,7 +655,7 @@ impl Db {
             obj.spawned = true;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
-                let logi = group.class.is_logi() && !obj.kind.is_airbase();
+                let logi = group.class.is_services() && !obj.kind.is_airbase();
                 let walkabout = group
                     .units
                     .into_iter()
@@ -652,7 +670,7 @@ impl Db {
             obj.spawned = false;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
-                let logi = group.class.is_logi() && !obj.kind.is_airbase();
+                let logi = group.class.is_services() && !obj.kind.is_airbase();
                 let walkabout = group
                     .units
                     .into_iter()
@@ -674,6 +692,25 @@ impl Db {
             }
         }
         Ok((became_threatened, became_clear))
+    }
+
+    pub fn repair_services(
+        &mut self,
+        side: Side,
+        now: DateTime<Utc>,
+        oid: ObjectiveId,
+    ) -> Result<()> {
+        let obj = objective_mut!(self, oid)?;
+        for gid in maybe!(obj.groups, &side, "side group")? {
+            let group = group_mut!(self, gid)?;
+            if group.class.is_services() {
+                for uid in &group.units {
+                    unit_mut!(self, uid)?.dead = false;
+                }
+                self.ephemeral.push_spawn(*gid);
+            }
+        }
+        self.update_objective_status(&oid, now)
     }
 
     pub fn repair_one_logi_step(
@@ -795,6 +832,7 @@ impl Db {
                     }
                 }
                 self.repair_one_logi_step(*side, now, oid)?;
+                self.repair_services(*side, now, oid)?;
                 for (_, gid) in gids {
                     self.delete_group(&gid)?
                 }

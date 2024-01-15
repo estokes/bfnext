@@ -228,6 +228,7 @@ impl Context {
 fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
     tbl: &'a mut FxHashMap<PlayerId, PlayerInfo>,
     rtbl: &'a mut FxHashMap<Ucid, PlayerId>,
+    ntbl: &'a mut FxHashMap<String, PlayerId>,
     lua: L,
     id: PlayerId,
 ) -> Result<&'a PlayerInfo> {
@@ -242,6 +243,7 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
         let name = ifo.name()?;
         info!("player name: '{}', id: {:?}, ucid: {:?}", name, id, ucid);
         rtbl.insert(ucid.clone(), id);
+        ntbl.insert(name.clone(), id);
         tbl.insert(id, PlayerInfo { name, ucid });
         Ok(&tbl[&id])
     }
@@ -269,7 +271,13 @@ fn on_player_try_connect(
 
 fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     let ctx = unsafe { Context::get_mut() };
-    let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
+    let ifo = get_player_info(
+        &mut ctx.info_by_player_id,
+        &mut ctx.id_by_ucid,
+        &mut ctx.id_by_name,
+        lua,
+        id,
+    )?;
     let side = if msg.eq_ignore_ascii_case("blue") {
         Side::Blue
     } else if msg.eq_ignore_ascii_case("red") {
@@ -308,7 +316,13 @@ fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
 
 fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     let ctx = unsafe { Context::get_mut() };
-    let ifo = get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id)?;
+    let ifo = get_player_info(
+        &mut ctx.info_by_player_id,
+        &mut ctx.id_by_ucid,
+        &mut ctx.id_by_name,
+        lua,
+        id,
+    )?;
     let (_, slot) = Net::singleton(lua)?.get_slot(id)?;
     if !slot.is_spectator() {
         bail!("you must be in spectators to switch sides")
@@ -456,7 +470,13 @@ fn on_player_try_change_slot(
     }
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    let res = match get_player_info(&mut ctx.info_by_player_id, &mut ctx.id_by_ucid, lua, id) {
+    let res = match get_player_info(
+        &mut ctx.info_by_player_id,
+        &mut ctx.id_by_ucid,
+        &mut ctx.id_by_name,
+        lua,
+        id,
+    ) {
         Err(e) => {
             error!("failed to get player info for {:?} {:?}", id, e);
             Ok(Some(false))
@@ -749,7 +769,7 @@ fn admin_sideswitch(ctx: &mut Context, side: Side, name: String) -> Result<()> {
     let id = ctx
         .id_by_name
         .get(&name)
-        .ok_or_else(|| anyhow!("no player by name {}", name))?;
+        .ok_or_else(|| anyhow!("no player by name \"{}\"", name))?;
     let ifo = ctx
         .info_by_player_id
         .get(&id)

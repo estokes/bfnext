@@ -131,7 +131,7 @@ impl Context {
 
     fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
-        self.db.respawn_after_load(&spctx)
+        self.db.respawn_after_load(&self.idx, &spctx)
     }
 
     fn log_perf(&mut self, now: DateTime<Utc>) {

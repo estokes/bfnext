@@ -396,12 +396,15 @@ impl Db {
             &pad_template,
             DeployKind::Objective,
         )?;
-        let pad_uid = group!(self, pad_gid)?
-            .units
-            .into_iter()
-            .next()
-            .map(|uid| *uid)
-            .ok_or_else(|| anyhow!("pad group missing pad"))?;
+        let pad_uid = {
+            let pad = group_mut!(self, pad_gid)?;
+            pad.class = ObjGroupClass::Services;
+            pad.units
+                .into_iter()
+                .next()
+                .map(|uid| *uid)
+                .ok_or_else(|| anyhow!("pad group missing pad"))?
+        };
         groups.insert_cow(pad_gid);
         ephemeral::spawn_group(&self.persisted, idx, spctx, group!(self, pad_gid)?)
             .context("spawning the pad")?;

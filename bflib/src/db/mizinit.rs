@@ -15,6 +15,7 @@ for more details.
 */
 
 use super::{
+    ephemeral,
     group::{DeployKind, UnitId},
     objective::ObjGroup,
     Db, Map,
@@ -269,7 +270,7 @@ impl Db {
         Ok(t)
     }
 
-    pub fn respawn_after_load(&mut self, spctx: &SpawnCtx) -> Result<()> {
+    pub fn respawn_after_load(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
         let mut spawn_deployed_and_logistics = || -> Result<()> {
             for gid in &self.persisted.deployed {
                 self.ephemeral.push_spawn(*gid);
@@ -284,9 +285,13 @@ impl Db {
                 if let Some(groups) = obj.groups.get(&obj.owner) {
                     for gid in groups {
                         let group = group!(self, gid)?;
-                        if obj.kind.is_farp()
-                            || (group.class.is_services() && !obj.kind.is_airbase())
-                        {
+                        if obj.kind.is_farp() {
+                            if group.class.is_services() {
+                                ephemeral::spawn_group(&self.persisted, idx, spctx, group)?
+                            } else {
+                                self.ephemeral.push_spawn(*gid);
+                            }
+                        } else if group.class.is_services() && !obj.kind.is_airbase() {
                             self.ephemeral.push_spawn(*gid)
                         }
                     }

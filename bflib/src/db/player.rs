@@ -17,7 +17,7 @@ for more details.
 use super::{group::GroupId, Db, Map, Set};
 use crate::{
     cfg::{LifeType, Vehicle},
-    maybe,
+    maybe, maybe_mut,
 };
 use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
@@ -293,6 +293,13 @@ impl Db {
                 Ok(())
             }
         }
+    }
+
+    pub fn force_sideswitch_player(&mut self, ucid: &Ucid, side: Side) -> Result<()> {
+        let player = maybe_mut!(self.persisted.players, ucid, "no such player")?;
+        player.side = side;
+        self.ephemeral.dirty();
+        Ok(())
     }
 
     pub fn sideswitch_player(&mut self, ucid: &Ucid, side: Side) -> Result<(), &'static str> {

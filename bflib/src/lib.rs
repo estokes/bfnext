@@ -76,11 +76,12 @@ enum AdminCommand {
     LogisticsDeliverNow,
     Tim { key: String, size: usize },
     Spawn { key: String },
+    SideSwitch { side: Side, player: String },
 }
 
 impl AdminCommand {
     fn help() -> &'static str {
-        "reduce-inventory <airbase> <amount>, logistics-tick-now, logistics-deliver-now, tim <key> [size], spawn <key>"
+        "reduce-inventory <airbase> <amount>, logistics-tick-now, logistics-deliver-now, tim <key> [size], spawn <key>, sideswitch <side> <player>"
     }
 }
 
@@ -127,6 +128,18 @@ impl FromStr for AdminCommand {
         } else if s.starts_with("spawn ") {
             let s = s.strip_prefix("spawn ").unwrap();
             Ok(Self::Spawn { key: s.into() })
+        } else if s.starts_with("sideswitch ") {
+            let s = s.strip_prefix("sideswitch ").unwrap();
+            match s.split_once(" ") {
+                None => bail!("sideswitch <side> <player>"),
+                Some((side, player)) => {
+                    let side = side.parse::<Side>()?;
+                    Ok(Self::SideSwitch {
+                        side,
+                        player: player.into(),
+                    })
+                }
+            }
         } else {
             bail!("unknown command {s}")
         }
@@ -149,6 +162,7 @@ struct Context {
     to_background: Option<UnboundedSender<bg::Task>>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
+    id_by_name: FxHashMap<String, PlayerId>,
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
@@ -247,6 +261,7 @@ fn on_player_try_connect(
     );
     let ctx = unsafe { Context::get_mut() };
     ctx.id_by_ucid.insert(ucid.clone(), id);
+    ctx.id_by_name.insert(name.clone(), id);
     ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
     record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
     Ok(true)
@@ -730,6 +745,18 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
     Ok(())
 }
 
+fn admin_sideswitch(ctx: &mut Context, side: Side, name: String) -> Result<()> {
+    let id = ctx
+        .id_by_name
+        .get(&name)
+        .ok_or_else(|| anyhow!("no player by name {}", name))?;
+    let ifo = ctx
+        .info_by_player_id
+        .get(&id)
+        .ok_or_else(|| anyhow!("missing player with id {:?}", id))?;
+    ctx.db.force_sideswitch_player(&ifo.ucid, side)
+}
+
 fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     use std::fmt::Write;
     let mut cmds = mem::take(&mut ctx.admin_commands);
@@ -811,6 +838,14 @@ fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     ctx.db.ephemeral.msgs().send(
                         MsgTyp::Chat(Some(id)),
                         format_compact!("could not spawn {:?}", e),
+                    );
+                }
+            }
+            AdminCommand::SideSwitch { side, player } => {
+                if let Err(e) = admin_sideswitch(ctx, side, player) {
+                    ctx.db.ephemeral.msgs().send(
+                        MsgTyp::Chat(Some(id)),
+                        format_compact!("could not sideswitch {:?}", e),
                     );
                 }
             }

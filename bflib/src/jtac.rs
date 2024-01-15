@@ -236,7 +236,7 @@ impl Jtac {
                 let spot = Spot::create_laser(
                     lua,
                     jt.as_object()?,
-                    Some(LuaVec3(Vector3::new(0., 2., 0.))),
+                    Some(LuaVec3(Vector3::new(0., 5., 0.))),
                     LuaVec3(pos),
                     self.code,
                 )
@@ -247,7 +247,7 @@ impl Jtac {
                         Spot::create_infra_red(
                             lua,
                             jt.as_object()?,
-                            Some(LuaVec3(Vector3::new(0., 2., 0.))),
+                            Some(LuaVec3(Vector3::new(0., 5., 0.))),
                             LuaVec3(pos),
                         )
                         .context("creating ir pointer spot")?
@@ -545,7 +545,7 @@ impl Jtacs {
                 saw_jtacs.push(group.id)
             }
             let range = (ifo.range as f64).powi(2);
-            pos.y += 2.; // adjust for unit height and ability to look over terrain
+            pos.y += 5.;
             let jtac = self
                 .0
                 .entry(group.side)

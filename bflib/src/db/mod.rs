@@ -55,7 +55,7 @@ macro_rules! maybe {
 #[macro_export]
 macro_rules! maybe_mut {
     ($t:expr, $id:expr, $name:expr) => {
-        $t.get_mut(&$id)
+        $t.get_mut_cow(&$id)
             .ok_or_else(|| anyhow!("no such {} {:?}", $name, $id))
     };
 }

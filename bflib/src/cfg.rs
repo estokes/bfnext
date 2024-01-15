@@ -50,6 +50,12 @@ impl Borrow<str> for Vehicle {
     }
 }
 
+impl Vehicle {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[bitflags]
 #[repr(u64)]

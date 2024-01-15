@@ -25,7 +25,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Context};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
@@ -445,10 +445,13 @@ impl Db {
         }
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
-        self.ephemeral.dirty();
+        self.init_farp_warehouse(spctx.lua(), &oid)
+            .context("initializing farp warehouse")?;
+        self.deliver_supplies_from_logistics_hubs()
+            .context("distributing supplies")?;
         self.ephemeral
             .create_objective_markup(objective!(self, oid)?, &self.persisted);
-        self.deliver_supplies_from_logistics_hubs()?;
+        self.ephemeral.dirty();
         Ok(oid)
     }
 
@@ -518,7 +521,8 @@ impl Db {
                         for uid in &group.units {
                             unit_mut!(self, uid)?.dead = false;
                         }
-                        if obj.spawned || class == ObjGroupClass::Services && !obj.kind.is_airbase() {
+                        if obj.spawned || class == ObjGroupClass::Services && !obj.kind.is_airbase()
+                        {
                             self.ephemeral.push_spawn(gid)
                         }
                         self.update_objective_status(&oid, now)?;

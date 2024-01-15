@@ -197,9 +197,53 @@ fn sync_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<
     Ok(())
 }
 
+fn get_supplier<'lua>(lua: MizLua<'lua>, template: String) -> Result<warehouse::Inventory<'lua>> {
+    Airbase::get_by_name(lua, template.clone())
+        .with_context(|| format_compact!("getting airbase {}", template))?
+        .get_warehouse()
+        .context("getting warehouse")?
+        .get_inventory(None)
+        .context("getting inventory")
+}
+
 impl Db {
-    pub(super) fn init_warehouses(&mut self, lua: MizLua) -> Result<()> {
+    pub(super) fn init_farp_warehouse(&mut self, lua: MizLua, oid: &ObjectiveId) -> Result<()> {
         let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
+            Some(cfg) => cfg,
+            None => return Ok(()),
+        };
+        let obj = objective_mut!(self, oid)?;
+        let template = match whcfg.supply_source.get(&obj.owner) {
+            Some(tmpl) => tmpl,
+            None => return Ok(()), // side didn't produce anything, bummer
+        };
+        let w = get_supplier(lua, template.clone())?;
+        w.weapons()?.for_each(|name, qty| {
+            if qty > 0 {
+                let inv = Inventory {
+                    stored: 0,
+                    capacity: qty * whcfg.airbase_max,
+                };
+                obj.warehouse.equipment.insert_cow(name, inv);
+            }
+            Ok(())
+        })?;
+        w.liquids()?.for_each(|name, qty| {
+            if qty > 0 {
+                let inv = Inventory {
+                    stored: 0,
+                    capacity: qty * whcfg.airbase_max,
+                };
+                obj.warehouse.liquids.insert_cow(name, inv);
+            }
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    pub(super) fn init_warehouses(&mut self, lua: MizLua) -> Result<()> {
+        let cfg = &self.ephemeral.cfg;
+        let whcfg = match cfg.warehouse.as_ref() {
             Some(cfg) => cfg,
             None => return Ok(()),
         };
@@ -214,42 +258,83 @@ impl Db {
                 Some(tmpl) => tmpl,
                 None => continue, // side didn't produce anything, bummer
             };
-            let w = Airbase::get_by_name(lua, template.clone())
-                .with_context(|| format_compact!("getting airbase {}", template))?
-                .get_warehouse()
-                .context("getting warehouse")?
-                .get_inventory(None)
-                .context("getting inventory")?;
-            macro_rules! dist {
-                ($src:ident, $dst:ident) => {{
-                    w.$src()
-                        .with_context(|| format_compact!("getting {}", stringify!($src)))?
-                        .for_each(|name, qty| {
-                            if qty > 0 {
-                                for oid in &oids {
-                                    let hub = self.persisted.logistics_hubs.contains(oid);
-                                    let obj = objective_mut!(self, oid)?;
-                                    let capacity = qty
-                                        * if hub {
-                                            whcfg.hub_max
-                                        } else {
-                                            whcfg.airbase_max
-                                        };
-                                    let inv = Inventory {
-                                        stored: capacity,
-                                        capacity,
-                                    };
-                                    obj.warehouse.$dst.insert_cow(name.clone(), inv);
-                                }
+            let w = get_supplier(lua, template.clone())?;
+            w.weapons()
+                .context("getting weapons")?
+                .for_each(|name, qty| {
+                    if qty > 0 {
+                        for oid in &oids {
+                            let hub = self.persisted.logistics_hubs.contains(oid);
+                            let obj = objective_mut!(self, oid)?;
+                            let capacity = qty
+                                * if hub {
+                                    whcfg.hub_max
+                                } else {
+                                    whcfg.airbase_max
+                                };
+                            let inv = Inventory {
+                                stored: capacity,
+                                capacity,
+                            };
+                            obj.warehouse.equipment.insert_cow(name.clone(), inv);
+                        }
+                    }
+                    Ok(())
+                })
+                .context("distributing")?;
+            w.aircraft()
+                .context("getting aircraft")?
+                .for_each(|name, qty| {
+                    if qty > 0 {
+                        for oid in &oids {
+                            let hub = self.persisted.logistics_hubs.contains(oid);
+                            let obj = objective_mut!(self, oid)?;
+                            let capacity = qty
+                                * if hub {
+                                    whcfg.hub_max
+                                } else {
+                                    whcfg.airbase_max
+                                };
+                            let include = hub
+                                || obj
+                                    .slots
+                                    .into_iter()
+                                    .any(|(_, v)| v.as_str() == name.as_str());
+                            if include {
+                                let inv = Inventory {
+                                    stored: capacity,
+                                    capacity,
+                                };
+                                obj.warehouse.equipment.insert_cow(name.clone(), inv);
                             }
-                            Ok(())
-                        })
-                        .context("distributing")?;
-                }};
-            }
-            dist!(weapons, equipment);
-            dist!(aircraft, equipment);
-            dist!(liquids, liquids);
+                        }
+                    }
+                    Ok(())
+                })
+                .context("distributing")?;
+            w.liquids()
+                .context("getting liquids")?
+                .for_each(|name, qty| {
+                    if qty > 0 {
+                        for oid in &oids {
+                            let hub = self.persisted.logistics_hubs.contains(oid);
+                            let obj = objective_mut!(self, oid)?;
+                            let capacity = qty
+                                * if hub {
+                                    whcfg.hub_max
+                                } else {
+                                    whcfg.airbase_max
+                                };
+                            let inv = Inventory {
+                                stored: capacity,
+                                capacity,
+                            };
+                            obj.warehouse.liquids.insert_cow(name, inv);
+                        }
+                    }
+                    Ok(())
+                })
+                .context("distributing")?;
         }
         self.ephemeral.dirty();
         Ok(())

@@ -629,7 +629,7 @@ impl Db {
                     n += 1;
                 }
             }
-            obj.supply = (sum / n) as u8;
+            obj.supply = if n == 0 { 0 } else { (sum / n) as u8 };
             n = 0;
             sum = 0;
             for (_, inv) in &obj.warehouse.liquids {
@@ -638,7 +638,7 @@ impl Db {
                     n += 1;
                 }
             }
-            obj.fuel = (sum / n) as u8;
+            obj.fuel = if n == 0 { 0 } else { (sum / n) as u8 };
         }
         self.ephemeral.dirty();
         Ok(())

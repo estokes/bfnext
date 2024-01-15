@@ -61,6 +61,13 @@ impl ObjectiveKind {
             Self::Farp(_) | Self::Fob | Self::Logistics => false,
         }
     }
+
+    pub fn is_farp(&self) -> bool {
+        match self {
+            Self::Farp(_) => true,
+            Self::Airbase | Self::Fob | Self::Logistics => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -655,12 +662,13 @@ impl Db {
             obj.spawned = true;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
-                let logi = group.class.is_services() && !obj.kind.is_airbase();
+                let farp = obj.kind.is_farp();
+                let services = group.class.is_services() && !obj.kind.is_airbase();
                 let walkabout = group
                     .units
                     .into_iter()
                     .any(|u| self.ephemeral.units_potentially_on_walkabout.contains(u));
-                if !logi && !walkabout {
+                if !farp && !services && !walkabout {
                     self.ephemeral.push_spawn(*gid);
                 }
             }
@@ -670,12 +678,13 @@ impl Db {
             obj.spawned = false;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
-                let logi = group.class.is_services() && !obj.kind.is_airbase();
+                let farp = obj.kind.is_farp();
+                let services = group.class.is_services() && !obj.kind.is_airbase();
                 let walkabout = group
                     .units
                     .into_iter()
                     .any(|u| self.ephemeral.units_potentially_on_walkabout.contains(u));
-                if !logi && !walkabout {
+                if !farp && !services && !walkabout {
                     match group.kind {
                         Some(_) => self
                             .ephemeral

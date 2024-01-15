@@ -25,7 +25,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Context, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
@@ -327,6 +327,8 @@ impl Db {
         if let Some(lid) = obj.warehouse.supplier {
             let logi = objective_mut!(self, lid)?;
             logi.warehouse.destination.remove_cow(&obj.id);
+            self.ephemeral
+                .create_objective_markup(objective!(self, lid)?, &self.persisted);
         }
         for (_, groups) in &obj.groups {
             for gid in groups {
@@ -437,6 +439,8 @@ impl Db {
         if let Some(lid) = obj.warehouse.supplier {
             let logi = objective_mut!(self, lid)?;
             logi.warehouse.destination.insert_cow(oid);
+            self.ephemeral
+                .create_objective_markup(objective!(self, lid)?, &self.persisted);
         }
         for (_, groups) in &obj.groups {
             for gid in groups {

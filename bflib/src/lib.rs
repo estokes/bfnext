@@ -677,6 +677,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
     {
         let mk = mk?;
         if mk.text.starts_with(key.as_str()) {
+            to_remove.push(mk.id);
             let spec = mk.text.as_str().strip_prefix(key.as_str()).unwrap();
             let mut iter = spec.splitn(4, " ");
             let kind = iter
@@ -709,7 +710,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                 offset_direction: pointing_towards2(heading, pos),
                 group_heading: heading,
             };
-            let (template, cfg) = match kind {
+            match kind {
                 Kind::Troop => {
                     let specs = ctx
                         .db
@@ -723,13 +724,21 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         .find(|tr| tr.name.as_str() == name)
                         .ok_or_else(|| anyhow!("no troop called {name} on {side}"))?
                         .clone();
-                    (
-                        spec.template.clone(),
-                        DeployKind::Troop {
-                            player: ifo.ucid.clone(),
-                            spec,
-                        },
-                    )
+                    let origin = DeployKind::Troop {
+                        player: ifo.ucid.clone(),
+                        spec: spec.clone(),
+                    };
+                    ctx.db
+                        .add_and_queue_group(
+                            &spctx,
+                            &ctx.idx,
+                            side,
+                            loc,
+                            &spec.template,
+                            origin,
+                            None,
+                        )
+                        .context("adding group")?;
                 }
                 Kind::Deployable => {
                     let specs = ctx
@@ -744,19 +753,32 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         .find(|dp| dp.path.ends_with(&[String::from(name)]))
                         .ok_or_else(|| anyhow!("no deployable called {name} on {side}"))?
                         .clone();
-                    (
-                        spec.template.clone(),
-                        DeployKind::Deployed {
-                            player: ifo.ucid.clone(),
-                            spec,
-                        },
-                    )
+                    match &spec.logistics {
+                        Some(parts) => {
+                            ctx.db
+                                .add_farp(&spctx, &ctx.idx, side, pos, &spec, parts)
+                                .context("adding farp")?;
+                        }
+                        None => {
+                            let origin = DeployKind::Deployed {
+                                player: ifo.ucid.clone(),
+                                spec: spec.clone(),
+                            };
+                            ctx.db
+                                .add_and_queue_group(
+                                    &spctx,
+                                    &ctx.idx,
+                                    side,
+                                    loc,
+                                    &spec.template,
+                                    origin,
+                                    None,
+                                )
+                                .context("adding group")?;
+                        }
+                    }
                 }
-            };
-            to_remove.push(mk.id);
-            ctx.db
-                .add_and_queue_group(&spctx, &ctx.idx, side, loc, template.as_str(), cfg, None)
-                .context("adding group")?;
+            }
         }
     }
     for id in to_remove {
@@ -862,10 +884,15 @@ fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 }
             }
             AdminCommand::SideSwitch { side, player } => {
-                if let Err(e) = admin_sideswitch(ctx, side, player) {
+                if let Err(e) = admin_sideswitch(ctx, side, player.clone()) {
                     ctx.db.ephemeral.msgs().send(
                         MsgTyp::Chat(Some(id)),
                         format_compact!("could not sideswitch {:?}", e),
+                    );
+                } else {
+                    ctx.db.ephemeral.msgs().send(
+                        MsgTyp::Chat(Some(id)),
+                        format_compact!("{player} sideswitched to {side}"),
                     );
                 }
             }

@@ -305,7 +305,7 @@ impl Db {
         Ok(())
     }
 
-    pub(super) fn add_farp(
+    pub fn add_farp(
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,

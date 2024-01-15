@@ -1460,7 +1460,7 @@ impl Default for Cfg {
             }),
             logistics_exclusion: 10000,
             unit_cull_distance: 70000,
-            ground_vehicle_cull_distance: 20000,
+            ground_vehicle_cull_distance: 10000,
             slow_timed_events_freq: 10,
             threatened_distance: default_threatened_distance(),
             threatened_cooldown: 300,

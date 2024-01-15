@@ -38,6 +38,7 @@ use compact_str::{format_compact, CompactString};
 use db::{objective::ObjectiveId, player::RegErr, Db};
 use dcso3::{
     coalition::Side,
+    degrees_to_radians,
     env::{
         self,
         miz::{Miz, UnitId},
@@ -48,11 +49,12 @@ use dcso3::{
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
     object::{DcsObject, DcsOid},
+    pointing_towards2,
     timer::Timer,
     trigger::{MarkId, Trigger},
     unit::{ClassUnit, Unit},
-    world::{World, MarkPanel},
-    HooksLua, LuaEnv, MizLua, String, Vector2, degrees_to_radians, pointing_towards2,
+    world::World,
+    HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
@@ -63,37 +65,22 @@ use msgq::MsgTyp;
 use perf::Perf;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{iter, path::PathBuf, str::FromStr, sync::Arc};
+use std::{iter, mem, path::PathBuf, str::FromStr, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
 enum AdminCommand {
     Help,
-    ReduceInventory {
-        airbase: String,
-        amount: u8,
-    },
+    ReduceInventory { airbase: String, amount: u8 },
     LogisticsTickNow,
     LogisticsDeliverNow,
-    Tim {
-        key: String,
-        size: usize,
-    },
-    Troops {
-        key: String,
-        side: Side,
-        name: String,
-    },
-    Group {
-        key: String,
-        side: Side,
-        name: String,
-    },
+    Tim { key: String, size: usize },
+    Spawn { key: String },
 }
 
 impl AdminCommand {
     fn help() -> &'static str {
-        "reduce-inventory <airbase> <amount>, logistics-tick-now, logistics-deliver-now, tim <key> [size], troops <key> <side> <name>, group <key> <side> <name>"
+        "reduce-inventory <airbase> <amount>, logistics-tick-now, logistics-deliver-now, tim <key> [size], spawn <key>"
     }
 }
 
@@ -137,38 +124,9 @@ impl FromStr for AdminCommand {
                     })
                 }
             }
-        } else if s.starts_with("troops ") {
-            let s = s.strip_prefix("troops ").unwrap();
-            let mut iter = s.splitn(2, " ");
-            let key = iter
-                .next()
-                .ok_or_else(|| anyhow!("troops missing key"))?
-                .into();
-            let side = iter
-                .next()
-                .ok_or_else(|| anyhow!("troops missing side"))?
-                .parse()?;
-            let name = iter
-                .next()
-                .ok_or_else(|| anyhow!("troops missing name"))?
-                .into();
-            Ok(Self::Troops { key, side, name })
-        } else if s.starts_with("group ") {
-            let s = s.strip_prefix("group ").unwrap();
-            let mut iter = s.splitn(2, " ");
-            let key = iter
-                .next()
-                .ok_or_else(|| anyhow!("group missing key"))?
-                .into();
-            let side = iter
-                .next()
-                .ok_or_else(|| anyhow!("group missing side"))?
-                .parse()?;
-            let name = iter
-                .next()
-                .ok_or_else(|| anyhow!("group missing name"))?
-                .into();
-            Ok(Self::Group { key, side, name })
+        } else if s.starts_with("spawn ") {
+            let s = s.strip_prefix("spawn ").unwrap();
+            Ok(Self::Spawn { key: s.into() })
         } else {
             bail!("unknown command {s}")
         }
@@ -654,22 +612,128 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
     Ok(())
 }
 
+fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Result<()> {
+    let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
+    let act = Trigger::singleton(lua)?.action()?;
+    let spctx = SpawnCtx::new(lua)?;
+    let key = format_compact!("{} ", key);
+    let ifo = ctx
+        .info_by_player_id
+        .get(&id)
+        .ok_or_else(|| anyhow!("unknown admin"))?;
+    enum Kind {
+        Troop,
+        Deployable,
+    }
+    impl FromStr for Kind {
+        type Err = anyhow::Error;
+
+        fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+            match s {
+                "troop" => Ok(Kind::Troop),
+                "deployable" => Ok(Kind::Deployable),
+                s => bail!("invalid kind, expected troop or deployable got {s}"),
+            }
+        }
+    }
+    for mk in World::singleton(lua)?
+        .get_mark_panels()
+        .context("getting marks")?
+    {
+        let mk = mk?;
+        if mk.text.starts_with(key.as_str()) {
+            let spec = mk.text.as_str().strip_prefix(key.as_str()).unwrap();
+            let mut iter = spec.splitn(3, " ");
+            let kind = iter
+                .next()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "spawn mark '{}' missing kind expected troop or deployable",
+                        spec
+                    )
+                })?
+                .parse::<Kind>()?;
+            let side = iter
+                .next()
+                .ok_or_else(|| anyhow!("spawn mark {} missing side", spec))?;
+            let side = side.parse::<Side>().with_context(|| {
+                format_compact!("error parsing {} as a side in mark {}", side, spec)
+            })?;
+            let heading = iter
+                .next()
+                .ok_or_else(|| anyhow!("spawn mark {} missing heading", spec))?;
+            let heading = degrees_to_radians(heading.parse::<u32>().with_context(|| {
+                format_compact!("error parsing {} as a heading in mark {}", heading, spec)
+            })? as f64);
+            let name = iter
+                .next()
+                .ok_or_else(|| anyhow!("spawn mark {} missing name of the thing to spawn", spec))?;
+            let pos = Vector2::new(mk.pos.x, mk.pos.z);
+            let loc = SpawnLoc::AtPos {
+                pos,
+                offset_direction: pointing_towards2(heading, pos),
+                group_heading: heading,
+            };
+            let (template, cfg) = match kind {
+                Kind::Troop => {
+                    let specs = ctx
+                        .db
+                        .ephemeral
+                        .cfg()
+                        .troops
+                        .get(&side)
+                        .ok_or_else(|| anyhow!("no troops on {side}"))?;
+                    let spec = specs
+                        .iter()
+                        .find(|tr| tr.name.as_str() == name)
+                        .ok_or_else(|| anyhow!("no troop called {name} on {side}"))?
+                        .clone();
+                    (
+                        spec.template.clone(),
+                        DeployKind::Troop {
+                            player: ifo.ucid.clone(),
+                            spec,
+                        },
+                    )
+                }
+                Kind::Deployable => {
+                    let specs = ctx
+                        .db
+                        .ephemeral
+                        .cfg()
+                        .deployables
+                        .get(&side)
+                        .ok_or_else(|| anyhow!("no deployables on {side}"))?;
+                    let spec = specs
+                        .iter()
+                        .find(|dp| dp.path.ends_with(&[String::from(name)]))
+                        .ok_or_else(|| anyhow!("no deployable called {name} on {side}"))?
+                        .clone();
+                    (
+                        spec.template.clone(),
+                        DeployKind::Deployed {
+                            player: ifo.ucid.clone(),
+                            spec,
+                        },
+                    )
+                }
+            };
+            to_remove.push(mk.id);
+            ctx.db
+                .add_and_queue_group(&spctx, &ctx.idx, side, loc, template.as_str(), cfg, None)
+                .context("adding group")?;
+        }
+    }
+    for id in to_remove {
+        act.remove_mark(id).context("removing mark")?;
+    }
+    Ok(())
+}
+
 fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     use std::fmt::Write;
-    let compute_loc = |mk: &MarkPanel| {
-        let group_heading = degrees_to_radians(mk
-            .text
-            .split_once(" ")
-            .and_then(|(_, heading)| heading.parse::<f64>().ok())
-            .unwrap_or(0.));
-        let pos = Vector2::new(mk.pos.x, mk.pos.z);
-        SpawnLoc::AtPos {
-            pos,
-            offset_direction: pointing_towards2(group_heading, pos),
-            group_heading,
-        }
-    };
-    for (id, cmd) in ctx.admin_commands.drain(..) {
+    let mut cmds = mem::take(&mut ctx.admin_commands);
+    for (id, cmd) in cmds.drain(..) {
         match cmd {
             AdminCommand::Help => (),
             AdminCommand::ReduceInventory { airbase, amount } => {
@@ -742,100 +806,17 @@ fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     ctx.db.ephemeral.msgs().delete_mark(id);
                 }
             }
-            AdminCommand::Troops { key, side, name } => {
-                let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
-                let act = Trigger::singleton(lua)?.action()?;
-                let ifo = ctx
-                    .info_by_player_id
-                    .get(&id)
-                    .ok_or_else(|| anyhow!("unknown admin"))?;
-                let troop_cfg = ctx
-                    .db
-                    .ephemeral
-                    .cfg()
-                    .troops
-                    .get(&side)
-                    .ok_or_else(|| anyhow!("no troops on {side}"))?
-                    .iter()
-                    .find(|tr| tr.name == name)
-                    .ok_or_else(|| anyhow!("no troop called {name} on {side}"))?
-                    .clone();
-                let spctx = SpawnCtx::new(lua)?;
-                for mk in World::singleton(lua)?
-                    .get_mark_panels()
-                    .context("getting marks")?
-                {
-                    let mk = mk?;
-                    if mk.text.starts_with(key.as_str()) {
-                        to_remove.push(mk.id);
-                        ctx.db
-                            .add_and_queue_group(
-                                &spctx,
-                                &ctx.idx,
-                                side,
-                                compute_loc(&mk),
-                                &troop_cfg.template,
-                                DeployKind::Troop {
-                                    player: ifo.ucid.clone(),
-                                    spec: troop_cfg.clone(),
-                                },
-                                None,
-                            )
-                            .context("adding troop group")?;
-                    }
-                }
-                for id in to_remove {
-                    act.remove_mark(id).context("removing mark")?;
-                }
-            }
-            AdminCommand::Group { key, side, name } => {
-                let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
-                let act = Trigger::singleton(lua)?.action()?;
-                let ifo = ctx
-                    .info_by_player_id
-                    .get(&id)
-                    .ok_or_else(|| anyhow!("unknown admin"))?;
-                let dep_cfg = ctx
-                    .db
-                    .ephemeral
-                    .cfg()
-                    .deployables
-                    .get(&side)
-                    .ok_or_else(|| anyhow!("no deployables on {side}"))?
-                    .iter()
-                    .find(|dp| dp.path.ends_with(&[name.clone()]))
-                    .ok_or_else(|| anyhow!("no deployable called {name} on {side}"))?
-                    .clone();
-                let spctx = SpawnCtx::new(lua)?;
-                for mk in World::singleton(lua)?
-                    .get_mark_panels()
-                    .context("getting marks")?
-                {
-                    let mk = mk?;
-                    if mk.text.starts_with(key.as_str()) {
-                        to_remove.push(mk.id);
-                        ctx.db
-                            .add_and_queue_group(
-                                &spctx,
-                                &ctx.idx,
-                                side,
-                                compute_loc(&mk),
-                                &dep_cfg.template,
-                                DeployKind::Deployed {
-                                    player: ifo.ucid.clone(),
-                                    spec: dep_cfg.clone(),
-                                },
-                                None,
-                            )
-                            .context("adding deployable group")?;
-                    }
-                }
-                for id in to_remove {
-                    act.remove_mark(id).context("removing mark")?;
+            AdminCommand::Spawn { key } => {
+                if let Err(e) = admin_spawn(ctx, lua, id, key) {
+                    ctx.db.ephemeral.msgs().send(
+                        MsgTyp::Chat(Some(id)),
+                        format_compact!("could not spawn {:?}", e),
+                    );
                 }
             }
         }
     }
+    ctx.admin_commands = cmds;
     Ok(())
 }
 

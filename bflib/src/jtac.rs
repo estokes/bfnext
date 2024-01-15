@@ -244,14 +244,14 @@ impl Jtac {
                 .object_id()?;
                 let ir_pointer = if self.ir_pointer {
                     Some(
-                        dbg!(Spot::create_infra_red(
+                        Spot::create_infra_red(
                             lua,
                             jt.as_object()?,
                             Some(LuaVec3(Vector3::new(0., 2., 0.))),
                             LuaVec3(pos),
                         )
                         .context("creating ir pointer spot")?
-                        .object_id())?,
+                        .object_id()?,
                     )
                 } else {
                     None
@@ -437,7 +437,13 @@ impl Jtacs {
         jtac.sort_contacts(db, lua)
     }
 
-    pub fn add_filter(&mut self, db: &Db, lua: MizLua, gid: &GroupId, tag: UnitTag) -> Result<bool> {
+    pub fn add_filter(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        gid: &GroupId,
+        tag: UnitTag,
+    ) -> Result<bool> {
         let jtac = self.get_mut(gid)?;
         jtac.filter |= tag;
         jtac.sort_contacts(db, lua)

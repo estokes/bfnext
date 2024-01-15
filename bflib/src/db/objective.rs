@@ -448,6 +448,7 @@ impl Db {
         self.ephemeral.dirty();
         self.ephemeral
             .create_objective_markup(objective!(self, oid)?, &self.persisted);
+        self.deliver_supplies_from_logistics_hubs()?;
         Ok(oid)
     }
 

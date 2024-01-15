@@ -49,11 +49,6 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Debug, Clone)]
-pub(super) struct ObjLogi {
-    pub(super) airbase: DcsOid<ClassAirbase>,
-}
-
 #[derive(Debug, Clone, Default)]
 pub(super) struct DeployableIndex {
     pub(super) deployables_by_name: FxHashMap<String, Deployable>,
@@ -334,7 +329,7 @@ pub struct Ephemeral {
     pub(super) uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     pub(super) object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
     pub(super) slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
-    pub(super) logistics_by_oid: FxHashMap<ObjectiveId, ObjLogi>,
+    pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
     force_to_spectators: FxHashSet<Ucid>,
     pub(super) units_able_to_move: FxHashSet<UnitId>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
@@ -693,7 +688,7 @@ impl Ephemeral {
     }
 }
 
-fn spawn_group<'lua>(
+pub(super) fn spawn_group<'lua>(
     persisted: &Persisted,
     idx: &MizIndex,
     spctx: &SpawnCtx,

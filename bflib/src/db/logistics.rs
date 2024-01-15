@@ -18,10 +18,7 @@ use super::{
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
 };
-use crate::{
-    db::{ephemeral::ObjLogi, objective::ObjectiveKind},
-    maybe, objective, objective_mut,
-};
+use crate::{db::objective::ObjectiveKind, maybe, objective, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use compact_str::format_compact;
 use dcso3::{
@@ -371,16 +368,14 @@ impl Db {
                         continue;
                     }
                 };
-                self.ephemeral.logistics_by_oid.insert(
+                self.ephemeral.airbase_by_oid.insert(
                     oid,
-                    ObjLogi {
-                        airbase: airbase.object_id().context("getting airbase object_id")?,
-                    },
+                    airbase.object_id().context("getting airbase object_id")?,
                 );
             }
             let mut missing = vec![];
             for (oid, obj) in &self.persisted.objectives {
-                if !self.ephemeral.logistics_by_oid.contains_key(oid) {
+                if !self.ephemeral.airbase_by_oid.contains_key(oid) {
                     missing.push(obj.name.clone());
                 }
             }
@@ -504,7 +499,7 @@ impl Db {
             .collect();
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
-            let airbase = &maybe!(self.ephemeral.logistics_by_oid, oid, "airbase")?.airbase;
+            let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
@@ -524,7 +519,7 @@ impl Db {
             .collect();
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
-            let airbase = &maybe!(self.ephemeral.logistics_by_oid, oid, "airbase")?.airbase;
+            let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
@@ -741,12 +736,12 @@ impl Db {
             bail!("enter a percentage")
         }
         let percent = amount as f32 / 100.;
-        let logi = self
+        let airbase = self
             .ephemeral
-            .logistics_by_oid
+            .airbase_by_oid
             .get(&obj.id)
             .ok_or_else(|| anyhow!("no logistics for objective {name}"))?;
-        let warehouse = Airbase::get_instance(lua, &logi.airbase)
+        let warehouse = Airbase::get_instance(lua, &airbase)
             .context("getting airbase")?
             .get_warehouse()
             .context("getting warehouse")?;

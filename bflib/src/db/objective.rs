@@ -15,6 +15,7 @@ for more details.
 */
 
 use super::{
+    ephemeral,
     group::{DeployKind, GroupId, UnitId},
     logistics::{Inventory, Warehouse},
     Db, Map, Set,
@@ -29,6 +30,7 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
+    airbase::Airbase,
     atomic_id, azumith2d_to, centroid2d,
     coalition::Side,
     coord::Coord,
@@ -36,6 +38,7 @@ use dcso3::{
     env::miz::{GroupKind, MizIndex},
     land::Land,
     net::SlotId,
+    object::DcsObject,
     warehouse::LiquidType,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
@@ -384,12 +387,31 @@ impl Db {
             SpawnLoc::AtPosWithCenter { pos, center }
         };
         let mut groups: Set<GroupId> = Set::new();
+        // spawn the pad right away to set up the warehouse
+        let pad_gid = self.add_group(
+            spctx,
+            idx,
+            side,
+            location.clone(),
+            &pad_template,
+            DeployKind::Objective,
+        )?;
+        let pad_uid = group!(self, pad_gid)?
+            .units
+            .into_iter()
+            .next()
+            .map(|uid| *uid)
+            .ok_or_else(|| anyhow!("pad group missing pad"))?;
+        groups.insert_cow(pad_gid);
+        ephemeral::spawn_group(&self.persisted, idx, spctx, group!(self, pad_gid)?)
+            .context("spawning the pad")?;
+        // delay the spawn of the other components so the unpacker can
+        // get out of the way
         for name in [
             &spec.template,
             &ammo_template,
             &fuel_template,
             &barracks_template,
-            &pad_template,
         ] {
             groups.insert_cow(self.add_and_queue_group(
                 spctx,
@@ -440,6 +462,15 @@ impl Db {
             let logi = objective_mut!(self, lid)?;
             logi.warehouse.destination.insert_cow(oid);
         }
+        let airbase_name = unit!(self, pad_uid)
+            .context("getting pad name")?
+            .name
+            .clone();
+        let airbase = Airbase::get_by_name(spctx.lua(), airbase_name.clone())
+            .with_context(|| format_compact!("getting aibase {airbase_name}"))?
+            .object_id()
+            .with_context(|| format_compact!("getting airbase {airbase_name} object id"))?;
+        self.ephemeral.airbase_by_oid.insert(oid, airbase);
         for (_, groups) in &obj.groups {
             for gid in groups {
                 self.persisted.objectives_by_group.insert_cow(*gid, oid);
@@ -449,8 +480,10 @@ impl Db {
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.init_farp_warehouse(spctx.lua(), &oid)
             .context("initializing farp warehouse")?;
+        self.sync_objectives_from_warehouses(spctx.lua())?;
         self.deliver_supplies_from_logistics_hubs()
             .context("distributing supplies")?;
+        self.sync_warehouses_from_objectives(spctx.lua())?;
         self.ephemeral
             .create_objective_markup(objective!(self, oid)?, &self.persisted);
         if let Some(lid) = objective!(self, oid)?.warehouse.supplier {

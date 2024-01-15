@@ -324,6 +324,10 @@ impl Db {
     pub(super) fn delete_objective(&mut self, oid: &ObjectiveId) -> Result<()> {
         let obj = self.persisted.objectives.remove_cow(oid).unwrap();
         self.persisted.objectives_by_name.remove_cow(&obj.name);
+        if let Some(lid) = obj.warehouse.supplier {
+            let logi = objective_mut!(self, lid)?;
+            logi.warehouse.destination.remove_cow(&obj.id);
+        }
         for (_, groups) in &obj.groups {
             for gid in groups {
                 self.persisted.objectives_by_group.remove_cow(gid);
@@ -335,6 +339,7 @@ impl Db {
         }
         self.persisted.farps.remove_cow(oid);
         self.ephemeral.remove_objective_markup(oid);
+        self.ephemeral.dirty();
         Ok(())
     }
 
@@ -427,8 +432,12 @@ impl Db {
             last_threatened_ts: now,
             last_change_ts: now,
         };
-        obj.warehouse.supplier = self.compute_supplier(&obj)?;
         let oid = obj.id;
+        obj.warehouse.supplier = self.compute_supplier(&obj)?;
+        if let Some(lid) = obj.warehouse.supplier {
+            let logi = objective_mut!(self, lid)?;
+            logi.warehouse.destination.insert_cow(oid);
+        }
         for (_, groups) in &obj.groups {
             for gid in groups {
                 self.persisted.objectives_by_group.insert_cow(*gid, oid);

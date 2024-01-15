@@ -54,6 +54,15 @@ pub enum ObjectiveKind {
     Farp(Deployable),
 }
 
+impl ObjectiveKind {
+    pub fn is_airbase(&self) -> bool {
+        match self {
+            Self::Airbase => true,
+            Self::Farp(_) | Self::Fob | Self::Logistics => false
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ObjGroupClass {
     Logi,
@@ -628,7 +637,7 @@ impl Db {
             obj.spawned = true;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
-                let logi = group.class.is_logi();
+                let logi = group.class.is_logi() && !obj.kind.is_airbase();
                 let walkabout = group
                     .units
                     .into_iter()
@@ -643,7 +652,7 @@ impl Db {
             obj.spawned = false;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
-                let logi = group.class.is_logi();
+                let logi = group.class.is_logi() && !obj.kind.is_airbase();
                 let walkabout = group
                     .units
                     .into_iter()

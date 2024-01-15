@@ -439,8 +439,6 @@ impl Db {
         if let Some(lid) = obj.warehouse.supplier {
             let logi = objective_mut!(self, lid)?;
             logi.warehouse.destination.insert_cow(oid);
-            self.ephemeral
-                .create_objective_markup(objective!(self, lid)?, &self.persisted);
         }
         for (_, groups) in &obj.groups {
             for gid in groups {
@@ -455,6 +453,10 @@ impl Db {
             .context("distributing supplies")?;
         self.ephemeral
             .create_objective_markup(objective!(self, oid)?, &self.persisted);
+        if let Some(lid) = objective!(self, oid)?.warehouse.supplier {
+            self.ephemeral
+                .create_objective_markup(objective!(self, lid)?, &self.persisted);
+        }
         self.ephemeral.dirty();
         Ok(oid)
     }

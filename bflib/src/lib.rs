@@ -643,7 +643,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
         let mk = mk?;
         if mk.text.starts_with(key.as_str()) {
             let spec = mk.text.as_str().strip_prefix(key.as_str()).unwrap();
-            let mut iter = spec.splitn(3, " ");
+            let mut iter = spec.splitn(4, " ");
             let kind = iter
                 .next()
                 .ok_or_else(|| {

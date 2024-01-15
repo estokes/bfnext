@@ -21,7 +21,7 @@ use super::{
     unit::Unit,
 };
 use crate::{simple_enum, wrapped_table, LuaEnv, MizLua, Sequence};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{fmt, ops::Deref, str::FromStr};
@@ -71,6 +71,12 @@ impl Side {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum AddedStatic<'lua> {
+    Airbase(Airbase<'lua>),
+    Static(StaticObject<'lua>),
+}
+
 simple_enum!(Service, u8, [Atc => 0, Awacs => 1, Fac => 3, Tanker => 2]);
 wrapped_table!(Coalition, None);
 
@@ -97,8 +103,22 @@ impl<'lua> Coalition<'lua> {
         &self,
         country: Country,
         data: env::miz::Unit<'lua>,
-    ) -> Result<StaticObject<'lua>> {
-        Ok(self.t.call_function("addStaticObject", (country, data))?)
+    ) -> Result<AddedStatic<'lua>> {
+        let tbl: LuaTable = self.t.call_function("addStaticObject", (country, data))?;
+        let mt = tbl
+            .get_metatable()
+            .ok_or_else(|| anyhow!("returned static object has no meta table"))?;
+        if mt.raw_get::<_, String>("className_")?.as_str() == "Airbase" {
+            Ok(AddedStatic::Airbase(Airbase::from_lua(
+                Value::Table(tbl),
+                self.lua,
+            )?))
+        } else {
+            Ok(AddedStatic::Static(StaticObject::from_lua(
+                Value::Table(tbl),
+                self.lua,
+            )?))
+        }
     }
 
     pub fn get_groups(&self, side: Side) -> Result<Sequence<'lua, Group<'lua>>> {

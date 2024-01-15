@@ -508,7 +508,7 @@ impl Db {
                         for uid in &group.units {
                             unit_mut!(self, uid)?.dead = false;
                         }
-                        if class == ObjGroupClass::Logi || obj.spawned {
+                        if obj.spawned || class == ObjGroupClass::Services && !obj.kind.is_airbase() {
                             self.ephemeral.push_spawn(gid)
                         }
                         self.update_objective_status(&oid, now)?;

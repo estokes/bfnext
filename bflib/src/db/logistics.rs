@@ -339,6 +339,9 @@ impl Db {
         let mut load_and_sync_airbases = || -> Result<()> {
             for airbase in world.get_airbases().context("getting airbases")? {
                 let airbase = airbase.context("getting airbase")?;
+                if !airbase.is_exist()? {
+                    continue // can happen when farps get recycled
+                }
                 let pos3 = airbase.get_point().context("getting airbase position")?;
                 let pos = Vector2::new(pos3.x, pos3.z);
                 airbase
@@ -418,7 +421,7 @@ impl Db {
             for (oid, obj) in &self.persisted.objectives {
                 match obj.kind {
                     ObjectiveKind::Logistics => (),
-                    ObjectiveKind::Airbase | ObjectiveKind::Farp(_) | ObjectiveKind::Fob => {
+                    ObjectiveKind::Airbase | ObjectiveKind::Farp { .. } | ObjectiveKind::Fob => {
                         suppliers.push((*oid, self.compute_supplier(obj)?));
                     }
                 }

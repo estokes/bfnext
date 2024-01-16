@@ -15,7 +15,6 @@ for more details.
 */
 
 use super::{
-    ephemeral,
     group::{DeployKind, UnitId},
     objective::ObjGroup,
     Db, Map,
@@ -282,16 +281,21 @@ impl Db {
                 self.ephemeral.push_spawn(*gid);
             }
             for (_, obj) in &self.persisted.objectives {
+                if let ObjectiveKind::Farp {
+                    spec: _,
+                    pad_template,
+                } = &obj.kind
+                {
+                    spctx
+                        .move_farp_pad(idx, obj.owner, &pad_template, obj.pos)
+                        .context("moving farp pad")?;
+                }
                 if let Some(groups) = obj.groups.get(&obj.owner) {
                     for gid in groups {
                         let group = group!(self, gid)?;
-                        if obj.kind.is_farp() {
-                            if group.class.is_services() {
-                                ephemeral::spawn_group(&self.persisted, idx, spctx, group)?
-                            } else {
-                                self.ephemeral.push_spawn(*gid);
-                            }
-                        } else if group.class.is_services() && !obj.kind.is_airbase() {
+                        if obj.kind.is_farp()
+                            || (group.class.is_services() && !obj.kind.is_airbase())
+                        {
                             self.ephemeral.push_spawn(*gid)
                         }
                     }

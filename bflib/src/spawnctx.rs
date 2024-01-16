@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -121,6 +121,25 @@ impl<'lua> SpawnCtx<'lua> {
             .miz
             .get_trigger_zone(idx, name)?
             .ok_or_else(|| anyhow!("no such trigger zone {name}"))?)
+    }
+
+    pub fn move_farp_pad(&self, idx: &MizIndex, side: Side, pad_template: &str, pos: Vector2) -> Result<()> {
+        let pad = {
+            let pad = self
+                .get_template(idx, GroupKind::Any, side, &pad_template)
+                .context("getting the pad")?;
+            pad.group.set("hidden", false)?;
+            let pad_unit = pad
+                .group
+                .units()
+                .context("getting pad units")?
+                .get(1)
+                .context("getting pad unit")?;
+            pad_unit.set_pos(pos).context("setting pad pos")?;
+            drop(pad_unit);
+            pad
+        };
+        self.spawn(pad).context("moving the pad")
     }
 
     pub fn spawn(&self, template: GroupInfo) -> Result<()> {

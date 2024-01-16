@@ -31,14 +31,13 @@ use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
     atomic_id, azumith2d_to, centroid2d,
-    coalition::{Side, Static},
+    coalition::Side,
     coord::Coord,
     cvt_err,
     env::miz::{GroupKind, MizIndex},
     land::Land,
     net::SlotId,
     object::DcsObject,
-    static_object::StaticObject,
     warehouse::LiquidType,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
@@ -54,20 +53,23 @@ pub enum ObjectiveKind {
     Airbase,
     Fob,
     Logistics,
-    Farp(Deployable),
+    Farp {
+        spec: Deployable,
+        pad_template: String,
+    },
 }
 
 impl ObjectiveKind {
     pub fn is_airbase(&self) -> bool {
         match self {
             Self::Airbase => true,
-            Self::Farp(_) | Self::Fob | Self::Logistics => false,
+            Self::Farp { .. } | Self::Fob | Self::Logistics => false,
         }
     }
 
     pub fn is_farp(&self) -> bool {
         match self {
-            Self::Farp(_) => true,
+            Self::Farp { .. } => true,
             Self::Airbase | Self::Fob | Self::Logistics => false,
         }
     }
@@ -342,7 +344,15 @@ impl Db {
         for (slot, _) in &obj.slots {
             self.persisted.objectives_by_slot.remove_cow(slot);
         }
+        if let ObjectiveKind::Farp {
+            spec: _,
+            pad_template,
+        } = obj.kind
+        {
+            self.ephemeral.return_pad_template(&pad_template);
+        }
         self.persisted.farps.remove_cow(oid);
+        self.ephemeral.airbase_by_oid.remove(oid);
         self.ephemeral.remove_objective_markup(oid);
         self.ephemeral.dirty();
         Ok(())
@@ -359,18 +369,17 @@ impl Db {
     ) -> Result<ObjectiveId> {
         let now = Utc::now();
         let DeployableLogistics {
-            pad_template,
+            pad_templates: _,
             ammo_template,
             fuel_template,
             barracks_template,
         } = parts;
-        let (center, location) = {
+        let location = {
             let mut points: SmallVec<[Vector2; 16]> = smallvec![];
             let core = spctx.get_template_ref(idx, GroupKind::Any, side, &spec.template)?;
             let ammo = spctx.get_template_ref(idx, GroupKind::Any, side, &ammo_template)?;
             let fuel = spctx.get_template_ref(idx, GroupKind::Any, side, &fuel_template)?;
             let barracks = spctx.get_template_ref(idx, GroupKind::Any, side, &barracks_template)?;
-            let pad = spctx.get_template_ref(idx, GroupKind::Any, side, &pad_template)?;
             for unit in core
                 .group
                 .units()?
@@ -378,49 +387,21 @@ impl Db {
                 .chain(ammo.group.units()?.into_iter())
                 .chain(fuel.group.units()?.into_iter())
                 .chain(barracks.group.units()?.into_iter())
-                .chain(pad.group.units()?.into_iter())
             {
                 let unit = unit?;
                 points.push(unit.pos()?)
             }
             let center = centroid2d(points);
-            (center, SpawnLoc::AtPosWithCenter { pos, center })
+            SpawnLoc::AtPosWithCenter { pos, center }
         };
+        let pad_template = self
+            .ephemeral
+            .take_pad_template(side)
+            .ok_or_else(|| anyhow!("not enough farp pads available to build this farp"))?;
         // move the pad to the new location
-        let pad = {
-            for _ in 0..10 {
-                match StaticObject::get_by_name(spctx.lua(), &pad_template) {
-                    Ok(Static::Airbase(pad)) => {
-                        debug!("it was an airbase");
-                        pad.destroy()?
-                    }
-                    Ok(Static::Static(pad)) => {
-                        debug!("it was a static");
-                        pad.destroy()?
-                    }
-                    Err(e) => {
-                        debug!("did not find pad {pad_template}, {:?}", e);
-                        break;
-                    }
-                }
-            }
-            let pad = spctx
-                .get_template(idx, GroupKind::Any, side, &pad_template)
-                .context("getting the pad")?;
-            pad.group.set("hidden", false)?;
-            let pad_unit = pad
-                .group
-                .units()
-                .context("getting pad units")?
-                .get(1)
-                .context("getting pad unit")?;
-            pad_unit
-                .set_pos(pad_unit.pos().context("getting pad pos")? - center + pos)
-                .context("setting pad pos")?;
-            drop(pad_unit);
-            pad
-        };
-        spctx.spawn(pad).context("moving the pad")?;
+        spctx
+            .move_farp_pad(idx, side, pad_template.as_str(), pos)
+            .context("moving farp pad")?;
         // delay the spawn of the other components so the unpacker can
         // get out of the way
         let mut groups: Set<GroupId> = Set::new();
@@ -458,7 +439,10 @@ impl Db {
             id: ObjectiveId::new(),
             name: name.clone(),
             groups: Map::from_iter([(side, groups)]),
-            kind: ObjectiveKind::Farp(spec.clone()),
+            kind: ObjectiveKind::Farp {
+                spec: spec.clone(),
+                pad_template: pad_template.clone(),
+            },
             pos,
             radius: 2000.,
             owner: side,
@@ -494,10 +478,12 @@ impl Db {
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.init_farp_warehouse(spctx.lua(), &oid)
             .context("initializing farp warehouse")?;
-        self.sync_objectives_from_warehouses(spctx.lua())?;
+        self.sync_objectives_from_warehouses(spctx.lua())
+            .context("syncing objectives from warehouses")?;
         self.deliver_supplies_from_logistics_hubs()
             .context("distributing supplies")?;
-        self.sync_warehouses_from_objectives(spctx.lua())?;
+        self.sync_warehouses_from_objectives(spctx.lua())
+            .context("syncing warehouses from objectibes")?;
         self.ephemeral
             .create_objective_markup(objective!(self, oid)?, &self.persisted);
         if let Some(lid) = objective!(self, oid)?.warehouse.supplier {
@@ -522,7 +508,7 @@ impl Db {
             obj.last_change_ts = now;
             (obj.kind.clone(), health, logi)
         };
-        if let ObjectiveKind::Farp(_) = &kind {
+        if let ObjectiveKind::Farp { .. } = &kind {
             if logi == 0 {
                 self.delete_objective(oid)?;
             }

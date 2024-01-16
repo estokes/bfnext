@@ -358,8 +358,8 @@ impl Db {
         }
         for oid in &self.persisted.farps {
             let obj = objective!(self, oid)?;
-            if let ObjectiveKind::Farp(d) = &obj.kind {
-                if let Some(d_name) = d.path.last() {
+            if let ObjectiveKind::Farp {spec, pad_template: _} = &obj.kind {
+                if let Some(d_name) = spec.path.last() {
                     if obj.owner == side && d_name.as_str() == name {
                         if oldest.is_none() {
                             oldest = Some(Oldest::Objective(*oid));

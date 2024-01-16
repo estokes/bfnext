@@ -50,15 +50,6 @@ use std::{
 };
 
 #[derive(Debug, Clone, Default)]
-pub(super) struct DeployableIndex {
-    pub(super) deployables_by_name: FxHashMap<String, Deployable>,
-    pub(super) deployables_by_crates: FxHashMap<String, String>,
-    pub(super) deployables_by_repair: FxHashMap<String, String>,
-    pub(super) crates_by_name: FxHashMap<String, Crate>,
-    pub(super) squads_by_name: FxHashMap<String, Troop>,
-}
-
-#[derive(Debug, Clone, Default)]
 pub(super) struct ObjectiveMarkup {
     side: Side,
     threatened: bool,
@@ -195,41 +186,45 @@ impl ObjectiveMarkup {
             ObjectiveKind::Airbase | ObjectiveKind::Fob | ObjectiveKind::Logistics => {
                 SideFilter::All
             }
-            ObjectiveKind::Farp(_) => obj.owner.into(),
+            ObjectiveKind::Farp {..} => obj.owner.into(),
         };
-        let bar_with_label =
-            |msgq: &mut MsgQ, pos3: Vector3, label: MarkId, text: &str, marks: &[MarkId; 5], val: u8| {
-                msgq.text_to_all(
+        let bar_with_label = |msgq: &mut MsgQ,
+                              pos3: Vector3,
+                              label: MarkId,
+                              text: &str,
+                              marks: &[MarkId; 5],
+                              val: u8| {
+            msgq.text_to_all(
+                obj.owner.into(),
+                label,
+                TextSpec {
+                    pos: LuaVec3(Vector3::new(pos3.x + 200., 0., pos3.z)),
+                    color: text_color(0.75),
+                    fill_color: Color::black(0.),
+                    font_size: 12,
+                    read_only: true,
+                    text: text.into(),
+                },
+            );
+            for (i, id) in marks.iter().enumerate() {
+                let j = (i + 1) as u8;
+                let i = i as f64;
+                let a = if (val / (j * 20)) > 0 { 0.5 } else { 0. };
+                msgq.rect_to_all(
                     obj.owner.into(),
-                    label,
-                    TextSpec {
-                        pos: LuaVec3(Vector3::new(pos3.x + 200., 0., pos3.z)),
-                        color: text_color(0.75),
-                        fill_color: Color::black(0.),
-                        font_size: 12,
+                    *id,
+                    RectSpec {
+                        start: LuaVec3(Vector3::new(pos3.x, 0., pos3.z + i * 500.)),
+                        end: LuaVec3(Vector3::new(pos3.x - 400., 0., pos3.z + i * 500. + 400.)),
+                        color: Color::black(1.),
+                        fill_color: Color::green(a),
+                        line_type: LineType::Solid,
                         read_only: true,
-                        text: text.into(),
                     },
+                    None,
                 );
-                for (i, id) in marks.iter().enumerate() {
-                    let j = (i + 1) as u8;
-                    let i = i as f64;
-                    let a = if (val / (j * 20)) > 0 { 0.5 } else { 0. };
-                    msgq.rect_to_all(
-                        obj.owner.into(),
-                        *id,
-                        RectSpec {
-                            start: LuaVec3(Vector3::new(pos3.x, 0., pos3.z + i * 500.)),
-                            end: LuaVec3(Vector3::new(pos3.x - 400., 0., pos3.z + i * 500. + 400.)),
-                            color: Color::black(1.),
-                            fill_color: Color::green(a),
-                            line_type: LineType::Solid,
-                            read_only: true,
-                        },
-                        None,
-                    );
-                }
-            };
+            }
+        };
         let mut t = ObjectiveMarkup::default();
         t.side = obj.owner;
         t.threatened = obj.threatened;
@@ -277,15 +272,29 @@ impl ObjectiveMarkup {
         );
         pos3.x += 5000.;
         pos3.z -= 5000.;
-        bar_with_label(msgq, pos3, t.health_label, "Health", &t.healthbar, obj.health);
+        bar_with_label(
+            msgq,
+            pos3,
+            t.health_label,
+            "Health",
+            &t.healthbar,
+            obj.health,
+        );
         pos3.x -= 1500.;
         bar_with_label(msgq, pos3, t.logi_label, "Logi", &t.logibar, obj.logi);
         pos3.x -= 1500.;
-        bar_with_label(msgq, pos3, t.supply_label, "Supply", &t.supplybar, obj.supply);
+        bar_with_label(
+            msgq,
+            pos3,
+            t.supply_label,
+            "Supply",
+            &t.supplybar,
+            obj.supply,
+        );
         pos3.x -= 1500.;
         bar_with_label(msgq, pos3, t.fuel_label, "Fuel", &t.fuelbar, obj.fuel);
         match obj.kind {
-            ObjectiveKind::Airbase | ObjectiveKind::Farp(_) | ObjectiveKind::Fob => (),
+            ObjectiveKind::Airbase | ObjectiveKind::Farp {..} | ObjectiveKind::Fob => (),
             ObjectiveKind::Logistics => {
                 let pos = obj.pos;
                 for oid in &obj.warehouse.destination {
@@ -316,6 +325,16 @@ impl ObjectiveMarkup {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub(super) struct DeployableIndex {
+    pub(super) deployables_by_name: FxHashMap<String, Deployable>,
+    pub(super) deployables_by_crates: FxHashMap<String, String>,
+    pub(super) deployables_by_repair: FxHashMap<String, String>,
+    pub(super) crates_by_name: FxHashMap<String, Crate>,
+    pub(super) squads_by_name: FxHashMap<String, Troop>,
+    pub(super) pad_templates: FxHashSet<String>,
+}
+
 #[derive(Debug, Default)]
 pub struct Ephemeral {
     dirty: bool,
@@ -330,6 +349,7 @@ pub struct Ephemeral {
     pub(super) object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
     pub(super) slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
+    used_pad_templates: FxHashSet<String>,
     force_to_spectators: FxHashSet<Ucid>,
     pub(super) units_able_to_move: FxHashSet<UnitId>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
@@ -439,6 +459,21 @@ impl Ephemeral {
         Ok(())
     }
 
+    pub fn take_pad_template(&mut self, side: Side) -> Option<String> {
+        self.deployable_idx.get(&side).and_then(|idx| {
+            for pad in &idx.pad_templates {
+                if self.used_pad_templates.insert(pad.clone()) {
+                    return Some(pad.clone());
+                }
+            }
+            None
+        })
+    }
+
+    pub fn return_pad_template(&mut self, pad: &str) {
+        self.used_pad_templates.remove(pad);
+    }
+
     pub fn msgs(&mut self) -> &mut MsgQ {
         &mut self.msgs
     }
@@ -457,6 +492,7 @@ impl Ephemeral {
 
     fn index_deployables_for_side(
         &mut self,
+        global_pad_templates: &mut FxHashSet<String>,
         miz: &Miz,
         mizidx: &MizIndex,
         side: Side,
@@ -519,7 +555,7 @@ impl Ephemeral {
                 };
             }
             if let Some(DeployableLogistics {
-                pad_template,
+                pad_templates,
                 ammo_template,
                 fuel_template,
                 barracks_template,
@@ -528,16 +564,34 @@ impl Ephemeral {
                 let mut names = FxHashSet::default();
                 for name in [
                     &dep.template,
-                    &ammo_template,
-                    &pad_template,
-                    &fuel_template,
-                    &barracks_template,
-                ] {
+                    ammo_template,
+                    fuel_template,
+                    barracks_template,
+                ]
+                .into_iter()
+                .chain(pad_templates.iter())
+                {
                     miz.get_group_by_name(mizidx, GroupKind::Any, side, name)?
                         .ok_or_else(|| anyhow!("missing farp template {:?} {:?}", side, name))?;
                     if !names.insert(name) {
                         bail!("deployables with logistics must use unique templates for each part {name} is reused")
                     }
+                }
+                for pad in pad_templates {
+                    if !idx.pad_templates.insert(pad.clone()) {
+                        bail!("{:?} has a duplicate pad template {pad}", dep)
+                    }
+                    if !global_pad_templates.insert(pad.clone()) {
+                        bail!("pad template names must be globally unique {pad} is used more than once")
+                    }
+                }
+                if dep.limit as usize > pad_templates.len() {
+                    bail!(
+                        "{:?} does not have enough pad templates {} are required {} are provided",
+                        dep,
+                        dep.limit,
+                        pad_templates.len()
+                    )
                 }
             }
         }
@@ -668,9 +722,17 @@ impl Ephemeral {
             miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?
                 .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
         }
+        let mut global_pad_templates = FxHashSet::default();
         for (side, deployables) in cfg.deployables.iter() {
             let repair_crate = maybe!(cfg.repair_crate, side, "side repair crate")?.clone();
-            self.index_deployables_for_side(miz, mizidx, *side, repair_crate, deployables)?
+            self.index_deployables_for_side(
+                &mut global_pad_templates,
+                miz,
+                mizidx,
+                *side,
+                repair_crate,
+                deployables,
+            )?
         }
         for (side, troops) in cfg.troops.iter() {
             let idx = Arc::make_mut(self.deployable_idx.entry(*side).or_default());

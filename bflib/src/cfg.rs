@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use dcso3::{coalition::Side, err, String, net::Ucid};
+use dcso3::{coalition::Side, err, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
 use fxhash::{FxHashMap, FxHashSet};
 use log::error;
@@ -198,7 +198,7 @@ pub struct Crate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeployableLogistics {
-    pub pad_template: String,
+    pub pad_templates: Vec<String>,
     pub ammo_template: String,
     pub fuel_template: String,
     pub barracks_template: String,
@@ -289,7 +289,7 @@ pub struct WarehouseConfig {
     pub airbase_max: u32,
     /// Logistics tick in minutes. Supplies move automatically every tick
     pub tick: u32,
-    /// How many logistics ticks does it take before supplies are delivered 
+    /// How many logistics ticks does it take before supplies are delivered
     /// from outside
     pub ticks_per_delivery: u32,
     /// The fuel transfer crate
@@ -799,7 +799,12 @@ fn default_red_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: Some(DeployableLogistics {
-                pad_template: "DEPRFARPPAD".into(),
+                pad_templates: vec![
+                    "DEPRFARPPAD0".into(),
+                    "DEPRFARPPAD1".into(),
+                    "DEPRFARPPAD2".into(),
+                    "DEPRFARPPAD3".into(),
+                ],
                 ammo_template: "DEPRFARPAMMO".into(),
                 fuel_template: "DEPRFARPFUEL".into(),
                 barracks_template: "DEPRFARPTENT".into(),
@@ -1070,7 +1075,12 @@ fn default_blue_deployables() -> Vec<Deployable> {
             }],
             repair_crate: None,
             logistics: Some(DeployableLogistics {
-                pad_template: "DEPBFARPPAD".into(),
+                pad_templates: vec![
+                    "DEPBFARPPAD0".into(),
+                    "DEPBFARPPAD1".into(),
+                    "DEPBFARPPAD2".into(),
+                    "DEPBFARPPAD3".into(),
+                ],
                 ammo_template: "DEPBFARPAMMO".into(),
                 fuel_template: "DEPBFARPFUEL".into(),
                 barracks_template: "DEPBFARPTENT".into(),

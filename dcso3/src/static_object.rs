@@ -12,8 +12,8 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use super::{as_tbl, coalition::Side, country::Country, object::Object};
-use crate::{wrapped_table, LuaEnv, MizLua};
-use anyhow::Result;
+use crate::{airbase::Airbase, coalition::Static, wrapped_table, LuaEnv, MizLua};
+use anyhow::{anyhow, Result};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
 use std::ops::Deref;
@@ -21,10 +21,28 @@ use std::ops::Deref;
 wrapped_table!(StaticObject, Some("StaticObject"));
 
 impl<'lua> StaticObject<'lua> {
-    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> Result<Self> {
+    pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> Result<Static<'lua>> {
         let globals = lua.inner().globals();
         let sobj = as_tbl("StaticObject", None, globals.raw_get("StaticObject")?)?;
-        Ok(sobj.call_function("getByName", name)?)
+        let tbl: LuaTable = sobj.call_function("getByName", name)?;
+        let mt = tbl
+            .get_metatable()
+            .ok_or_else(|| anyhow!("returned static object has no meta table"))?;
+        if mt.raw_get::<_, String>("className_")?.as_str() == "Airbase" {
+            Ok(Static::Airbase(Airbase::from_lua(
+                Value::Table(tbl),
+                lua.inner(),
+            )?))
+        } else {
+            Ok(Static::Static(StaticObject::from_lua(
+                Value::Table(tbl),
+                lua.inner(),
+            )?))
+        }
+    }
+
+    pub fn destroy(self) -> Result<()> {
+        Ok(self.t.call_method("destroy", ())?)
     }
 
     pub fn get_coalition(&self) -> Result<Side> {

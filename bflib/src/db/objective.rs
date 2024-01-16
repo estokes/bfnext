@@ -31,13 +31,14 @@ use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
     atomic_id, azumith2d_to, centroid2d,
-    coalition::Side,
+    coalition::{Side, Static},
     coord::Coord,
     cvt_err,
     env::miz::{GroupKind, MizIndex},
     land::Land,
     net::SlotId,
     object::DcsObject,
+    static_object::StaticObject,
     warehouse::LiquidType,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
@@ -387,6 +388,22 @@ impl Db {
         };
         // move the pad to the new location
         let pad = {
+            for _ in 0..10 {
+                match StaticObject::get_by_name(spctx.lua(), &pad_template) {
+                    Ok(Static::Airbase(pad)) => {
+                        debug!("it was an airbase");
+                        pad.destroy()?
+                    }
+                    Ok(Static::Static(pad)) => {
+                        debug!("it was a static");
+                        pad.destroy()?
+                    }
+                    Err(e) => {
+                        debug!("did not find pad {pad_template}, {:?}", e);
+                        break;
+                    }
+                }
+            }
             let pad = spctx
                 .get_template(idx, GroupKind::Any, side, &pad_template)
                 .context("getting the pad")?;

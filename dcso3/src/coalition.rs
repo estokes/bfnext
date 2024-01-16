@@ -72,7 +72,7 @@ impl Side {
 }
 
 #[derive(Debug, Clone)]
-pub enum AddedStatic<'lua> {
+pub enum Static<'lua> {
     Airbase(Airbase<'lua>),
     Static(StaticObject<'lua>),
 }
@@ -103,18 +103,18 @@ impl<'lua> Coalition<'lua> {
         &self,
         country: Country,
         data: env::miz::Unit<'lua>,
-    ) -> Result<AddedStatic<'lua>> {
+    ) -> Result<Static<'lua>> {
         let tbl: LuaTable = self.t.call_function("addStaticObject", (country, data))?;
         let mt = tbl
             .get_metatable()
             .ok_or_else(|| anyhow!("returned static object has no meta table"))?;
         if mt.raw_get::<_, String>("className_")?.as_str() == "Airbase" {
-            Ok(AddedStatic::Airbase(Airbase::from_lua(
+            Ok(Static::Airbase(Airbase::from_lua(
                 Value::Table(tbl),
                 self.lua,
             )?))
         } else {
-            Ok(AddedStatic::Static(StaticObject::from_lua(
+            Ok(Static::Static(StaticObject::from_lua(
                 Value::Table(tbl),
                 self.lua,
             )?))

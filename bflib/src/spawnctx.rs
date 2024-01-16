@@ -17,7 +17,7 @@ for more details.
 use anyhow::{anyhow, Context, Result};
 use compact_str::format_compact;
 use dcso3::{
-    coalition::{Coalition, Side},
+    coalition::{Coalition, Side, Static},
     env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
     group::GroupCategory,
     land::Land,
@@ -161,7 +161,8 @@ impl<'lua> SpawnCtx<'lua> {
             }
             Despawn::Static(name) => {
                 match dcso3::static_object::StaticObject::get_by_name(self.lua, &*name) {
-                    Ok(obj) => obj.as_object()?.destroy()?,
+                    Ok(Static::Airbase(obj)) => obj.destroy()?,
+                    Ok(Static::Static(obj)) => obj.destroy()?,
                     Err(e) => error!("attempt to despawn unknown static {} {}", name, e),
                 }
                 Ok(())

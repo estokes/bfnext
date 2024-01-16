@@ -65,6 +65,10 @@ impl<'lua> Inventory<'lua> {
     pub fn liquids(&self) -> Result<LiquidInventory<'lua>> {
         Ok(self.t.raw_get("liquids")?)
     }
+
+    pub fn is_unlimited(&self) -> Result<bool> {
+        Ok(self.weapons()?.is_empty() && self.aircraft()?.is_empty() && self.liquids()?.is_empty())
+    }
 }
 
 wrapped_table!(Warehouse, Some("Warehouse"));
@@ -113,5 +117,9 @@ impl<'lua> Warehouse<'lua> {
 
     pub fn get_owner(&self) -> Result<Airbase> {
         Ok(self.t.call_method("getOwner", ())?)
+    }
+
+    pub fn whid(&self) -> Result<String> {
+        Ok(self.t.raw_get("whid_")?)
     }
 }

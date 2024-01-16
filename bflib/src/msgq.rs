@@ -21,8 +21,8 @@ use dcso3::{
     trigger::{Action, ArrowSpec, CircleSpec, MarkId, RectSpec, SideFilter, TextSpec},
     Color, LuaVec3, String, Vector2, Vector3,
 };
-use log::{debug, error};
-use std::{collections::VecDeque, cmp::max};
+use log::error;
+use std::{cmp::max, collections::VecDeque};
 
 #[derive(Debug, Clone, Copy)]
 pub enum PanelDest {
@@ -302,7 +302,6 @@ impl MsgQ {
                 Some(cmd) => cmd,
                 None => return,
             };
-            debug!("server sending {:?}", cmd);
             let res = match cmd {
                 Cmd::DeleteMark(id) => act.remove_mark(id),
                 Cmd::Send(Msg::Message { typ, text }) => match typ {

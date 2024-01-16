@@ -11,12 +11,15 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.
 */
 
-use super::{as_tbl, coalition::Side, object::Object, warehouse::Warehouse, String, LuaVec3};
-use crate::{wrapped_table, Sequence, object::{DcsObject, DcsOid}, MizLua, LuaEnv};
-use anyhow::{Result, bail};
+use super::{as_tbl, coalition::Side, object::Object, warehouse::Warehouse, LuaVec3, String};
+use crate::{
+    object::{DcsObject, DcsOid},
+    wrapped_table, LuaEnv, MizLua, Sequence,
+};
+use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
-use std::{ops::Deref, marker::PhantomData};
+use std::{marker::PhantomData, ops::Deref};
 
 wrapped_table!(Runway, None);
 

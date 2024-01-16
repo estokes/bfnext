@@ -15,7 +15,6 @@ for more details.
 */
 
 use super::{
-    ephemeral,
     group::{DeployKind, GroupId, UnitId},
     logistics::{Inventory, Warehouse},
     Db, Map, Set,
@@ -364,7 +363,7 @@ impl Db {
             fuel_template,
             barracks_template,
         } = parts;
-        let location = {
+        let (center, location) = {
             let mut points: SmallVec<[Vector2; 16]> = smallvec![];
             let core = spctx.get_template_ref(idx, GroupKind::Any, side, &spec.template)?;
             let ammo = spctx.get_template_ref(idx, GroupKind::Any, side, &ammo_template)?;
@@ -384,32 +383,30 @@ impl Db {
                 points.push(unit.pos()?)
             }
             let center = centroid2d(points);
-            SpawnLoc::AtPosWithCenter { pos, center }
+            (center, SpawnLoc::AtPosWithCenter { pos, center })
         };
-        let mut groups: Set<GroupId> = Set::new();
-        // spawn the pad right away to set up the warehouse
-        let pad_gid = self.add_group(
-            spctx,
-            idx,
-            side,
-            location.clone(),
-            &pad_template,
-            DeployKind::Objective,
-        )?;
-        let pad_uid = {
-            let pad = group_mut!(self, pad_gid)?;
-            pad.class = ObjGroupClass::Services;
-            pad.units
-                .into_iter()
-                .next()
-                .map(|uid| *uid)
-                .ok_or_else(|| anyhow!("pad group missing pad"))?
+        // move the pad to the new location
+        let pad = {
+            let pad = spctx
+                .get_template(idx, GroupKind::Any, side, &pad_template)
+                .context("getting the pad")?;
+            pad.group.set("hidden", false)?;
+            let pad_unit = pad
+                .group
+                .units()
+                .context("getting pad units")?
+                .get(1)
+                .context("getting pad unit")?;
+            pad_unit
+                .set_pos(pad_unit.pos().context("getting pad pos")? - center + pos)
+                .context("setting pad pos")?;
+            drop(pad_unit);
+            pad
         };
-        groups.insert_cow(pad_gid);
-        ephemeral::spawn_group(&self.persisted, idx, spctx, group!(self, pad_gid)?)
-            .context("spawning the pad")?;
+        spctx.spawn(pad).context("moving the pad")?;
         // delay the spawn of the other components so the unpacker can
         // get out of the way
+        let mut groups: Set<GroupId> = Set::new();
         for name in [
             &spec.template,
             &ammo_template,
@@ -465,14 +462,11 @@ impl Db {
             let logi = objective_mut!(self, lid)?;
             logi.warehouse.destination.insert_cow(oid);
         }
-        let airbase_name = unit!(self, pad_uid)
-            .context("getting pad name")?
-            .name
-            .clone();
-        let airbase = Airbase::get_by_name(spctx.lua(), airbase_name.clone())
-            .with_context(|| format_compact!("getting aibase {airbase_name}"))?
+        let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
+            .with_context(|| format_compact!("getting airbase {pad_template}"))?;
+        let airbase = airbase
             .object_id()
-            .with_context(|| format_compact!("getting airbase {airbase_name} object id"))?;
+            .with_context(|| format_compact!("getting airbase {pad_template} object id"))?;
         self.ephemeral.airbase_by_oid.insert(oid, airbase);
         for (_, groups) in &obj.groups {
             for gid in groups {

@@ -1,6 +1,7 @@
 ## 0.1.0
 
 - warehouse system
+- StaticObject::get_by_name can return an airbase
 
 ## 0.0.10
 

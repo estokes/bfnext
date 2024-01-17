@@ -12,14 +12,519 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, LuaVec3, String};
-use crate::{bitflags_enum, simple_enum, string_enum, wrapped_table, Sequence, lua_err};
+use crate::{
+    airbase::RunwayId,
+    attribute::Attribute,
+    bitflags_enum,
+    env::miz::{GroupId, TriggerZoneId, UnitId},
+    lua_err, simple_enum,
+    static_object::StaticObjectId,
+    string_enum,
+    trigger::Modulation,
+    wrapped_table, LuaVec2, Sequence, Time,
+};
 use anyhow::Result;
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
-wrapped_table!(Task, None);
+string_enum!(WeaponExpend, u8, [
+    Quarter => "QUARTER",
+    Two => "TWO",
+    One => "ONE",
+    Four => "FOUR",
+    Half => "HALF",
+    All => "ALL"
+]);
+
+string_enum!(OrbitPattern, u8, [
+    RraceTrack => "RACE_TRACK",
+    Circle => "CIRCLE"
+]);
+
+string_enum!(Designation, u8, [
+    No => "NO",
+    WP => "WP",
+    IrPointer => "IR_POINTER",
+    Laser => "LASER",
+    Auto => "AUTO"
+]);
+
+simple_enum!(AltType, u8, [
+    MSL => 0,
+    AGL => 1
+]);
+
+simple_enum!(FACCallsign, u8, [
+    Axeman	=> 1,
+    Darknight => 2,
+    Warrior => 3,
+    Pointer	=> 4,
+    Eyeball	=> 5,
+    Moonbeam => 6,
+    Whiplash => 7,
+    Finger => 8,
+    Pinpoint => 9,
+    Ferret => 10,
+    Shaba => 11,
+    Playboy	=> 12,
+    Hammer => 13,
+    Jaguar => 14,
+    Deathstar => 15,
+    Anvil => 16,
+    Firefly => 17,
+    Mantis => 18,
+    Badger => 19
+]);
+
+#[derive(Debug, Clone)]
+pub struct AttackParams {
+    weapon_type: Option<u64>, // weapon flag(s)
+    expend: Option<WeaponExpend>,
+    direction: Option<f64>, // in radians
+    altitude: Option<f64>,
+    attack_qty: Option<i64>,
+    group_attack: Option<bool>,
+}
+
+impl AttackParams {
+    fn push_tbl(&self, tbl: &LuaTable) -> LuaResult<()> {
+        if let Some(wt) = self.weapon_type {
+            tbl.raw_set("weaponType", wt)?
+        }
+        if let Some(exp) = &self.expend {
+            tbl.raw_set("expend", exp.clone())?
+        }
+        if let Some(dir) = self.direction {
+            tbl.raw_set("directionEnabled", true)?;
+            tbl.raw_set("direction", dir)?
+        }
+        if let Some(alt) = self.altitude {
+            tbl.raw_set("altitudeEnabled", true)?;
+            tbl.raw_set("altitude", alt)?;
+        }
+        if let Some(qty) = self.attack_qty {
+            tbl.raw_set("attackQtyLimit", true)?;
+            tbl.raw_set("attackQty", qty)?;
+        }
+        if let Some(grp) = self.group_attack {
+            tbl.raw_set("groupAttack", grp)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FollowParams {
+    group: GroupId,
+    pos: LuaVec3,
+    last_waypoint_index: Option<i64>,
+}
+
+impl FollowParams {
+    fn push_tbl(&self, tbl: &LuaTable) -> LuaResult<()> {
+        tbl.raw_set("groupId", self.group)?;
+        tbl.raw_set("pos", self.pos)?;
+        if let Some(idx) = self.last_waypoint_index {
+            tbl.raw_set("lastWptIndexFlag", true)?;
+            tbl.raw_set("lastWptIndex", idx)?
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FACParams {
+    weapon_type: Option<u64>, // weapon flag(s),
+    designation: Option<Designation>,
+    datalink: Option<bool>,
+    frequency: Option<f64>,
+    modulation: Option<Modulation>,
+    callname: Option<FACCallsign>,
+    number: Option<u8>,
+}
+
+impl FACParams {
+    fn push_tbl(&self, tbl: &LuaTable) -> LuaResult<()> {
+        if let Some(wt) = self.weapon_type {
+            tbl.raw_set("weaponType", wt)?;
+        }
+        if let Some(d) = &self.designation {
+            tbl.raw_set("designation", d.clone())?;
+        }
+        if let Some(dl) = self.datalink {
+            tbl.raw_set("datalink", dl)?;
+        }
+        if let Some(frq) = self.frequency {
+            tbl.raw_set("frequency", frq)?;
+        }
+        if let Some(md) = self.modulation {
+            tbl.raw_set("modulation", md)?;
+        }
+        if let Some(cn) = self.callname {
+            tbl.raw_set("callname", cn)?;
+        }
+        if let Some(n) = self.number {
+            tbl.raw_set("number", n)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Task {
+    AttackGroup {
+        group: GroupId,
+        params: AttackParams,
+    },
+    AttackUnit {
+        unit: UnitId,
+        params: AttackParams,
+    },
+    Bombing {
+        point: LuaVec2,
+        params: AttackParams,
+    },
+    Strafing {
+        point: LuaVec2,
+        length: f64,
+        params: AttackParams,
+    },
+    CarpetBombing {
+        point: LuaVec2,
+        carpet_length: f64,
+        params: AttackParams,
+    },
+    AttackMapObject {
+        point: LuaVec2,
+        params: AttackParams,
+    },
+    BombRunway {
+        runway: RunwayId,
+        params: AttackParams,
+    },
+    Orbit {
+        pattern: OrbitPattern,
+        point: Option<LuaVec2>,
+        point2: Option<LuaVec2>,
+        speed: Option<f64>,
+        altitude: Option<f64>,
+    },
+    Refuelling,
+    Land {
+        point: LuaVec2,
+        duration: Option<Time>,
+    },
+    Follow(FollowParams),
+    FollowBigFormation(FollowParams),
+    Escort {
+        engagement_dist_max: f64,
+        target_types: Vec<Attribute>,
+        params: FollowParams,
+    },
+    Embarking {
+        pos: LuaVec2,
+        groups_for_embarking: Vec<GroupId>,
+        duration: Option<Time>,
+        distribution: Option<Vec<UnitId>>,
+    },
+    FireAtPoint {
+        point: LuaVec2,
+        radius: Option<f64>,
+        expend_qty: Option<i64>,
+        weapon_type: Option<u64>, // weapon flag(s)
+        altitude: Option<f64>,
+        altitude_type: Option<AltType>,
+    },
+    Hold,
+    FACAttackGroup {
+        group: GroupId,
+        params: FACParams,
+    },
+    EmbarkToTransport {
+        pos: LuaVec2,
+        radius: Option<f64>,
+    },
+    DisembarkFromTransport {
+        pos: LuaVec2,
+        radius: Option<f64>,
+    },
+    CargoTransportation {
+        group: Option<StaticObjectId>,
+        zone: Option<TriggerZoneId>,
+    },
+    GoToWaypoint {
+        from_waypoint: i64,
+        to_waypoint: i64,
+    },
+    GroundEscort {
+        group: GroupId,
+        engagement_max_distance: f64,
+        target_types: Vec<Attribute>,
+        last_wpt_index: Option<i64>,
+    },
+    RecoveryTanker {
+        group: GroupId,
+        speed: f64,
+        altitude: f64,
+        last_wpt_idx: Option<i64>,
+    },
+    EngageTargets {
+        target_types: Vec<Attribute>,
+        max_dist: Option<f64>,
+        priority: Option<i64>,
+    },
+    EngageTargetsInZone {
+        point: LuaVec2,
+        zone_radius: f64,
+        target_types: Vec<Attribute>,
+        priority: Option<i64>,
+    },
+    EngageGroup {
+        group: GroupId,
+        params: AttackParams,
+        priority: Option<i64>,
+    },
+    EngageUnit {
+        unit: UnitId,
+        params: AttackParams,
+        priority: Option<i64>,
+    },
+    AWACS,
+    Tanker,
+    EWR,
+    FACEngageGroup {
+        group: GroupId,
+        params: FACParams,
+        priority: Option<i64>,
+    },
+    FAC {
+        params: FACParams,
+        priority: Option<i64>,
+    },
+}
+
+impl<'lua> IntoLua<'lua> for Task {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let root = lua.create_table()?;
+        let params = lua.create_table()?;
+        match self {
+            Self::AttackGroup { group, params: atp} => {
+                root.raw_set("id", "AttackGroup")?;
+                params.raw_set("groupId", group)?;
+                atp.push_tbl(&params)?;
+            }
+            Self::AttackUnit { unit, params: atp} => {
+                root.raw_set("id", "AttackUnit")?;
+                params.raw_set("unitId", unit)?;
+                atp.push_tbl(&params)?;
+            }
+            Self::Bombing { point, params: atp } => {
+                root.raw_set("id", "Bombing")?;
+                params.raw_set("point", point)?;
+                atp.push_tbl(&params)?;
+            }
+            Self::Strafing { point, length, params: atp } => {
+                root.raw_set("id", "Strafing")?;
+                params.raw_set("point", point)?;
+                params.raw_set("length", length)?;
+                atp.push_tbl(&params)?;
+            }
+            Self::CarpetBombing { point, carpet_length, params: atp } => {
+                root.raw_set("id", "CarpetBombing")?;
+                params.raw_set("point", point)?;
+                params.raw_set("carpetLength", carpet_length)?;
+                atp.push_tbl(&params)?;
+            }
+            Self::AttackMapObject { point, params: atp } => {
+                root.raw_set("id", "AttackMapObject")?;
+                params.raw_set("point", point)?;
+                atp.push_tbl(&params)?;
+            }
+            Self::BombRunway { runway, params: atp } => {
+                root.raw_set("id", "BombingRunway")?;
+                params.raw_set("runwayId", runway)?;
+                atp.push_tbl(&params)?;
+            }
+            Self::Orbit { pattern, point, point2, speed, altitude } => {
+                root.raw_set("id", "Orbit")?;
+                params.raw_set("pattern", pattern)?;
+                params.raw_set("point", point)?;
+                params.raw_set("point2", point2)?;
+                params.raw_set("speed", speed)?;
+                params.raw_set("altitude", altitude)?;
+            }
+            Self::Refuelling => root.raw_set("id", "Refueling")?,
+            Self::Land { point, duration } => {
+                root.raw_set("id", "Land")?;
+                params.raw_set("point", point)?;
+                if let Some(dur) = duration {
+                    params.raw_set("durationFlag", true)?;
+                    params.raw_set("duration", dur)?;
+                }
+            }
+            Self::Follow(fp) => {
+                root.raw_set("id", "Follow")?;
+                fp.push_tbl(&params)?;
+            }
+            Self::FollowBigFormation(fp) => {
+                root.raw_set("id", "FollowBigFormation")?;
+                fp.push_tbl(&params)?;
+            }
+            Self::Escort { engagement_dist_max, target_types, params: fp } => {
+                root.raw_set("id", "Escort")?;
+                params.raw_set("engagementDistMax", engagement_dist_max)?;
+                params.raw_set("targetTypes", target_types)?;
+                fp.push_tbl(&params)?;
+            }
+            Self::Embarking { pos, groups_for_embarking, duration, distribution } => {
+                root.raw_set("id", "Embarking")?;
+                params.raw_set("x", pos.x)?;
+                params.raw_set("y", pos.y)?;
+                params.raw_set("groupsForEmbarking", groups_for_embarking)?;
+                if let Some(dur) = duration {
+                    params.raw_set("duration", dur)?;
+                }
+                if let Some(dist) = distribution {
+                    params.raw_set("distribution", dist)?;
+                }
+            }
+            Self::FireAtPoint { point, radius, expend_qty, weapon_type, altitude, altitude_type } => {
+                root.raw_set("id", "FireAtPoint")?;
+                params.raw_set("point", point)?;
+                if let Some(radius) = radius {
+                    params.raw_set("radius", radius)?;
+                }
+                if let Some(qty) = expend_qty {
+                    params.raw_set("expendQtyEnabled", true)?;
+                    params.raw_set("expendQty", qty)?;
+                }
+                if let Some(wt) = weapon_type {
+                    params.raw_set("weaponType", wt)?;
+                }
+                if let Some(alt) = altitude {
+                    params.raw_set("altitude", alt)?;
+                }
+                if let Some(at) = altitude_type {
+                    params.raw_set("alt_type", at)?;
+                }
+            }
+            Self::Hold => root.raw_set("id", "Hold")?,
+            Self::FACAttackGroup { group, params: fp } => {
+                root.raw_set("id", "FAC_AttackGroup")?;
+                params.raw_set("groupId", group)?;
+                fp.push_tbl(&params)?;
+            }
+            Self::EmbarkToTransport { pos, radius } => {
+                root.raw_set("id", "EmbarkToTransport")?;
+                params.raw_set("x", pos.x)?;
+                params.raw_set("y", pos.y)?;
+                if let Some(rad) = radius {
+                    params.raw_set("zoneRadius", rad)?
+                }
+            }
+            Self::DisembarkFromTransport { pos, radius } => {
+                root.raw_set("id", "DisembarkFromTransport")?;
+                params.raw_set("x", pos.x)?;
+                params.raw_set("y", pos.y)?;
+                if let Some(rad) = radius {
+                    params.raw_set("zoneRadius", rad)?;
+                }
+            }
+            Self::CargoTransportation { group, zone } => {
+                root.raw_set("id", "CargoTransportation")?;
+                if let Some(gid) = group {
+                    params.raw_set("groupId", gid)?;
+                }
+                if let Some(zone) = zone {
+                    params.raw_set("zoneId", zone)?;
+                }
+            }
+            Self::GoToWaypoint { from_waypoint, to_waypoint } => {
+                root.raw_set("id", "goToWaypoint")?;
+                params.raw_set("fromWaypointIndex", from_waypoint)?;
+                params.raw_set("goToWaypointIndex", to_waypoint)?;
+            }
+            Self::GroundEscort { group, engagement_max_distance, target_types, last_wpt_index } => {
+                root.raw_set("id", "GroundEscort")?;
+                params.raw_set("groupId", group)?;
+                params.raw_set("engagementDistMax", engagement_max_distance)?;
+                params.raw_set("targetTypes", target_types)?;
+                if let Some(wpi) = last_wpt_index {
+                    params.raw_set("lastWptIndexFlag", true)?;
+                    params.raw_set("lastWptIndex", wpi)?;
+                }
+            }
+            Self::RecoveryTanker { group, speed, altitude, last_wpt_idx } => {
+                root.raw_set("id", "RecoveryTanker")?;
+                params.raw_set("groupId", group)?;
+                params.raw_set("speed", speed)?;
+                params.raw_set("altitude", altitude)?;
+                if let Some(idx) = last_wpt_idx {
+                    params.raw_set("lastWptIndexFlag", true)?;
+                    params.raw_set("lastWptIndex", idx)?;
+                }
+            }
+            Self::EngageTargets { target_types, max_dist, priority } => {
+                root.raw_set("id", "EngageTargets")?;
+                params.raw_set("targetTypes", target_types)?;
+                if let Some(d) = max_dist {
+                    params.raw_set("maxDist", d)?;
+                }
+                if let Some(p) = priority {
+                    params.raw_set("priority", p)?;
+                }
+            }
+            Self::EngageTargetsInZone { point, zone_radius, target_types, priority } => {
+                root.raw_set("id", "EngageTargetsInZone")?;
+                params.raw_set("point", point)?;
+                params.raw_set("zoneRadius", zone_radius)?;
+                params.raw_set("targetTypes", target_types)?;
+                if let Some(p) = priority {
+                    params.raw_set("priority", p)?;
+                }
+            }
+            Self::EngageGroup { group, params: atp, priority } => {
+                root.raw_set("id", "EngageGroup")?;
+                params.raw_set("groupId", group)?;
+                atp.push_tbl(&params)?;
+                if let Some(p) = priority {
+                    params.raw_set("priority", p)?;
+                }
+            }
+            Self::EngageUnit { unit, params: atp, priority } => {
+                root.raw_set("id", "EngageUnit")?;
+                params.raw_set("unitId", unit)?;
+                atp.push_tbl(&params)?;
+                if let Some(p) = priority {
+                    params.raw_set("priority", p)?;
+                }
+            }
+            Self::AWACS => root.raw_set("id", "AWACS")?,
+            Self::Tanker => root.raw_set("id", "Tanker")?,
+            Self::EWR => root.raw_set("id", "EWR")?,
+            Self::FACEngageGroup { group, params: fp, priority } => {
+                root.raw_set("id", "FAC_EngageGroup")?;
+                params.raw_set("groupId", group)?;
+                fp.push_tbl(&params)?;
+                if let Some(p) = priority {
+                    params.raw_set("priority", p)?;
+                }
+            }
+            Self::FAC { params: fp, priority } => {
+                root.raw_set("id", "FAC")?;
+                fp.push_tbl(&params)?;
+                if let Some(p) = priority {
+                    params.raw_set("priority", p)?;
+                }
+            }
+        }
+        root.raw_set("params", params)?;
+        Ok(Value::Table(root))
+    }
+}
+
 wrapped_table!(Command, None);
 
 simple_enum!(AirRoe, u8, [

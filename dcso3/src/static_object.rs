@@ -12,11 +12,13 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use super::{as_tbl, coalition::Side, country::Country, object::Object};
-use crate::{airbase::Airbase, coalition::Static, wrapped_table, LuaEnv, MizLua};
+use crate::{airbase::Airbase, coalition::Static, wrapped_table, LuaEnv, MizLua, wrapped_prim};
 use anyhow::{anyhow, Result};
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
+
+wrapped_prim!(StaticObjectId, i64, Hash, Copy);
 
 wrapped_table!(StaticObject, Some("StaticObject"));
 
@@ -43,6 +45,10 @@ impl<'lua> StaticObject<'lua> {
 
     pub fn destroy(self) -> Result<()> {
         Ok(self.t.call_method("destroy", ())?)
+    }
+
+    pub fn id(&self) -> Result<StaticObjectId> {
+        Ok(self.t.call_method("getID", ())?)
     }
 
     pub fn get_coalition(&self) -> Result<Side> {

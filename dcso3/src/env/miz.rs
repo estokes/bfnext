@@ -32,6 +32,8 @@ pub enum TriggerZoneTyp {
     Quad(Quad2),
 }
 
+wrapped_prim!(TriggerZoneId, i64, Copy, Hash);
+
 wrapped_table!(TriggerZone, None);
 
 impl<'lua> TriggerZone<'lua> {
@@ -58,6 +60,10 @@ impl<'lua> TriggerZone<'lua> {
 
     pub fn color(&self) -> Result<Color> {
         Ok(self.raw_get("color")?)
+    }
+
+    pub fn id(&self) -> Result<TriggerZoneId> {
+        Ok(self.raw_get("zoneId")?)
     }
 }
 

@@ -14,14 +14,40 @@ FITNESS FOR A PARTICULAR PURPOSE.
 use super::{as_tbl, coalition::Side, object::Object, warehouse::Warehouse, LuaVec3, String};
 use crate::{
     object::{DcsObject, DcsOid},
-    wrapped_table, LuaEnv, MizLua, Sequence,
+    wrapped_table, LuaEnv, MizLua, Sequence, wrapped_prim,
 };
 use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::{marker::PhantomData, ops::Deref};
 
+wrapped_prim!(RunwayId, i64, Hash, Copy);
+
 wrapped_table!(Runway, None);
+
+impl<'lua> Runway<'lua> {
+    pub fn id(&self) -> Result<RunwayId> {
+        Ok(self.t.raw_get("Name")?)
+    }
+
+    pub fn course(&self) -> Result<f64> {
+        Ok(self.t.raw_get("course")?)
+    }
+
+    pub fn position(&self) -> Result<LuaVec3> {
+        Ok(self.t.raw_get("position")?)
+    }
+
+    pub fn length(&self) -> Result<f64> {
+        Ok(self.t.raw_get("length")?)
+    }
+
+    pub fn width(&self) -> Result<f64> {
+        Ok(self.t.raw_get("width")?)
+    }
+}
+
+wrapped_table!(Parking, None);
 
 wrapped_table!(Airbase, Some("Airbase"));
 
@@ -56,7 +82,7 @@ impl<'lua> Airbase<'lua> {
         Ok(self.t.call_method("getId", ())?)
     }
 
-    pub fn get_parking(&self, available: bool) -> Result<mlua::Table<'lua>> {
+    pub fn get_parking(&self, available: bool) -> Result<Parking<'lua>> {
         Ok(self.t.call_method("getParking", available)?)
     }
 

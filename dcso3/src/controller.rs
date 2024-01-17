@@ -13,7 +13,7 @@ FITNESS FOR A PARTICULAR PURPOSE.
 
 use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, LuaVec3, String};
 use crate::{
-    airbase::RunwayId,
+    airbase::{RunwayId, AirbaseId},
     attribute::Attribute,
     bitflags_enum,
     env::miz::{GroupId, TriggerZoneId, UnitId},
@@ -28,6 +28,14 @@ use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
+
+string_enum!(WaypointType, u8, [
+    Takeoff => "TAKEOFF",
+    TakeoffParking => "TAKEOFF_PARKING",
+    TakeoffParkingHot => "TAKEOFF_PARKING_HOT",
+    TurningPoint => "TURNING_POINT",
+    Land => "LAND"
+]);
 
 string_enum!(WeaponExpend, u8, [
     Quarter => "QUARTER",
@@ -173,6 +181,13 @@ impl FACParams {
 }
 
 #[derive(Debug, Clone)]
+pub struct MissionPoint {
+    typ: WaypointType,
+    airdrome_id: Option<AirbaseId>,
+    time_re_fu_ar: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Task {
     AttackGroup {
         group: GroupId,
@@ -303,6 +318,10 @@ pub enum Task {
         params: FACParams,
         priority: Option<i64>,
     },
+    Mission {
+        airborne: Option<bool>,
+        route: Vec<MissionPoint>,
+    }
 }
 
 impl<'lua> IntoLua<'lua> for Task {

@@ -22,6 +22,7 @@ use serde_derive::{Serialize, Deserialize};
 use std::{marker::PhantomData, ops::Deref};
 
 wrapped_prim!(RunwayId, i64, Hash, Copy);
+wrapped_prim!(AirbaseId, i64, Hash, Copy);
 
 wrapped_table!(Runway, None);
 
@@ -78,7 +79,7 @@ impl<'lua> Airbase<'lua> {
         Ok(self.t.call_method("getUnit", i)?)
     }
 
-    pub fn get_id(&self) -> Result<i64> {
+    pub fn get_id(&self) -> Result<AirbaseId> {
         Ok(self.t.call_method("getId", ())?)
     }
 

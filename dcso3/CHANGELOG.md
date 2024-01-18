@@ -2,6 +2,8 @@
 
 - warehouse system
 - StaticObject::get_by_name can return an airbase
+- ai tasking system converted to enum
+- ai command system converted to enum
 
 ## 0.0.10
 

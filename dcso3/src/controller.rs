@@ -13,7 +13,7 @@ FITNESS FOR A PARTICULAR PURPOSE.
 
 use super::{as_tbl, attribute::Attributes, cvt_err, object::Object, LuaVec3, String};
 use crate::{
-    airbase::{RunwayId, AirbaseId},
+    airbase::{AirbaseId, RunwayId},
     attribute::Attribute,
     bitflags_enum,
     env::miz::{GroupId, TriggerZoneId, UnitId},
@@ -26,6 +26,7 @@ use crate::{
 use anyhow::Result;
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
+use serde::ser::SerializeTupleVariant;
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
@@ -49,6 +50,11 @@ string_enum!(WeaponExpend, u8, [
 string_enum!(OrbitPattern, u8, [
     RraceTrack => "RACE_TRACK",
     Circle => "CIRCLE"
+]);
+
+string_enum!(TurnMethod, u8, [
+    FlyOverPoint => "FLY_OVER_POINT",
+    FinPoint => "FIN_POINT"
 ]);
 
 string_enum!(Designation, u8, [
@@ -185,6 +191,44 @@ pub struct MissionPoint {
     typ: WaypointType,
     airdrome_id: Option<AirbaseId>,
     time_re_fu_ar: Option<i64>,
+    helipad: Option<AirbaseId>,
+    link_unit: Option<UnitId>,
+    action: Option<TurnMethod>,
+    pos: LuaVec2,
+    alt: f64,
+    alt_typ: Option<AltType>,
+    speed: f64,
+    speed_locked: Option<bool>,
+    eta: Option<Time>,
+    eta_locked: Option<bool>,
+    name: String,
+    task: Box<Task>,
+}
+
+impl<'lua> IntoLua<'lua> for MissionPoint {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let iter = [
+            ("type", self.typ.into_lua(lua)?),
+            ("airdromId", self.airdrome_id.into_lua(lua)?),
+            ("timeReFuAr", self.time_re_fu_ar.into_lua(lua)?),
+            ("helipadId", self.helipad.into_lua(lua)?),
+            ("linkUnit", self.link_unit.into_lua(lua)?),
+            ("action", self.action.into_lua(lua)?),
+            ("x", self.pos.x.into_lua(lua)?),
+            ("y", self.pos.y.into_lua(lua)?),
+            ("alt", self.alt.into_lua(lua)?),
+            ("alt_type", self.alt_typ.into_lua(lua)?),
+            ("speed", self.speed.into_lua(lua)?),
+            ("speed_locked", self.speed_locked.into_lua(lua)?),
+            ("ETA", self.eta.into_lua(lua)?),
+            ("ETA_locked", self.eta_locked.into_lua(lua)?),
+            ("name", self.name.into_lua(lua)?),
+            ("task", self.task.into_lua(lua)?),
+        ]
+        .into_iter()
+        .filter(|(_, v)| !v.is_nil());
+        Ok(Value::Table(lua.create_table_from(iter)?))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -321,7 +365,8 @@ pub enum Task {
     Mission {
         airborne: Option<bool>,
         route: Vec<MissionPoint>,
-    }
+    },
+    ComboTask(Vec<Task>),
 }
 
 impl<'lua> IntoLua<'lua> for Task {
@@ -329,12 +374,12 @@ impl<'lua> IntoLua<'lua> for Task {
         let root = lua.create_table()?;
         let params = lua.create_table()?;
         match self {
-            Self::AttackGroup { group, params: atp} => {
+            Self::AttackGroup { group, params: atp } => {
                 root.raw_set("id", "AttackGroup")?;
                 params.raw_set("groupId", group)?;
                 atp.push_tbl(&params)?;
             }
-            Self::AttackUnit { unit, params: atp} => {
+            Self::AttackUnit { unit, params: atp } => {
                 root.raw_set("id", "AttackUnit")?;
                 params.raw_set("unitId", unit)?;
                 atp.push_tbl(&params)?;
@@ -344,13 +389,21 @@ impl<'lua> IntoLua<'lua> for Task {
                 params.raw_set("point", point)?;
                 atp.push_tbl(&params)?;
             }
-            Self::Strafing { point, length, params: atp } => {
+            Self::Strafing {
+                point,
+                length,
+                params: atp,
+            } => {
                 root.raw_set("id", "Strafing")?;
                 params.raw_set("point", point)?;
                 params.raw_set("length", length)?;
                 atp.push_tbl(&params)?;
             }
-            Self::CarpetBombing { point, carpet_length, params: atp } => {
+            Self::CarpetBombing {
+                point,
+                carpet_length,
+                params: atp,
+            } => {
                 root.raw_set("id", "CarpetBombing")?;
                 params.raw_set("point", point)?;
                 params.raw_set("carpetLength", carpet_length)?;
@@ -361,12 +414,21 @@ impl<'lua> IntoLua<'lua> for Task {
                 params.raw_set("point", point)?;
                 atp.push_tbl(&params)?;
             }
-            Self::BombRunway { runway, params: atp } => {
+            Self::BombRunway {
+                runway,
+                params: atp,
+            } => {
                 root.raw_set("id", "BombingRunway")?;
                 params.raw_set("runwayId", runway)?;
                 atp.push_tbl(&params)?;
             }
-            Self::Orbit { pattern, point, point2, speed, altitude } => {
+            Self::Orbit {
+                pattern,
+                point,
+                point2,
+                speed,
+                altitude,
+            } => {
                 root.raw_set("id", "Orbit")?;
                 params.raw_set("pattern", pattern)?;
                 params.raw_set("point", point)?;
@@ -391,13 +453,22 @@ impl<'lua> IntoLua<'lua> for Task {
                 root.raw_set("id", "FollowBigFormation")?;
                 fp.push_tbl(&params)?;
             }
-            Self::Escort { engagement_dist_max, target_types, params: fp } => {
+            Self::Escort {
+                engagement_dist_max,
+                target_types,
+                params: fp,
+            } => {
                 root.raw_set("id", "Escort")?;
                 params.raw_set("engagementDistMax", engagement_dist_max)?;
                 params.raw_set("targetTypes", target_types)?;
                 fp.push_tbl(&params)?;
             }
-            Self::Embarking { pos, groups_for_embarking, duration, distribution } => {
+            Self::Embarking {
+                pos,
+                groups_for_embarking,
+                duration,
+                distribution,
+            } => {
                 root.raw_set("id", "Embarking")?;
                 params.raw_set("x", pos.x)?;
                 params.raw_set("y", pos.y)?;
@@ -409,7 +480,14 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.raw_set("distribution", dist)?;
                 }
             }
-            Self::FireAtPoint { point, radius, expend_qty, weapon_type, altitude, altitude_type } => {
+            Self::FireAtPoint {
+                point,
+                radius,
+                expend_qty,
+                weapon_type,
+                altitude,
+                altitude_type,
+            } => {
                 root.raw_set("id", "FireAtPoint")?;
                 params.raw_set("point", point)?;
                 if let Some(radius) = radius {
@@ -460,12 +538,20 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.raw_set("zoneId", zone)?;
                 }
             }
-            Self::GoToWaypoint { from_waypoint, to_waypoint } => {
+            Self::GoToWaypoint {
+                from_waypoint,
+                to_waypoint,
+            } => {
                 root.raw_set("id", "goToWaypoint")?;
                 params.raw_set("fromWaypointIndex", from_waypoint)?;
                 params.raw_set("goToWaypointIndex", to_waypoint)?;
             }
-            Self::GroundEscort { group, engagement_max_distance, target_types, last_wpt_index } => {
+            Self::GroundEscort {
+                group,
+                engagement_max_distance,
+                target_types,
+                last_wpt_index,
+            } => {
                 root.raw_set("id", "GroundEscort")?;
                 params.raw_set("groupId", group)?;
                 params.raw_set("engagementDistMax", engagement_max_distance)?;
@@ -475,7 +561,12 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.raw_set("lastWptIndex", wpi)?;
                 }
             }
-            Self::RecoveryTanker { group, speed, altitude, last_wpt_idx } => {
+            Self::RecoveryTanker {
+                group,
+                speed,
+                altitude,
+                last_wpt_idx,
+            } => {
                 root.raw_set("id", "RecoveryTanker")?;
                 params.raw_set("groupId", group)?;
                 params.raw_set("speed", speed)?;
@@ -485,7 +576,11 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.raw_set("lastWptIndex", idx)?;
                 }
             }
-            Self::EngageTargets { target_types, max_dist, priority } => {
+            Self::EngageTargets {
+                target_types,
+                max_dist,
+                priority,
+            } => {
                 root.raw_set("id", "EngageTargets")?;
                 params.raw_set("targetTypes", target_types)?;
                 if let Some(d) = max_dist {
@@ -495,7 +590,12 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.raw_set("priority", p)?;
                 }
             }
-            Self::EngageTargetsInZone { point, zone_radius, target_types, priority } => {
+            Self::EngageTargetsInZone {
+                point,
+                zone_radius,
+                target_types,
+                priority,
+            } => {
                 root.raw_set("id", "EngageTargetsInZone")?;
                 params.raw_set("point", point)?;
                 params.raw_set("zoneRadius", zone_radius)?;
@@ -504,7 +604,11 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.raw_set("priority", p)?;
                 }
             }
-            Self::EngageGroup { group, params: atp, priority } => {
+            Self::EngageGroup {
+                group,
+                params: atp,
+                priority,
+            } => {
                 root.raw_set("id", "EngageGroup")?;
                 params.raw_set("groupId", group)?;
                 atp.push_tbl(&params)?;
@@ -512,7 +616,11 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.raw_set("priority", p)?;
                 }
             }
-            Self::EngageUnit { unit, params: atp, priority } => {
+            Self::EngageUnit {
+                unit,
+                params: atp,
+                priority,
+            } => {
                 root.raw_set("id", "EngageUnit")?;
                 params.raw_set("unitId", unit)?;
                 atp.push_tbl(&params)?;
@@ -523,7 +631,11 @@ impl<'lua> IntoLua<'lua> for Task {
             Self::AWACS => root.raw_set("id", "AWACS")?,
             Self::Tanker => root.raw_set("id", "Tanker")?,
             Self::EWR => root.raw_set("id", "EWR")?,
-            Self::FACEngageGroup { group, params: fp, priority } => {
+            Self::FACEngageGroup {
+                group,
+                params: fp,
+                priority,
+            } => {
                 root.raw_set("id", "FAC_EngageGroup")?;
                 params.raw_set("groupId", group)?;
                 fp.push_tbl(&params)?;
@@ -531,11 +643,33 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.raw_set("priority", p)?;
                 }
             }
-            Self::FAC { params: fp, priority } => {
+            Self::FAC {
+                params: fp,
+                priority,
+            } => {
                 root.raw_set("id", "FAC")?;
                 fp.push_tbl(&params)?;
                 if let Some(p) = priority {
                     params.raw_set("priority", p)?;
+                }
+            }
+            Self::Mission { airborne, route } => {
+                root.raw_set("id", "Mission")?;
+                params.raw_set("airborne", airborne)?;
+                let points = lua.create_table()?;
+                points.raw_set(
+                    "points",
+                    route
+                        .into_iter()
+                        .map(|m| m.into_lua(lua))
+                        .collect::<LuaResult<Vec<Value>>>()?,
+                )?;
+                params.raw_set("route", points)?;
+            }
+            Self::ComboTask(tasks) => {
+                root.raw_set("id", "ComboTask")?;
+                for task in tasks {
+                    params.push(task)?;
                 }
             }
         }
@@ -544,7 +678,142 @@ impl<'lua> IntoLua<'lua> for Task {
     }
 }
 
-wrapped_table!(Command, None);
+simple_enum!(BeaconType, u16, [
+    Null => 0,
+    VOR => 1,
+    DME => 2,
+    VORDME => 3,
+    TACAN => 4,
+    VORTAC => 5,
+    RSBN => 32,
+    BroadcastStation => 1024,
+    Homer => 8,
+    AirportHomer => 4104,
+    AirportHomerWithMarker => 4136,
+    ILSFarHomer => 16408,
+    ILSNearHomer => 16456,
+    ILSLocalizer => 16640,
+    ILSGlideslope => 16896,
+    NauticalHomer => 32776
+]);
+
+simple_enum!(BeaconSystem, u8, [
+    PAR10 => 1,
+    RSBN5 => 2,
+    TACAN => 3,
+    TACANTanker => 4,
+    ILSLocalizer => 5,
+    ILSGlideslope => 6,
+    BroadcastStation => 7
+]);
+
+pub enum Command {
+    Script(String),
+    SetCallsign { callname: i64, number: u8 },
+    SetFrequency { frequency: i64, modulation: Modulation, power: i64 },
+    SetFrequencyForUnit { frequency: i64, modulation: Modulation, power: i64, unit: UnitId },
+    SwitchWaypoint { from_waypoint: i64, to_waypoint: i64 },
+    StopRoute(bool),
+    SwitchAction(i64),
+    SetInvisible(bool),
+    SetImmortal(bool),
+    SetUnlimitedFuel(bool),
+    ActivateBeacon {
+        typ: BeaconType,
+        system: BeaconSystem,
+        name: Option<String>,
+        callsign: String,
+        frequency: i64,
+    },
+    DeactivateBeacon,
+    ActivateICLS { channel: i64, unit: UnitId, name: Option<String> },
+    DeactivateICLS,
+    EPLRS { enable: bool, group: GroupId },
+    Start,
+    TransmitMessage {
+        duration: Option<Time>,
+        subtitle: Option<String>,
+        looping: Option<bool>,
+        file: String
+    },
+    StopTransmission,
+    Smoke(bool),
+    ActivateLink4 { unit: UnitId, frequency: i64, name: Option<String> },
+    DeactivateLink4,
+    ActivateACLS { unit: UnitId, name: Option<String> },
+    DeactivateACLS,
+    LoadingShip { cargo: i64, unit: UnitId }    
+}
+
+impl<'lua> IntoLua<'lua> for Command {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let root = lua.create_table()?;
+        let params = lua.create_table()?;
+        match self {
+            Self::Script(s) => {
+                root.raw_set("id", "Script")?;
+                params.raw_set("command", s)?;
+            }
+            Self::SetCallsign { callname, number } => {
+                root.raw_set("id", "SetCallsign")?;
+                params.raw_set("callname", callname)?;
+                params.raw_set("number", number)?;
+            }
+            Self::SetFrequency { frequency, modulation, power } => {
+                root.raw_set("id", "SetFrequency")?;
+                params.raw_set("frequency", frequency)?;
+                params.raw_set("modulation", modulation)?;
+                params.raw_set("power", power)?;
+            }
+            Self::SetFrequencyForUnit { frequency, modulation, power, unit } => {
+                root.raw_set("id", "SetFrequencyForUnit")?;
+                params.raw_set("frequency", frequency)?;
+                params.raw_set("modulation", modulation)?;
+                params.raw_set("power", power)?;
+                params.raw_set("unitId", unit)?;
+            }
+            Self::SwitchWaypoint { from_waypoint, to_waypoint } => {
+                root.raw_set("id", "SwitchWaypoint")?;
+                params.raw_set("fromWaypointIndex", from_waypoint)?;
+                params.raw_set("goToWaypointIndex", to_waypoint)?;
+            }
+            Self::StopRoute(stop) => {
+                root.raw_set("id", "StopRoute")?;
+                params.raw_set("value", stop)?;
+            }
+            Self::SwitchAction(action) => {
+                root.raw_set("id", "SwitchAction")?;
+                params.raw_set("actionIndex", action)?;
+            }
+            Self::SetInvisible(invisible) => {
+                root.raw_set("id", "SetInvisible")?;
+                params.raw_set("value", invisible)?;
+            }
+            Self::SetImmortal(immortal) => {
+                root.raw_set("id", "SetImmortal")?;
+                params.raw_set("value", immortal)?;
+            }
+            Self::SetUnlimitedFuel(unlimited_fuel) => {
+                root.raw_set("id", "SetUnlimitedFuel")?;
+                params.raw_set("value", unlimited_fuel)?;
+            }
+            Self::ActivateBeacon { typ, system, name, callsign, frequency } => {
+                root.raw_set("id", "ActivateBeacon")?;
+                params.raw_set("type", typ)?;
+                params.raw_set("system", system)?;
+                params.raw_set("callsign", callsign)?;
+                params.raw_set("frequency", frequency)?;
+                if let Some(name) = name {
+                    params.raw_set("name", name)?;
+                }
+            }
+            Self::DeactivateBeacon => root.raw_set("id", "DeactivateBeacon")?,
+            
+        }
+        root.raw_set("params", params)?;
+        Ok(Value::Table(root))
+    }
+}
 
 simple_enum!(AirRoe, u8, [
     OpenFire => 2,

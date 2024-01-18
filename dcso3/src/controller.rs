@@ -26,7 +26,6 @@ use crate::{
 use anyhow::Result;
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
-use serde::ser::SerializeTupleVariant;
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
@@ -94,12 +93,12 @@ simple_enum!(FACCallsign, u8, [
 
 #[derive(Debug, Clone)]
 pub struct AttackParams {
-    weapon_type: Option<u64>, // weapon flag(s)
-    expend: Option<WeaponExpend>,
-    direction: Option<f64>, // in radians
-    altitude: Option<f64>,
-    attack_qty: Option<i64>,
-    group_attack: Option<bool>,
+    pub weapon_type: Option<u64>, // weapon flag(s)
+    pub expend: Option<WeaponExpend>,
+    pub direction: Option<f64>, // in radians
+    pub altitude: Option<f64>,
+    pub attack_qty: Option<i64>,
+    pub group_attack: Option<bool>,
 }
 
 impl AttackParams {
@@ -131,9 +130,9 @@ impl AttackParams {
 
 #[derive(Debug, Clone)]
 pub struct FollowParams {
-    group: GroupId,
-    pos: LuaVec3,
-    last_waypoint_index: Option<i64>,
+    pub group: GroupId,
+    pub pos: LuaVec3,
+    pub last_waypoint_index: Option<i64>,
 }
 
 impl FollowParams {
@@ -150,13 +149,13 @@ impl FollowParams {
 
 #[derive(Debug, Clone)]
 pub struct FACParams {
-    weapon_type: Option<u64>, // weapon flag(s),
-    designation: Option<Designation>,
-    datalink: Option<bool>,
-    frequency: Option<f64>,
-    modulation: Option<Modulation>,
-    callname: Option<FACCallsign>,
-    number: Option<u8>,
+    pub weapon_type: Option<u64>, // weapon flag(s),
+    pub designation: Option<Designation>,
+    pub datalink: Option<bool>,
+    pub frequency: Option<f64>,
+    pub modulation: Option<Modulation>,
+    pub callname: Option<FACCallsign>,
+    pub number: Option<u8>,
 }
 
 impl FACParams {
@@ -187,25 +186,25 @@ impl FACParams {
 }
 
 #[derive(Debug, Clone)]
-pub struct MissionPoint {
-    typ: WaypointType,
-    airdrome_id: Option<AirbaseId>,
-    time_re_fu_ar: Option<i64>,
-    helipad: Option<AirbaseId>,
-    link_unit: Option<UnitId>,
-    action: Option<TurnMethod>,
-    pos: LuaVec2,
-    alt: f64,
-    alt_typ: Option<AltType>,
-    speed: f64,
-    speed_locked: Option<bool>,
-    eta: Option<Time>,
-    eta_locked: Option<bool>,
-    name: String,
-    task: Box<Task>,
+pub struct MissionPoint<'lua> {
+    pub typ: WaypointType,
+    pub airdrome_id: Option<AirbaseId>,
+    pub time_re_fu_ar: Option<i64>,
+    pub helipad: Option<AirbaseId>,
+    pub link_unit: Option<UnitId>,
+    pub action: Option<TurnMethod>,
+    pub pos: LuaVec2,
+    pub alt: f64,
+    pub alt_typ: Option<AltType>,
+    pub speed: f64,
+    pub speed_locked: Option<bool>,
+    pub eta: Option<Time>,
+    pub eta_locked: Option<bool>,
+    pub name: String,
+    pub task: Box<Task<'lua>>,
 }
 
-impl<'lua> IntoLua<'lua> for MissionPoint {
+impl<'lua> IntoLua<'lua> for MissionPoint<'lua> {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
         let iter = [
             ("type", self.typ.into_lua(lua)?),
@@ -232,7 +231,53 @@ impl<'lua> IntoLua<'lua> for MissionPoint {
 }
 
 #[derive(Debug, Clone)]
-pub enum Task {
+pub struct TaskStartCond<'lua> {
+    pub time: Option<Time>,
+    pub user_flag: Option<Value<'lua>>,
+    pub user_flag_value: Option<Value<'lua>>,
+    pub probability: Option<u8>,
+    pub condition: Option<String>, // lua code
+}
+
+impl<'lua> IntoLua<'lua> for TaskStartCond<'lua> {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let iter = [
+            ("time", self.time.into_lua(lua)?),
+            ("userFlag", self.user_flag.into_lua(lua)?),
+            ("userFlagValue", self.user_flag_value.into_lua(lua)?),
+            ("probability", self.probability.into_lua(lua)?),
+            ("condition", self.condition.into_lua(lua)?),
+        ].into_iter().filter(|(_, v)| !v.is_nil());
+        Ok(Value::Table(lua.create_table_from(iter)?))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TaskStopCond<'lua> {
+    pub time: Option<Time>,
+    pub user_flag: Option<Value<'lua>>,
+    pub user_flag_value: Option<Value<'lua>>,
+    pub last_waypoint: i64,
+    pub duration: Time,
+    pub condition: Option<String>, // lua code
+}
+
+impl<'lua> IntoLua<'lua> for TaskStopCond<'lua> {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let iter = [
+            ("time", self.time.into_lua(lua)?),
+            ("userFlag", self.user_flag.into_lua(lua)?),
+            ("userFlagValue", self.user_flag_value.into_lua(lua)?),
+            ("lastWaypoint", self.last_waypoint.into_lua(lua)?),
+            ("duration", self.duration.into_lua(lua)?),
+            ("condition", self.condition.into_lua(lua)?),
+        ].into_iter().filter(|(_, v)| !v.is_nil());
+        Ok(Value::Table(lua.create_table_from(iter)?))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Task<'lua> {
     AttackGroup {
         group: GroupId,
         params: AttackParams,
@@ -364,12 +409,19 @@ pub enum Task {
     },
     Mission {
         airborne: Option<bool>,
-        route: Vec<MissionPoint>,
+        route: Vec<MissionPoint<'lua>>,
     },
-    ComboTask(Vec<Task>),
+    ComboTask(Vec<Task<'lua>>),
+    ControlledTask {
+        task: Box<Task<'lua>>,
+        condition: TaskStartCond<'lua>,
+        stop_condition: Option<TaskStopCond<'lua>>,
+    },
+    WrappedCommand(Command),
+    WrappedOption(AiOption<'lua>),
 }
 
-impl<'lua> IntoLua<'lua> for Task {
+impl<'lua> IntoLua<'lua> for Task<'lua> {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
         let root = lua.create_table()?;
         let params = lua.create_table()?;
@@ -672,6 +724,27 @@ impl<'lua> IntoLua<'lua> for Task {
                     params.push(task)?;
                 }
             }
+            Self::ControlledTask { task, condition, stop_condition } => {
+                root.raw_set("id", "ControlledTask")?;
+                params.raw_set("task", &**task)?;
+                params.raw_set("condition", condition)?;
+                params.raw_set("stopCondition", stop_condition)?;
+            }
+            Self::WrappedCommand(cmd) => {
+                root.raw_set("id", "WrappedAction")?;
+                let cmd = cmd.into_lua(lua)?;
+                params.raw_set("action", cmd)?;
+            }
+            Self::WrappedOption(val) => {
+                root.raw_set("id", "WrappedAction")?;
+                let opt = lua.create_table()?;
+                let optpar = lua.create_table()?;
+                opt.raw_set("id", "Option")?;
+                optpar.raw_set("name", val.tag())?;
+                optpar.raw_set("value", val)?;
+                opt.raw_set("params", optpar)?;
+                params.raw_set("action", opt)?;
+            }
         }
         root.raw_set("params", params)?;
         Ok(Value::Table(root))
@@ -707,6 +780,7 @@ simple_enum!(BeaconSystem, u8, [
     BroadcastStation => 7
 ]);
 
+#[derive(Debug, Clone)]
 pub enum Command {
     Script(String),
     SetCallsign {

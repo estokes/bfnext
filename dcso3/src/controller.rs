@@ -709,10 +709,25 @@ simple_enum!(BeaconSystem, u8, [
 
 pub enum Command {
     Script(String),
-    SetCallsign { callname: i64, number: u8 },
-    SetFrequency { frequency: i64, modulation: Modulation, power: i64 },
-    SetFrequencyForUnit { frequency: i64, modulation: Modulation, power: i64, unit: UnitId },
-    SwitchWaypoint { from_waypoint: i64, to_waypoint: i64 },
+    SetCallsign {
+        callname: i64,
+        number: u8,
+    },
+    SetFrequency {
+        frequency: i64,
+        modulation: Modulation,
+        power: i64,
+    },
+    SetFrequencyForUnit {
+        frequency: i64,
+        modulation: Modulation,
+        power: i64,
+        unit: UnitId,
+    },
+    SwitchWaypoint {
+        from_waypoint: i64,
+        to_waypoint: i64,
+    },
     StopRoute(bool),
     SwitchAction(i64),
     SetInvisible(bool),
@@ -726,23 +741,40 @@ pub enum Command {
         frequency: i64,
     },
     DeactivateBeacon,
-    ActivateICLS { channel: i64, unit: UnitId, name: Option<String> },
+    ActivateICLS {
+        channel: i64,
+        unit: UnitId,
+        name: Option<String>,
+    },
     DeactivateICLS,
-    EPLRS { enable: bool, group: GroupId },
+    EPLRS {
+        enable: bool,
+        group: GroupId,
+    },
     Start,
     TransmitMessage {
         duration: Option<Time>,
         subtitle: Option<String>,
         looping: Option<bool>,
-        file: String
+        file: String,
     },
     StopTransmission,
     Smoke(bool),
-    ActivateLink4 { unit: UnitId, frequency: i64, name: Option<String> },
+    ActivateLink4 {
+        unit: UnitId,
+        frequency: i64,
+        name: Option<String>,
+    },
     DeactivateLink4,
-    ActivateACLS { unit: UnitId, name: Option<String> },
+    ActivateACLS {
+        unit: UnitId,
+        name: Option<String>,
+    },
     DeactivateACLS,
-    LoadingShip { cargo: i64, unit: UnitId }    
+    LoadingShip {
+        cargo: i64,
+        unit: UnitId,
+    },
 }
 
 impl<'lua> IntoLua<'lua> for Command {
@@ -759,20 +791,32 @@ impl<'lua> IntoLua<'lua> for Command {
                 params.raw_set("callname", callname)?;
                 params.raw_set("number", number)?;
             }
-            Self::SetFrequency { frequency, modulation, power } => {
+            Self::SetFrequency {
+                frequency,
+                modulation,
+                power,
+            } => {
                 root.raw_set("id", "SetFrequency")?;
                 params.raw_set("frequency", frequency)?;
                 params.raw_set("modulation", modulation)?;
                 params.raw_set("power", power)?;
             }
-            Self::SetFrequencyForUnit { frequency, modulation, power, unit } => {
+            Self::SetFrequencyForUnit {
+                frequency,
+                modulation,
+                power,
+                unit,
+            } => {
                 root.raw_set("id", "SetFrequencyForUnit")?;
                 params.raw_set("frequency", frequency)?;
                 params.raw_set("modulation", modulation)?;
                 params.raw_set("power", power)?;
                 params.raw_set("unitId", unit)?;
             }
-            Self::SwitchWaypoint { from_waypoint, to_waypoint } => {
+            Self::SwitchWaypoint {
+                from_waypoint,
+                to_waypoint,
+            } => {
                 root.raw_set("id", "SwitchWaypoint")?;
                 params.raw_set("fromWaypointIndex", from_waypoint)?;
                 params.raw_set("goToWaypointIndex", to_waypoint)?;
@@ -797,7 +841,13 @@ impl<'lua> IntoLua<'lua> for Command {
                 root.raw_set("id", "SetUnlimitedFuel")?;
                 params.raw_set("value", unlimited_fuel)?;
             }
-            Self::ActivateBeacon { typ, system, name, callsign, frequency } => {
+            Self::ActivateBeacon {
+                typ,
+                system,
+                name,
+                callsign,
+                frequency,
+            } => {
                 root.raw_set("id", "ActivateBeacon")?;
                 params.raw_set("type", typ)?;
                 params.raw_set("system", system)?;
@@ -808,7 +858,71 @@ impl<'lua> IntoLua<'lua> for Command {
                 }
             }
             Self::DeactivateBeacon => root.raw_set("id", "DeactivateBeacon")?,
-            
+            Self::ActivateICLS {
+                channel,
+                unit,
+                name,
+            } => {
+                root.raw_set("id", "ActivateICLS")?;
+                params.raw_set("type", 131584)?;
+                params.raw_set("channel", channel)?;
+                params.raw_set("unitId", unit)?;
+                if let Some(name) = name {
+                    params.raw_set("name", name)?;
+                }
+            }
+            Self::DeactivateICLS => root.raw_set("id", "DeactivateICLS")?,
+            Self::EPLRS { enable, group } => {
+                root.raw_set("id", "EPLRS")?;
+                params.raw_set("value", enable)?;
+                params.raw_set("groupId", group)?;
+            }
+            Self::Start => root.raw_set("id", "Start")?,
+            Self::TransmitMessage {
+                duration,
+                subtitle,
+                looping,
+                file,
+            } => {
+                root.raw_set("id", "TransmitMessage")?;
+                params.raw_set("file", file)?;
+                if let Some(d) = duration {
+                    params.raw_set("duration", d)?;
+                }
+                if let Some(s) = subtitle {
+                    params.raw_set("subtitle", s)?;
+                }
+                if let Some(l) = looping {
+                    params.raw_set("loop", l)?;
+                }
+            }
+            Self::StopTransmission => root.raw_set("id", "stopTransmission")?,
+            Self::Smoke(on) => {
+                root.raw_set("id", "SMOKE_ON_OFF")?;
+                params.raw_set("value", on)?
+            }
+            Self::ActivateLink4 { unit, frequency, name } => {
+                root.raw_set("id", "ActivateLink4")?;
+                params.raw_set("unitId", unit)?;
+                params.raw_set("frequency", frequency)?;
+                if let Some(name) = name {
+                    params.raw_set("name", name)?;
+                }
+            }
+            Self::DeactivateLink4 => root.raw_set("id", "DeactivateLink4")?,
+            Self::ActivateACLS { unit, name } => {
+                root.raw_set("id", "ActivateACLS")?;
+                params.raw_set("unitId", unit)?;
+                if let Some(name) = name {
+                    params.raw_set("name", name)?;
+                }
+            }
+            Self::DeactivateACLS => root.raw_set("id", "DeactivateACLS")?,
+            Self::LoadingShip { cargo, unit } => {
+                root.raw_set("id", "LoadingShip")?;
+                params.raw_set("cargo", cargo)?;
+                params.raw_set("unitId", unit)?;
+            }
         }
         root.raw_set("params", params)?;
         Ok(Value::Table(root))

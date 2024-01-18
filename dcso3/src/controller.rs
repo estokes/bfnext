@@ -27,7 +27,7 @@ use anyhow::Result;
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
 use serde_derive::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{ops::Deref, mem};
 
 string_enum!(WaypointType, u8, [
     Takeoff => "TAKEOFF",
@@ -724,9 +724,10 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
                     params.push(task)?;
                 }
             }
-            Self::ControlledTask { task, condition, stop_condition } => {
+            Self::ControlledTask { mut task, condition, stop_condition } => {
+                let task = mem::replace(task.as_mut(), Task::AWACS);
                 root.raw_set("id", "ControlledTask")?;
-                params.raw_set("task", &**task)?;
+                params.raw_set("task", task)?;
                 params.raw_set("condition", condition)?;
                 params.raw_set("stopCondition", stop_condition)?;
             }

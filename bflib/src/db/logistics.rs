@@ -20,7 +20,6 @@ use super::{
 };
 use crate::{db::objective::ObjectiveKind, maybe, objective, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
@@ -804,9 +803,8 @@ impl Db {
         }
         sync_from_obj(objective!(self, from)?, &from_wh)?;
         sync_from_obj(objective!(self, to)?, &to_wh)?;
-        let now = Utc::now();
-        self.update_objective_status(&from, now)?;
-        self.update_objective_status(&to, now)?;
+        self.update_supply_status()
+            .context("updating supply status")?;
         Ok(())
     }
 

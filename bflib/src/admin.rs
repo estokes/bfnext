@@ -33,7 +33,7 @@ pub enum AdminCommand {
 
 impl AdminCommand {
     pub fn help() -> &'static str {
-        "reduce-inventory <airbase> <amount>, logistics-tick-now, logistics-deliver-now, tim <key> [size], spawn <key>, sideswitch <side> <player>"
+        "reduce-inventory <airbase> <amount>, transfer-supply <from> <to>, logistics-tick-now, logistics-deliver-now, tim <key> [size], spawn <key>, sideswitch <side> <player>"
     }
 }
 

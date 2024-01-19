@@ -4,7 +4,7 @@ use crate::{
     spawnctx::{SpawnCtx, SpawnLoc},
     Context,
 };
-use anyhow::{anyhow, bail, Result, Context as AnyhowContext};
+use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
@@ -23,6 +23,7 @@ use std::{mem, str::FromStr};
 pub enum AdminCommand {
     Help,
     ReduceInventory { airbase: String, amount: u8 },
+    TransferSupply { from: String, to: String },
     LogisticsTickNow,
     LogisticsDeliverNow,
     Tim { key: String, size: usize },
@@ -48,7 +49,7 @@ impl FromStr for AdminCommand {
         } else if s.starts_with("reduce-inventory ") {
             let s = s.strip_prefix("reduce-inventory ").unwrap();
             match s.split_once(" ") {
-                None => bail!("reduce-inventory [airbase] [amount]"),
+                None => bail!("reduce-inventory <airbase> <amount>"),
                 Some((airbase, amount)) => {
                     let amount = amount.parse::<u8>()?;
                     Ok(Self::ReduceInventory {
@@ -56,6 +57,15 @@ impl FromStr for AdminCommand {
                         amount,
                     })
                 }
+            }
+        } else if s.starts_with("transfer-supply ") {
+            let s = s.strip_prefix("transfer-supply ").unwrap();
+            match s.split_once(" ") {
+                None => bail!("transfer-supply <from> <to>"),
+                Some((from, to)) => Ok(Self::TransferSupply {
+                    from: from.into(),
+                    to: to.into(),
+                }),
             }
         } else if s.starts_with("logistics-tick-now") {
             Ok(Self::LogisticsTickNow)
@@ -266,6 +276,19 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                         .ephemeral
                         .msgs()
                         .send(MsgTyp::Chat(Some(id)), "inventory reduced"),
+                }
+            }
+            AdminCommand::TransferSupply { from, to } => {
+                match ctx.db.admin_transfer_supplies(lua, &from, &to) {
+                    Err(e) => ctx.db.ephemeral.msgs().send(
+                        MsgTyp::Chat(Some(id)),
+                        format_compact!("transfer inventory failed {:?}", e),
+                    ),
+                    Ok(()) => ctx
+                        .db
+                        .ephemeral
+                        .msgs()
+                        .send(MsgTyp::Chat(Some(id)), "transfer complete. disconnect"),
                 }
             }
             AdminCommand::LogisticsTickNow => {

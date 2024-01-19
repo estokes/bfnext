@@ -62,6 +62,7 @@ pub enum Unpakistan {
     UnpackedFarp(String, ObjectiveId),
     Repaired(String, GroupId),
     RepairedBase(String, u8),
+    TransferedSupplies(String, String),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -80,6 +81,9 @@ impl fmt::Display for Unpakistan {
             ),
             Self::Repaired(unit, _) => write!(f, "repaired a {unit}"),
             Self::RepairedBase(base, logi) => write!(f, "repaired logistics at {base} to %{logi}"),
+            Self::TransferedSupplies(from, to) => {
+                write!(f, "transfered supplies from {from} to {to}")
+            }
         }
     }
 }
@@ -358,7 +362,11 @@ impl Db {
         }
         for oid in &self.persisted.farps {
             let obj = objective!(self, oid)?;
-            if let ObjectiveKind::Farp {spec, pad_template: _} = &obj.kind {
+            if let ObjectiveKind::Farp {
+                spec,
+                pad_template: _,
+            } = &obj.kind
+            {
                 if let Some(d_name) = spec.path.last() {
                     if obj.owner == side && d_name.as_str() == name {
                         if oldest.is_none() {
@@ -506,6 +514,22 @@ impl Db {
                 .filter(|ci| ci.crate_def.name == cr.name)
                 .map(|ci| (ci.group, ci.clone()))
                 .collect()
+        }
+        fn supply_transferrable(
+            db: &Db,
+            side: Side,
+            nearby: &SmallVec<[Cifo; 8]>,
+        ) -> SmallVec<[(GroupId, Cifo); 2]> {
+            if let Some(whcfg) = db.ephemeral.cfg.warehouse.as_ref() {
+                let cr = &whcfg.supply_transfer_crate[&side];
+                nearby
+                    .iter()
+                    .filter(|ci| ci.crate_def.name == cr.name)
+                    .map(|ci| (ci.group, ci.clone()))
+                    .collect()
+            } else {
+                smallvec![]
+            }
         }
         fn repairable(
             db: &Db,
@@ -703,6 +727,7 @@ impl Db {
         }
         let mut reasons: SmallVec<[CompactString; 2]> = smallvec![];
         let base_repairs = base_repairable(self, st.side, &nearby);
+        let supply_transfer = supply_transferrable(self, st.side, &nearby);
         if !base_repairs.is_empty() {
             let centroid = centroid2d(base_repairs.iter().map(|(_, c)| c.pos));
             let oid = close_enough_to_repair(self, st.side, centroid, || {
@@ -717,6 +742,30 @@ impl Db {
                     self.delete_group(base_repairs.keys().next().unwrap())?;
                     let obj = objective!(self, oid)?;
                     return Ok(Unpakistan::RepairedBase(obj.name.clone(), obj.logi()));
+                }
+            } else {
+                reasons.push("not close enough to a friendly objective".into());
+            }
+        }
+        if !supply_transfer.is_empty() {
+            let centroid = centroid2d(supply_transfer.iter().map(|(_, c)| c.pos));
+            let oid = close_enough_to_repair(self, st.side, centroid, || {
+                base_repairs.iter().map(|(_, c)| c)
+            });
+            if let Some(to) = oid {
+                let (gid, _) = supply_transfer.into_iter().next().unwrap();
+                if let DeployKind::Crate {
+                    origin: from,
+                    player: _,
+                    spec: _,
+                } = self.persisted.groups[&gid].origin
+                {
+                    self.transfer_supplies(lua, from, to)?;
+                    self.delete_group(&gid)?;
+                    return Ok(Unpakistan::TransferedSupplies(
+                        objective!(self, from)?.name.clone(),
+                        objective!(self, to)?.name.clone(),
+                    ));
                 }
             } else {
                 reasons.push("not close enough to a friendly objective".into());

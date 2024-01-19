@@ -21,7 +21,7 @@ use super::{
     persisted::Persisted,
 };
 use crate::{
-    cfg::{Cfg, Crate, Deployable, DeployableLogistics, Troop},
+    cfg::{Cfg, Crate, Deployable, DeployableLogistics, Troop, WarehouseConfig},
     maybe,
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx},
@@ -186,7 +186,7 @@ impl ObjectiveMarkup {
             ObjectiveKind::Airbase | ObjectiveKind::Fob | ObjectiveKind::Logistics => {
                 SideFilter::All
             }
-            ObjectiveKind::Farp {..} => obj.owner.into(),
+            ObjectiveKind::Farp { .. } => obj.owner.into(),
         };
         let bar_with_label = |msgq: &mut MsgQ,
                               pos3: Vector3,
@@ -294,7 +294,7 @@ impl ObjectiveMarkup {
         pos3.x -= 1500.;
         bar_with_label(msgq, pos3, t.fuel_label, "Fuel", &t.fuelbar, obj.fuel);
         match obj.kind {
-            ObjectiveKind::Airbase | ObjectiveKind::Farp {..} | ObjectiveKind::Fob => (),
+            ObjectiveKind::Airbase | ObjectiveKind::Farp { .. } | ObjectiveKind::Fob => (),
             ObjectiveKind::Logistics => {
                 let pos = obj.pos;
                 for oid in &obj.warehouse.destination {
@@ -497,11 +497,23 @@ impl Ephemeral {
         mizidx: &MizIndex,
         side: Side,
         repair_crate: Crate,
+        whcfg: &Option<WarehouseConfig>,
         deployables: &[Deployable],
     ) -> Result<()> {
         let idx = Arc::make_mut(self.deployable_idx.entry(side).or_default());
         idx.crates_by_name
             .insert(repair_crate.name.clone(), repair_crate);
+        if let Some(whcfg) = whcfg.as_ref() {
+            match whcfg.supply_transfer_crate.get(&side) {
+                None => bail!("missing supply transfer crate for {side}"),
+                Some(cr) => match idx.crates_by_name.entry(cr.name.clone()) {
+                    Entry::Occupied(_) => bail!("multiple {} crates for side {side}", cr.name),
+                    Entry::Vacant(e) => {
+                        e.insert(cr.clone());
+                    }
+                },
+            };
+        }
         for dep in deployables.iter() {
             miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
                 .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
@@ -731,6 +743,7 @@ impl Ephemeral {
                 mizidx,
                 *side,
                 repair_crate,
+                &cfg.warehouse,
                 deployables,
             )?
         }

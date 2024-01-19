@@ -346,6 +346,11 @@ fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> 
     let ctx = unsafe { Context::get_mut() };
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::NoLives => Ok(false),
+        SlotAuth::VehicleNotAvailable(vehicle) => {
+            let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            Ok(false)
+        }
         SlotAuth::ObjectiveHasNoLogistics => {
             let msg = format_compact!("Objective is capturable");
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);

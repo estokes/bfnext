@@ -20,6 +20,7 @@ use super::{
 };
 use crate::{db::objective::ObjectiveKind, maybe, objective, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
+use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
@@ -38,8 +39,8 @@ use std::{
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct Inventory {
-    stored: u32,
-    capacity: u32,
+    pub stored: u32,
+    pub capacity: u32,
 }
 
 impl Inventory {
@@ -53,8 +54,14 @@ impl Inventory {
         }
     }
 
-    pub fn reduce(&mut self, percent: f32) {
-        self.stored = (self.stored as f32 * percent) as u32;
+    pub fn reduce(&mut self, percent: f32) -> u32 {
+        if self.stored == 0 {
+            0
+        } else {
+            let taken = max(1, (self.stored as f32 * percent) as u32);
+            self.stored -= taken;
+            taken
+        }
     }
 }
 
@@ -340,7 +347,7 @@ impl Db {
             for airbase in world.get_airbases().context("getting airbases")? {
                 let airbase = airbase.context("getting airbase")?;
                 if !airbase.is_exist()? {
-                    continue // can happen when farps get recycled
+                    continue; // can happen when farps get recycled
                 }
                 let pos3 = airbase.get_point().context("getting airbase position")?;
                 let pos = Vector2::new(pos3.x, pos3.z);
@@ -558,7 +565,11 @@ impl Db {
                         let mut total_demanded = 0;
                         for n in &mut needed {
                             let inv = n.obj.$get(name);
-                            let demanded = inv.capacity - inv.stored;
+                            let demanded = if inv.stored <= inv.capacity {
+                                inv.capacity - inv.stored
+                            } else {
+                                0
+                            };
                             total_demanded += demanded;
                             n.demanded = demanded;
                             n.allocated = 0;
@@ -721,28 +732,112 @@ impl Db {
         Ok(())
     }
 
-    pub fn admin_reduce_inventory(&mut self, lua: MizLua, name: &str, amount: u8) -> Result<()> {
-        let obj = self
-            .persisted
-            .objectives_by_name
-            .get(name)
-            .map(|oid| *oid)
-            .and_then(|oid| self.persisted.objectives.get_mut_cow(&oid))
-            .ok_or_else(|| anyhow!("no such objective {name}"))?;
-        if amount > 99 {
-            bail!("enter a percentage")
-        }
-        let percent = amount as f32 / 100.;
+    fn sync_to_objective<'lua>(
+        &mut self,
+        lua: MizLua<'lua>,
+        oid: ObjectiveId,
+    ) -> Result<(&mut Objective, warehouse::Warehouse<'lua>)> {
+        let obj = objective_mut!(self, oid)?;
         let airbase = self
             .ephemeral
             .airbase_by_oid
-            .get(&obj.id)
-            .ok_or_else(|| anyhow!("no logistics for objective {name}"))?;
+            .get(&oid)
+            .ok_or_else(|| anyhow!("no logistics for objective {}", obj.name))?;
         let warehouse = Airbase::get_instance(lua, &airbase)
             .context("getting airbase")?
             .get_warehouse()
             .context("getting warehouse")?;
         sync_to_obj(obj, &warehouse).context("syncing warehouse to objective")?;
+        Ok((obj, warehouse))
+    }
+
+    pub fn transfer_supplies(
+        &mut self,
+        lua: MizLua,
+        from: ObjectiveId,
+        to: ObjectiveId,
+    ) -> Result<()> {
+        let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
+            Some(whcfg) => whcfg,
+            None => return Ok(()),
+        };
+        let size = whcfg.supply_transfer_size as f32 / 100.;
+        if objective!(self, from)?.owner != objective!(self, to)?.owner {
+            bail!("can't transfer supply from an enemy objective")
+        }
+        let mut transfers: SmallVec<[Transfer; 128]> = smallvec![];
+        let (_, from_wh) = self
+            .sync_to_objective(lua, from)
+            .context("syncing objective")?;
+        let from_obj = objective!(self, from)?;
+        let to_obj = objective!(self, to)?;
+        macro_rules! compute {
+            ($src:ident, $typ:ident) => {
+                for (name, inv) in &from_obj.warehouse.$src {
+                    if inv.stored > 0 {
+                        let needed = match to_obj.warehouse.$src.get(name) {
+                            None => 0,
+                            Some(inv) => {
+                                if inv.capacity >= inv.stored {
+                                    inv.capacity - inv.stored
+                                } else {
+                                    0
+                                }
+                            }
+                        };
+                        let amount = min(needed, max(1, (inv.stored as f32 * size) as u32));
+                        transfers.push(Transfer {
+                            amount,
+                            source: from,
+                            target: to,
+                            item: TransferItem::$typ(name.clone()),
+                        });
+                    }
+                }
+            };
+        }
+        compute!(equipment, Equipment);
+        compute!(liquids, Liquid);
+        let (_, to_wh) = self.sync_to_objective(lua, to)?;
+        for tr in transfers {
+            tr.execute(self)?
+        }
+        sync_from_obj(objective!(self, from)?, &from_wh)?;
+        sync_from_obj(objective!(self, to)?, &to_wh)?;
+        let now = Utc::now();
+        self.update_objective_status(&from, now)?;
+        self.update_objective_status(&to, now)?;
+        Ok(())
+    }
+
+    pub fn admin_transfer_supplies(&mut self, lua: MizLua, from: &str, to: &str) -> Result<()> {
+        let from = self
+            .persisted
+            .objectives_by_name
+            .get(from)
+            .ok_or_else(|| anyhow!("not such objective {from}"))?;
+        let to = self
+            .persisted
+            .objectives_by_name
+            .get(to)
+            .ok_or_else(|| anyhow!("no such objective {to}"))?;
+        self.transfer_supplies(lua, *from, *to)
+    }
+
+    pub fn admin_reduce_inventory(&mut self, lua: MizLua, name: &str, amount: u8) -> Result<()> {
+        let oid = self
+            .persisted
+            .objectives_by_name
+            .get(name)
+            .map(|oid| *oid)
+            .ok_or_else(|| anyhow!("no such objective {name}"))?;
+        if amount > 100 {
+            bail!("enter a percentage")
+        }
+        let percent = amount as f32 / 100.;
+        let (obj, warehouse) = self
+            .sync_to_objective(lua, oid)
+            .with_context(|| format_compact!("syncing warehouses to {name}"))?;
         let equip: SmallVec<[String; 128]> = obj
             .warehouse
             .equipment

@@ -612,16 +612,30 @@ fn add_cargo_menu_for_group(
     )?;
     let root = mc.add_submenu_for_group(group, "Crates".into(), Some(root.clone()))?;
     let rep = &cfg.repair_crate[side];
+    let logi = mc.add_submenu_for_group(group, "Logistics".into(), Some(root.clone()))?;
     mc.add_command_for_group(
         group,
         rep.name.clone(),
-        Some(root.clone()),
+        Some(logi.clone()),
         spawn_crate,
         ArgTuple {
             fst: group,
             snd: rep.name.clone(),
         },
     )?;
+    if let Some(whcfg) = &cfg.warehouse {
+        let cr = &whcfg.supply_transfer_crate[&side];
+        mc.add_command_for_group(
+            group,
+            cr.name.clone(),
+            Some(logi.clone()),
+            spawn_crate,
+            ArgTuple {
+                fst: group,
+                snd: cr.name.clone(),
+            },
+        )?;
+    }
     let mut created_menus: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
     for dep in cfg.deployables.get(side).unwrap_or(&vec![]) {
         let root = dep

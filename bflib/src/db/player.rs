@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -17,9 +17,9 @@ for more details.
 use super::{group::GroupId, Db, Map, Set};
 use crate::{
     cfg::{LifeType, Vehicle},
-    maybe, maybe_mut,
+    maybe, maybe_mut, objective_mut,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{
     coalition::Side,
@@ -32,13 +32,14 @@ use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum SlotAuth {
     Yes,
     ObjectiveNotOwned(Side),
     ObjectiveHasNoLogistics,
     NoLives,
     NotRegistered(Side),
+    VehicleNotAvailable(Vehicle),
 }
 
 pub enum RegErr {
@@ -95,11 +96,15 @@ impl Db {
         slot: SlotId,
         position: Vector2,
     ) -> Result<Option<LifeType>> {
-        let objective = self
+        let oid = *self
             .persisted
             .objectives_by_slot
             .get(&slot)
-            .and_then(|id| self.persisted.objectives.get(&id))
+            .ok_or_else(|| anyhow!("could not find objective for slot {:?}", slot))?;
+        let objective = self
+            .persisted
+            .objectives
+            .get(&oid)
             .ok_or_else(|| anyhow!("could not find objective for slot {:?}", slot))?;
         let player = self
             .ephemeral
@@ -107,8 +112,8 @@ impl Db {
             .get(&slot)
             .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
             .ok_or_else(|| anyhow!("could not find player in slot {:?}", slot))?;
-        let vehicle = maybe!(objective.slots, slot, "slot")?;
-        let life_type = *maybe!(self.ephemeral.cfg.life_types, *vehicle, "life type")?;
+        let vehicle = maybe!(objective.slots, slot, "slot")?.clone();
+        let life_type = *maybe!(self.ephemeral.cfg.life_types, vehicle, "life type")?;
         let (_, player_lives) = player.lives.get_or_insert_cow(life_type, || {
             (time, self.ephemeral.cfg.default_lives[&life_type].0)
         });
@@ -124,6 +129,14 @@ impl Db {
                 // paranoia
                 *player_lives -= 1;
             }
+            let obj = objective_mut!(self, oid)?;
+            let inv = match obj.warehouse.equipment.get_mut_cow(&vehicle.0) {
+                Some(inv) => inv,
+                None => bail!("vehicle not found in warehouse {:?}", vehicle),
+            };
+            if inv.stored > 0 {
+                inv.stored -= 1;
+            }
             self.ephemeral.dirty();
             Ok(Some(life_type))
         } else {
@@ -132,12 +145,11 @@ impl Db {
     }
 
     pub fn land(&mut self, slot: SlotId, position: Vector2) -> Option<LifeType> {
-        let objective = match self
-            .persisted
-            .objectives_by_slot
-            .get(&slot)
-            .and_then(|id| self.persisted.objectives.get(&id))
-        {
+        let oid = match self.persisted.objectives_by_slot.get(&slot) {
+            Some(oid) => *oid,
+            None => return None,
+        };
+        let objective = match self.persisted.objectives.get(&oid) {
             Some(objective) => objective,
             None => return None,
         };
@@ -150,7 +162,8 @@ impl Db {
             Some(player) => player,
             None => return None,
         };
-        let life_type = self.ephemeral.cfg.life_types[&objective.slots[&slot]];
+        let vehicle = objective.slots[&slot].clone();
+        let life_type = self.ephemeral.cfg.life_types[&vehicle];
         let (_, player_lives) = match player.lives.get_mut_cow(&life_type) {
             Some(l) => l,
             None => return None,
@@ -167,6 +180,9 @@ impl Db {
             if *player_lives >= self.ephemeral.cfg.default_lives[&life_type].0 {
                 player.lives.remove_cow(&life_type);
             }
+            let obj = &mut self.persisted.objectives[&oid];
+            let inv = obj.warehouse.equipment.get_or_default_cow(vehicle.0);
+            inv.stored += 1;
             self.ephemeral.dirty();
             Some(life_type)
         } else {
@@ -241,9 +257,14 @@ impl Db {
                 if objective.captureable() {
                     return SlotAuth::ObjectiveHasNoLogistics;
                 }
-                let life_type = self.ephemeral.cfg.life_types[&objective.slots[&slot]];
+                let vehicle = &objective.slots[&slot];
+                let life_type = self.ephemeral.cfg.life_types[vehicle];
                 macro_rules! yes {
                     () => {
+                        match objective.warehouse.equipment.get(vehicle.as_str()) {
+                            Some(inv) if inv.stored > 0 => (),
+                            Some(_) | None => break SlotAuth::VehicleNotAvailable(vehicle.clone()),
+                        }
                         player.current_slot = Some((slot.clone(), None));
                         self.ephemeral.players_by_slot.insert(slot, ucid.clone());
                         break SlotAuth::Yes;

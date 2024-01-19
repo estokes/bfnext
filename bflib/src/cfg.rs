@@ -30,7 +30,7 @@ use std::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Vehicle(String);
+pub struct Vehicle(pub String);
 
 impl<'a> From<&'a str> for Vehicle {
     fn from(value: &'a str) -> Self {
@@ -292,10 +292,10 @@ pub struct WarehouseConfig {
     /// How many logistics ticks does it take before supplies are delivered
     /// from outside
     pub ticks_per_delivery: u32,
-    /// The fuel transfer crate
-    pub fuel_transfer_crate: FxHashMap<Side, Crate>,
     /// The supply transfer crate
     pub supply_transfer_crate: FxHashMap<Side, Crate>,
+    /// The percentage of supply that is transfered by a transfer crate
+    pub supply_transfer_size: u8,
     /// The name of the warehouse that is the source of supply every
     /// restart
     pub supply_source: FxHashMap<Side, String>,
@@ -1402,33 +1402,6 @@ fn default_repair_crate() -> FxHashMap<Side, Crate> {
     ])
 }
 
-fn default_fuel_transfer_crate() -> FxHashMap<Side, Crate> {
-    FxHashMap::from_iter([
-        (
-            Side::Blue,
-            Crate {
-                name: "Fuel Transfer".into(),
-                weight: 1500,
-                required: 1,
-                pos_unit: None,
-                max_drop_height_agl: 10,
-                max_drop_speed: 13,
-            },
-        ),
-        (
-            Side::Red,
-            Crate {
-                name: "Fuel Transfer".into(),
-                weight: 2000,
-                required: 1,
-                pos_unit: None,
-                max_drop_height_agl: 10,
-                max_drop_speed: 13,
-            },
-        ),
-    ])
-}
-
 fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
     FxHashMap::from_iter([
         (
@@ -1467,8 +1440,8 @@ impl Default for Cfg {
                 airbase_max: 5,
                 tick: 10,
                 ticks_per_delivery: 6,
-                fuel_transfer_crate: default_fuel_transfer_crate(),
                 supply_transfer_crate: default_supply_transfer_crate(),
+                supply_transfer_size: 25,
                 supply_source: FxHashMap::from_iter([
                     (Side::Blue, "BINVENTORY".into()),
                     (Side::Red, "RINVENTORY".into()),

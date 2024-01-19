@@ -14,11 +14,10 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use dcso3::{coalition::Side, err, net::Ucid, String};
+use anyhow::{anyhow, Result};
+use dcso3::{coalition::Side, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
 use fxhash::{FxHashMap, FxHashSet};
-use log::error;
-use mlua::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
@@ -362,7 +361,7 @@ pub struct Cfg {
 }
 
 impl Cfg {
-    pub fn load(miz_state_path: &Path) -> LuaResult<Self> {
+    pub fn load(miz_state_path: &Path) -> Result<Self> {
         let mut path = PathBuf::from(miz_state_path);
         let file_name = path
             .file_name()
@@ -378,26 +377,19 @@ impl Cfg {
                 Ok(f) => break f,
                 Err(e) => match e.kind() {
                     io::ErrorKind::NotFound => {
-                        let file = File::create(&path).map_err(|e| {
-                            error!("could not create default config {}", e);
-                            err("creating cfg")
-                        })?;
-                        serde_json::to_writer_pretty(file, &Cfg::default()).map_err(|e| {
-                            error!("could not write default config {}", e);
-                            err("writing default cfg")
-                        })?;
+                        let file = File::create(&path)
+                            .map_err(|e| anyhow!("could not create default config {}", e))?;
+                        serde_json::to_writer_pretty(file, &Cfg::default())
+                            .map_err(|e| anyhow!("could not write default config {}", e))?;
                     }
                     e => {
-                        error!("could not open config file {}", e);
-                        return Err(err("opening config"));
+                        return Err(anyhow!("error opening config file {:?}", e));
                     }
                 },
             }
         };
-        let cfg: Self = serde_json::from_reader(file).map_err(|e| {
-            error!("failed to decode cfg file {:?}, {:?}", path, e);
-            err("cfg decode error")
-        })?;
+        let cfg: Self = serde_json::from_reader(file)
+            .map_err(|e| anyhow!("failed to decode cfg file {:?}, {:?}", path, e))?;
         Ok(cfg)
     }
 }

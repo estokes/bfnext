@@ -91,8 +91,8 @@
     "Su-25": 21600,
     "AV8BNA": 36000,
     "MB-339A": 9000,
-	"J-11A": 36000,
-	"Su-33": 36000
+	  "J-11A": 36000,
+	  "Su-33": 36000
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,

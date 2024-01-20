@@ -550,19 +550,45 @@ impl Db {
                 .insert(id.clone(), slot.clone());
             self.ephemeral.object_id_by_slot.insert(slot.clone(), id);
             let obj = objective_mut!(self, oid)?;
-            let sifo = maybe!(obj.slots, slot, "slot")?;
-            let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
-            let wh = Airbase::get_instance(lua, id)
-                .context("getting airbase")?
-                .get_warehouse()
-                .context("getting warehouse")?;
-            if sifo.ground_start {
-                wh.remove_item(sifo.typ.0.clone(), 1)
-                    .with_context(|| format_compact!("removing {} from warehouse", sifo.typ.0))?;
+            let mut adjust_warehouse = || -> Result<()> {
+                let sifo = maybe!(obj.slots, slot, "slot")?;
+                let id = maybe!(self.ephemeral.airbase_by_oid, obj.id, "airbase")?;
+                let wh = Airbase::get_instance(lua, id)
+                    .context("getting airbase")?
+                    .get_warehouse()
+                    .context("getting warehouse")?;
+                if sifo.ground_start {
+                    wh.remove_item(sifo.typ.0.clone(), 1).with_context(|| {
+                        format_compact!("removing {} from warehouse", sifo.typ.0)
+                    })?;
+                    for wep in unit.get_ammo()? {
+                        let wep = wep?;
+                        let count = wep.count()?;
+                        let typ = wep.type_name()?;
+                        let whcnt = wh.get_item_count(typ.clone())?;
+                        if whcnt < count {
+                            let ucid = self
+                                .ephemeral
+                                .player_in_slot(&slot)
+                                .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?
+                                .clone();
+                            self.ephemeral.force_player_to_spectators(&ucid)
+                        } else {
+                            wh.remove_item(typ.clone(), count)?;
+                            maybe_mut!(obj.warehouse.equipment, typ, "equip")?.stored =
+                                whcnt - count;
+                        }
+                    }
+                }
+                maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored =
+                    wh.get_item_count(sifo.typ.0.clone()).with_context(|| {
+                        format_compact!("getting warehouse count for {}", sifo.typ.0)
+                    })?;
+                Ok(())
+            };
+            if let Err(e) = adjust_warehouse() {
+                error!("couldn't adjust warehouse {:?}", e)
             }
-            maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored = wh
-                .get_item_count(sifo.typ.0.clone())
-                .with_context(|| format_compact!("getting warehouse count for {}", sifo.typ.0))?;
             self.player_entered_unit(unit)
                 .context("entering player into unit")?;
             self.ephemeral.dirty()

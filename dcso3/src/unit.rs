@@ -16,7 +16,7 @@ use crate::{
     env::miz::UnitId,
     net::SlotId,
     object::{DcsObject, DcsOid},
-    simple_enum, wrapped_table, LuaEnv, LuaVec2, LuaVec3, MizLua, Position3,
+    simple_enum, wrapped_table, LuaEnv, LuaVec2, LuaVec3, MizLua, Position3, Sequence,
 };
 use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
@@ -31,6 +31,22 @@ simple_enum!(UnitCategory, u8, [
     Ship => 3,
     Structure => 4
 ]);
+
+wrapped_table!(Ammo, None);
+
+impl<'lua> Ammo<'lua> {
+    pub fn count(&self) -> Result<u32> {
+        Ok(self.t.raw_get("count")?)
+    }
+
+    pub fn type_name(&self) -> Result<String> {
+        Ok(self.t.raw_get::<_, LuaTable>("desc")?.raw_get("typeName")?)
+    }
+
+    pub fn display_name(&self) -> Result<String> {
+        Ok(self.t.raw_get::<_, LuaTable>("desc")?.raw_get("displayName")?)
+    }
+}
 
 wrapped_table!(Unit, Some("Unit"));
 
@@ -132,6 +148,10 @@ impl<'lua> Unit<'lua> {
 
     pub fn get_category(&self) -> Result<UnitCategory> {
         Ok(self.t.call_method("getCategory", ())?)
+    }
+
+    pub fn get_ammo(&self) -> Result<Sequence<'lua, Ammo<'lua>>> {
+        Ok(self.t.call_method("getAmmo", ())?)
     }
 }
 

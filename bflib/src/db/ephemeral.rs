@@ -663,6 +663,13 @@ impl Ephemeral {
         })
     }
 
+    pub fn force_player_to_spectators(&mut self, ucid: &Ucid) {
+        self.force_to_spectators
+            .entry(Utc::now())
+            .or_default()
+            .push(ucid.clone())
+    }
+
     pub(super) fn player_deslot(&mut self, slot: &SlotId, kick: bool) -> Option<(UnitId, Ucid)> {
         if let Some(ucid) = self.players_by_slot.remove(slot) {
             if kick {

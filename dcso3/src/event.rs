@@ -160,6 +160,24 @@ impl<'lua> FromLua<'lua> for AtPlace<'lua> {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct WeaponAdd<'lua> {
+    pub time: Time,
+    pub initiator: Object<'lua>,
+    pub weapon_name: String
+}
+
+impl<'lua> FromLua<'lua> for WeaponAdd<'lua> {
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("WeaponAdd", None, value).map_err(lua_err)?;
+        Ok(Self {
+            time: tbl.raw_get("time")?,
+            initiator: tbl.raw_get("initiator")?,
+            weapon_name: tbl.raw_get("weapon_name")?,
+        })
+    }
+}
+
 /// This is a dcs event
 #[derive(Debug, Clone, Serialize)]
 pub enum Event<'lua> {
@@ -197,7 +215,7 @@ pub enum Event<'lua> {
     LandingAfterEjection,
     ParatrooperLanding,
     DiscardChairAfterEjection,
-    WeaponAdd,
+    WeaponAdd(WeaponAdd<'lua>),
     TriggerZone,
     LandingQualityMark,
     Bda,
@@ -259,7 +277,7 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> Resul
         31 => Event::LandingAfterEjection,
         32 => Event::ParatrooperLanding,
         33 => Event::DiscardChairAfterEjection,
-        34 => Event::WeaponAdd,
+        34 => Event::WeaponAdd(WeaponAdd::from_lua(value, lua)?),
         35 => Event::TriggerZone,
         36 => Event::LandingQualityMark,
         37 => Event::Bda,

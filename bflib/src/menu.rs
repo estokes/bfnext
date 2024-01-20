@@ -755,9 +755,51 @@ fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
 fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
-        ctx.jtac.shift(&ctx.db, lua, &gid).context("shifting jtac target")?;
+        ctx.jtac
+            .shift(&ctx.db, lua, &gid)
+            .context("shifting jtac target")?;
     }
     jtac_status(lua, gid)
+}
+
+fn jtac_artillery_mission(lua: MizLua, gid: DbGid) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let side = ctx.db.group(&gid)?.side;
+    match ctx.jtac.artillery_mission(lua, &ctx.db, &gid) {
+        Ok(()) => ctx.db.ephemeral.msgs().panel_to_side(
+            10,
+            false,
+            side,
+            format!("jtac {} artillery fire mission started", gid),
+        ),
+        Err(e) => ctx.db.ephemeral.msgs().panel_to_side(
+            10,
+            false,
+            side,
+            format!("jtac {} could not start artillery mission {:?}", gid, e),
+        ),
+    }
+    Ok(())
+}
+
+fn jtac_stop_artillery_mission(lua: MizLua, gid: DbGid) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let side = ctx.db.group(&gid)?.side;
+    match ctx.jtac.cancel_artillery_mission(lua, &ctx.db, &gid) {
+        Ok(()) => ctx.db.ephemeral.msgs().panel_to_side(
+            10,
+            false,
+            side,
+            format!("jtac {} artillery fire mission stopped", gid),
+        ),
+        Err(e) => ctx.db.ephemeral.msgs().panel_to_side(
+            10,
+            false,
+            side,
+            format!("jtac {} could not stop artillery mission {:?}", gid, e),
+        ),
+    }
+    Ok(())
 }
 
 fn jtac_clear_filter(lua: MizLua, gid: DbGid) -> Result<()> {
@@ -828,6 +870,20 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
         "Smoke Current Target".into(),
         Some(root.clone()),
         jtac_smoke_target,
+        group,
+    )?;
+    mc.add_command_for_coalition(
+        side,
+        "Start Artillery Mission".into(),
+        Some(root.clone()),
+        jtac_artillery_mission,
+        group,
+    )?;
+    mc.add_command_for_coalition(
+        side,
+        "Stop Artillery Mission".into(),
+        Some(root.clone()),
+        jtac_stop_artillery_mission,
         group,
     )?;
     mc.add_command_for_coalition(side, "Shift".into(), Some(root.clone()), jtac_shift, group)?;

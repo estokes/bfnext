@@ -18,7 +18,7 @@ use crate::{
     cfg::{UnitTag, UnitTags},
     db::{
         ephemeral::Ephemeral,
-        group::{GroupId, SpawnedUnit, UnitId},
+        group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
         Db,
     },
     menu,
@@ -28,6 +28,8 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
+    controller::Task,
+    group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
     radians_to_degrees,
@@ -70,6 +72,7 @@ struct JtacTarget {
     spot: DcsOid<ClassSpot>,
     ir_pointer: Option<DcsOid<ClassSpot>>,
     mark: Option<MarkId>,
+    artillery_mission: Option<SmallVec<[GroupId; 8]>>,
 }
 
 impl JtacTarget {
@@ -187,7 +190,8 @@ impl Jtac {
         ct.typ = unit.typ.clone();
     }
 
-    fn remove_target(&mut self, lua: MizLua) -> Result<()> {
+    fn remove_target(&mut self, db: &Db, lua: MizLua) -> Result<()> {
+        self.cancel_artillery_mission(db, lua).context("canceling artillery mission")?;
         if let Some(target) = self.target.take() {
             target
                 .destroy(lua)
@@ -227,7 +231,7 @@ impl Jtac {
         match &self.target {
             Some(target) if target.uid == uid => Ok(false),
             Some(_) | None => {
-                self.remove_target(lua)?;
+                self.remove_target(db, lua)?;
                 let jtid = db
                     .first_living_unit(&self.gid)
                     .context("getting jtac beam source")?
@@ -262,6 +266,7 @@ impl Jtac {
                     ir_pointer,
                     mark: None,
                     uid,
+                    artillery_mission: None
                 });
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
@@ -312,11 +317,11 @@ impl Jtac {
         self.set_target(db, lua, i).context("setting target")
     }
 
-    fn remove_contact(&mut self, lua: MizLua, uid: &UnitId) -> Result<bool> {
+    fn remove_contact(&mut self, lua: MizLua, db: &Db, uid: &UnitId) -> Result<bool> {
         if let Some(_) = self.contacts.swap_remove(uid) {
             if let Some(target) = &self.target {
                 if &target.uid == uid {
-                    self.remove_target(lua).context("removing target")?;
+                    self.remove_target(db, lua).context("removing target")?;
                     return Ok(true);
                 }
             }
@@ -373,11 +378,77 @@ impl Jtac {
     fn reset_target(&mut self, db: &Db, lua: MizLua) -> Result<()> {
         if let Some(target) = &self.target {
             if let Some(i) = self.contacts.get_index_of(&target.uid) {
-                self.remove_target(lua)?;
+                self.remove_target(db, lua)?;
                 self.set_target(db, lua, i).context("setting jtac target")?;
             }
         }
         Ok(())
+    }
+
+    fn cancel_artillery_mission(&mut self, db: &Db, lua: MizLua) -> Result<()> {
+        if let Some(target) = self.target.as_mut() {
+            if let Some(artillery) = target.artillery_mission.take() {
+                for gid in artillery {
+                    let group = db.group(&gid)?;
+                    let con = Group::get_by_name(lua, &group.name)
+                        .with_context(|| format_compact!("getting group {}", group.name))?
+                        .get_controller()
+                        .context("getting controller")?;
+                    con.reset_task().context("resetting task")?
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn artillery_mission(&mut self, db: &Db, lua: MizLua) -> Result<()> {
+        self.cancel_artillery_mission(db, lua)
+            .context("canceling artillery mission")?;
+        match &mut self.target {
+            None => bail!("can't start an artillery mission without a target"),
+            Some(target) => {
+                let range2 = (db.ephemeral.cfg().artillery_mission_range as f64).powi(2);
+                let pos = db.unit(&target.uid)?.pos;
+                let artillery = db
+                    .deployed()
+                    .filter_map(|group| {
+                        if group.tags.contains(UnitTag::Artillery) {
+                            let center = db.group_center(&group.id).ok()?;
+                            if na::distance_squared(&center.into(), &pos.into()) <= range2 {
+                                Some(group)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<SmallVec<[&SpawnedGroup; 8]>>();
+                if artillery.is_empty() {
+                    bail!(
+                        "no artillery within {} meters of the jtac target",
+                        db.ephemeral.cfg().artillery_mission_range
+                    );
+                }
+                for group in &artillery {
+                    let con = Group::get_by_name(lua, &group.name)
+                        .with_context(|| format_compact!("getting group {}", group.name))?
+                        .get_controller()
+                        .context("getting controller")?;
+                    con.set_task(Task::FireAtPoint {
+                        point: LuaVec2(pos),
+                        radius: Some(30.),
+                        expend_qty: None,
+                        weapon_type: None,
+                        altitude: None,
+                        altitude_type: None,
+                    })
+                    .context("setting task")?;
+                }
+                target.artillery_mission = Some(artillery.into_iter().map(|g| g.id).collect());
+            }
+        }
+        unimplemented!()
     }
 }
 
@@ -399,6 +470,14 @@ impl Jtacs {
             .ok_or_else(|| anyhow!("no such jtac"))
     }
 
+    pub fn artillery_mission(&mut self, lua: MizLua, db: &Db, gid: &GroupId) -> Result<()> {
+        self.get_mut(gid)?.artillery_mission(db, lua)
+    }
+    
+    pub fn cancel_artillery_mission(&mut self, lua: MizLua, db: &Db, gid: &GroupId) -> Result<()> {
+        self.get_mut(gid)?.cancel_artillery_mission(db, lua)
+    }
+
     pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {
         self.get(gid)?.status(db)
     }
@@ -409,7 +488,7 @@ impl Jtacs {
         if jtac.autolase {
             jtac.shift(db, lua)?;
         } else {
-            jtac.remove_target(lua)?
+            jtac.remove_target(db, lua)?
         }
         Ok(())
     }
@@ -473,7 +552,7 @@ impl Jtacs {
                         if &group == gid {
                             let alive = db.group_health(gid).unwrap_or((0, 0)).0;
                             if alive <= 1 {
-                                if let Err(e) = jt.remove_target(lua) {
+                                if let Err(e) = jt.remove_target(db, lua) {
                                     warn!("0 could not remove jtac target {:?}", e)
                                 }
                                 ui_jtac_dead(&mut db.ephemeral, lua, *side, *gid);
@@ -492,7 +571,7 @@ impl Jtacs {
                         Some(target) => target.uid == uid,
                     };
                     if dead {
-                        if let Err(e) = jt.remove_target(lua) {
+                        if let Err(e) = jt.remove_target(db, lua) {
                             warn!("1 could not remove jtac target {:?}", e)
                         }
                     }
@@ -567,7 +646,7 @@ impl Jtacs {
                     continue;
                 }
                 if !unit.tags.contains(jtac.filter) {
-                    if let Err(e) = jtac.remove_contact(lua, &unit.id) {
+                    if let Err(e) = jtac.remove_contact(lua, db, &unit.id) {
                         warn!("could not filter jtac contact {} {:?}", unit.name, e)
                     }
                     continue;
@@ -581,7 +660,7 @@ impl Jtacs {
                 if dist <= range && land.is_visible(LuaVec3(pos), unit.position.p)? {
                     jtac.add_contact(unit)
                 } else {
-                    match jtac.remove_contact(lua, &unit.id) {
+                    match jtac.remove_contact(lua, db, &unit.id) {
                         Err(e) => warn!("could not remove jtac contact {} {:?}", unit.name, e),
                         Ok(false) => (),
                         Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
@@ -592,7 +671,7 @@ impl Jtacs {
         for (side, jtx) in self.0.iter_mut() {
             jtx.retain(|gid, jt| {
                 saw_jtacs.contains(gid) || {
-                    if let Err(e) = jt.remove_target(lua) {
+                    if let Err(e) = jt.remove_target(db, lua) {
                         warn!("2 could not remove jtac target {:?}", e)
                     }
                     ui_jtac_dead(&mut db.ephemeral, lua, *side, *gid);
@@ -612,7 +691,7 @@ impl Jtacs {
         for (side, gid, uid) in lost_targets {
             match uid {
                 Some(uid) => {
-                    if let Err(e) = self.get_mut(&gid)?.remove_contact(lua, &uid) {
+                    if let Err(e) = self.get_mut(&gid)?.remove_contact(lua, db, &uid) {
                         warn!("3 could not remove jtac target {uid} {:?}", e)
                     }
                 }

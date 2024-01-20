@@ -336,6 +336,9 @@ pub struct Cfg {
     pub crate_load_distance: u32,
     /// how far crates apart crates can be and still unpack (Meters)
     pub crate_spread: u32,
+    /// how close must artillery be to participate in an artillery mission
+    /// (meters).
+    pub artillery_mission_range: u32,
     /// how many times a user may switch sides in a given round,
     /// or None for unlimited side switches
     pub side_switches: Option<u8>,
@@ -1447,6 +1450,7 @@ impl Default for Cfg {
             threatened_cooldown: 300,
             crate_load_distance: 50,
             crate_spread: 250,
+            artillery_mission_range: 15000,
             side_switches: Some(1),
             max_crates: Some(4),
             default_lives: FxHashMap::from_iter([

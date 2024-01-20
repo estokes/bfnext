@@ -42,6 +42,7 @@ use dcso3::{
     unit::{ClassUnit, Unit},
     LuaVec2, MizLua, Position3, String, Vector2,
 };
+use enumflags2::BitFlags;
 use fxhash::FxHashMap;
 use log::{error, warn};
 use mlua::{prelude::*, Value};
@@ -99,6 +100,7 @@ pub struct SpawnedGroup {
     pub class: ObjGroupClass,
     pub origin: DeployKind,
     pub units: Set<UnitId>,
+    pub tags: UnitTags,
 }
 
 impl Db {
@@ -146,6 +148,14 @@ impl Db {
             .units
             .into_iter()
             .filter_map(|(uid, sp)| self.ephemeral.object_id_by_uid.get(uid).map(|id| (sp, id)))
+    }
+
+    pub fn deployed(&self) -> impl Iterator<Item = &SpawnedGroup> {
+        self.persisted
+            .deployed
+            .into_iter()
+            .chain(self.persisted.troops.into_iter())
+            .filter_map(|gid| self.persisted.groups.get(gid))
     }
 
     pub(super) fn mark_group(&mut self, gid: &GroupId) -> Result<()> {
@@ -424,6 +434,7 @@ impl Db {
             origin,
             class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),
+            tags: UnitTags(BitFlags::empty())
         };
         for unit in template.group.units()?.into_iter() {
             let uid = UnitId::new();
@@ -437,6 +448,7 @@ impl Db {
                 .unit_classification
                 .get(typ.as_str())
                 .ok_or_else(|| anyhow!("unit type not classified {typ}"))?;
+            spawned.tags.0.insert(tags.0);
             let pos = match positions_by_typ.get_mut(&typ) {
                 None => positions.pop_front().unwrap(),
                 Some(positions) => positions.pop_front().unwrap(),

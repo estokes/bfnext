@@ -229,6 +229,8 @@ pub struct Objective {
     pub(super) warehouse: Warehouse,
     #[serde(skip)]
     pub(super) spawned: bool,
+    #[serde(skip)]
+    pub(super) last_cull: DateTime<Utc>,
 }
 
 impl Objective {
@@ -462,6 +464,7 @@ impl Db {
             warehouse: Warehouse::default(),
             last_threatened_ts: now,
             last_change_ts: now,
+            last_cull: DateTime::<Utc>::default(),
         };
         let oid = obj.id;
         obj.warehouse.supplier = self.compute_supplier(&obj)?;
@@ -597,7 +600,7 @@ impl Db {
                     .current_slot
                     .as_ref()
                     .and_then(|(_, inst)| inst.as_ref())
-                    .map(|inst| (side, inst.position.p, inst.typ.clone()))
+                    .map(|inst| (side, inst.position.p, inst.velocity, inst.typ.clone()))
             })
             .collect::<SmallVec<[_; 64]>>();
         let cfg = &self.ephemeral.cfg;
@@ -645,12 +648,19 @@ impl Db {
         };
         let check_close_players =
             |obj: &Objective, pos3: LuaVec3, spawn: &mut bool, threat: &mut bool| {
-                for (side, pos, typ) in &players {
+                for (side, pos, v, typ) in &players {
                     if obj.owner != *side {
                         let threat_dist = (cfg.threatened_distance[typ] as f64).powi(2);
                         let ppos = Vector2::new(pos.x, pos.z);
+                        let (future_ppos30, future_ppos60) = {
+                            let pos30 = pos.0 + (v * 30.);
+                            let pos60 = pos.0 + (v * 60.);
+                            (Vector2::new(pos30.x, pos30.z), Vector2::new(pos60.x, pos60.z))
+                        };
                         let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
-                        if dist <= cull_distance {
+                        let fdist30 = na::distance_squared(&obj.pos.into(), &future_ppos30.into());
+                        let fdist60 = na::distance_squared(&obj.pos.into(), &future_ppos60.into());
+                        if dist <= cull_distance || fdist30 <= cull_distance || fdist60 <= cull_distance {
                             *spawn = true;
                         }
                         if dist <= threat_dist && land.is_visible(pos3, *pos)? {
@@ -684,7 +694,7 @@ impl Db {
             }
             if !obj.spawned && spawn {
                 to_spawn.push(*oid);
-            } else if obj.spawned && !spawn {
+            } else if obj.spawned && !spawn && now - obj.last_cull >= Duration::seconds(300) {
                 to_cull.push(*oid);
             }
         }
@@ -735,6 +745,7 @@ impl Db {
         for oid in to_cull {
             let obj = objective_mut!(self, oid)?;
             obj.spawned = false;
+            obj.last_cull = now;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
                 let farp = obj.kind.is_farp();

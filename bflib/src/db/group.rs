@@ -44,7 +44,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
-use log::{error, warn};
+use log::{debug, error, warn};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -566,17 +566,10 @@ impl Db {
                         let count = wep.count()?;
                         let typ = wep.type_name()?;
                         let whcnt = wh.get_item_count(typ.clone())?;
-                        if whcnt < count {
-                            let ucid = self
-                                .ephemeral
-                                .player_in_slot(&slot)
-                                .ok_or_else(|| anyhow!("no player in slot {:?}", slot))?
-                                .clone();
-                            self.ephemeral.force_player_to_spectators(&ucid)
-                        } else {
-                            wh.remove_item(typ.clone(), count)?;
-                            maybe_mut!(obj.warehouse.equipment, typ, "equip")?.stored =
-                                whcnt - count;
+                        debug!("removing {count} {typ} from the warehouse which contains {whcnt}");
+                        wh.remove_item(typ.clone(), count)?;
+                        if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ) {
+                            inv.stored = whcnt - count;
                         }
                     }
                 }

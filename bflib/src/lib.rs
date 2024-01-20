@@ -54,7 +54,7 @@ use dcso3::{
 use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
 use jtac::Jtacs;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
 use perf::Perf;
@@ -387,9 +387,6 @@ fn on_player_try_change_slot(
     slot: SlotId,
 ) -> Result<Option<bool>> {
     info!("onPlayerTryChangeSlot: {:?} {:?} {:?}", id, side, slot);
-    if slot.is_spectator() {
-        return Ok(None);
-    }
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let res = match get_player_info(
@@ -432,7 +429,10 @@ fn unit_killed(lua: MizLua, ctx: &mut Context, id: DcsOid<ClassUnit>) -> Result<
 
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
-    trace!("onEvent: {:?}", ev);
+    match &ev {
+        Event::MarkAdded | Event::MarkChange | Event::MarkRemoved => (),
+        ev => info!("onEvent: {:?}", ev)
+    }
     let ctx = unsafe { Context::get_mut() };
     match ev {
         Event::Birth(b) => {
@@ -454,6 +454,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::PlayerLeaveUnit(e) => {
             if let Some(o) = &e.initiator {
                 if let Ok(unit) = o.as_unit() {
+                    info!("player leave unit {:?}", unit.slot()?);
                     if let Err(e) = ctx.db.player_left_unit(lua, &unit) {
                         error!("player left unit failed {:?} {:?}", unit, e)
                     }

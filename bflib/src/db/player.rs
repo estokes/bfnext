@@ -65,13 +65,17 @@ pub struct Player {
     pub crates: Set<GroupId>,
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
+    #[serde(skip)]
+    pub changing_slots: bool,
+    #[serde(skip)]
+    pub jtac_or_spectators: bool,
 }
 
 impl Db {
-    pub fn player_deslot(&mut self, ucid: &Ucid) {
+    pub fn player_deslot(&mut self, ucid: &Ucid, kick: bool) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             if let Some((slot, _)) = player.current_slot.take() {
-                let _ = self.ephemeral.player_deslot(&slot);
+                let _ = self.ephemeral.player_deslot(&slot, kick);
             }
         }
     }
@@ -228,6 +232,7 @@ impl Db {
             }
         };
         if slot.is_spectator() {
+            player.jtac_or_spectators = true;
             return SlotAuth::Yes;
         }
         if slot_side != player.side {
@@ -238,12 +243,17 @@ impl Db {
             | SlotIdKind::ForwardObserver
             | SlotIdKind::Instructor
             | SlotIdKind::Observer => {
+                player.jtac_or_spectators = true;
                 // CR estokes: add permissions for game master
                 SlotAuth::Yes
             }
             SlotIdKind::Normal => {
                 let oid = match self.persisted.objectives_by_slot.get(&slot) {
-                    None => return SlotAuth::Yes, // it's a multicrew slot
+                    None => {
+                        player.changing_slots = true;
+                        player.jtac_or_spectators = false;
+                        return SlotAuth::Yes // it's a multicrew slot
+                    }
                     Some(oid) => oid,
                 };
                 let objective = match self.persisted.objectives.get(oid) {
@@ -264,8 +274,9 @@ impl Db {
                             Some(inv) if inv.stored > 0 => (),
                             Some(_) | None => break SlotAuth::VehicleNotAvailable(sifo.typ.clone()),
                         }
-                        player.current_slot = Some((slot.clone(), None));
                         self.ephemeral.players_by_slot.insert(slot, ucid.clone());
+                        player.changing_slots = true;
+                        player.jtac_or_spectators = false;
                         break SlotAuth::Yes;
                     };
                 }
@@ -307,6 +318,8 @@ impl Db {
                         lives: Map::new(),
                         crates: Set::new(),
                         current_slot: None,
+                        changing_slots: false,
+                        jtac_or_spectators: true,
                     },
                 );
                 self.ephemeral.dirty();
@@ -386,7 +399,7 @@ impl Db {
             self.ephemeral.units_able_to_move.insert(*uid);
         }
         let slot = unit.slot()?;
-        if let Some(ucid) = self.ephemeral.players_by_slot.get(&slot) {
+        if let Some(ucid) = self.ephemeral.players_by_slot.get(&slot).map(|u| u.clone()) {
             if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
                 let position = unit.get_position()?;
                 let point = Vector2::new(position.p.x, position.p.z);
@@ -409,6 +422,10 @@ impl Db {
                         landed_at_objective,
                     }),
                 ));
+                if player.changing_slots {
+                    player.changing_slots = false;
+                    self.ephemeral.cancel_force_to_spectators(&ucid);
+                }
             }
         }
         Ok(())
@@ -430,6 +447,7 @@ impl Db {
             if let Some(ucid) = self.ephemeral.player_in_slot(slot) {
                 let ucid = ucid.clone();
                 let player = maybe_mut!(self.persisted.players, ucid, "player")?;
+                let kick = !player.jtac_or_spectators;
                 if let Some((_, Some(inst))) = player.current_slot.as_mut() {
                     let typ = inst.typ.clone();
                     if let Some(oid) = inst.landed_at_objective {
@@ -438,7 +456,7 @@ impl Db {
                         }
                     }
                 }
-                self.player_deslot(&ucid)
+                self.player_deslot(&ucid, kick)
             }
         }
         Ok(dead)
@@ -455,7 +473,6 @@ impl Db {
                 self.ephemeral.push_sync_warehouse(oid, inst.typ.clone());
             }
         }
-        self.player_deslot(ucid);
-        self.ephemeral.cancel_force_to_spectators(ucid);
+        self.player_deslot(ucid, false);
     }
 }

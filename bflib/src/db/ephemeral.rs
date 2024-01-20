@@ -663,12 +663,14 @@ impl Ephemeral {
         })
     }
 
-    pub(super) fn player_deslot(&mut self, slot: &SlotId) -> Option<(UnitId, Ucid)> {
+    pub(super) fn player_deslot(&mut self, slot: &SlotId, kick: bool) -> Option<(UnitId, Ucid)> {
         if let Some(ucid) = self.players_by_slot.remove(slot) {
-            self.force_to_spectators
-                .entry(Utc::now() + Duration::seconds(30))
-                .or_default()
-                .push(ucid.clone());
+            if kick {
+                self.force_to_spectators
+                    .entry(Utc::now() + Duration::seconds(10))
+                    .or_default()
+                    .push(ucid.clone());
+            }
             self.cargo.remove(slot);
             if let Some(id) = self.object_id_by_slot.remove(slot) {
                 self.slot_by_object_id.remove(&id);
@@ -684,6 +686,10 @@ impl Ephemeral {
 
     pub(super) fn unit_dead(&mut self, id: &DcsOid<ClassUnit>) -> Option<(UnitId, Option<Ucid>)> {
         let (uid, ucid) = match self.slot_by_object_id.remove(&id) {
+            Some(slot) => match self.player_deslot(&slot, true) {
+                Some((uid, ucid)) => (uid, Some(ucid)),
+                None => return None,
+            },
             None => match self.uid_by_object_id.remove(&id) {
                 Some(uid) => {
                     self.object_id_by_uid.remove(&uid);
@@ -691,13 +697,6 @@ impl Ephemeral {
                 }
                 None => {
                     info!("no uid for object id {:?}", id);
-                    return None;
-                }
-            },
-            Some(slot) => match self.player_deslot(&slot) {
-                Some((uid, ucid)) => (uid, Some(ucid)),
-                None => {
-                    info!("deslot player in slot {:?} failed", slot);
                     return None;
                 }
             },

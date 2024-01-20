@@ -137,8 +137,8 @@
     "Su-25": "Attack",
     "AV8BNA": "Attack",
     "MB-339A": "Recon",
-	"J-11A": "Standard",
-	"Su-33": "Standard"
+	  "J-11A": "Standard",
+	  "Su-33": "Standard"
   },
   "default_lives": {
     "Standard": [

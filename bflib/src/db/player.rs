@@ -66,7 +66,7 @@ pub struct Player {
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
     #[serde(skip)]
-    pub changing_slots: bool,
+    pub changing_slots: Option<SlotId>,
     #[serde(skip)]
     pub jtac_or_spectators: bool,
 }
@@ -250,7 +250,7 @@ impl Db {
             SlotIdKind::Normal => {
                 let oid = match self.persisted.objectives_by_slot.get(&slot) {
                     None => {
-                        player.changing_slots = true;
+                        player.changing_slots = Some(slot.clone());
                         player.jtac_or_spectators = false;
                         return SlotAuth::Yes // it's a multicrew slot
                     }
@@ -274,8 +274,8 @@ impl Db {
                             Some(inv) if inv.stored > 0 => (),
                             Some(_) | None => break SlotAuth::VehicleNotAvailable(sifo.typ.clone()),
                         }
-                        self.ephemeral.players_by_slot.insert(slot, ucid.clone());
-                        player.changing_slots = true;
+                        self.ephemeral.players_by_slot.insert(slot.clone(), ucid.clone());
+                        player.changing_slots = Some(slot);
                         player.jtac_or_spectators = false;
                         break SlotAuth::Yes;
                     };
@@ -318,7 +318,7 @@ impl Db {
                         lives: Map::new(),
                         crates: Set::new(),
                         current_slot: None,
-                        changing_slots: false,
+                        changing_slots: None,
                         jtac_or_spectators: true,
                     },
                 );
@@ -422,8 +422,7 @@ impl Db {
                         landed_at_objective,
                     }),
                 ));
-                if player.changing_slots {
-                    player.changing_slots = false;
+                if let Some(_) = player.changing_slots.take() {
                     self.ephemeral.cancel_force_to_spectators(&ucid);
                 }
             }

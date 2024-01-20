@@ -26,7 +26,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
@@ -434,7 +434,7 @@ impl Db {
             origin,
             class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),
-            tags: UnitTags(BitFlags::empty())
+            tags: UnitTags(BitFlags::empty()),
         };
         for unit in template.group.units()?.into_iter() {
             let uid = UnitId::new();
@@ -552,12 +552,19 @@ impl Db {
             let obj = objective_mut!(self, oid)?;
             let sifo = maybe!(obj.slots, slot, "slot")?;
             let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
-            let wh = Airbase::get_instance(lua, id)?.get_warehouse()?;
+            let wh = Airbase::get_instance(lua, id)
+                .context("getting airbase")?
+                .get_warehouse()
+                .context("getting warehouse")?;
             if sifo.ground_start {
-                wh.remove_item(sifo.typ.0.clone(), 1)?;
+                wh.remove_item(sifo.typ.0.clone(), 1)
+                    .with_context(|| format_compact!("removing {} from warehouse", sifo.typ.0))?;
             }
-            maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored =
-                wh.get_item_count(sifo.typ.0.clone())?;
+            maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored = wh
+                .get_item_count(sifo.typ.0.clone())
+                .with_context(|| format_compact!("getting warehouse count for {}", sifo.typ.0))?;
+            self.player_entered_unit(unit)
+                .context("entering player into unit")?;
             self.ephemeral.dirty()
         }
         Ok(())

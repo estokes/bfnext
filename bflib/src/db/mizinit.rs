@@ -16,7 +16,7 @@ for more details.
 
 use super::{
     group::{DeployKind, UnitId},
-    objective::ObjGroup,
+    objective::{ObjGroup, SlotInfo},
     Db, Map,
 };
 use crate::{
@@ -33,7 +33,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use dcso3::{
     coalition::Side,
-    env::miz::{Group, Miz, MizIndex, TriggerZone, TriggerZoneTyp},
+    env::miz::{Group, Miz, MizIndex, PointType, Skill, TriggerZone, TriggerZoneTyp},
     MizLua, String, Vector2,
 };
 use log::info;
@@ -166,8 +166,24 @@ impl Db {
     }
 
     pub fn init_objective_slots(&mut self, slot: Group) -> Result<()> {
+        let mut ground_start = false;
+        for point in slot.route()?.points()? {
+            let point = point?;
+            match point.typ()? {
+                PointType::TakeOffGround | PointType::TakeOffGroundHot => ground_start = true,
+                PointType::Land
+                | PointType::TakeOff
+                | PointType::Custom(_)
+                | PointType::Nil
+                | PointType::TakeOffParking
+                | PointType::TurningPoint => (),
+            }
+        }
         for unit in slot.units()? {
             let unit = unit?;
+            if unit.skill()? != Skill::Client {
+                continue;
+            }
             let id = unit.slot()?;
             let pos = slot.pos()?;
             let obj = {
@@ -210,7 +226,13 @@ impl Db {
             self.persisted
                 .objectives_by_slot
                 .insert_cow(id.clone(), obj);
-            objective_mut!(self, obj)?.slots.insert_cow(id, vehicle);
+            objective_mut!(self, obj)?.slots.insert_cow(
+                id,
+                SlotInfo {
+                    typ: vehicle,
+                    ground_start,
+                },
+            );
         }
         Ok(())
     }

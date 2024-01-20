@@ -21,7 +21,7 @@ use super::{
     persisted::Persisted,
 };
 use crate::{
-    cfg::{Cfg, Crate, Deployable, DeployableLogistics, Troop, WarehouseConfig},
+    cfg::{Cfg, Crate, Deployable, DeployableLogistics, Troop, Vehicle, WarehouseConfig},
     maybe,
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx},
@@ -46,6 +46,7 @@ use smallvec::{smallvec, SmallVec};
 use std::{
     cmp::max,
     collections::{hash_map::Entry, BTreeMap, VecDeque},
+    mem,
     sync::Arc,
 };
 
@@ -357,6 +358,7 @@ pub struct Ephemeral {
     pub(super) delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<(GroupId, Despawn)>,
+    sync_warehouse: Vec<(ObjectiveId, Vehicle)>,
     pub(super) msgs: MsgQ,
 }
 
@@ -381,6 +383,14 @@ impl Ephemeral {
         if let Some(mk) = self.objective_markup.remove(oid) {
             mk.remove(&mut self.msgs)
         }
+    }
+
+    pub fn push_sync_warehouse(&mut self, oid: ObjectiveId, vehicle: Vehicle) {
+        self.sync_warehouse.push((oid, vehicle));
+    }
+
+    pub fn warehouses_to_sync(&mut self) -> Vec<(ObjectiveId, Vehicle)> {
+        mem::take(&mut self.sync_warehouse)
     }
 
     pub fn push_despawn(&mut self, gid: GroupId, ds: Despawn) {

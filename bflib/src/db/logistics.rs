@@ -18,7 +18,7 @@ use super::{
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
 };
-use crate::{db::objective::ObjectiveKind, maybe, objective, objective_mut};
+use crate::{db::objective::ObjectiveKind, maybe, objective, objective_mut, cfg::Vehicle};
 use anyhow::{anyhow, bail, Context, Result};
 use compact_str::format_compact;
 use dcso3::{
@@ -296,7 +296,7 @@ impl Db {
                                 || obj
                                     .slots
                                     .into_iter()
-                                    .any(|(_, v)| v.as_str() == name.as_str());
+                                    .any(|(_, v)| v.typ.as_str() == name.as_str());
                             if include {
                                 let inv = Inventory {
                                     stored: capacity,
@@ -530,6 +530,20 @@ impl Db {
             sync_from_obj(obj, &warehouse).context("syncing warehouse from objective")?
         }
         self.ephemeral.dirty();
+        Ok(())
+    }
+
+    pub fn sync_vehicle_at_obj(&mut self, lua: MizLua, oid: ObjectiveId, typ: Vehicle) -> Result<()> {
+        let obj = objective_mut!(self, oid)?;
+        let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
+        let wh = Airbase::get_instance(lua, id)
+            .context("getting airbase")?
+            .get_warehouse()
+            .context("getting warehouse")?;
+        if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ.0) {
+            inv.stored = wh.get_item_count(typ.0).context("getting item")?;
+            self.ephemeral.dirty();
+        }
         Ok(())
     }
 

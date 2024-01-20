@@ -22,7 +22,7 @@ use super::{
 };
 use crate::{
     cfg::{Crate, Deployable, Troop, UnitTags},
-    group, group_by_name,
+    group, group_by_name, maybe, maybe_mut, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
 };
@@ -30,6 +30,7 @@ use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
+    airbase::Airbase,
     atomic_id, azumith3d, centroid2d,
     coalition::Side,
     env::miz::{Group, GroupKind, MizIndex},
@@ -519,7 +520,7 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn unit_born(&mut self, unit: &Unit) -> Result<()> {
+    pub fn unit_born(&mut self, lua: MizLua, unit: &Unit) -> Result<()> {
         let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
@@ -531,21 +532,46 @@ impl Db {
             self.ephemeral.units_potentially_on_walkabout.insert(*uid);
         }
         let slot = unit.slot()?;
-        if self.persisted.objectives_by_slot.get(&slot).is_some() {
+        if let Some(oid) = self.persisted.objectives_by_slot.get(&slot) {
             self.ephemeral
                 .slot_by_object_id
                 .insert(id.clone(), slot.clone());
-            self.ephemeral.object_id_by_slot.insert(slot, id);
+            self.ephemeral.object_id_by_slot.insert(slot.clone(), id);
+            let obj = objective_mut!(self, oid)?;
+            let sifo = maybe!(obj.slots, slot, "slot")?;
+            let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
+            let wh = Airbase::get_instance(lua, id)?.get_warehouse()?;
+            if sifo.ground_start {
+                wh.remove_item(sifo.typ.0.clone(), 1)?;
+            }
+            maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored =
+                wh.get_item_count(sifo.typ.0.clone())?;
+            self.ephemeral.dirty()
         }
         Ok(())
     }
 
-    pub fn unit_dead(&mut self, id: &DcsOid<ClassUnit>, now: DateTime<Utc>) -> Result<()> {
+    pub fn unit_dead(
+        &mut self,
+        lua: MizLua,
+        id: &DcsOid<ClassUnit>,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
         let uid = match self.ephemeral.unit_dead(id) {
             None => return Ok(()),
             Some((uid, ucid)) => {
                 if let Some(ucid) = ucid {
-                    self.persisted.players[&ucid].current_slot = None;
+                    let player = &mut self.persisted.players[&ucid];
+                    if let Some((_, Some(inst))) = player.current_slot.take() {
+                        if let Some(oid) = inst.landed_at_objective {
+                            if let Err(e) = self.sync_vehicle_at_obj(lua, oid, inst.typ.clone()) {
+                                error!(
+                                    "failed to sync warehouse at {:?} for vehicle {:?} {:?}",
+                                    oid, inst.typ, e
+                                )
+                            }
+                        }
+                    }
                 }
                 uid
             }

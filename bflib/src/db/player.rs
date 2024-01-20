@@ -14,10 +14,10 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{group::GroupId, Db, Map, Set};
+use super::{group::GroupId, objective::ObjectiveId, Db, Map, Set};
 use crate::{
     cfg::{LifeType, Vehicle},
-    maybe, maybe_mut, objective_mut,
+    maybe, maybe_mut,
 };
 use anyhow::{anyhow, bail, Result};
 use chrono::{prelude::*, Duration};
@@ -47,12 +47,13 @@ pub enum RegErr {
     AlreadyOn(Side),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstancedPlayer {
     pub position: Position3,
     pub velocity: Vector3,
     pub typ: Vehicle,
     pub in_air: bool,
+    pub landed_at_objective: Option<ObjectiveId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,11 +113,17 @@ impl Db {
             .get(&slot)
             .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
             .ok_or_else(|| anyhow!("could not find player in slot {:?}", slot))?;
-        let vehicle = maybe!(objective.slots, slot, "slot")?.clone();
-        let life_type = *maybe!(self.ephemeral.cfg.life_types, vehicle, "life type")?;
+        let sifo = maybe!(objective.slots, slot, "slot")?.clone();
+        let life_type = match self.ephemeral.cfg.life_types.get(&sifo.typ) {
+            None => bail!("no life type for vehicle {:?}", sifo.typ),
+            Some(typ) => *typ,
+        };
         let (_, player_lives) = player.lives.get_or_insert_cow(life_type, || {
             (time, self.ephemeral.cfg.default_lives[&life_type].0)
         });
+        if let Some((_, Some(inst))) = &mut player.current_slot {
+            inst.landed_at_objective = None;
+        }
         let is_on_owned_objective = self
             .persisted
             .objectives
@@ -128,14 +135,6 @@ impl Db {
             if *player_lives > 0 {
                 // paranoia
                 *player_lives -= 1;
-            }
-            let obj = objective_mut!(self, oid)?;
-            let inv = match obj.warehouse.equipment.get_mut_cow(&vehicle.0) {
-                Some(inv) => inv,
-                None => bail!("vehicle not found in warehouse {:?}", vehicle),
-            };
-            if inv.stored > 0 {
-                inv.stored -= 1;
             }
             self.ephemeral.dirty();
             Ok(Some(life_type))
@@ -162,8 +161,8 @@ impl Db {
             Some(player) => player,
             None => return None,
         };
-        let vehicle = objective.slots[&slot].clone();
-        let life_type = self.ephemeral.cfg.life_types[&vehicle];
+        let sifo = objective.slots[&slot].clone();
+        let life_type = self.ephemeral.cfg.life_types[&sifo.typ];
         let (_, player_lives) = match player.lives.get_mut_cow(&life_type) {
             Some(l) => l,
             None => return None,
@@ -180,9 +179,9 @@ impl Db {
             if *player_lives >= self.ephemeral.cfg.default_lives[&life_type].0 {
                 player.lives.remove_cow(&life_type);
             }
-            let obj = &mut self.persisted.objectives[&oid];
-            let inv = obj.warehouse.equipment.get_or_default_cow(vehicle.0);
-            inv.stored += 1;
+            if let Some((_, Some(inst))) = &mut player.current_slot {
+                inst.landed_at_objective = Some(oid);
+            }
             self.ephemeral.dirty();
             Some(life_type)
         } else {
@@ -257,13 +256,13 @@ impl Db {
                 if objective.captureable() {
                     return SlotAuth::ObjectiveHasNoLogistics;
                 }
-                let vehicle = &objective.slots[&slot];
-                let life_type = self.ephemeral.cfg.life_types[vehicle];
+                let sifo = &objective.slots[&slot];
+                let life_type = self.ephemeral.cfg.life_types[&sifo.typ];
                 macro_rules! yes {
                     () => {
-                        match objective.warehouse.equipment.get(vehicle.as_str()) {
+                        match objective.warehouse.equipment.get(sifo.typ.as_str()) {
                             Some(inv) if inv.stored > 0 => (),
-                            Some(_) | None => break SlotAuth::VehicleNotAvailable(vehicle.clone()),
+                            Some(_) | None => break SlotAuth::VehicleNotAvailable(sifo.typ.clone()),
                         }
                         player.current_slot = Some((slot.clone(), None));
                         self.ephemeral.players_by_slot.insert(slot, ucid.clone());
@@ -367,13 +366,11 @@ impl Db {
                             dead.push(id.clone())
                         }
                         Ok(instance) => {
-                            let instanced_player = InstancedPlayer {
-                                position: instance.get_position()?,
-                                velocity: instance.get_velocity()?.0,
-                                in_air: instance.in_air()?,
-                                typ: Vehicle::from(instance.get_type_name()?),
-                            };
-                            player.current_slot = Some((slot.clone(), Some(instanced_player)));
+                            if let Some((_, Some(inst))) = &mut player.current_slot {
+                                inst.position = instance.get_position()?;
+                                inst.velocity = instance.get_velocity()?.0;
+                                inst.in_air = instance.in_air()?;
+                            }
                             unit = Some(instance);
                         }
                     }
@@ -387,6 +384,32 @@ impl Db {
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             self.ephemeral.units_able_to_move.insert(*uid);
+        }
+        let slot = unit.slot()?;
+        if let Some(ucid) = self.ephemeral.players_by_slot.get(&slot) {
+            if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+                let position = unit.get_position()?;
+                let point = Vector2::new(position.p.x, position.p.z);
+                let landed_at_objective = self
+                    .persisted
+                    .objectives
+                    .into_iter()
+                    .find(|(_, obj)| {
+                        let radius2 = obj.radius.powi(2);
+                        na::distance_squared(&point.into(), &obj.pos.into()) <= radius2
+                    })
+                    .map(|(oid, _)| *oid);
+                player.current_slot = Some((
+                    slot,
+                    Some(InstancedPlayer {
+                        position,
+                        velocity: unit.get_velocity()?.0,
+                        in_air: unit.in_air()?,
+                        typ: Vehicle::from(unit.get_type_name()?),
+                        landed_at_objective,
+                    }),
+                ));
+            }
         }
         Ok(())
     }
@@ -405,9 +428,34 @@ impl Db {
         let id = unit.object_id()?;
         if let Some(slot) = self.ephemeral.slot_by_object_id.get(&id) {
             if let Some(ucid) = self.ephemeral.player_in_slot(slot) {
-                self.player_deslot(&ucid.clone())
+                let ucid = ucid.clone();
+                let player = maybe_mut!(self.persisted.players, ucid, "player")?;
+                if let Some((_, Some(inst))) = player.current_slot.as_mut() {
+                    let typ = inst.typ.clone();
+                    if let Some(oid) = inst.landed_at_objective {
+                        if let Err(e) = self.sync_vehicle_at_obj(lua, oid, typ) {
+                            error!("failed to sync warehouse after player deslot {:?}", e);
+                        }
+                    }
+                }
+                self.player_deslot(&ucid)
             }
         }
         Ok(dead)
+    }
+
+    pub fn player_disconnected(&mut self, ucid: &Ucid) {
+        if let Some((_, Some(inst))) = self
+            .persisted
+            .players
+            .get(&ucid)
+            .and_then(|p| p.current_slot.as_ref())
+        {
+            if let Some(oid) = inst.landed_at_objective {
+                self.ephemeral.push_sync_warehouse(oid, inst.typ.clone());
+            }
+        }
+        self.player_deslot(ucid);
+        self.ephemeral.cancel_force_to_spectators(ucid);
     }
 }

@@ -54,7 +54,7 @@ use dcso3::{
 use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
 use jtac::Jtacs;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, warn, trace};
 use mlua::prelude::*;
 use msgq::MsgTyp;
 use perf::Perf;
@@ -424,7 +424,7 @@ fn unit_killed(lua: MizLua, ctx: &mut Context, id: DcsOid<ClassUnit>) -> Result<
     if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
         error!("jtac unit dead failed for {:?} {:?}", id, e)
     }
-    if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
+    if let Err(e) = ctx.db.unit_dead(lua, &id, Utc::now()) {
         error!("unit dead failed for {:?} {:?}", id, e);
     }
     Ok(())
@@ -432,12 +432,12 @@ fn unit_killed(lua: MizLua, ctx: &mut Context, id: DcsOid<ClassUnit>) -> Result<
 
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
-    info!("onEvent: {:?}", ev);
+    trace!("onEvent: {:?}", ev);
     let ctx = unsafe { Context::get_mut() };
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
-                if let Err(e) = ctx.db.unit_born(&unit) {
+                if let Err(e) = ctx.db.unit_born(lua, &unit) {
                     error!("unit born failed {:?} {:?}", unit, e);
                 }
             }
@@ -701,6 +701,11 @@ fn run_slow_timed_events(
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         let start_ts = Utc::now();
+        if let Err(e) = ctx.db.maybe_do_repairs(ts) {
+            error!("error doing repairs {:?}", e)
+        }
+        record_perf(&mut perf.do_repairs, start_ts);
+        let start_ts = Utc::now();
         let mut dead = vec![];
         match ctx.db.update_unit_positions::<iter::Once<_>>(lua, None) {
             Err(e) => error!("could not update unit positions {e}"),
@@ -766,11 +771,15 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
-    if let Err(e) = ctx.db.maybe_do_repairs(ts) {
-        error!("error doing repairs {:?}", e)
-    }
-    record_perf(&mut perf.do_repairs, ts);
     return_lives(lua, ctx, ts);
+    for (oid, vh) in ctx.db.ephemeral.warehouses_to_sync() {
+        if let Err(e) = ctx.db.sync_vehicle_at_obj(lua, oid, vh.clone()) {
+            error!(
+                "failed to sync warehouse at objective {:?} vehicle {:?} {:?}",
+                oid, vh, e
+            )
+        }
+    }
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
     for ucid in ctx.db.ephemeral.players_to_force_to_spectators() {
@@ -897,7 +906,7 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
-        ctx.db.player_deslot(&ifo.ucid)
+        ctx.db.player_disconnected(&ifo.ucid)
     }
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,

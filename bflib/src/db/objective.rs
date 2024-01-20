@@ -198,6 +198,12 @@ impl ObjGroup {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlotInfo {
+    pub typ: Vehicle,
+    pub ground_start: bool,
+}
+
 atomic_id!(ObjectiveId);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,7 +214,7 @@ pub struct Objective {
     pub(super) radius: f64,
     pub(super) owner: Side,
     pub(super) kind: ObjectiveKind,
-    pub(super) slots: Map<SlotId, Vehicle>,
+    pub(super) slots: Map<SlotId, SlotInfo>,
     pub(super) groups: Map<Side, Set<GroupId>>,
     pub(super) health: u8,
     pub(super) logi: u8,

@@ -13,7 +13,7 @@ FITNESS FOR A PARTICULAR PURPOSE.
 
 use crate::{
     as_tbl, coalition::Side, country, is_hooks_env, wrapped_prim, wrapped_table, Color,
-    DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String, net::SlotId,
+    DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String, net::SlotId, string_enum,
 };
 use anyhow::{bail, Result};
 use fxhash::FxHashMap;
@@ -25,6 +25,21 @@ wrapped_table!(Weather, None);
 
 wrapped_prim!(UnitId, i64, Hash, Copy);
 wrapped_prim!(GroupId, i64, Hash, Copy);
+
+string_enum!(PointType, u8, [
+    TakeOffGround => "TakeOffGround",
+    TakeOffGroundHot => "TakeOffGroundHot",
+    TurningPoint => "Turning Point",
+    TakeOffParking => "TakeOffParking",
+    TakeOff => "TakeOff",
+    Land => "Land",
+    Nil => ""
+]);
+
+string_enum!(Skill, u8, [
+    Client => "Client",
+    Excellant => "Excellant"
+]);
 
 #[derive(Debug, Clone, Copy)]
 pub enum TriggerZoneTyp {
@@ -72,6 +87,12 @@ wrapped_table!(NavPoint, None);
 wrapped_table!(Task, None);
 
 wrapped_table!(Point, None);
+
+impl<'lua> Point<'lua> {
+    pub fn typ(&self) -> Result<PointType> {
+        Ok(self.t.raw_get("type")?)
+    }
+}
 
 wrapped_table!(Route, None);
 
@@ -123,6 +144,10 @@ impl<'lua> Unit<'lua> {
 
     pub fn typ(&self) -> Result<String> {
         Ok(self.raw_get("type")?)
+    }
+
+    pub fn skill(&self) -> Result<Skill> {
+        Ok(self.raw_get("skill")?)
     }
 }
 

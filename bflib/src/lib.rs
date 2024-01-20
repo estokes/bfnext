@@ -700,6 +700,15 @@ fn run_slow_timed_events(
     let freq = Duration::seconds(ctx.db.ephemeral.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
+        for (oid, vh) in ctx.db.ephemeral.warehouses_to_sync() {
+            if let Err(e) = ctx.db.sync_vehicle_at_obj(lua, oid, vh.clone()) {
+                error!(
+                    "failed to sync warehouse at objective {:?} vehicle {:?} {:?}",
+                    oid, vh, e
+                )
+            }
+        }
+        return_lives(lua, ctx, ts);
         let start_ts = Utc::now();
         if let Err(e) = ctx.db.maybe_do_repairs(ts) {
             error!("error doing repairs {:?}", e)
@@ -771,15 +780,6 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
-    return_lives(lua, ctx, ts);
-    for (oid, vh) in ctx.db.ephemeral.warehouses_to_sync() {
-        if let Err(e) = ctx.db.sync_vehicle_at_obj(lua, oid, vh.clone()) {
-            error!(
-                "failed to sync warehouse at objective {:?} vehicle {:?} {:?}",
-                oid, vh, e
-            )
-        }
-    }
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
     for ucid in ctx.db.ephemeral.players_to_force_to_spectators() {

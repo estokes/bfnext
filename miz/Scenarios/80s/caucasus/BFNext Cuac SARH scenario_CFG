@@ -1,4 +1,5 @@
 {
+  "admins": ["f279deb7a6b62c96a78eca3ddb2bd8d0"],
   "repair_time": 1800,
   "repair_crate": {
     "Red": {
@@ -18,9 +19,39 @@
       "max_drop_speed": 50
     }
   },
+  "warehouse": {
+    "hub_max": 25,
+    "airbase_max": 5,
+    "tick": 10,
+    "ticks_per_delivery": 6,
+    "supply_transfer_size": 25,
+    "supply_transfer_crate": {
+      "Red": {
+        "name": "Supply Transfer",
+        "weight": 2000,
+        "required": 1,
+        "pos_unit": null,
+        "max_drop_height_agl": 10,
+        "max_drop_speed": 13
+      },
+      "Blue": {
+        "name": "Supply Transfer",
+        "weight": 1500,
+        "required": 1,
+        "pos_unit": null,
+        "max_drop_height_agl": 10,
+        "max_drop_speed": 13
+      }
+    },
+    "supply_source": {
+      "Red": "RINVENTORY",
+      "Blue": "BINVENTORY"
+    }
+  },
   "logistics_exclusion": 10000,
   "unit_cull_distance": 70000,
   "ground_vehicle_cull_distance": 20000,
+  "artillery_mission_range": 15000,
   "slow_timed_events_freq": 10,
   "threatened_distance": {
     "Mirage-F1EE": 14400,

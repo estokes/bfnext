@@ -624,7 +624,7 @@ impl Jtacs {
                 saw_jtacs.push(group.id)
             }
             let range = (ifo.range as f64).powi(2);
-            pos.y += 5.;
+            pos.y += 10.;
             let jtac = self
                 .0
                 .entry(group.side)

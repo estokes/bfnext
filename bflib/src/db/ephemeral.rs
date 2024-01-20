@@ -27,7 +27,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx},
 };
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::prelude::*;
+use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
     airbase::ClassAirbase,
@@ -351,7 +351,7 @@ pub struct Ephemeral {
     pub(super) slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
     used_pad_templates: FxHashSet<String>,
-    force_to_spectators: FxHashSet<Ucid>,
+    force_to_spectators: BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>>,
     pub(super) units_able_to_move: FxHashSet<UnitId>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
     pub(super) units_potentially_on_walkabout: FxHashSet<UnitId>,
@@ -648,17 +648,27 @@ impl Ephemeral {
         self.slot_instance_unit(lua, slot)?.get_position()
     }
 
-    pub fn players_to_force_to_spectators<'a>(&'a mut self) -> impl Iterator<Item = Ucid> + 'a {
-        self.force_to_spectators.drain()
+    pub fn players_to_force_to_spectators<'a>(
+        &'a mut self,
+        now: DateTime<Utc>,
+    ) -> BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>> {
+        let keep = self.force_to_spectators.split_off(&now);
+        mem::replace(&mut self.force_to_spectators, keep)
     }
 
     pub fn cancel_force_to_spectators(&mut self, ucid: &Ucid) {
-        self.force_to_spectators.remove(ucid);
+        self.force_to_spectators.retain(|_, ids| {
+            ids.retain(|pucid| pucid != ucid);
+            !ids.is_empty()
+        })
     }
 
     pub(super) fn player_deslot(&mut self, slot: &SlotId) -> Option<(UnitId, Ucid)> {
         if let Some(ucid) = self.players_by_slot.remove(slot) {
-            self.force_to_spectators.insert(ucid.clone());
+            self.force_to_spectators
+                .entry(Utc::now() + Duration::seconds(30))
+                .or_default()
+                .push(ucid.clone());
             self.cargo.remove(slot);
             if let Some(id) = self.object_id_by_slot.remove(slot) {
                 self.slot_by_object_id.remove(&id);

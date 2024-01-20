@@ -54,7 +54,7 @@ use dcso3::{
 use ewr::Ewr;
 use fxhash::{FxHashMap, FxHashSet};
 use jtac::Jtacs;
-use log::{debug, error, info, warn, trace};
+use log::{debug, error, info, trace, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
 use perf::Perf;
@@ -386,7 +386,7 @@ fn on_player_try_change_slot(
     side: Side,
     slot: SlotId,
 ) -> Result<Option<bool>> {
-    info!("onPlayerTryChangeSlot: {:?}", id);
+    info!("onPlayerTryChangeSlot: {:?} {:?} {:?}", id, side, slot);
     if slot.is_spectator() {
         return Ok(None);
     }
@@ -695,11 +695,24 @@ fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
     perf: &mut Perf,
+    net: &Net,
     ts: DateTime<Utc>,
 ) -> Result<()> {
     let freq = Duration::seconds(ctx.db.ephemeral.cfg().slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
+        for (_, ids) in ctx.db.ephemeral.players_to_force_to_spectators(ts) {
+            for ucid in ids {
+                match ctx.id_by_ucid.get(&ucid) {
+                    None => warn!("no id for player ucid {:?}", ucid),
+                    Some(id) => {
+                        if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::spectator()) {
+                            error!("error forcing player {:?} to spectators {:?}", id, e);
+                        }
+                    }
+                }
+            }
+        }
         for (oid, vh) in ctx.db.ephemeral.warehouses_to_sync() {
             if let Err(e) = ctx.db.sync_vehicle_at_obj(lua, oid, vh.clone()) {
                 error!(
@@ -782,17 +795,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
-    for ucid in ctx.db.ephemeral.players_to_force_to_spectators() {
-        match ctx.id_by_ucid.get(&ucid) {
-            None => warn!("no id for player ucid {:?}", ucid),
-            Some(id) => {
-                if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::spectator()) {
-                    error!("error forcing player {:?} to spectators {:?}", id, e);
-                }
-            }
-        }
-    }
-    if let Err(e) = run_slow_timed_events(lua, ctx, perf, ts) {
+    if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, ts) {
         error!("error running slow timed events {:?}", e)
     }
     let now = Utc::now();

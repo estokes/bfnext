@@ -667,7 +667,7 @@ impl Ephemeral {
         if let Some(ucid) = self.players_by_slot.remove(slot) {
             if kick {
                 self.force_to_spectators
-                    .entry(Utc::now() + Duration::seconds(10))
+                    .entry(Utc::now() + Duration::seconds(30))
                     .or_default()
                     .push(ucid.clone());
             }

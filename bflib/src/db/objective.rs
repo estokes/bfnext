@@ -834,7 +834,9 @@ impl Db {
                             unit.dead = true;
                         }
                     }
-                    self.ephemeral.push_spawn(*gid);
+                    if obj.spawned {
+                        self.ephemeral.push_spawn(*gid);
+                    }
                 }
             }
         }
@@ -912,17 +914,23 @@ impl Db {
         let mut actually_captured = smallvec![];
         for (oid, gids) in captured {
             let (side, _) = gids.first().unwrap();
-            let captured = gids.iter().all(|(s, _)| side == s);
-            if captured {
+            if gids.iter().all(|(s, _)| side == s) {
+                let supplier = self
+                    .compute_supplier(objective!(self, oid)?)
+                    .context("computing supplier")?;
                 let obj = objective_mut!(self, &oid)?;
+                obj.spawned = false;
+                obj.threatened = true;
+                obj.last_threatened_ts = now;
+                obj.last_cull = now;
                 obj.owner = *side;
+                let old_supplier = obj.warehouse.supplier.take();
+                obj.warehouse.supplier = supplier;
                 actually_captured.push((*side, oid));
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
-                    let group = group!(self, gid)?;
-                    for uid in &group.units {
+                    for uid in &group!(self, gid)?.units {
                         if !self.ephemeral.object_id_by_uid.contains_key(uid) {
-                            let unit = unit_mut!(self, uid)?;
-                            unit.dead = true;
+                            unit_mut!(self, uid)?.dead = true;
                         }
                     }
                 }
@@ -933,8 +941,17 @@ impl Db {
                     .ok_or_else(|| anyhow!("no airbase for objetive {}", obj.name))?;
                 let airbase =
                     Airbase::get_instance(lua, abid).context("getting captured airbase")?;
-                let supplier = obj.warehouse.supplier;
-                airbase.set_coalition(*side).context("setting airbase coalition")?;
+                airbase
+                    .set_coalition(*side)
+                    .context("setting airbase coalition")?;
+                if let Some(lid) = supplier {
+                    let logi = objective_mut!(self, lid).context("getting new supplier")?;
+                    logi.warehouse.destination.insert_cow(oid);
+                }
+                if let Some(lid) = old_supplier {
+                    let logi = objective_mut!(self, lid).context("getting old supplier")?;
+                    logi.warehouse.destination.remove_cow(&oid);
+                }
                 self.repair_one_logi_step(*side, now, oid)
                     .context("repairing captured airbase logi")?;
                 self.repair_services(*side, now, oid)
@@ -954,6 +971,10 @@ impl Db {
                 if let Some(lid) = supplier {
                     self.ephemeral
                         .create_objective_markup(objective!(self, lid)?, &self.persisted);
+                }
+                if let Some(lid) = old_supplier {
+                    self.ephemeral
+                        .create_objective_markup(objective!(self, lid)?, &self.persisted)
                 }
                 self.ephemeral.dirty();
             }

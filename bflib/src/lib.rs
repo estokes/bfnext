@@ -614,8 +614,8 @@ fn advise_captureable(ctx: &mut Context) -> Result<()> {
     Ok(())
 }
 
-fn advise_captured(ctx: &mut Context, ts: DateTime<Utc>) -> Result<()> {
-    for (side, oid) in ctx.db.check_capture(ts)? {
+fn advise_captured(ctx: &mut Context, lua: MizLua, ts: DateTime<Utc>) -> Result<()> {
+    for (side, oid) in ctx.db.check_capture(lua, ts)? {
         let name = ctx.db.objective(&oid)?.name();
         let mcap = format_compact!("our forces have captured {}", name);
         let mlost = format_compact!("we have lost {}", name);
@@ -810,7 +810,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.spawn_queue, now);
     let now = Utc::now();
-    if let Err(e) = advise_captured(ctx, ts) {
+    if let Err(e) = advise_captured(ctx, lua, ts) {
         error!("error advise captured {:?}", e)
     }
     record_perf(&mut perf.advise_captured, now);

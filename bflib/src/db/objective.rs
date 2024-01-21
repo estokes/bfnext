@@ -79,7 +79,7 @@ impl ObjectiveKind {
             Self::Airbase => "Airbase",
             Self::Fob => "FOB",
             Self::Farp { .. } => "FARP",
-            Self::Logistics => "Logistics Hub"
+            Self::Logistics => "Logistics Hub",
         }
     }
 }
@@ -655,30 +655,36 @@ impl Db {
             }
             Ok::<_, anyhow::Error>(())
         };
-        let check_close_players =
-            |obj: &Objective, pos3: LuaVec3, spawn: &mut bool, threat: &mut bool| {
-                for (side, pos, v, typ) in &players {
-                    if obj.owner != *side {
-                        let threat_dist = (cfg.threatened_distance[typ] as f64).powi(2);
-                        let ppos = Vector2::new(pos.x, pos.z);
-                        let (future_ppos30, future_ppos60) = {
-                            let pos30 = pos.0 + (v * 30.);
-                            let pos60 = pos.0 + (v * 60.);
-                            (Vector2::new(pos30.x, pos30.z), Vector2::new(pos60.x, pos60.z))
-                        };
-                        let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
-                        let fdist30 = na::distance_squared(&obj.pos.into(), &future_ppos30.into());
-                        let fdist60 = na::distance_squared(&obj.pos.into(), &future_ppos60.into());
-                        if dist <= cull_distance || fdist30 <= cull_distance || fdist60 <= cull_distance {
-                            *spawn = true;
-                        }
-                        if dist <= threat_dist && land.is_visible(pos3, *pos)? {
-                            *threat = true;
-                        }
+        let check_close_players = |obj: &Objective,
+                                   pos3: LuaVec3,
+                                   spawn: &mut bool,
+                                   threat: &mut bool| {
+            for (side, pos, v, typ) in &players {
+                if obj.owner != *side {
+                    let threat_dist = (cfg.threatened_distance[typ] as f64).powi(2);
+                    let ppos = Vector2::new(pos.x, pos.z);
+                    let (future_ppos30, future_ppos60) = {
+                        let pos30 = pos.0 + (v * 30.);
+                        let pos60 = pos.0 + (v * 60.);
+                        (
+                            Vector2::new(pos30.x, pos30.z),
+                            Vector2::new(pos60.x, pos60.z),
+                        )
+                    };
+                    let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
+                    let fdist30 = na::distance_squared(&obj.pos.into(), &future_ppos30.into());
+                    let fdist60 = na::distance_squared(&obj.pos.into(), &future_ppos60.into());
+                    if dist <= cull_distance || fdist30 <= cull_distance || fdist60 <= cull_distance
+                    {
+                        *spawn = true;
+                    }
+                    if dist <= threat_dist && land.is_visible(pos3, *pos)? {
+                        *threat = true;
                     }
                 }
-                Ok::<_, anyhow::Error>(())
-            };
+            }
+            Ok::<_, anyhow::Error>(())
+        };
         for (oid, obj) in &self.persisted.objectives {
             let pos3 = {
                 let alt = land.get_height(LuaVec2(obj.pos))?;
@@ -873,6 +879,7 @@ impl Db {
 
     pub fn check_capture(
         &mut self,
+        lua: MizLua,
         now: DateTime<Utc>,
     ) -> Result<SmallVec<[(Side, ObjectiveId); 1]>> {
         let mut captured: FxHashMap<ObjectiveId, Vec<(Side, GroupId)>> = FxHashMap::default();
@@ -919,13 +926,35 @@ impl Db {
                         }
                     }
                 }
-                self.repair_one_logi_step(*side, now, oid)?;
-                self.repair_services(*side, now, oid)?;
+                let abid = self
+                    .ephemeral
+                    .airbase_by_oid
+                    .get(&oid)
+                    .ok_or_else(|| anyhow!("no airbase for objetive {}", obj.name))?;
+                let airbase =
+                    Airbase::get_instance(lua, abid).context("getting captured airbase")?;
+                let supplier = obj.warehouse.supplier;
+                airbase.set_coalition(*side).context("setting airbase coalition")?;
+                self.repair_one_logi_step(*side, now, oid)
+                    .context("repairing captured airbase logi")?;
+                self.repair_services(*side, now, oid)
+                    .context("repairing captured airbase services")?;
+                self.sync_objectives_from_warehouses(lua)
+                    .context("syncing objectives from warehouses")?;
+                self.deliver_supplies_from_logistics_hubs()
+                    .context("distributing supplies")?;
+                self.sync_warehouses_from_objectives(lua)
+                    .context("syncing warehouses from objectibes")?;
                 for (_, gid) in gids {
-                    self.delete_group(&gid)?
+                    self.delete_group(&gid)
+                        .context("deleting capturing troops")?
                 }
                 self.ephemeral
                     .create_objective_markup(objective!(self, oid)?, &self.persisted);
+                if let Some(lid) = supplier {
+                    self.ephemeral
+                        .create_objective_markup(objective!(self, lid)?, &self.persisted);
+                }
                 self.ephemeral.dirty();
             }
         }

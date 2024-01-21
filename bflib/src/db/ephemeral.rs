@@ -210,14 +210,14 @@ impl ObjectiveMarkup {
             for (i, id) in marks.iter().enumerate() {
                 let j = (i + 1) as u8;
                 let i = i as f64;
-                let a = if (val / (j * 20)) > 0 { 0.5 } else { 0. };
+                let (a, ba) = if (val / (j * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
                 msgq.rect_to_all(
                     obj.owner.into(),
                     *id,
                     RectSpec {
                         start: LuaVec3(Vector3::new(pos3.x, 0., pos3.z + i * 500.)),
                         end: LuaVec3(Vector3::new(pos3.x - 400., 0., pos3.z + i * 500. + 400.)),
-                        color: Color::black(1.),
+                        color: Color::black(ba),
                         fill_color: Color::green(a),
                         line_type: LineType::Solid,
                         read_only: true,

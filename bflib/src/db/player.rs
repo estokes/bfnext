@@ -461,6 +461,8 @@ impl Db {
                     let ppos = inst.position.p.0;
                     if let Some(oid) = inst.landed_at_objective {
                         let fix_warehouse = || -> Result<()> {
+                            self.sync_vehicle_at_obj(lua, oid, typ)
+                                .context("sync vehicle to objective")?;
                             match &objective!(self, oid).context("get objective")?.kind {
                                 ObjectiveKind::Airbase => (),
                                 ObjectiveKind::Farp { .. }
@@ -482,8 +484,7 @@ impl Db {
                                     }
                                 }
                             }
-                            self.sync_vehicle_at_obj(lua, oid, typ)
-                                .context("sync vehicle to objective")
+                            Ok(())
                         };
                         if let Err(e) = fix_warehouse() {
                             error!("unable to fix warehouse {:?}", e)

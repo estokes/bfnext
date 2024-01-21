@@ -268,7 +268,7 @@ impl ObjectiveMarkup {
                 fill_color: Color::black(0.),
                 font_size: 14,
                 read_only: true,
-                text: obj.name.clone(),
+                text: format_compact!("{} {}", obj.name, obj.kind.name()).into(),
             },
         );
         pos3.x += 5000.;

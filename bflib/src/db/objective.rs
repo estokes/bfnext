@@ -73,6 +73,15 @@ impl ObjectiveKind {
             Self::Airbase | Self::Fob | Self::Logistics => false,
         }
     }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Airbase => "Airbase",
+            Self::Fob => "FOB",
+            Self::Farp { .. } => "FARP",
+            Self::Logistics => "Logistics Hub"
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

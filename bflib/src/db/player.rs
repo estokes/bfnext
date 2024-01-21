@@ -21,7 +21,7 @@ use super::{
 };
 use crate::{
     cfg::{LifeType, Vehicle},
-    maybe, maybe_mut, objective,
+    maybe, maybe_mut, objective, objective_mut,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -461,17 +461,20 @@ impl Db {
                     let ppos = inst.position.p.0;
                     if let Some(oid) = inst.landed_at_objective {
                         let fix_warehouse = || -> Result<()> {
-                            self.sync_vehicle_at_obj(lua, oid, typ)
-                                .context("sync vehicle to objective")?;
-                            match &objective!(self, oid).context("get objective")?.kind {
+                            let obj = objective_mut!(self, oid).context("get objective")?;
+                            let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
+                            let airbase =
+                                Airbase::get_instance(lua, &id).context("get airbase")?;
+                            let wh = airbase.get_warehouse().context("get warehouse")?;
+                            if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ.0) {
+                                inv.stored = wh.get_item_count(typ.0).context("getting item")?;
+                                self.ephemeral.dirty();
+                            }
+                            match &obj.kind {
                                 ObjectiveKind::Airbase => (),
                                 ObjectiveKind::Farp { .. }
                                 | ObjectiveKind::Fob
                                 | ObjectiveKind::Logistics => {
-                                    let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
-                                    let airbase =
-                                        Airbase::get_instance(lua, &id).context("get airbase")?;
-                                    let wh = airbase.get_warehouse().context("get warehouse")?;
                                     let pos = airbase.get_point().context("get airbase pos")?.0;
                                     if na::distance_squared(&pos.into(), &ppos.into()) > 10000. {
                                         for ammo in unit.get_ammo().context("get ammo")? {

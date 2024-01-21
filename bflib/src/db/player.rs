@@ -14,14 +14,19 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{group::GroupId, objective::ObjectiveId, Db, Map, Set};
+use super::{
+    group::GroupId,
+    objective::{ObjectiveId, ObjectiveKind},
+    Db, Map, Set,
+};
 use crate::{
     cfg::{LifeType, Vehicle},
-    maybe, maybe_mut,
+    maybe, maybe_mut, objective,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
 use dcso3::{
+    airbase::Airbase,
     coalition::Side,
     net::{SlotId, SlotIdKind, Ucid},
     object::{DcsObject, DcsOid},
@@ -184,6 +189,8 @@ impl Db {
                 player.lives.remove_cow(&life_type);
             }
             if let Some((_, Some(inst))) = &mut player.current_slot {
+                inst.position.p.x = position.x;
+                inst.position.p.z = position.y;
                 inst.landed_at_objective = Some(oid);
             }
             self.ephemeral.dirty();
@@ -252,7 +259,7 @@ impl Db {
                     None => {
                         player.changing_slots = Some(slot.clone());
                         player.jtac_or_spectators = false;
-                        return SlotAuth::Yes // it's a multicrew slot
+                        return SlotAuth::Yes; // it's a multicrew slot
                     }
                     Some(oid) => oid,
                 };
@@ -274,7 +281,9 @@ impl Db {
                             Some(inv) if inv.stored > 0 => (),
                             Some(_) | None => break SlotAuth::VehicleNotAvailable(sifo.typ.clone()),
                         }
-                        self.ephemeral.players_by_slot.insert(slot.clone(), ucid.clone());
+                        self.ephemeral
+                            .players_by_slot
+                            .insert(slot.clone(), ucid.clone());
                         player.changing_slots = Some(slot);
                         player.jtac_or_spectators = false;
                         break SlotAuth::Yes;
@@ -449,9 +458,35 @@ impl Db {
                 let kick = !player.jtac_or_spectators;
                 if let Some((_, Some(inst))) = player.current_slot.as_mut() {
                     let typ = inst.typ.clone();
+                    let ppos = inst.position.p.0;
                     if let Some(oid) = inst.landed_at_objective {
-                        if let Err(e) = self.sync_vehicle_at_obj(lua, oid, typ) {
-                            error!("failed to sync warehouse after player deslot {:?}", e);
+                        let fix_warehouse = || -> Result<()> {
+                            match &objective!(self, oid).context("get objective")?.kind {
+                                ObjectiveKind::Airbase => (),
+                                ObjectiveKind::Farp { .. }
+                                | ObjectiveKind::Fob
+                                | ObjectiveKind::Logistics => {
+                                    let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
+                                    let airbase =
+                                        Airbase::get_instance(lua, &id).context("get airbase")?;
+                                    let wh = airbase.get_warehouse().context("get warehouse")?;
+                                    let pos = airbase.get_point().context("get airbase pos")?.0;
+                                    if na::distance_squared(&pos.into(), &ppos.into()) > 10000. {
+                                        for ammo in unit.get_ammo().context("get ammo")? {
+                                            let ammo = ammo.context("ammo")?;
+                                            let count = ammo.count().context("ammo count")?;
+                                            let typ = ammo.type_name().context("ammo typ")?;
+                                            wh.add_item(typ, count)
+                                                .context("add item to warehouse")?;
+                                        }
+                                    }
+                                }
+                            }
+                            self.sync_vehicle_at_obj(lua, oid, typ)
+                                .context("sync vehicle to objective")
+                        };
+                        if let Err(e) = fix_warehouse() {
+                            error!("unable to fix warehouse {:?}", e)
                         }
                     }
                 }

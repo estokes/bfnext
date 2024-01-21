@@ -21,7 +21,7 @@ use super::{
 };
 use crate::{
     cfg::{LifeType, Vehicle},
-    maybe, maybe_mut, objective, objective_mut,
+    maybe, maybe_mut, objective_mut,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};

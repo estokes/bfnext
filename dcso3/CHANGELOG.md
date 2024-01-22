@@ -1,3 +1,7 @@
+## 0.1.1
+
+- very minor bug fixes and changes
+
 ## 0.1.0
 
 - warehouse system

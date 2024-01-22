@@ -18,7 +18,7 @@ use super::{
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
 };
-use crate::{db::objective::ObjectiveKind, maybe, objective, objective_mut, cfg::Vehicle};
+use crate::{cfg::Vehicle, db::objective::ObjectiveKind, maybe, objective, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use compact_str::format_compact;
 use dcso3::{
@@ -417,36 +417,38 @@ impl Db {
             .map(|(_, id)| id))
     }
 
+    pub fn setup_supply_lines(&mut self) -> Result<()> {
+        let mut suppliers: SmallVec<[(ObjectiveId, Option<ObjectiveId>); 64]> = smallvec![];
+        for (oid, obj) in &self.persisted.objectives {
+            match obj.kind {
+                ObjectiveKind::Logistics => (),
+                ObjectiveKind::Airbase | ObjectiveKind::Farp { .. } | ObjectiveKind::Fob => {
+                    suppliers.push((*oid, self.compute_supplier(obj)?));
+                }
+            }
+        }
+        for oid in &self.persisted.logistics_hubs {
+            let obj = objective_mut!(self, oid)?;
+            obj.warehouse.destination = Set::new();
+        }
+        for (oid, supplier) in suppliers {
+            let obj = objective_mut!(self, oid)?;
+            obj.warehouse.supplier = supplier;
+            if let Some(id) = supplier {
+                let logi = objective_mut!(self, id)?;
+                logi.warehouse.destination.insert_cow(oid);
+            }
+        }
+        Ok(())
+    }
+
     pub fn deliver_production(&mut self, lua: MizLua) -> Result<()> {
         let whcfg = match self.ephemeral.cfg.warehouse.clone() {
             Some(cfg) => cfg,
             None => return Ok(()), // warehouse system disabled
         };
-        let mut setup_supply_lines = || -> Result<()> {
-            let mut suppliers: SmallVec<[(ObjectiveId, Option<ObjectiveId>); 64]> = smallvec![];
-            for (oid, obj) in &self.persisted.objectives {
-                match obj.kind {
-                    ObjectiveKind::Logistics => (),
-                    ObjectiveKind::Airbase | ObjectiveKind::Farp { .. } | ObjectiveKind::Fob => {
-                        suppliers.push((*oid, self.compute_supplier(obj)?));
-                    }
-                }
-            }
-            for oid in &self.persisted.logistics_hubs {
-                let obj = objective_mut!(self, oid)?;
-                obj.warehouse.destination = Set::new();
-            }
-            for (oid, supplier) in suppliers {
-                let obj = objective_mut!(self, oid)?;
-                obj.warehouse.supplier = supplier;
-                if let Some(id) = supplier {
-                    let logi = objective_mut!(self, id)?;
-                    logi.warehouse.destination.insert_cow(oid);
-                }
-            }
-            Ok(())
-        };
-        setup_supply_lines().context("setting up supplylines")?;
+        self.setup_supply_lines()
+            .context("setting up supply lines")?;
         let mut deliver_produced_supplies = || -> Result<()> {
             for side in [Side::Red, Side::Blue, Side::Neutral] {
                 macro_rules! dlvr {
@@ -533,7 +535,12 @@ impl Db {
         Ok(())
     }
 
-    pub fn sync_vehicle_at_obj(&mut self, lua: MizLua, oid: ObjectiveId, typ: Vehicle) -> Result<()> {
+    pub fn sync_vehicle_at_obj(
+        &mut self,
+        lua: MizLua,
+        oid: ObjectiveId,
+        typ: Vehicle,
+    ) -> Result<()> {
         let obj = objective_mut!(self, oid)?;
         let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
         let wh = Airbase::get_instance(lua, id)

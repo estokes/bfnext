@@ -483,6 +483,7 @@ impl Db {
         }
         let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
             .with_context(|| format_compact!("getting airbase {pad_template}"))?;
+        airbase.set_coalition(side)?;
         let airbase = airbase
             .object_id()
             .with_context(|| format_compact!("getting airbase {pad_template} object id"))?;
@@ -915,15 +916,16 @@ impl Db {
         for (oid, gids) in captured {
             let (side, _) = gids.first().unwrap();
             if gids.iter().all(|(s, _)| side == s) {
-                let supplier = self
-                    .compute_supplier(objective!(self, oid)?)
-                    .context("computing supplier")?;
-                let obj = objective_mut!(self, &oid)?;
+                let obj = objective_mut!(self, oid)?;
                 obj.spawned = false;
                 obj.threatened = true;
                 obj.last_threatened_ts = now;
                 obj.last_cull = now;
                 obj.owner = *side;
+                let supplier = self
+                    .compute_supplier(objective!(self, oid)?)
+                    .context("computing supplier")?;
+                let obj = objective_mut!(self, oid)?;
                 let old_supplier = obj.warehouse.supplier.take();
                 obj.warehouse.supplier = supplier;
                 actually_captured.push((*side, oid));

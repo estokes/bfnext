@@ -151,8 +151,9 @@ impl ObjectiveMarkup {
             self.health = obj.health;
             for (i, id) in self.healthbar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let a = if (obj.health / (i * 20)) > 0 { 0.5 } else { 0. };
+                let (a, ba) = if (obj.health / (i * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
                 msgq.set_markup_fill_color(*id, Color::green(a));
+                msgq.set_markup_color(*id, Color::black(ba));
             }
         }
         if self.logi != obj.logi {

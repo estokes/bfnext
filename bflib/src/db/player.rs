@@ -45,6 +45,7 @@ pub enum SlotAuth {
     NoLives,
     NotRegistered(Side),
     VehicleNotAvailable(Vehicle),
+    Denied,
 }
 
 pub enum RegErr {
@@ -247,10 +248,15 @@ impl Db {
             return SlotAuth::ObjectiveNotOwned(player.side);
         }
         match slot.classify() {
-            SlotIdKind::ArtilleryCommander
-            | SlotIdKind::ForwardObserver
-            | SlotIdKind::Instructor
-            | SlotIdKind::Observer => {
+            SlotIdKind::Instructor => {
+                if self.ephemeral.cfg.admins.contains(ucid) {
+                    player.jtac_or_spectators = true;
+                    SlotAuth::Yes
+                } else {
+                    SlotAuth::Denied
+                }
+            }
+            SlotIdKind::ArtilleryCommander | SlotIdKind::ForwardObserver | SlotIdKind::Observer => {
                 player.jtac_or_spectators = true;
                 // CR estokes: add permissions for game master
                 SlotAuth::Yes

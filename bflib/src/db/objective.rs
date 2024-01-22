@@ -796,6 +796,27 @@ impl Db {
         oid: ObjectiveId,
     ) -> Result<()> {
         let obj = objective_mut!(self, oid)?;
+        // despawn the previous services
+        for side in [Side::Neutral, side.opposite()] {
+            if let Some(groups) = obj.groups.get(&side) {
+                for gid in groups {
+                    if let Some(group) = self.persisted.groups.get(gid) {
+                        if group.class.is_services() {
+                            let mut despawn = false;
+                            for uid in &group.units {
+                                if self.ephemeral.object_id_by_uid.contains_key(uid) {
+                                    despawn = true
+                                }
+                            }
+                            if despawn {
+                                self.ephemeral
+                                    .push_despawn(*gid, Despawn::Group(group.name.clone()))
+                            }
+                        }
+                    }
+                }
+            }
+        }
         for gid in maybe!(obj.groups, &side, "side group")? {
             let group = group_mut!(self, gid)?;
             if group.class.is_services() {
@@ -917,17 +938,12 @@ impl Db {
             let (side, _) = gids.first().unwrap();
             if gids.iter().all(|(s, _)| side == s) {
                 let obj = objective_mut!(self, oid)?;
+                let old_supplier = obj.warehouse.supplier;
                 obj.spawned = false;
                 obj.threatened = true;
                 obj.last_threatened_ts = now;
                 obj.last_cull = now;
                 obj.owner = *side;
-                let supplier = self
-                    .compute_supplier(objective!(self, oid)?)
-                    .context("computing supplier")?;
-                let obj = objective_mut!(self, oid)?;
-                let old_supplier = obj.warehouse.supplier.take();
-                obj.warehouse.supplier = supplier;
                 actually_captured.push((*side, oid));
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
                     for uid in &group!(self, gid)?.units {
@@ -946,31 +962,20 @@ impl Db {
                 airbase
                     .set_coalition(*side)
                     .context("setting airbase coalition")?;
-                if let Some(lid) = supplier {
-                    let logi = objective_mut!(self, lid).context("getting new supplier")?;
-                    logi.warehouse.destination.insert_cow(oid);
-                }
-                if let Some(lid) = old_supplier {
-                    let logi = objective_mut!(self, lid).context("getting old supplier")?;
-                    logi.warehouse.destination.remove_cow(&oid);
-                }
                 self.repair_one_logi_step(*side, now, oid)
                     .context("repairing captured airbase logi")?;
                 self.repair_services(*side, now, oid)
                     .context("repairing captured airbase services")?;
-                self.sync_objectives_from_warehouses(lua)
-                    .context("syncing objectives from warehouses")?;
-                self.deliver_supplies_from_logistics_hubs()
-                    .context("distributing supplies")?;
-                self.sync_warehouses_from_objectives(lua)
-                    .context("syncing warehouses from objectibes")?;
+                self.deliver_production(lua)
+                    .context("delivering production")?;
                 for (_, gid) in gids {
                     self.delete_group(&gid)
                         .context("deleting capturing troops")?
                 }
+                let obj = objective!(self, oid)?;
                 self.ephemeral
-                    .create_objective_markup(objective!(self, oid)?, &self.persisted);
-                if let Some(lid) = supplier {
+                    .create_objective_markup(obj, &self.persisted);
+                if let Some(lid) = obj.warehouse.supplier {
                     self.ephemeral
                         .create_objective_markup(objective!(self, lid)?, &self.persisted);
                 }

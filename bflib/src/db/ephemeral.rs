@@ -160,24 +160,27 @@ impl ObjectiveMarkup {
             self.logi = obj.logi;
             for (i, id) in self.logibar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let a = if (obj.logi / (i * 20)) > 0 { 0.5 } else { 0. };
+                let (a, ba) = if (obj.logi / (i * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
                 msgq.set_markup_fill_color(*id, Color::green(a));
+                msgq.set_markup_color(*id, Color::black(ba));
             }
         }
         if self.supply != obj.supply {
             self.supply = obj.supply;
             for (i, id) in self.supplybar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let a = if (obj.supply / (i * 20)) > 0 { 0.5 } else { 0. };
+                let (a, ba) = if (obj.supply / (i * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
                 msgq.set_markup_fill_color(*id, Color::green(a));
+                msgq.set_markup_color(*id, Color::black(ba));
             }
         }
         if self.fuel != obj.fuel {
             self.fuel = obj.fuel;
             for (i, id) in self.fuelbar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let a = if (obj.fuel / (i * 20)) > 0 { 0.5 } else { 0. };
+                let (a, ba) = if (obj.fuel / (i * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
                 msgq.set_markup_fill_color(*id, Color::green(a));
+                msgq.set_markup_color(*id, Color::black(ba));
             }
         }
     }

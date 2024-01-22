@@ -32,6 +32,8 @@ simplelog = "0.12"
 smallvec = { version = "1", features = ["const_generics", "union", "serde"] }
 hdrhistogram = { version = "7" }
 rand = { version = "0.8" }
+humantime = { version = "2" }
+regex = { version = "1" }
 
 [workspace]
 resolver = "2"

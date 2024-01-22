@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use crate::{db::persisted::Persisted, Perf};
+use crate::{db::persisted::Persisted, Perf, cfg::Cfg};
 use bytes::{Bytes, BytesMut};
 use log::error;
 use once_cell::sync::OnceCell;
@@ -53,6 +53,7 @@ impl io::Write for LogHandle {
 #[derive(Debug)]
 pub(super) enum Task {
     SaveState(PathBuf, Persisted),
+    SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
     LogPerf(Arc<Perf>),
 }
@@ -71,6 +72,10 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
             Task::SaveState(path, db) => match db.save(&path) {
                 Ok(()) => (),
                 Err(e) => error!("failed to save state to {:?}, {:?}", path, e),
+            },
+            Task::SaveConfig(path, cfg) => match cfg.save(&path) {
+                Ok(()) => (),
+                Err(e) => error!("failed to save config {:?}", e),
             },
             Task::WriteLog(mut buf) => log_file.write_all_buf(&mut buf).await.unwrap(),
             Task::LogPerf(perf) => perf.log(),

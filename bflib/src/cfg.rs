@@ -14,7 +14,9 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
+use chrono::prelude::*;
+use compact_str::format_compact;
 use dcso3::{coalition::Side, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
 use fxhash::{FxHashMap, FxHashSet};
@@ -318,7 +320,7 @@ pub struct Cfg {
     pub admins: FxHashSet<Ucid>,
     /// ucids in this list are banned
     #[serde(default)]
-    pub banned: FxHashSet<Ucid>,
+    pub banned: FxHashMap<Ucid, (Option<DateTime<Utc>>, String)>,
     /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
     /// The base repair crate
@@ -377,7 +379,7 @@ pub struct Cfg {
 }
 
 impl Cfg {
-    pub fn load(miz_state_path: &Path) -> Result<Self> {
+    fn path(miz_state_path: &Path) -> PathBuf {
         let mut path = PathBuf::from(miz_state_path);
         let file_name = path
             .file_name()
@@ -388,6 +390,11 @@ impl Cfg {
             })
             .unwrap_or_else(|| "CFG".into());
         path.set_file_name(file_name);
+        path
+    }
+
+    pub fn load(miz_state_path: &Path) -> Result<Self> {
+        let path = Self::path(miz_state_path);
         let file = loop {
             match File::open(&path) {
                 Ok(f) => break f,
@@ -407,6 +414,17 @@ impl Cfg {
         let cfg: Self = serde_json::from_reader(file)
             .map_err(|e| anyhow!("failed to decode cfg file {:?}, {:?}", path, e))?;
         Ok(cfg)
+    }
+
+    pub fn save(&self, miz_state_path: &Path) -> Result<()> {
+        let path = Self::path(miz_state_path);
+        let fd = File::options()
+            .write(true)
+            .create(true)
+            .open(&path)
+            .with_context(|| format_compact!("opening {:?}", path))?;
+        serde_json::to_writer_pretty(fd, self).context("serializing cfg")?;
+        Ok(())
     }
 }
 
@@ -1441,7 +1459,7 @@ impl Default for Cfg {
     fn default() -> Self {
         Self {
             admins: FxHashSet::default(),
-            banned: FxHashSet::default(),
+            banned: FxHashMap::default(),
             repair_time: 1800,
             repair_crate: default_repair_crate(),
             warehouse: Some(WarehouseConfig {

@@ -31,3 +31,5 @@ smallvec = { workspace = true }
 indexmap = { workspace = true }
 hdrhistogram = { workspace = true }
 rand = { workspace = true }
+humantime = { workspace = true }
+regex = { workspace = true }

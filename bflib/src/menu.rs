@@ -296,7 +296,7 @@ fn spawn_crate(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
                 .panel_to_group(10, false, arg.fst, format_compact!("{e}"))
         }
         Ok(st) => {
-            if let Some(max_crates) = ctx.db.ephemeral.cfg().max_crates {
+            if let Some(max_crates) = ctx.db.ephemeral.cfg.max_crates {
                 let (n, oldest) = ctx
                     .db
                     .number_crates_deployed(&st)
@@ -964,7 +964,7 @@ impl CarryCap {
 
 pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
     debug!("initializing menus");
-    let cfg = ctx.db.ephemeral.cfg();
+    let cfg = &ctx.db.ephemeral.cfg;
     let miz = Miz::singleton(lua)?;
     let mc = MissionCommands::singleton(lua)?;
     for side in [Side::Red, Side::Blue, Side::Neutral] {

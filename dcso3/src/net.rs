@@ -17,7 +17,8 @@ use anyhow::Result;
 use compact_str::format_compact;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::ops::Deref;
+use core::fmt;
+use std::{ops::Deref, str::FromStr};
 
 simple_enum!(PlayerStat, u8, [
     Car => 2,
@@ -44,6 +45,20 @@ simple_enum!(PlayerStat, u8, [
 ]);
 
 wrapped_prim!(PlayerId, i64, Copy, Hash);
+
+impl FromStr for PlayerId {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(s.parse::<i64>()?))
+    }
+}
+
+impl fmt::Display for PlayerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum SlotIdKind {
@@ -107,6 +122,18 @@ impl SlotId {
 }
 
 wrapped_prim!(Ucid, String, Hash);
+
+impl From<&str> for Ucid {
+    fn from(value: &str) -> Self {
+        Self(String::from(value))
+    }
+}
+
+impl fmt::Display for Ucid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &self.0)
+    }
+}
 
 wrapped_table!(PlayerInfo, None);
 

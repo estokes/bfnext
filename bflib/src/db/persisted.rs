@@ -67,4 +67,8 @@ impl Persisted {
         fs::rename(tmp, path)?;
         Ok(())
     }
+
+    pub fn players(&self) -> &Map<Ucid, Player> {
+        &self.players
+    }
 }

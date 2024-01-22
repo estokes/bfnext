@@ -680,8 +680,7 @@ impl Db {
                 Ok(i) => i,
                 Err(e) => {
                     warn!(
-                        "update_unit_positions skipping invalid instance {uid}, {:?}, {:?}",
-                        unit!(self, uid),
+                        "update_unit_positions skipping invalid instance {uid}, {:?}",
                         e
                     );
                     dead.push(id.clone());

@@ -383,15 +383,16 @@ impl Db {
         };
         let w = get_supplier(lua, template.clone())
             .with_context(|| format_compact!("getting supplier {template}"))?;
+        let mut equipment: FxHashSet<String> = FxHashSet::default();
+        let mut liquids: FxHashSet<LiquidType> = FxHashSet::default();
         let hub = obj.kind.is_hub();
         macro_rules! capture {
-            ($whname:ident, $objname:ident) => {{
-                let mut items: FxHashSet<_> = FxHashSet::default();
+            ($whname:ident, $objname:ident, $all_equipment:ident) => {{
                 w.$whname()
                     .with_context(|| format_compact!("getting {}", stringify!($whname)))?
                     .for_each(|name, qty| {
                         if qty > 0 {
-                            items.insert(name.clone());
+                            $all_equipment.insert(name.clone());
                             let inv = obj.warehouse.$objname.get_or_default_cow(name.clone());
                             inv.capacity = whcfg.capacity(hub, qty);
                             if hub {
@@ -407,17 +408,17 @@ impl Db {
                     .map(|(k, _)| k.clone())
                     .collect();
                 for name in all {
-                    if !items.contains(&name) {
+                    if !$all_equipment.contains(&name) {
                         let inv = &mut obj.warehouse.$objname[&name];
                         inv.stored = 0;
                         inv.capacity = 0;
                     }
                 }
-            };};
+            }};
         }
-        capture!(weapons, equipment);
-        capture!(aircraft, equipment);
-        capture!(liquids, liquids);
+        capture!(weapons, equipment, equipment);
+        capture!(aircraft, equipment, equipment);
+        capture!(liquids, liquids, liquids);
         Ok(())
     }
 

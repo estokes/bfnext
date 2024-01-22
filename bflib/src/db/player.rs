@@ -64,6 +64,7 @@ pub struct InstancedPlayer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
     pub name: String,
+    pub alts: Set<String>,
     pub side: Side,
     pub side_switches: Option<u8>,
     pub lives: Map<LifeType, (DateTime<Utc>, u8)>,
@@ -313,6 +314,16 @@ impl Db {
         }
     }
 
+    pub fn player_connected(&mut self, ucid: Ucid, name: String) {
+        if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+            if player.name != name {
+                player.alts.insert(name.clone());
+                player.name = name;
+                self.ephemeral.dirty()
+            }
+        }
+    }
+
     pub fn register_player(&mut self, ucid: Ucid, name: String, side: Side) -> Result<(), RegErr> {
         match self.persisted.players.get(&ucid) {
             Some(p) if p.side != side => Err(RegErr::AlreadyRegistered(p.side_switches, p.side)),
@@ -321,7 +332,8 @@ impl Db {
                 self.persisted.players.insert_cow(
                     ucid,
                     Player {
-                        name,
+                        name: name.clone(),
+                        alts: Set::from_iter([name]),
                         side,
                         side_switches: self.ephemeral.cfg.side_switches,
                         lives: Map::new(),
@@ -463,8 +475,7 @@ impl Db {
                         let fix_warehouse = || -> Result<()> {
                             let obj = objective_mut!(self, oid).context("get objective")?;
                             let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
-                            let airbase =
-                                Airbase::get_instance(lua, &id).context("get airbase")?;
+                            let airbase = Airbase::get_instance(lua, &id).context("get airbase")?;
                             let wh = airbase.get_warehouse().context("get warehouse")?;
                             if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ.0) {
                                 inv.stored = wh.get_item_count(typ.0).context("getting item")?;

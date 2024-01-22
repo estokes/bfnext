@@ -179,13 +179,13 @@ impl Ewr {
             None => return reports,
         };
         let state = self.player_state.entry(ucid.clone()).or_default();
-        if !state.enabled {
+        if !force && !state.enabled {
             return reports;
         }
-        tracks.retain(|_, track| {
+        tracks.retain(|tucid, track| {
             let age = (now - track.last).num_seconds();
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
-            if include && age <= 120 {
+            if include && age <= 120 && tucid != ucid {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);
                 let range = na::distance(&pos.into(), &cpos.into());
                 let bearing = radians_to_degrees(azumith2d_to(pos, cpos));

@@ -71,6 +71,8 @@ struct PlayerInfo {
 
 #[derive(Debug, Default)]
 struct Context {
+    sortie: String,
+    miz_state_path: PathBuf,
     last_perf_log: DateTime<Utc>,
     loaded: bool,
     idx: env::miz::MizIndex,
@@ -166,24 +168,65 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
     }
 }
 
+fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let ifo = match ctx.info_by_player_id.get(&id) {
+        None => return Ok(()),
+        Some(ifo) => ifo,
+    };
+    if ctx.db.player(&ifo.ucid).is_none() {
+        let sideswitch = match ctx.db.ephemeral.cfg.side_switches {
+            Some(n) => format_compact!("{n}"),
+            None => "unlimited".into(),
+        };
+        // CR estokes: handlebars
+        let msg = format_compact!("Welcome to {}.\n\nA dynamic persistant campaign with limited lives and locked sides. You must join a side before you may slot. Choose carefully, as you may only change sides {} time(s) until the map resets. Join a side by typing the name of the side in chat. E.G. type red to join red. Change sides by typing -switch <side> in chat, e.g. -switch red. Type -help in chat for more commands.\n\nGood hunting!", ctx.sortie, sideswitch);
+        ctx.db
+            .ephemeral
+            .msgs()
+            .panel_to_side(60, false, Side::Neutral, msg)
+    }
+    Ok(())
+}
+
 fn on_player_try_connect(
     _: HooksLua,
     addr: String,
     name: String,
     ucid: Ucid,
     id: PlayerId,
-) -> Result<bool> {
+) -> Result<Option<String>> {
     let ts = Utc::now();
     info!(
         "onPlayerTryConnect addr: {:?}, name: {:?}, ucid: {:?}, id: {:?}",
         addr, name, ucid, id
     );
     let ctx = unsafe { Context::get_mut() };
+    if let Some((until, _)) = ctx.db.ephemeral.cfg.banned.get(&ucid) {
+        match until {
+            None => return Ok(Some("you are banned forever".into())),
+            Some(until) if until <= &Utc::now() => {
+                return Ok(Some(
+                    format_compact!("you are banned until {}", until).into(),
+                ))
+            }
+            Some(_) => {
+                let path = ctx.miz_state_path.clone();
+                {
+                    let cfg = Arc::make_mut(&mut ctx.db.ephemeral.cfg);
+                    cfg.banned.remove(&ucid);
+                }
+                let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
+                ctx.do_bg_task(bg::Task::SaveConfig(path, cfg))
+            }
+        }
+    }
     ctx.id_by_ucid.insert(ucid.clone(), id);
     ctx.id_by_name.insert(name.clone(), id);
+    ctx.db.player_connected(ucid.clone(), name.clone());
     ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
     record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
-    Ok(true)
+    Ok(None)
 }
 
 fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
@@ -278,7 +321,7 @@ fn do_admin_command(id: PlayerId, cmd: String) {
         Some(ifo) => ifo,
         None => return,
     };
-    if !ctx.db.ephemeral.cfg().admins.contains(&ifo.ucid) {
+    if !ctx.db.ephemeral.cfg.admins.contains(&ifo.ucid) {
         return;
     }
     match cmd.parse::<AdminCommand>() {
@@ -287,10 +330,9 @@ fn do_admin_command(id: PlayerId, cmd: String) {
             format_compact!("parse error {:?}", e),
         ),
         Ok(AdminCommand::Help) => {
-            ctx.db
-                .ephemeral
-                .msgs()
-                .send(MsgTyp::Chat(Some(id)), AdminCommand::help());
+            for cmd in AdminCommand::help() {
+                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), *cmd);
+            }
         }
         Ok(cmd) => {
             info!("queueing admin command {:?} from {:?}", cmd, ifo);
@@ -320,6 +362,27 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         Ok("".into())
     } else if msg.starts_with("-admin ") {
         do_admin_command(id, msg);
+        Ok("".into())
+    } else if msg.starts_with("-help") {
+        let ctx = unsafe { Context::get_mut() };
+        let admin = match ctx.info_by_player_id.get(&id) {
+            None => false,
+            Some(ifo) => ctx.db.ephemeral.cfg.admins.contains(&ifo.ucid),
+        };
+        for cmd in [
+            "blue: join the blue team",
+            "red: join the red team",
+            "-switch <color>: side switch to <color>",
+            "-lives: display your current lives",
+        ] {
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
+        }
+        if admin {
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                "-admin <command>: run admin commands, -admin help for details",
+            );
+        }
         Ok("".into())
     } else {
         record_perf(
@@ -431,7 +494,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
     match &ev {
         Event::MarkAdded | Event::MarkChange | Event::MarkRemoved => (),
-        ev => info!("onEvent: {:?}", ev)
+        ev => info!("onEvent: {:?}", ev),
     }
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -527,7 +590,7 @@ fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<Compac
     let player = db
         .player(ucid)
         .ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
-    let cfg = db.ephemeral.cfg();
+    let cfg = &db.ephemeral.cfg;
     let lives = &player.lives;
     let mut msg = CompactString::new("");
     let now = Utc::now();
@@ -663,7 +726,7 @@ fn run_logistics_events(
     perf: &mut Perf,
     ts: DateTime<Utc>,
 ) -> Result<()> {
-    if let Some(wcfg) = ctx.db.ephemeral.cfg().warehouse.as_ref() {
+    if let Some(wcfg) = ctx.db.ephemeral.cfg.warehouse.as_ref() {
         let freq = Duration::minutes(wcfg.tick as i64);
         let ticks_per_delivery = wcfg.ticks_per_delivery;
         if ts - ctx.last_logistics_tick >= freq {
@@ -699,7 +762,7 @@ fn run_slow_timed_events(
     net: &Net,
     ts: DateTime<Utc>,
 ) -> Result<()> {
-    let freq = Duration::seconds(ctx.db.ephemeral.cfg().slow_timed_events_freq as i64);
+    let freq = Duration::seconds(ctx.db.ephemeral.cfg.slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         for (_, ids) in ctx.db.ephemeral.players_to_force_to_spectators(ts) {
@@ -707,7 +770,9 @@ fn run_slow_timed_events(
                 match ctx.id_by_ucid.get(&ucid) {
                     None => warn!("no id for player ucid {:?}", ucid),
                     Some(id) => {
-                        if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::spectator()) {
+                        if let Err(e) =
+                            net.force_player_slot(*id, Side::Neutral, SlotId::spectator())
+                        {
                             error!("error forcing player {:?} to spectators {:?}", id, e);
                         }
                     }
@@ -876,9 +941,13 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         .context("adding event handlers")?;
     let sortie = miz.sortie().context("getting the sortie")?;
     debug!("sortie is {:?}", sortie);
-    let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
-        "" => bail!("missing sortie in miz file"),
-        s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
+    let path = {
+        let s = Env::singleton(lua)?.get_value_dict_by_key(sortie)?;
+        if s.is_empty() {
+            bail!("missing sortie in miz file")
+        }
+        ctx.sortie = s;
+        PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str())
     };
     debug!("path to saved state is {:?}", path);
     info!("initializing db");
@@ -925,6 +994,7 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
         .on_player_try_change_slot(on_player_try_change_slot)?
         .on_mission_load_end(on_mission_load_end)?
         .on_player_try_connect(on_player_try_connect)?
+        .on_player_connect(on_player_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .on_player_disconnect(on_player_disconnect)?
         .register()?;

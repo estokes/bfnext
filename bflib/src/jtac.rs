@@ -407,7 +407,7 @@ impl Jtac {
         match &mut self.target {
             None => bail!("can't start an artillery mission without a target"),
             Some(target) => {
-                let range2 = (db.ephemeral.cfg().artillery_mission_range as f64).powi(2);
+                let range2 = (db.ephemeral.cfg.artillery_mission_range as f64).powi(2);
                 let pos = db.unit(&target.uid)?.pos;
                 let artillery = db
                     .deployed()
@@ -427,7 +427,7 @@ impl Jtac {
                 if artillery.is_empty() {
                     bail!(
                         "no artillery within {} meters of the jtac target",
-                        db.ephemeral.cfg().artillery_mission_range
+                        db.ephemeral.cfg.artillery_mission_range
                     );
                 }
                 for group in &artillery {
@@ -637,7 +637,7 @@ impl Jtacs {
                     Jtac::new(
                         group.id,
                         group.side,
-                        db.ephemeral.cfg().jtac_priority.clone(),
+                        db.ephemeral.cfg.jtac_priority.clone(),
                     )
                 });
             for (unit, _) in db.instanced_units() {

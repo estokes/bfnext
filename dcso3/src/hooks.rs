@@ -153,12 +153,13 @@ impl<'lua> UserHooks<'lua> {
     where
         F: Fn(HooksLua, String, String) -> Result<()> + 'static,
     {
-        self.on_mission_load_progress =
-            Some(self.lua.create_function(move |lua, (progress, message): (String, String)| {
+        self.on_mission_load_progress = Some(self.lua.create_function(
+            move |lua, (progress, message): (String, String)| {
                 wrap_f("on_mission_load_progress", HooksLua(lua), |lua| {
                     f(lua, progress, message)
                 })
-            })?);
+            },
+        )?);
         Ok(self)
     }
 
@@ -166,10 +167,10 @@ impl<'lua> UserHooks<'lua> {
     where
         F: Fn(HooksLua) -> Result<()> + 'static,
     {
-        self.on_mission_load_end = Some(
-            self.lua
-                .create_function(move |lua, ()| wrap_f("on_mission_load_end", HooksLua(lua), &f))?,
-        );
+        self.on_mission_load_end =
+            Some(self.lua.create_function(move |lua, ()| {
+                wrap_f("on_mission_load_end", HooksLua(lua), &f)
+            })?);
         Ok(self)
     }
 
@@ -177,10 +178,10 @@ impl<'lua> UserHooks<'lua> {
     where
         F: Fn(HooksLua) -> Result<()> + 'static,
     {
-        self.on_simulation_start = Some(
-            self.lua
-                .create_function(move |lua, ()| wrap_f("on_simulation_start", HooksLua(lua), &f))?,
-        );
+        self.on_simulation_start =
+            Some(self.lua.create_function(move |lua, ()| {
+                wrap_f("on_simulation_start", HooksLua(lua), &f)
+            })?);
         Ok(self)
     }
 
@@ -199,10 +200,10 @@ impl<'lua> UserHooks<'lua> {
     where
         F: Fn(HooksLua) -> Result<()> + 'static,
     {
-        self.on_simulation_frame = Some(
-            self.lua
-                .create_function(move |lua, ()| wrap_f("on_simulation_frame", HooksLua(lua), &f))?,
-        );
+        self.on_simulation_frame =
+            Some(self.lua.create_function(move |lua, ()| {
+                wrap_f("on_simulation_frame", HooksLua(lua), &f)
+            })?);
         Ok(self)
     }
 
@@ -210,10 +211,10 @@ impl<'lua> UserHooks<'lua> {
     where
         F: Fn(HooksLua) -> Result<()> + 'static,
     {
-        self.on_simulation_pause = Some(
-            self.lua
-                .create_function(move |lua, ()| wrap_f("on_simulation_pause", HooksLua(lua), &f))?,
-        );
+        self.on_simulation_pause =
+            Some(self.lua.create_function(move |lua, ()| {
+                wrap_f("on_simulation_pause", HooksLua(lua), &f)
+            })?);
         Ok(self)
     }
 
@@ -278,15 +279,22 @@ impl<'lua> UserHooks<'lua> {
         Ok(self)
     }
 
-    /// f(addr, ucid, name, id)
+    /// f(addr, ucid, name, id), return `None` to accept the player,
+    /// return `Some("reason for rejection")` to reject the player.
     pub fn on_player_try_connect<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, String, String, Ucid, PlayerId) -> Result<bool> + 'static,
+        F: Fn(HooksLua, String, String, Ucid, PlayerId) -> Result<Option<String>> + 'static,
     {
         self.on_player_try_connect = Some(self.lua.create_function(
             move |lua, (addr, name, ucid, id): (String, String, Ucid, PlayerId)| {
                 wrap_f("on_player_try_connect", HooksLua(lua), |lua| {
-                    f(lua, addr, name, ucid, id)
+                    match f(lua, addr, name, ucid, id) {
+                        Err(e) => Err(e),
+                        Ok(None) => Ok(vec![LuaValue::Boolean(true)]),
+                        Ok(Some(reason)) => {
+                            Ok(vec![LuaValue::Boolean(false), reason.into_lua(lua.inner())?])
+                        }
+                    }
                 })
             },
         )?);
@@ -298,12 +306,13 @@ impl<'lua> UserHooks<'lua> {
     where
         F: Fn(HooksLua, PlayerId, String, bool) -> Result<String> + 'static,
     {
-        self.on_player_try_send_chat =
-            Some(self.lua.create_function(move |lua, (id, msg, all): (PlayerId, String, bool)| {
+        self.on_player_try_send_chat = Some(self.lua.create_function(
+            move |lua, (id, msg, all): (PlayerId, String, bool)| {
                 wrap_f("on_player_try_send_chat", HooksLua(lua), |lua| {
                     f(lua, id, msg, all)
                 })
-            })?);
+            },
+        )?);
         Ok(self)
     }
 
@@ -312,12 +321,13 @@ impl<'lua> UserHooks<'lua> {
     where
         F: Fn(HooksLua, PlayerId, Side, SlotId) -> Result<Option<bool>> + 'static,
     {
-        self.on_player_try_change_slot =
-            Some(self.lua.create_function(move |lua, (id, side, slot): (PlayerId, Side, SlotId)| {
+        self.on_player_try_change_slot = Some(self.lua.create_function(
+            move |lua, (id, side, slot): (PlayerId, Side, SlotId)| {
                 wrap_f("on_player_try_change_slot", HooksLua(lua), |lua| {
                     f(lua, id, side, slot)
                 })
-            })?);
+            },
+        )?);
         Ok(self)
     }
 }

@@ -343,7 +343,7 @@ pub(super) struct DeployableIndex {
 #[derive(Debug, Default)]
 pub struct Ephemeral {
     dirty: bool,
-    pub(super) cfg: Cfg,
+    pub cfg: Arc<Cfg>,
     pub(super) players_by_slot: FxHashMap<SlotId, Ucid>,
     pub(super) cargo: FxHashMap<SlotId, Cargo>,
     pub(super) deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
@@ -490,10 +490,6 @@ impl Ephemeral {
 
     pub fn msgs(&mut self) -> &mut MsgQ {
         &mut self.msgs
-    }
-
-    pub fn cfg(&self) -> &Cfg {
-        &self.cfg
     }
 
     pub fn get_uid_by_object_id(&self, id: &DcsOid<ClassUnit>) -> Option<&UnitId> {
@@ -788,7 +784,7 @@ impl Ephemeral {
                 };
             }
         }
-        self.cfg = cfg;
+        self.cfg = Arc::new(cfg);
         Ok(())
     }
 }

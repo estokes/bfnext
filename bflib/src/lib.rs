@@ -71,6 +71,7 @@ struct PlayerInfo {
 
 #[derive(Debug, Default)]
 struct Context {
+    sortie: String,
     last_perf_log: DateTime<Utc>,
     loaded: bool,
     idx: env::miz::MizIndex,
@@ -172,18 +173,32 @@ fn on_player_try_connect(
     name: String,
     ucid: Ucid,
     id: PlayerId,
-) -> Result<bool> {
+) -> Result<Option<String>> {
     let ts = Utc::now();
     info!(
         "onPlayerTryConnect addr: {:?}, name: {:?}, ucid: {:?}, id: {:?}",
         addr, name, ucid, id
     );
     let ctx = unsafe { Context::get_mut() };
+    if ctx.db.ephemeral.cfg().banned.contains(&ucid) {
+        return Ok(Some("you are banned".into()));
+    }
     ctx.id_by_ucid.insert(ucid.clone(), id);
     ctx.id_by_name.insert(name.clone(), id);
+    if ctx.db.player(&ucid).is_none() {
+        let sideswitch = match ctx.db.ephemeral.cfg().side_switches {
+            Some(n) => format_compact!("{n}"),
+            None => "unlimited".into(),
+        };
+        let msg = format_compact!("Welcome to {}.\n\nA dynamic persistant campaign with limited lives and locked sides. You must join a side before you may slot. Choose carefully, as you may only change sides {} time(s) until the map resets. Join a side by typing the name of the side in chat. E.G. type red to join red. Change sides by typing -switch <side> in chat, e.g. -switch red.\n\nGood hunting!", ctx.sortie, sideswitch);
+        ctx.db
+            .ephemeral
+            .msgs()
+            .panel_to_side(60, false, Side::Neutral, msg)
+    }
     ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
     record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
-    Ok(true)
+    Ok(None)
 }
 
 fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
@@ -431,7 +446,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
     match &ev {
         Event::MarkAdded | Event::MarkChange | Event::MarkRemoved => (),
-        ev => info!("onEvent: {:?}", ev)
+        ev => info!("onEvent: {:?}", ev),
     }
     let ctx = unsafe { Context::get_mut() };
     match ev {
@@ -707,7 +722,9 @@ fn run_slow_timed_events(
                 match ctx.id_by_ucid.get(&ucid) {
                     None => warn!("no id for player ucid {:?}", ucid),
                     Some(id) => {
-                        if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::spectator()) {
+                        if let Err(e) =
+                            net.force_player_slot(*id, Side::Neutral, SlotId::spectator())
+                        {
                             error!("error forcing player {:?} to spectators {:?}", id, e);
                         }
                     }
@@ -876,9 +893,13 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         .context("adding event handlers")?;
     let sortie = miz.sortie().context("getting the sortie")?;
     debug!("sortie is {:?}", sortie);
-    let path = match Env::singleton(lua)?.get_value_dict_by_key(sortie)?.as_str() {
-        "" => bail!("missing sortie in miz file"),
-        s => PathBuf::from(format_compact!("{}\\{}", Lfs::singleton(lua)?.writedir()?, s).as_str()),
+    let path = {
+        let s = Env::singleton(lua)?.get_value_dict_by_key(sortie)?;
+        if s.is_empty() {
+            bail!("missing sortie in miz file")
+        }
+        ctx.sortie = s;
+        PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str())
     };
     debug!("path to saved state is {:?}", path);
     info!("initializing db");

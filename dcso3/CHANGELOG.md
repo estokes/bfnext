@@ -1,3 +1,8 @@
+## 0.1.2
+
+- alter the return type of on_player_try_connect to allow returning a
+  ban message
+
 ## 0.1.1
 
 - very minor bug fixes and changes
@@ -24,7 +29,8 @@
 
 ## 0.0.8
 
-- fix lifetimes on some returned objects were not as long as they should have been
+- fix lifetimes on some returned objects were not as long as they
+  should have been
 
 ## 0.0.7
 
@@ -36,8 +42,8 @@
 
 ## 0.0.6
 
-- add bindings for most of the triggers singleton, including almost all of the f10 map
-shape options
+- add bindings for most of the triggers singleton, including almost
+all of the f10 map shape options
 - add bindings for the missionCommands singleton
 
 ## 0.0.5

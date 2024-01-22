@@ -316,6 +316,9 @@ pub struct Cfg {
     /// ucids in this list are able to run admin commands
     #[serde(default)]
     pub admins: FxHashSet<Ucid>,
+    /// ucids in this list are banned
+    #[serde(default)]
+    pub banned: FxHashSet<Ucid>,
     /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
     /// The base repair crate
@@ -1438,6 +1441,7 @@ impl Default for Cfg {
     fn default() -> Self {
         Self {
             admins: FxHashSet::default(),
+            banned: FxHashSet::default(),
             repair_time: 1800,
             repair_crate: default_repair_crate(),
             warehouse: Some(WarehouseConfig {

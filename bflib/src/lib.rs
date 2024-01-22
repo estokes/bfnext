@@ -167,6 +167,27 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
     }
 }
 
+fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let ifo = match ctx.info_by_player_id.get(&id) {
+        None => return Ok(()),
+        Some(ifo) => ifo,
+    };
+    if ctx.db.player(&ifo.ucid).is_none() {
+        let sideswitch = match ctx.db.ephemeral.cfg().side_switches {
+            Some(n) => format_compact!("{n}"),
+            None => "unlimited".into(),
+        };
+        // CR estokes: handlebars
+        let msg = format_compact!("Welcome to {}.\n\nA dynamic persistant campaign with limited lives and locked sides. You must join a side before you may slot. Choose carefully, as you may only change sides {} time(s) until the map resets. Join a side by typing the name of the side in chat. E.G. type red to join red. Change sides by typing -switch <side> in chat, e.g. -switch red.\n\nGood hunting!", ctx.sortie, sideswitch);
+        ctx.db
+            .ephemeral
+            .msgs()
+            .panel_to_side(60, false, Side::Neutral, msg)
+    }
+    Ok(())
+}
+
 fn on_player_try_connect(
     _: HooksLua,
     addr: String,
@@ -185,17 +206,6 @@ fn on_player_try_connect(
     }
     ctx.id_by_ucid.insert(ucid.clone(), id);
     ctx.id_by_name.insert(name.clone(), id);
-    if ctx.db.player(&ucid).is_none() {
-        let sideswitch = match ctx.db.ephemeral.cfg().side_switches {
-            Some(n) => format_compact!("{n}"),
-            None => "unlimited".into(),
-        };
-        let msg = format_compact!("Welcome to {}.\n\nA dynamic persistant campaign with limited lives and locked sides. You must join a side before you may slot. Choose carefully, as you may only change sides {} time(s) until the map resets. Join a side by typing the name of the side in chat. E.G. type red to join red. Change sides by typing -switch <side> in chat, e.g. -switch red.\n\nGood hunting!", ctx.sortie, sideswitch);
-        ctx.db
-            .ephemeral
-            .msgs()
-            .panel_to_side(60, false, Side::Neutral, msg)
-    }
     ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
     record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
     Ok(None)
@@ -946,6 +956,7 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
         .on_player_try_change_slot(on_player_try_change_slot)?
         .on_mission_load_end(on_mission_load_end)?
         .on_player_try_connect(on_player_try_connect)?
+        .on_player_connect(on_player_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .on_player_disconnect(on_player_disconnect)?
         .register()?;

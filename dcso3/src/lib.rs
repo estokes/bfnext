@@ -305,8 +305,7 @@ pub fn wrap_f<'lua, L: LuaEnv<'lua>, R: Default, F: FnOnce(L) -> Result<R>>(
     lua: L,
     f: F,
 ) -> LuaResult<R> {
-    let r = panic::catch_unwind(AssertUnwindSafe(|| wrap(name, f(lua))));
-    match r {
+    match panic::catch_unwind(AssertUnwindSafe(|| wrap(name, f(lua)))) {
         Ok(r) => r,
         Err(e) => {
             match e.downcast::<anyhow::Error>() {

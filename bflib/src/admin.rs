@@ -403,8 +403,8 @@ fn admin_ban(
     let name = ctx
         .db
         .player(&ucid)
-        .ok_or_else(|| anyhow!("missing player {ucid}"))?
-        .name
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| name.clone())
         .clone();
     Arc::make_mut(&mut ctx.db.ephemeral.cfg)
         .banned

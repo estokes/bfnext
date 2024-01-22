@@ -205,7 +205,7 @@ fn on_player_try_connect(
     if let Some((until, _)) = ctx.db.ephemeral.cfg.banned.get(&ucid) {
         match until {
             None => return Ok(Some("you are banned forever".into())),
-            Some(until) if until <= &Utc::now() => {
+            Some(until) if until >= &Utc::now() => {
                 return Ok(Some(
                     format_compact!("you are banned until {}", until).into(),
                 ))
@@ -947,7 +947,8 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
             bail!("missing sortie in miz file")
         }
         ctx.sortie = s;
-        PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str())
+        ctx.miz_state_path = PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str());
+        ctx.miz_state_path.clone()
     };
     debug!("path to saved state is {:?}", path);
     info!("initializing db");

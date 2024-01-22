@@ -24,7 +24,7 @@ use serde_derive::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
     fmt,
-    fs::File,
+    fs::{self, File},
     io,
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
@@ -417,13 +417,16 @@ impl Cfg {
     }
 
     pub fn save(&self, miz_state_path: &Path) -> Result<()> {
-        let path = Self::path(miz_state_path);
+        let mut path = Self::path(miz_state_path);
+        path.set_extension("bak");
         let fd = File::options()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&path)
             .with_context(|| format_compact!("opening {:?}", path))?;
         serde_json::to_writer_pretty(fd, self).context("serializing cfg")?;
+        fs::rename(&path, Self::path(miz_state_path)).context("moving new file into place")?;
         Ok(())
     }
 }

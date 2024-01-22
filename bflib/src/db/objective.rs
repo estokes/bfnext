@@ -74,6 +74,13 @@ impl ObjectiveKind {
         }
     }
 
+    pub fn is_hub(&self) -> bool {
+        match self {
+            Self::Logistics => true,
+            Self::Airbase | Self::Farp { .. } | Self::Fob => false,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Self::Airbase => "Airbase",
@@ -966,6 +973,8 @@ impl Db {
                     .context("repairing captured airbase logi")?;
                 self.repair_services(*side, now, oid)
                     .context("repairing captured airbase services")?;
+                self.capture_warehouse(lua, oid)
+                    .context("capturing warehouse")?;
                 self.deliver_production(lua)
                     .context("delivering production")?;
                 for (_, gid) in gids {
@@ -973,8 +982,7 @@ impl Db {
                         .context("deleting capturing troops")?
                 }
                 let obj = objective!(self, oid)?;
-                self.ephemeral
-                    .create_objective_markup(obj, &self.persisted);
+                self.ephemeral.create_objective_markup(obj, &self.persisted);
                 if let Some(lid) = obj.warehouse.supplier {
                     self.ephemeral
                         .create_objective_markup(objective!(self, lid)?, &self.persisted);

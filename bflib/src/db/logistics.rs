@@ -249,13 +249,14 @@ impl Db {
                 .persisted
                 .objectives
                 .into_iter()
-                .filter_map(|(oid, obj)| if obj.owner == side { Some(*oid) } else { None })
+                .map(|(oid, _)| *oid)
                 .collect();
             let template = match whcfg.supply_source.get(&side) {
                 Some(tmpl) => tmpl,
                 None => continue, // side didn't produce anything, bummer
             };
-            let w = get_supplier(lua, template.clone())?;
+            let w = get_supplier(lua, template.clone())
+                .with_context(|| format_compact!("getting supplier {template}"))?;
             w.weapons()
                 .context("getting weapons")?
                 .for_each(|name, qty| {
@@ -263,12 +264,15 @@ impl Db {
                         for oid in &oids {
                             let hub = self.persisted.logistics_hubs.contains(oid);
                             let obj = objective_mut!(self, oid)?;
-                            let capacity = qty
-                                * if hub {
+                            let capacity = if obj.owner != side {
+                                0
+                            } else {
+                                qty * if hub {
                                     whcfg.hub_max
                                 } else {
                                     whcfg.airbase_max
-                                };
+                                }
+                            };
                             let inv = Inventory {
                                 stored: capacity,
                                 capacity,
@@ -286,12 +290,15 @@ impl Db {
                         for oid in &oids {
                             let hub = self.persisted.logistics_hubs.contains(oid);
                             let obj = objective_mut!(self, oid)?;
-                            let capacity = qty
-                                * if hub {
+                            let capacity = if obj.owner != side {
+                                0
+                            } else {
+                                qty * if hub {
                                     whcfg.hub_max
                                 } else {
                                     whcfg.airbase_max
-                                };
+                                }
+                            };
                             let include = hub
                                 || obj
                                     .slots
@@ -316,12 +323,15 @@ impl Db {
                         for oid in &oids {
                             let hub = self.persisted.logistics_hubs.contains(oid);
                             let obj = objective_mut!(self, oid)?;
-                            let capacity = qty
-                                * if hub {
+                            let capacity = if obj.owner != side {
+                                0
+                            } else {
+                                qty * if hub {
                                     whcfg.hub_max
                                 } else {
                                     whcfg.airbase_max
-                                };
+                                }
+                            };
                             let inv = Inventory {
                                 stored: capacity,
                                 capacity,
@@ -393,6 +403,48 @@ impl Db {
         self.ephemeral.dirty();
         self.sync_warehouses_from_objectives(lua)
             .context("syncing warehouses from objectives")
+    }
+
+    pub(super) fn capture_warehouse(&mut self, lua: MizLua, oid: ObjectiveId) -> Result<()> {
+        let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
+            Some(cfg) => cfg,
+            None => return Ok(()),
+        };
+        let obj = objective_mut!(self, oid)?;
+        let template = match whcfg.supply_source.get(&obj.owner) {
+            Some(tmpl) => tmpl,
+            None => return Ok(()), // side didn't produce anything, bummer
+        };
+        let w = get_supplier(lua, template.clone())
+            .with_context(|| format_compact!("getting supplier {template}"))?;
+        macro_rules! capture {
+            ($whname:ident, $objname:ident) => {
+                w.$whname()
+                    .with_context(|| format_compact!("getting {}", stringify!($whname)))?
+                    .for_each(|name, qty| {
+                        if qty == 0 {
+                            if let Some(inv) = obj.warehouse.$objname.get_mut_cow(&name) {
+                                inv.stored = 0;
+                                inv.capacity = 0;
+                            }
+                        } else {
+                            let inv = obj.warehouse.$objname.get_or_default_cow(name);
+                            let capacity = qty
+                                * if obj.kind.is_hub() {
+                                    whcfg.hub_max
+                                } else {
+                                    whcfg.airbase_max
+                                };
+                            inv.capacity = capacity;
+                        }
+                        Ok(())
+                    })?;
+            };
+        }
+        capture!(weapons, equipment);
+        capture!(aircraft, equipment);
+        capture!(liquids, liquids);
+        Ok(())
     }
 
     pub(super) fn compute_supplier(&self, obj: &Objective) -> Result<Option<ObjectiveId>> {

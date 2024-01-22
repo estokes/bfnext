@@ -973,10 +973,14 @@ impl Db {
                     .context("repairing captured airbase logi")?;
                 self.repair_services(*side, now, oid)
                     .context("repairing captured airbase services")?;
+                self.sync_objectives_from_warehouses(lua)
+                    .context("syncing objectives from warehouse")?;
                 self.capture_warehouse(lua, oid)
                     .context("capturing warehouse")?;
                 self.deliver_production(lua)
                     .context("delivering production")?;
+                self.sync_warehouses_from_objectives(lua)
+                    .context("syncing warehouses from objectives")?;
                 for (_, gid) in gids {
                     self.delete_group(&gid)
                         .context("deleting capturing troops")?

@@ -393,12 +393,7 @@ impl Db {
                             }
                         } else {
                             let inv = obj.warehouse.$objname.get_or_default_cow(name);
-                            let capacity = qty
-                                * if obj.kind.is_hub() {
-                                    whcfg.hub_max
-                                } else {
-                                    whcfg.airbase_max
-                                };
+                            let capacity = whcfg.capacity(obj.kind.is_hub(), qty);
                             inv.capacity = capacity;
                         }
                         Ok(())

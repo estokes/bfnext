@@ -257,32 +257,30 @@ impl Db {
             };
             let w = get_supplier(lua, template.clone())
                 .with_context(|| format_compact!("getting supplier {template}"))?;
-            w.weapons()
-                .context("getting weapons")?
-                .for_each(|name, qty| {
-                    if qty > 0 {
-                        for oid in &oids {
-                            let hub = self.persisted.logistics_hubs.contains(oid);
-                            let obj = objective_mut!(self, oid)?;
-                            let capacity = if obj.owner != side {
-                                0
-                            } else {
-                                qty * if hub {
-                                    whcfg.hub_max
-                                } else {
-                                    whcfg.airbase_max
+            macro_rules! setup {
+                ($whname:ident, $objname:ident) => {
+                    w.$whname()
+                        .with_context(|| format_compact!("getting {}", stringify!($whname)))?
+                        .for_each(|name, qty| {
+                            if qty > 0 {
+                                for oid in &oids {
+                                    let obj = objective_mut!(self, oid)?;
+                                    let inv = obj.warehouse.$objname.get_or_default_cow(name.clone());
+                                    let hub = self.persisted.logistics_hubs.contains(oid);
+                                    let capacity = whcfg.capacity(hub, qty);
+                                    if obj.owner == side {
+                                        inv.capacity = capacity;
+                                        inv.stored = capacity;
+                                    }
                                 }
-                            };
-                            let inv = Inventory {
-                                stored: capacity,
-                                capacity,
-                            };
-                            obj.warehouse.equipment.insert_cow(name.clone(), inv);
-                        }
-                    }
-                    Ok(())
-                })
-                .context("distributing")?;
+                            }
+                            Ok(())
+                        })
+                        .context("distributing")?;
+                }
+            }
+            setup!(weapons, equipment);
+            setup!(liquids, liquids);
             w.aircraft()
                 .context("getting aircraft")?
                 .for_each(|name, qty| {
@@ -290,53 +288,19 @@ impl Db {
                         for oid in &oids {
                             let hub = self.persisted.logistics_hubs.contains(oid);
                             let obj = objective_mut!(self, oid)?;
-                            let capacity = if obj.owner != side {
-                                0
-                            } else {
-                                qty * if hub {
-                                    whcfg.hub_max
-                                } else {
-                                    whcfg.airbase_max
-                                }
-                            };
+                            let capacity = whcfg.capacity(hub, qty);
                             let include = hub
                                 || obj
                                     .slots
                                     .into_iter()
                                     .any(|(_, v)| v.typ.as_str() == name.as_str());
                             if include {
-                                let inv = Inventory {
-                                    stored: capacity,
-                                    capacity,
-                                };
-                                obj.warehouse.equipment.insert_cow(name.clone(), inv);
-                            }
-                        }
-                    }
-                    Ok(())
-                })
-                .context("distributing")?;
-            w.liquids()
-                .context("getting liquids")?
-                .for_each(|name, qty| {
-                    if qty > 0 {
-                        for oid in &oids {
-                            let hub = self.persisted.logistics_hubs.contains(oid);
-                            let obj = objective_mut!(self, oid)?;
-                            let capacity = if obj.owner != side {
-                                0
-                            } else {
-                                qty * if hub {
-                                    whcfg.hub_max
-                                } else {
-                                    whcfg.airbase_max
+                                let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
+                                if obj.owner == side {
+                                    inv.capacity = capacity;
+                                    inv.stored = capacity;
                                 }
-                            };
-                            let inv = Inventory {
-                                stored: capacity,
-                                capacity,
-                            };
-                            obj.warehouse.liquids.insert_cow(name, inv);
+                            }
                         }
                     }
                     Ok(())

@@ -300,6 +300,16 @@ pub struct WarehouseConfig {
     pub supply_source: FxHashMap<Side, String>,
 }
 
+impl WarehouseConfig {
+    pub fn capacity(&self, hub: bool, qty: u32) -> u32 {
+        if hub {
+            qty * self.hub_max
+        } else {
+            qty * self.airbase_max
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {

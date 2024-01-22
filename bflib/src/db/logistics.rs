@@ -265,7 +265,8 @@ impl Db {
                             if qty > 0 {
                                 for oid in &oids {
                                     let obj = objective_mut!(self, oid)?;
-                                    let inv = obj.warehouse.$objname.get_or_default_cow(name.clone());
+                                    let inv =
+                                        obj.warehouse.$objname.get_or_default_cow(name.clone());
                                     let hub = self.persisted.logistics_hubs.contains(oid);
                                     let capacity = whcfg.capacity(hub, qty);
                                     if obj.owner == side {
@@ -277,7 +278,7 @@ impl Db {
                             Ok(())
                         })
                         .context("distributing")?;
-                }
+                };
             }
             setup!(weapons, equipment);
             setup!(liquids, liquids);
@@ -386,15 +387,14 @@ impl Db {
                 w.$whname()
                     .with_context(|| format_compact!("getting {}", stringify!($whname)))?
                     .for_each(|name, qty| {
-                        if qty == 0 {
-                            if let Some(inv) = obj.warehouse.$objname.get_mut_cow(&name) {
+                        if let Some(inv) = obj.warehouse.$objname.get_mut_cow(&name) {
+                            if qty == 0 {
                                 inv.stored = 0;
                                 inv.capacity = 0;
+                            } else {
+                                let capacity = whcfg.capacity(obj.kind.is_hub(), qty);
+                                inv.capacity = capacity;
                             }
-                        } else {
-                            let inv = obj.warehouse.$objname.get_or_default_cow(name);
-                            let capacity = whcfg.capacity(obj.kind.is_hub(), qty);
-                            inv.capacity = capacity;
                         }
                         Ok(())
                     })?;

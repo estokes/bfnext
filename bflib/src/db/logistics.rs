@@ -29,6 +29,7 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
+use fxhash::FxHashSet;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -383,22 +384,34 @@ impl Db {
         let w = get_supplier(lua, template.clone())
             .with_context(|| format_compact!("getting supplier {template}"))?;
         macro_rules! capture {
-            ($whname:ident, $objname:ident) => {
+            ($whname:ident, $objname:ident) => {{
+                let mut items: FxHashSet<_> = FxHashSet::default();
                 w.$whname()
                     .with_context(|| format_compact!("getting {}", stringify!($whname)))?
                     .for_each(|name, qty| {
-                        if let Some(inv) = obj.warehouse.$objname.get_mut_cow(&name) {
-                            if qty == 0 {
-                                inv.stored = 0;
-                                inv.capacity = 0;
-                            } else {
+                        if qty > 0 {
+                            if let Some(inv) = obj.warehouse.$objname.get_mut_cow(&name) {
+                                items.insert(name.clone());
                                 let capacity = whcfg.capacity(obj.kind.is_hub(), qty);
                                 inv.capacity = capacity;
                             }
                         }
                         Ok(())
                     })?;
-            };
+                let all: SmallVec<[_; 128]> = obj
+                    .warehouse
+                    .$objname
+                    .into_iter()
+                    .map(|(k, _)| k.clone())
+                    .collect();
+                for name in all {
+                    if !items.contains(&name) {
+                        let inv = &mut obj.warehouse.$objname[&name];
+                        inv.stored = 0;
+                        inv.capacity = 0;
+                    }
+                }
+            };};
         }
         capture!(weapons, equipment);
         capture!(aircraft, equipment);

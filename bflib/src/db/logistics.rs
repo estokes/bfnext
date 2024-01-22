@@ -383,6 +383,7 @@ impl Db {
         };
         let w = get_supplier(lua, template.clone())
             .with_context(|| format_compact!("getting supplier {template}"))?;
+        let hub = obj.kind.is_hub();
         macro_rules! capture {
             ($whname:ident, $objname:ident) => {{
                 let mut items: FxHashSet<_> = FxHashSet::default();
@@ -390,10 +391,11 @@ impl Db {
                     .with_context(|| format_compact!("getting {}", stringify!($whname)))?
                     .for_each(|name, qty| {
                         if qty > 0 {
-                            if let Some(inv) = obj.warehouse.$objname.get_mut_cow(&name) {
-                                items.insert(name.clone());
-                                let capacity = whcfg.capacity(obj.kind.is_hub(), qty);
-                                inv.capacity = capacity;
+                            items.insert(name.clone());
+                            let inv = obj.warehouse.$objname.get_or_default_cow(name.clone());
+                            inv.capacity = whcfg.capacity(hub, qty);
+                            if hub {
+                                inv.stored = max(inv.stored, qty * whcfg.airbase_max);
                             }
                         }
                         Ok(())

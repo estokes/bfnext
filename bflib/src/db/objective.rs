@@ -964,7 +964,7 @@ impl Db {
                     .ephemeral
                     .airbase_by_oid
                     .get(&oid)
-                    .ok_or_else(|| anyhow!("no airbase for objetive {}", obj.name))?;
+                    .ok_or_else(|| anyhow!("no airbase for objective {}", obj.name))?;
                 let airbase =
                     Airbase::get_instance(lua, abid).context("getting captured airbase")?;
                 airbase

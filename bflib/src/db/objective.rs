@@ -769,6 +769,7 @@ impl Db {
             let obj = objective_mut!(self, oid)?;
             obj.spawned = false;
             obj.last_cull = now;
+            let obj = objective!(self, oid)?;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
                 let farp = obj.kind.is_farp();
@@ -777,7 +778,7 @@ impl Db {
                     .units
                     .into_iter()
                     .any(|u| self.ephemeral.units_potentially_on_walkabout.contains(u));
-                if !farp && !services && !walkabout {
+                if !farp && !services && !walkabout && self.group_health(gid)?.0 > 0 {
                     match group.kind {
                         Some(_) => self
                             .ephemeral

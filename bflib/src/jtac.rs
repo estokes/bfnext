@@ -368,6 +368,10 @@ impl Jtac {
                     Side::Blue => SmokeColor::Red,
                     Side::Red => SmokeColor::Blue,
                     Side::Neutral => SmokeColor::Green,
+                    Side::Green => SmokeColor::Orange,
+                    Side::Merc1 => SmokeColor::Green,
+                    Side::Merc2 => SmokeColor::Green,
+                    Side::Merc3 => SmokeColor::Green
                 };
                 act.smoke(LuaVec3(pos), color).context("creating smoke")?;
             }

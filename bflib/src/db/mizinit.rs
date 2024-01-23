@@ -32,7 +32,7 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side,
+    coalition::{Side, SIDES},
     env::miz::{Group, Miz, MizIndex, PointType, Skill, TriggerZone, TriggerZoneTyp},
     MizLua, String, Vector2,
 };
@@ -249,7 +249,7 @@ impl Db {
                 t.init_objective(zone, name)?
             }
         }
-        for side in [Side::Blue, Side::Red, Side::Neutral] {
+        for side in SIDES {
             let coa = miz.coalition(side)?;
             for zone in miz.triggers()? {
                 let zone = zone?;

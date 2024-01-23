@@ -26,7 +26,8 @@ use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{fmt, ops::Deref, str::FromStr};
 
-simple_enum!(Side, u8, [Neutral => 0, Red => 1, Blue => 2]);
+simple_enum!(Side, u8, [Neutral => 0, Red => 1, Blue => 2, Green => 3, Merc1 => 4, Merc2 => 5 , Merc3 => 6]);
+pub const SIDES: [Side; 7] = [Side::Neutral, Side::Red, Side::Blue, Side::Green, Side::Merc1, Side::Merc2, Side::Merc3];
 
 impl Default for Side {
     fn default() -> Self {
@@ -59,6 +60,10 @@ impl Side {
             Side::Blue => "blue",
             Side::Red => "red",
             Side::Neutral => "neutrals",
+            Side::Green => "green",
+            Side::Merc1 => "merc1",
+            Side::Merc2 => "merc2",
+            Side::Merc3 => "merc3"
         }
     }
 
@@ -67,6 +72,10 @@ impl Side {
             Self::Blue => Self::Red,
             Self::Red => Self::Blue,
             Self::Neutral => Self::Neutral,
+            Self::Green => Self::Neutral,
+            Self::Merc1 => Self::Green,
+            Self::Merc2 => Self::Green,
+            Self::Merc3 => Self::Green
         }
     }
 }

@@ -64,10 +64,12 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
     let log_path = write_dir.join("Logs").join("bfnext.txt");
     if log_path.exists() {
         let mut rotate_path = log_path.clone();
-        rotate_path.set_file_name(format_compact!(
-            "bfnext{}.txt",
-            Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
-        ));
+        let ts = Utc::now()
+            .to_rfc3339_opts(SecondsFormat::Secs, true)
+            .chars()
+            .filter(|c| c != &'-' && c != &':')
+            .collect::<String>();
+        rotate_path.set_file_name(format_compact!("bfnext{ts}.txt"));
         if let Err(e) = fs::rename(&log_path, &rotate_path) {
             error!("could not rotate log file to {:?} {:?}", rotate_path, e)
         }

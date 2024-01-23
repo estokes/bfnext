@@ -18,7 +18,8 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
-use serde_derive::{Serialize, Deserialize};
+use serde::Deserialize;
+use serde_derive::Serialize;
 use std::{marker::PhantomData, ops::Deref};
 
 wrapped_prim!(RunwayId, i64, Hash, Copy);

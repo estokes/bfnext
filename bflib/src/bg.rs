@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -14,14 +14,14 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use crate::{db::persisted::Persisted, Perf, cfg::Cfg};
-use chrono::prelude::*;
+use crate::{cfg::Cfg, db::persisted::Persisted, Perf};
 use bytes::{Bytes, BytesMut};
+use chrono::prelude::*;
 use compact_str::format_compact;
 use log::error;
 use once_cell::sync::OnceCell;
 use simplelog::{LevelFilter, WriteLogger};
-use std::{cell::RefCell, env, io, path::PathBuf, thread, sync::Arc, fs};
+use std::{cell::RefCell, env, fs, io, path::PathBuf, sync::Arc, thread};
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
@@ -64,9 +64,12 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
     let log_path = write_dir.join("Logs").join("bfnext.txt");
     if log_path.exists() {
         let mut rotate_path = log_path.clone();
-        rotate_path.set_file_name(format_compact!("bfnext{}.txt", Utc::now()));
+        rotate_path.set_file_name(format_compact!(
+            "bfnext{}.txt",
+            Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+        ));
         if let Err(e) = fs::rename(&log_path, &rotate_path) {
-            error!("could not rotate log file {:?}", e)
+            error!("could not rotate log file to {:?} {:?}", rotate_path, e)
         }
     }
     let mut log_file = File::options()

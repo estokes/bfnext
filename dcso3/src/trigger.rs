@@ -87,7 +87,11 @@ simple_enum!(SideFilter, i8, [
     All => -1,
     Neutral => 0,
     Red => 1,
-    Blue => 2
+    Blue => 2,
+    Green => 3,
+    Merc1 => 4,
+    Merc2 => 5,
+    Merc3 => 6
 ]);
 
 impl From<Side> for SideFilter {
@@ -96,6 +100,10 @@ impl From<Side> for SideFilter {
             Side::Blue => SideFilter::Blue,
             Side::Red => SideFilter::Red,
             Side::Neutral => SideFilter::Neutral,
+            Side::Green => SideFilter::Green,
+            Side::Merc1 => SideFilter::Merc1,
+            Side::Merc2 => SideFilter::Merc2,
+            Side::Merc3 => SideFilter::Merc3
         }
     }
 }

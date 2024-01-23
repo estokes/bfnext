@@ -208,6 +208,10 @@ impl ObjGroup {
                 Side::Red => "R",
                 Side::Blue => "B",
                 Side::Neutral => "N",
+                Side::Green => "G",
+                Side::Merc1 => "1",
+                Side::Merc2 => "2",
+                Side::Merc3 => "3"
             };
             (side, format_compact!("{}{}", pfx, s).into())
         }

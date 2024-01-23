@@ -13,7 +13,6 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
-
 use super::{
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
@@ -23,7 +22,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
-    coalition::Side,
+    coalition::{Side, SIDES},
     object::DcsObject,
     warehouse::{self, LiquidType},
     world::World,
@@ -245,7 +244,7 @@ impl Db {
             Some(cfg) => cfg,
             None => return Ok(()),
         };
-        for side in [Side::Red, Side::Blue, Side::Neutral] {
+        for side in SIDES {
             let oids: SmallVec<[ObjectiveId; 64]> = self
                 .persisted
                 .objectives

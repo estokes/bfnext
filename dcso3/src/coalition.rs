@@ -27,6 +27,7 @@ use serde_derive::{Deserialize, Serialize};
 use std::{fmt, ops::Deref, str::FromStr};
 
 simple_enum!(Side, u8, [Neutral => 0, Red => 1, Blue => 2, Green => 3, Merc1 => 4, Merc2 => 5 , Merc3 => 6]);
+pub const SIDES: [Side; 7] = [Side::Neutral, Side::Red, Side::Blue, Side::Green, Side::Merc1, Side::Merc2, Side::Merc3];
 
 impl Default for Side {
     fn default() -> Self {

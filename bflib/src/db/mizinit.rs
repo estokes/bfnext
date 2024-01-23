@@ -242,13 +242,13 @@ impl Db {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
         t.ephemeral.set_cfg(miz, idx, cfg)?;
-        // for zone in miz.triggers()? {
-        //     let zone = zone?;
-        //     let name = zone.name()?;
-        //     if let Some(name) = name.strip_prefix("O") {
-        //         t.init_objective(zone, name)?
-        //     }
-        // }
+        for zone in miz.triggers()? {
+            let zone = zone?;
+            let name = zone.name()?;
+            if let Some(name) = name.strip_prefix("O") {
+                t.init_objective(zone, name)?
+            }
+        }
         for side in [Side::Blue, Side::Red, Side::Neutral, Side::Green, Side::Merc1, Side::Merc2, Side::Merc3] {
             let coa = miz.coalition(side)?;
             for zone in miz.triggers()? {

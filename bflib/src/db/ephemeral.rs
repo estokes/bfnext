@@ -77,6 +77,10 @@ fn text_color(side: Side, a: f32) -> Color {
         Side::Red => Color::red(a),
         Side::Blue => Color::blue(a),
         Side::Neutral => Color::white(a),
+        Side::Green => Color::green(a),
+        Side::Merc1 => Color::black(a),
+        Side::Merc2 => Color::gray(a),
+        Side::Merc3 => Color::yellow(a)
     }
 }
 

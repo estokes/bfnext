@@ -242,28 +242,18 @@ impl Db {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
         t.ephemeral.set_cfg(miz, idx, cfg)?;
-        for zone in miz.triggers()? {
-            let zone = zone?;
-            let name = zone.name()?;
-            if let Some(name) = name.strip_prefix("O") {
-                t.init_objective(zone, name)?
-            }
-        }
-        for side in [Side::Blue, Side::Red, Side::Neutral] {
+        // for zone in miz.triggers()? {
+        //     let zone = zone?;
+        //     let name = zone.name()?;
+        //     if let Some(name) = name.strip_prefix("O") {
+        //         t.init_objective(zone, name)?
+        //     }
+        // }
+        for side in [Side::Blue, Side::Red, Side::Neutral, Side::Green, Side::Merc1, Side::Merc2, Side::Merc3] {
             let coa = miz.coalition(side)?;
             for zone in miz.triggers()? {
                 let zone = zone?;
                 let name = zone.name()?;
-                if let Some(name) = name.strip_prefix("G") {
-                    let (template_side, name) = name.parse::<ObjGroup>()?.template(side);
-                    if template_side == side {
-                        t.init_objective_group(&spctx, idx, miz, zone, side, name.as_str())?
-                    }
-                } else if name.starts_with("T") || name.starts_with("O") {
-                    () // ignored
-                } else {
-                    bail!("invalid trigger zone type code {name}, expected O, G, or T prefix")
-                }
             }
             for country in coa.countries()? {
                 let country = country?;
@@ -278,15 +268,6 @@ impl Db {
             }
         }
         let now = Utc::now();
-        let ids = t
-            .persisted
-            .objectives
-            .into_iter()
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-        for id in ids {
-            t.update_objective_status(&id, now)?
-        }
         t.init_warehouses(lua).context("initializing warehouses")?;
         t.ephemeral.dirty();
         Ok(t)

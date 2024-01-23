@@ -15,11 +15,13 @@ for more details.
 */
 
 use crate::{db::persisted::Persisted, Perf, cfg::Cfg};
+use chrono::prelude::*;
 use bytes::{Bytes, BytesMut};
+use compact_str::format_compact;
 use log::error;
 use once_cell::sync::OnceCell;
 use simplelog::{LevelFilter, WriteLogger};
-use std::{cell::RefCell, env, io, path::PathBuf, thread, sync::Arc};
+use std::{cell::RefCell, env, io, path::PathBuf, thread, sync::Arc, fs};
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
@@ -60,6 +62,13 @@ pub(super) enum Task {
 
 async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
     let log_path = write_dir.join("Logs").join("bfnext.txt");
+    if log_path.exists() {
+        let mut rotate_path = log_path.clone();
+        rotate_path.set_file_name(format_compact!("bfnext{}.txt", Utc::now()));
+        if let Err(e) = fs::rename(&log_path, &rotate_path) {
+            error!("could not rotate log file {:?}", e)
+        }
+    }
     let mut log_file = File::options()
         .create(true)
         .write(true)

@@ -191,11 +191,16 @@ impl Jtac {
     }
 
     fn remove_target(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        self.cancel_artillery_mission(db, lua).context("canceling artillery mission")?;
+        if let Err(e) = self.cancel_artillery_mission(db, lua) {
+            warn!(
+                "could not cancel artillery mission for jtac {} {:?}",
+                self.gid, e
+            )
+        }
         if let Some(target) = self.target.take() {
             target
                 .destroy(lua)
-                .with_context(|| format_compact!("destroying mark for jtac {}", self.gid))?
+                .with_context(|| format_compact!("destroying target for jtac {}", self.gid))?
         }
         Ok(())
     }
@@ -266,7 +271,7 @@ impl Jtac {
                     ir_pointer,
                     mark: None,
                     uid,
-                    artillery_mission: None
+                    artillery_mission: None,
                 });
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
@@ -389,12 +394,14 @@ impl Jtac {
         if let Some(target) = self.target.as_mut() {
             if let Some(artillery) = target.artillery_mission.take() {
                 for gid in artillery {
-                    let group = db.group(&gid)?;
-                    let con = Group::get_by_name(lua, &group.name)
-                        .with_context(|| format_compact!("getting group {}", group.name))?
-                        .get_controller()
-                        .context("getting controller")?;
-                    con.reset_task().context("resetting task")?
+                    // the jtac might BE the artillery and it might be gone
+                    if let Ok(group) = db.group(&gid) {
+                        let con = Group::get_by_name(lua, &group.name)
+                            .with_context(|| format_compact!("getting group {}", group.name))?
+                            .get_controller()
+                            .context("getting controller")?;
+                        con.reset_task().context("resetting task")?
+                    }
                 }
             }
         }
@@ -437,8 +444,8 @@ impl Jtac {
                         .context("getting controller")?;
                     con.set_task(Task::FireAtPoint {
                         point: LuaVec2(pos),
-                        radius: Some(30.),
-                        expend_qty: None,
+                        radius: Some(10.),
+                        expend_qty: Some(100),
                         weapon_type: None,
                         altitude: None,
                         altitude_type: None,
@@ -448,7 +455,7 @@ impl Jtac {
                 target.artillery_mission = Some(artillery.into_iter().map(|g| g.id).collect());
             }
         }
-        unimplemented!()
+        Ok(())
     }
 }
 
@@ -473,7 +480,7 @@ impl Jtacs {
     pub fn artillery_mission(&mut self, lua: MizLua, db: &Db, gid: &GroupId) -> Result<()> {
         self.get_mut(gid)?.artillery_mission(db, lua)
     }
-    
+
     pub fn cancel_artillery_mission(&mut self, lua: MizLua, db: &Db, gid: &GroupId) -> Result<()> {
         self.get_mut(gid)?.cancel_artillery_mission(db, lua)
     }
@@ -634,11 +641,7 @@ impl Jtacs {
                     if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id) {
                         error!("could not add menu for jtac {} {e}", group.id)
                     }
-                    Jtac::new(
-                        group.id,
-                        group.side,
-                        db.ephemeral.cfg.jtac_priority.clone(),
-                    )
+                    Jtac::new(group.id, group.side, db.ephemeral.cfg.jtac_priority.clone())
                 });
             for (unit, _) in db.instanced_units() {
                 saw_units.insert(unit.id);

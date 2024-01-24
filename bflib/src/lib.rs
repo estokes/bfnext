@@ -746,20 +746,26 @@ fn run_logistics_events(
             if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
                 error!("failed to sync objectives from warehouses {:?}", e)
             }
+            record_perf(&mut perf.logistics_sync_from, start_ts);
+            let sts = Utc::now();
             if ctx.logistics_ticks_since_delivery >= ticks_per_delivery {
                 ctx.logistics_ticks_since_delivery = 0;
                 if let Err(e) = ctx.db.deliver_production(lua) {
                     error!("failed to deliver production {:?}", e)
                 }
+                record_perf(&mut perf.logistics_deliver, sts);
             } else {
                 ctx.logistics_ticks_since_delivery += 1;
                 if let Err(e) = ctx.db.deliver_supplies_from_logistics_hubs() {
                     error!("failed to deliver supplies from hubs {:?}", e)
                 }
+                record_perf(&mut perf.logistics_distribute, sts);
             }
+            let sts = Utc::now();
             if let Err(e) = ctx.db.sync_warehouses_from_objectives(lua) {
                 error!("failed to sync warehouses from objectives {:?}", e)
             }
+            record_perf(&mut perf.logistics_sync_to, sts);
             record_perf(&mut perf.logistics, start_ts);
         }
     }

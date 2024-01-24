@@ -24,6 +24,10 @@ pub struct Perf {
     pub process_messages: Histogram<u64>,
     pub snapshot: Histogram<u64>,
     pub logistics: Histogram<u64>,
+    pub logistics_distribute: Histogram<u64>,
+    pub logistics_deliver: Histogram<u64>,
+    pub logistics_sync_from: Histogram<u64>,
+    pub logistics_sync_to: Histogram<u64>,
 }
 
 static mut PERF: Option<Arc<Perf>> = None;
@@ -50,6 +54,10 @@ impl Default for Perf {
             process_messages: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             snapshot: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             logistics: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            logistics_distribute: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            logistics_deliver: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            logistics_sync_from: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            logistics_sync_to: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
         }
     }
 }
@@ -76,10 +84,10 @@ impl Perf {
     pub fn log(&self) {
         fn log_histogram(h: &Histogram<u64>, name: &str) {
             let n = h.len();
-            let twenty_five = h.value_at_quantile(0.25);
-            let fifty = h.value_at_quantile(0.5);
-            let ninety = h.value_at_quantile(0.9);
-            let ninety_nine = h.value_at_quantile(0.99);
+            let twenty_five = h.value_at_quantile(0.25) / 1000;
+            let fifty = h.value_at_quantile(0.5) / 1000;
+            let ninety = h.value_at_quantile(0.9) / 1000;
+            let ninety_nine = h.value_at_quantile(0.99) / 1000;
             info!(
                 "{name} n: {:>7}, 25th: {:>7}, 50th: {:>7}, 90th: {:>7}, 99th: {:>8}",
                 n, twenty_five, fifty, ninety, ninety_nine

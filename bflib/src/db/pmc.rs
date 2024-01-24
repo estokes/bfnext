@@ -52,7 +52,7 @@ impl Db {
 
     pub fn register_pmc(&mut self, pmc: Pmc) -> Result<()> {
         match self.persisted.pmcs.get_key(&pmc.name) {
-            Some(_p) => bail!("PMC Already exists in DB"),
+            Some(p) => bail!("{} already exists in DB", p),
             None => {
                 self.persisted.pmcs.insert_cow(pmc.name.clone(), pmc);
                 self.ephemeral.dirty();

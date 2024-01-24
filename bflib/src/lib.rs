@@ -524,11 +524,22 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 }
             }
         }
+        Event::Hit(e) => {
+            if let Some(unit) = e.target {
+                if let Ok(unit) = unit.as_unit() {
+                    if unit.get_life()? < 1 {
+                        if let Err(e) = unit_killed(lua, ctx, unit.object_id()?) {
+                            error!("0 unit killed failed {:?}", e)
+                        }
+                    }
+                }
+            }
+        }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Some(unit) = e.initiator {
                 if let Ok(unit) = unit.as_unit() {
                     if let Err(e) = unit_killed(lua, ctx, unit.object_id()?) {
-                        error!("unit killed failed {}", e)
+                        error!("1 unit killed failed {:?}", e)
                     }
                 }
             }
@@ -536,7 +547,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Ejection(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 if let Err(e) = unit_killed(lua, ctx, unit.object_id()?) {
-                    error!("unit killed failed {}", e)
+                    error!("2 unit killed failed {}", e)
                 }
             }
         }

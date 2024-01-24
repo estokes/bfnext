@@ -500,6 +500,10 @@ impl Ephemeral {
         self.object_id_by_uid.get(id)
     }
 
+    pub fn get_slot_by_object_id(&self, id: &DcsOid<ClassUnit>) -> Option<&SlotId> {
+        self.slot_by_object_id.get(id)
+    }
+
     fn index_deployables_for_side(
         &mut self,
         global_pad_templates: &mut FxHashSet<String>,

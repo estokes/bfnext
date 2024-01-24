@@ -1,7 +1,7 @@
+use chrono::prelude::*;
 use hdrhistogram::Histogram;
 use log::info;
 use std::sync::Arc;
-use chrono::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct Perf {
@@ -111,6 +111,10 @@ impl Perf {
         log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
         log_histogram(&self.process_messages, "process messages:  ");
         log_histogram(&self.snapshot, "snapshot:          ");
-        log_histogram(&self.logistics, "logistics:         ")
+        log_histogram(&self.logistics, "logistics:         ");
+        log_histogram(&self.logistics_distribute, "logistics_distrib: ");
+        log_histogram(&self.logistics_deliver, "logistics_deliver: ");
+        log_histogram(&self.logistics_sync_from, "logistics_sfrom:   ");
+        log_histogram(&self.logistics_sync_to, "logistics_sto:     ");
     }
 }

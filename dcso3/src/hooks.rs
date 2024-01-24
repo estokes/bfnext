@@ -288,13 +288,16 @@ impl<'lua> UserHooks<'lua> {
         self.on_player_try_connect = Some(self.lua.create_function(
             move |lua, (addr, name, ucid, id): (String, String, Ucid, PlayerId)| {
                 wrap_f("on_player_try_connect", HooksLua(lua), |lua| {
+                    let mut rval = LuaMultiValue::new();
                     match f(lua, addr, name, ucid, id) {
-                        Err(e) => Err(e),
-                        Ok(None) => Ok(vec![LuaValue::Boolean(true)]),
+                        Err(e) => return Err(e),
+                        Ok(None) => rval.push_front(LuaValue::Boolean(true)),
                         Ok(Some(reason)) => {
-                            Ok(vec![LuaValue::Boolean(false), reason.into_lua(lua.inner())?])
+                            rval.push_front(reason.into_lua(lua.inner())?);
+                            rval.push_front(LuaValue::Boolean(false));
                         }
                     }
+                    Ok(rval)
                 })
             },
         )?);

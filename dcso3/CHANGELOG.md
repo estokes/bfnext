@@ -2,6 +2,7 @@
 
 - alter the return type of on_player_try_connect to allow returning a
   ban message
+- add Display implementation for PlayerId and Ucid
 
 ## 0.1.1
 

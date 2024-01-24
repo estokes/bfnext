@@ -205,7 +205,7 @@ fn on_player_try_connect(
     if let Some((until, _)) = ctx.db.ephemeral.cfg.banned.get(&ucid) {
         match until {
             None => return Ok(Some("you are banned forever".into())),
-            Some(until) if until <= &Utc::now() => {
+            Some(until) if until >= &Utc::now() => {
                 return Ok(Some(
                     format_compact!("you are banned until {}", until).into(),
                 ))
@@ -370,17 +370,17 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
             Some(ifo) => ctx.db.ephemeral.cfg.admins.contains(&ifo.ucid),
         };
         for cmd in [
-            "blue: join the blue team",
-            "red: join the red team",
-            "-switch <color>: side switch to <color>",
-            "-lives: display your current lives",
+            " blue: join the blue team",
+            " red: join the red team",
+            " -switch <color>: side switch to <color>",
+            " -lives: display your current lives",
         ] {
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
         }
         if admin {
             ctx.db.ephemeral.msgs().send(
                 MsgTyp::Chat(Some(id)),
-                "-admin <command>: run admin commands, -admin help for details",
+                " -admin <command>: run admin commands, -admin help for details",
             );
         }
         Ok("".into())
@@ -408,7 +408,7 @@ fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> 
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
-        SlotAuth::NoLives => Ok(false),
+        SlotAuth::Denied | SlotAuth::NoLives => Ok(false),
         SlotAuth::VehicleNotAvailable(vehicle) => {
             let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
@@ -947,7 +947,8 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
             bail!("missing sortie in miz file")
         }
         ctx.sortie = s;
-        PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str())
+        ctx.miz_state_path = PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str());
+        ctx.miz_state_path.clone()
     };
     debug!("path to saved state is {:?}", path);
     info!("initializing db");

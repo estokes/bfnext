@@ -15,10 +15,7 @@ for more details.
 */
 
 use super::{
-    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
-    objective::{Objective, ObjectiveId},
-    player::Player,
-    Map, Set,
+    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId}, objective::{Objective, ObjectiveId}, player::Player, pmc::Pmc, Map, Set
 };
 use dcso3::{
     coalition::Side,
@@ -50,6 +47,7 @@ pub struct Persisted {
     pub(super) objectives_by_name: Map<String, ObjectiveId>,
     pub(super) objectives_by_group: Map<GroupId, ObjectiveId>,
     pub(super) players: Map<Ucid, Player>,
+    pub(super) pmcs: Map<String, Pmc>,
     #[serde(default)]
     pub(super) logistics_hubs: Set<ObjectiveId>,
 }

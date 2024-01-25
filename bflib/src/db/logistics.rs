@@ -18,9 +18,12 @@ use super::{
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
 };
-use crate::{cfg::Vehicle, db::objective::ObjectiveKind, maybe, objective, objective_mut};
+use crate::{
+    admin::WarehouseKind, cfg::Vehicle, db::objective::ObjectiveKind, maybe, objective,
+    objective_mut,
+};
 use anyhow::{anyhow, bail, Context, Result};
-use compact_str::format_compact;
+use compact_str::{format_compact, CompactString};
 use dcso3::{
     airbase::Airbase,
     coalition::Side,
@@ -30,6 +33,7 @@ use dcso3::{
     MizLua, String, Vector2,
 };
 use fxhash::FxHashSet;
+use log::warn;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -926,6 +930,55 @@ impl Db {
         self.update_supply_status()
             .context("updating supply status")?;
         self.ephemeral.dirty();
+        Ok(())
+    }
+
+    pub fn admin_log_inventory(
+        &mut self,
+        lua: MizLua,
+        kind: WarehouseKind,
+        name: &str,
+    ) -> Result<()> {
+        use std::fmt::Write;
+        let oid = self
+            .persisted
+            .objectives_by_name
+            .get(name)
+            .map(|oid| *oid)
+            .ok_or_else(|| anyhow!("no such objective {name}"))?;
+        match kind {
+            WarehouseKind::DCS => {
+                let abid = self
+                    .ephemeral
+                    .airbase_by_oid
+                    .get(&oid)
+                    .ok_or_else(|| anyhow!("no airbase for {oid}"))?;
+                let wh = Airbase::get_instance(lua, &abid)
+                    .context("getting airbase")?
+                    .get_warehouse()
+                    .context("getting warehouse")?;
+                let mut msg = CompactString::new("");
+                let inv = wh.get_inventory(None).context("getting inventory")?;
+                inv.weapons()?
+                    .for_each(|name, qty| Ok(write!(msg, "{name}, {qty}\n")?))?;
+                inv.aircraft()?
+                    .for_each(|name, qty| Ok(write!(msg, "{name}, {qty}\n")?))?;
+                inv.liquids()?
+                    .for_each(|name, qty| Ok(write!(msg, "{:?}, {qty}\n", name)?))?;
+                warn!("{msg}")
+            }
+            WarehouseKind::Objective => {
+                let obj = objective!(self, oid)?;
+                let mut msg = CompactString::new("");
+                for (name, inv) in &obj.warehouse.equipment {
+                    write!(msg, "{name}, {}/{}", inv.stored, inv.capacity)?
+                }
+                for (name, inv) in &obj.warehouse.liquids {
+                    write!(msg, "{:?}, {}/{}", name, inv.stored, inv.capacity)?
+                }
+                warn!("{msg}")
+            }
+        }
         Ok(())
     }
 }

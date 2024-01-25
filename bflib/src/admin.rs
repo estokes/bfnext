@@ -12,15 +12,38 @@ use dcso3::{
     coalition::Side,
     degrees_to_radians,
     net::{Net, PlayerId, Ucid},
+    object::DcsObject,
     pointing_towards2,
     trigger::{MarkId, Trigger},
+    unit::Unit,
+    value_to_json,
     world::World,
     MizLua, String, Vector2,
 };
-use log::error;
+use fxhash::FxHashMap;
+use log::{error, warn};
+use mlua::Value;
 use regex::{Regex, RegexBuilder};
 use smallvec::{smallvec, SmallVec};
 use std::{mem, str::FromStr, sync::Arc};
+
+#[derive(Debug, Clone, Copy)]
+pub enum WarehouseKind {
+    Objective,
+    DCS,
+}
+
+impl FromStr for WarehouseKind {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        match s {
+            "objective" => Ok(Self::Objective),
+            "dcs" => Ok(Self::DCS),
+            x => bail!("unknown warehouse kind {x}"),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum AdminCommand {
@@ -61,6 +84,11 @@ pub enum AdminCommand {
     Search {
         expr: Regex,
     },
+    LogWarehouse {
+        kind: WarehouseKind,
+        airbase: String,
+    },
+    LogLoadout,
 }
 
 impl AdminCommand {
@@ -79,6 +107,8 @@ impl AdminCommand {
             "connected: list connected players",
             "banned: list banned players",
             "search <regex>: search the player list by regular expression",
+            "log-warehouse <objective|dcs> <airbase>: write the contents of the selected warehouse to the log file",
+            "log-loadout: write the loadout of the plane you are currently in to the log file"
         ]
     }
 }
@@ -179,6 +209,17 @@ impl FromStr for AdminCommand {
             Ok(Self::Search {
                 expr: RegexBuilder::new(s).case_insensitive(true).build()?,
             })
+        } else if s.starts_with("log-warehouse ") {
+            let s = s.strip_prefix("log-warehouse ").unwrap();
+            match s.split_once(" ") {
+                None => bail!("log-warehouse <objective|dcs> <airbase>"),
+                Some((kind, airbase)) => Ok(Self::LogWarehouse {
+                    kind: kind.parse()?,
+                    airbase: String::from(airbase),
+                }),
+            }
+        } else if s.starts_with("log-loadout") {
+            Ok(Self::LogLoadout)
         } else {
             bail!("unknown command {s}")
         }
@@ -488,6 +529,28 @@ fn admin_search(
         .collect()
 }
 
+fn admin_log_loadout(ctx: &Context, lua: MizLua, ucid: &Ucid) -> Result<()> {
+    let slot = &ctx
+        .db
+        .player(ucid)
+        .ok_or_else(|| anyhow!("no such player {ucid}"))?
+        .current_slot
+        .as_ref()
+        .ok_or_else(|| anyhow!("player {ucid} isn't in a slot"))?
+        .0;
+    let id = ctx
+        .db
+        .ephemeral
+        .get_object_id_by_slot(&slot)
+        .ok_or_else(|| anyhow!("player {ucid} unit not found"))?;
+    let unit = Unit::get_instance(lua, &id).context("getting unit")?;
+    let mut tbl = FxHashMap::default();
+    let ammo = Value::Table(unit.get_ammo().context("getting ammo")?.into_inner());
+    let v = value_to_json(&mut tbl, None, &ammo);
+    warn!("{v}");
+    Ok(())
+}
+
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     use std::fmt::Write;
     let mut cmds = mem::take(&mut ctx.admin_commands);
@@ -605,6 +668,19 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     }
                 }
             }
+            AdminCommand::LogWarehouse { kind, airbase } => {
+                match ctx.db.admin_log_inventory(lua, kind, &airbase) {
+                    Ok(()) => reply!("{airbase} inventory logged"),
+                    Err(e) => reply!("could not log {airbase} inventory {:?}", e),
+                }
+            }
+            AdminCommand::LogLoadout => match ctx.info_by_player_id.get(&id) {
+                None => reply!("no player {id}"),
+                Some(ifo) => match admin_log_loadout(ctx, lua, &ifo.ucid) {
+                    Ok(()) => reply!("{} inventory logged", ifo.ucid),
+                    Err(e) => reply!("could not log admin loadout {:?}", e),
+                },
+            },
         }
     }
     ctx.admin_commands = cmds;

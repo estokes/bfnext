@@ -15,7 +15,7 @@ use super::as_tbl;
 use crate::{
     airbase::Airbase, cvt_err, lua_err, simple_enum, wrapped_table, LuaEnv, MizLua, String,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -71,6 +71,99 @@ impl<'lua> Inventory<'lua> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum WSAirplaneCategory {
+    Fighters,
+    FastBombers,
+    Interceptors,
+    Bombers,
+    MiscSupport,
+    Attack,
+    None,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum WSAircraftCategory {
+    Airplane(WSAirplaneCategory),
+    Helicopters,
+    None,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum WSCategory {
+    Aircraft(WSAircraftCategory),
+    Vehicles,
+    Ships,
+    Weapons,
+    None,
+}
+
+wrapped_table!(WSType, None);
+
+impl<'lua> WSType<'lua> {
+    pub fn category(&self) -> Result<WSCategory> {
+        match self.t.raw_get(1)? {
+            0 => Ok(WSCategory::None),
+            1 => match self.t.raw_get(2)? {
+                0 => Ok(WSCategory::Aircraft(WSAircraftCategory::None)),
+                1 => Ok(WSCategory::Aircraft(WSAircraftCategory::Airplane(
+                    match self.t.raw_get(3)? {
+                        0 => WSAirplaneCategory::None,
+                        1 => WSAirplaneCategory::Fighters,
+                        2 => WSAirplaneCategory::FastBombers,
+                        3 => WSAirplaneCategory::Interceptors,
+                        4 => WSAirplaneCategory::Bombers,
+                        5 => WSAirplaneCategory::MiscSupport,
+                        6 => WSAirplaneCategory::Attack,
+                        n => bail!("unknown airplane category {n}"),
+                    },
+                ))),
+                2 => Ok(WSCategory::Aircraft(WSAircraftCategory::Helicopters)),
+                n => bail!("unknown aircraft category {n}"),
+            },
+            2 => Ok(WSCategory::Vehicles),
+            3 => Ok(WSCategory::Ships),
+            4 => Ok(WSCategory::Weapons),
+            n => bail!("unknown major category {n}"),
+        }
+    }
+}
+
+wrapped_table!(ResourceMap, None);
+
+impl<'lua> ResourceMap<'lua> {
+    pub fn for_each<F: FnMut(String, WSType) -> Result<()>>(&self, mut f: F) -> Result<()> {
+        Ok(self.t.for_each(|k, v| f(k, v).map_err(lua_err))?)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum WarehouseItem<'lua> {
+    Name(String),
+    Typ(WSType<'lua>),
+}
+
+impl<'lua> IntoLua<'lua> for WarehouseItem<'lua> {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        match self {
+            Self::Name(s) => s.into_lua(lua),
+            Self::Typ(t) => Ok(Value::Table(t.t)),
+        }
+    }
+}
+
+impl<'lua> From<String> for WarehouseItem<'lua> {
+    fn from(value: String) -> Self {
+        Self::Name(value)
+    }
+}
+
+impl<'lua> From<WSType<'lua>> for WarehouseItem<'lua> {
+    fn from(value: WSType<'lua>) -> Self {
+        Self::Typ(value)
+    }
+}
+
 wrapped_table!(Warehouse, Some("Warehouse"));
 
 impl<'lua> Warehouse<'lua> {
@@ -79,20 +172,33 @@ impl<'lua> Warehouse<'lua> {
         Ok(wh.call_function("getByName", name)?)
     }
 
-    pub fn add_item(&self, name: String, count: u32) -> Result<()> {
-        Ok(self.t.call_method("addItem", (name, count))?)
+    pub fn get_resource_map(lua: MizLua<'lua>) -> Result<ResourceMap<'lua>> {
+        let wh: LuaTable = lua.inner().globals().raw_get("Warehouse")?;
+        Ok(wh.call_function("getResourceMap", ())?)
     }
 
-    pub fn remove_item(&self, name: String, count: u32) -> Result<()> {
-        Ok(self.t.call_method("removeItem", (name, count))?)
+    pub fn add_item<T: Into<WarehouseItem<'lua>>>(&self, item: T, count: u32) -> Result<()> {
+        Ok(self
+            .t
+            .call_method("addItem", (Into::<WarehouseItem>::into(item), count))?)
     }
 
-    pub fn set_item(&self, name: String, count: u32) -> Result<()> {
-        Ok(self.t.call_method("setItem", (name, count))?)
+    pub fn remove_item<T: Into<WarehouseItem<'lua>>>(&self, item: T, count: u32) -> Result<()> {
+        Ok(self
+            .t
+            .call_method("removeItem", (Into::<WarehouseItem>::into(item), count))?)
     }
 
-    pub fn get_item_count(&self, name: String) -> Result<u32> {
-        Ok(self.t.call_method("getItemCount", name)?)
+    pub fn set_item<T: Into<WarehouseItem<'lua>>>(&self, item: T, count: u32) -> Result<()> {
+        Ok(self
+            .t
+            .call_method("setItem", (Into::<WarehouseItem>::into(item), count))?)
+    }
+
+    pub fn get_item_count<T: Into<WarehouseItem<'lua>>>(&self, item: T) -> Result<u32> {
+        Ok(self
+            .t
+            .call_method("getItemCount", Into::<WarehouseItem>::into(item))?)
     }
 
     pub fn add_liquid(&self, typ: LiquidType, count: u32) -> Result<()> {

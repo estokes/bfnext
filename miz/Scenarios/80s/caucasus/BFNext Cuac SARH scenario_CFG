@@ -78,8 +78,8 @@
     "Su-27": 21600,
     "F-14B": 21600,
     "Su-25T": 21600,
-	"Su-25": 21600,
-	"F-5E-3": 14400,
+    "Su-25": 21600,
+    "F-5E-3": 14400,
     "A-10C_2": 14400,
     "SA342L": 9000,
     "AH-64D_BLK_II": 14400,
@@ -93,9 +93,9 @@
     "Su-25": 21600,
     "AV8BNA": 36000,
     "MB-339A": 9000,
-	"C-101CC": 9000,
-	"J-11A": 36000,
-	"Su-33": 36000
+    "C-101CC": 9000,
+    "J-11A": 36000,
+    "Su-33": 36000
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
@@ -127,8 +127,8 @@
     "Su-27": "Standard",
     "F-14B": "Standard",
     "Su-25T": "Attack",
-	"Su-25": "Attack",
-	"F-5E-3": "Intercept",
+    "Su-25": "Attack",
+    "F-5E-3": "Intercept",
     "A-10C_2": "Attack",
     "SA342L": "Logistics",
     "AH-64D_BLK_II": "Attack",
@@ -143,8 +143,8 @@
     "AV8BNA": "Attack",
     "MB-339A": "Recon",
     "C-101CC": "Recon",
-	"J-11A": "Standard",
-	"Su-33": "Standard"
+    "J-11A": "Standard",
+    "Su-33": "Standard"
   },
   "default_lives": {
     "Standard": [
@@ -1505,6 +1505,12 @@
       "Aircraft"
     ],
     "A-10C_2": [
+      "Aircraft"
+    ],
+    "A-10C": [
+      "Aircraft"
+    ],
+    "A-10A": [
       "Aircraft"
     ],
     "F-14B": [

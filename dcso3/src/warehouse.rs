@@ -15,7 +15,7 @@ use super::as_tbl;
 use crate::{
     airbase::Airbase, cvt_err, lua_err, simple_enum, wrapped_table, LuaEnv, MizLua, String,
 };
-use anyhow::{bail, Result};
+use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -83,6 +83,7 @@ pub enum WSFixedWingCategory {
     Bombers,
     MiscSupport,
     Attack,
+    Other(i32),
     None,
 }
 
@@ -90,6 +91,7 @@ pub enum WSFixedWingCategory {
 pub enum WSAircraftCategory {
     FixedWing(WSFixedWingCategory),
     Helicopters,
+    Other(i32),
     None,
 }
 
@@ -99,6 +101,7 @@ pub enum WSCategory {
     Vehicles,
     Ships,
     Weapons,
+    Other(i32),
     None,
 }
 
@@ -106,7 +109,7 @@ impl WSCategory {
     pub fn is_aircraft(&self) -> bool {
         match self {
             Self::Aircraft(_) => true,
-            Self::None | Self::Ships | Self::Vehicles | Self::Weapons => false,
+            Self::None | Self::Ships | Self::Vehicles | Self::Weapons | Self::Other(_) => false,
         }
     }
 
@@ -115,10 +118,12 @@ impl WSCategory {
             Self::Aircraft(WSAircraftCategory::FixedWing(_)) => true,
             Self::Aircraft(WSAircraftCategory::Helicopters)
             | Self::Aircraft(WSAircraftCategory::None)
+            | Self::Aircraft(WSAircraftCategory::Other(_))
             | Self::None
             | Self::Ships
             | Self::Vehicles
-            | Self::Weapons => false,
+            | Self::Weapons
+            | Self::Other(_) => false,
         }
     }
 
@@ -127,31 +132,35 @@ impl WSCategory {
             Self::Aircraft(WSAircraftCategory::Helicopters) => true,
             Self::Aircraft(WSAircraftCategory::FixedWing(_))
             | Self::Aircraft(WSAircraftCategory::None)
+            | Self::Aircraft(WSAircraftCategory::Other(_))
             | Self::None
             | Self::Ships
             | Self::Vehicles
-            | Self::Weapons => false,
+            | Self::Weapons
+            | Self::Other(_) => false,
         }
     }
- 
+
     pub fn is_weapon(&self) -> bool {
         match self {
             Self::Weapons => true,
-            Self::Aircraft(_) | Self::None | Self::Ships | Self::Vehicles => false,
+            Self::Aircraft(_) | Self::None | Self::Ships | Self::Vehicles | Self::Other(_) => false,
         }
     }
-    
+
     pub fn is_vehicle(&self) -> bool {
         match self {
             Self::Vehicles => true,
-            Self::Aircraft(_) | Self::None | Self::Ships | Self::Weapons => false,
+            Self::Aircraft(_) | Self::None | Self::Ships | Self::Weapons | Self::Other(_) => false,
         }
     }
-    
+
     pub fn is_ship(&self) -> bool {
         match self {
             Self::Ships => true,
-            Self::Aircraft(_) | Self::None | Self::Weapons | Self::Vehicles => false,
+            Self::Aircraft(_) | Self::None | Self::Weapons | Self::Vehicles | Self::Other(_) => {
+                false
+            }
         }
     }
 }
@@ -173,16 +182,16 @@ impl<'lua> WSType<'lua> {
                         4 => WSFixedWingCategory::Bombers,
                         5 => WSFixedWingCategory::MiscSupport,
                         6 => WSFixedWingCategory::Attack,
-                        n => bail!("unknown airplane category {n}"),
+                        n => WSFixedWingCategory::Other(n),
                     },
                 ))),
                 2 => Ok(WSCategory::Aircraft(WSAircraftCategory::Helicopters)),
-                n => bail!("unknown aircraft category {n}"),
+                n => Ok(WSCategory::Aircraft(WSAircraftCategory::Other(n))),
             },
             2 => Ok(WSCategory::Vehicles),
             3 => Ok(WSCategory::Ships),
             4 => Ok(WSCategory::Weapons),
-            n => bail!("unknown major category {n}"),
+            n => Ok(WSCategory::Other(n)),
         }
     }
 }

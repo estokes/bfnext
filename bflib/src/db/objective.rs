@@ -296,6 +296,10 @@ impl Db {
         objective!(self, id)
     }
 
+    pub fn objectives(&self) -> impl Iterator<Item = (&ObjectiveId, &Objective)> {
+        self.persisted.objectives.into_iter()
+    }
+
     /// (distance, heading from objective to point, objective)
     pub fn objective_near_point(&self, pos: Vector2) -> (f64, f64, &Objective) {
         let (dist, obj) = self.persisted.objectives.into_iter().fold(

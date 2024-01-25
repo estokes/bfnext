@@ -142,7 +142,7 @@ pub struct Warehouse {
     pub(super) destination: Set<ObjectiveId>,
 }
 
-fn sync_from_obj(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
+fn sync_obj_to_warehouse(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
     let inventory = warehouse.get_inventory(None).context("getting inventory")?;
     let weapons = inventory.weapons().context("getting weapons")?;
     let aircraft = inventory.aircraft().context("getting aircraft")?;
@@ -172,7 +172,7 @@ fn sync_from_obj(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()
     Ok(())
 }
 
-fn sync_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
+fn sync_warehouse_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
     let inventory = warehouse.get_inventory(None).context("getting inventory")?;
     let weapons = inventory.weapons().context("getting weapons")?;
     let aircraft = inventory.aircraft().context("getting aircraft")?;
@@ -536,7 +536,7 @@ impl Db {
                 .context("getting airbase")?
                 .get_warehouse()
                 .context("getting warehouse")?;
-            sync_to_obj(obj, &warehouse).context("syncing warehouse to objective")?
+            sync_warehouse_to_obj(obj, &warehouse).context("syncing warehouse to objective")?
         }
         self.ephemeral.dirty();
         Ok(())
@@ -556,7 +556,7 @@ impl Db {
                 .context("getting airbase")?
                 .get_warehouse()
                 .context("getting warehouse")?;
-            sync_from_obj(obj, &warehouse).context("syncing warehouse from objective")?
+            sync_obj_to_warehouse(obj, &warehouse).context("syncing warehouse from objective")?
         }
         self.ephemeral.dirty();
         Ok(())
@@ -779,7 +779,7 @@ impl Db {
         Ok(())
     }
 
-    fn sync_to_objective<'lua>(
+    pub fn sync_warehouse_to_objective<'lua>(
         &mut self,
         lua: MizLua<'lua>,
         oid: ObjectiveId,
@@ -794,7 +794,26 @@ impl Db {
             .context("getting airbase")?
             .get_warehouse()
             .context("getting warehouse")?;
-        sync_to_obj(obj, &warehouse).context("syncing warehouse to objective")?;
+        sync_warehouse_to_obj(obj, &warehouse).context("syncing warehouse to objective")?;
+        Ok((obj, warehouse))
+    }
+
+    pub fn sync_objective_to_warehouse<'lua>(
+        &mut self,
+        lua: MizLua<'lua>,
+        oid: ObjectiveId,
+    ) -> Result<(&mut Objective, warehouse::Warehouse<'lua>)> {
+        let obj = objective_mut!(self, oid)?;
+        let airbase = self
+            .ephemeral
+            .airbase_by_oid
+            .get(&oid)
+            .ok_or_else(|| anyhow!("no logistics for objective {}", obj.name))?;
+        let warehouse = Airbase::get_instance(lua, &airbase)
+            .context("getting airbase")?
+            .get_warehouse()
+            .context("getting warehouse")?;
+        sync_obj_to_warehouse(obj, &warehouse).context("syncing warehouse to objective")?;
         Ok((obj, warehouse))
     }
 
@@ -814,7 +833,7 @@ impl Db {
         }
         let mut transfers: SmallVec<[Transfer; 128]> = smallvec![];
         let (_, from_wh) = self
-            .sync_to_objective(lua, from)
+            .sync_warehouse_to_objective(lua, from)
             .context("syncing objective")?;
         let from_obj = objective!(self, from)?;
         let to_obj = objective!(self, to)?;
@@ -845,12 +864,12 @@ impl Db {
         }
         compute!(equipment, Equipment);
         compute!(liquids, Liquid);
-        let (_, to_wh) = self.sync_to_objective(lua, to)?;
+        let (_, to_wh) = self.sync_warehouse_to_objective(lua, to)?;
         for tr in transfers {
             tr.execute(self)?
         }
-        sync_from_obj(objective!(self, from)?, &from_wh)?;
-        sync_from_obj(objective!(self, to)?, &to_wh)?;
+        sync_obj_to_warehouse(objective!(self, from)?, &from_wh)?;
+        sync_obj_to_warehouse(objective!(self, to)?, &to_wh)?;
         self.update_supply_status()
             .context("updating supply status")?;
         Ok(())
@@ -882,7 +901,7 @@ impl Db {
         }
         let percent = amount as f32 / 100.;
         let (obj, warehouse) = self
-            .sync_to_objective(lua, oid)
+            .sync_warehouse_to_objective(lua, oid)
             .with_context(|| format_compact!("syncing warehouses to {name}"))?;
         let equip: SmallVec<[String; 128]> = obj
             .warehouse
@@ -903,7 +922,7 @@ impl Db {
                 inv.reduce(percent);
             }
         }
-        sync_from_obj(obj, &warehouse).context("syncing from warehouse")?;
+        sync_obj_to_warehouse(obj, &warehouse).context("syncing from warehouse")?;
         self.update_supply_status()
             .context("updating supply status")?;
         self.ephemeral.dirty();

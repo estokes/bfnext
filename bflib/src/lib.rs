@@ -63,6 +63,19 @@ use spawnctx::SpawnCtx;
 use std::{iter, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
+#[derive(Debug, Clone)]
+enum LogiStage {
+    Complete { last_tick: DateTime<Utc> },
+    SyncFromWarehouses { objectives: SmallVec<[ObjectiveId; 128]> },
+    SyncToWarehouses { objectives: SmallVec<[ObjectiveId; 128]> }
+}
+
+impl Default for LogiStage {
+    fn default() -> Self {
+        Self::Complete { last_tick: DateTime::<Utc>::MIN_UTC }
+    }
+}
+
 #[derive(Debug)]
 struct PlayerInfo {
     name: String,
@@ -86,7 +99,7 @@ struct Context {
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
     last_slow_timed_events: DateTime<Utc>,
-    last_logistics_tick: DateTime<Utc>,
+    logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
     ewr: Ewr,
     jtac: Jtacs,
@@ -740,34 +753,54 @@ fn run_logistics_events(
     if let Some(wcfg) = ctx.db.ephemeral.cfg.warehouse.as_ref() {
         let freq = Duration::minutes(wcfg.tick as i64);
         let ticks_per_delivery = wcfg.ticks_per_delivery;
-        if ts - ctx.last_logistics_tick >= freq {
-            ctx.last_logistics_tick = ts;
-            let start_ts = Utc::now();
-            if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
-                error!("failed to sync objectives from warehouses {:?}", e)
+        let start_ts = Utc::now();
+        match &mut ctx.logistics_stage {
+            LogiStage::Complete { last_tick } if ts - *last_tick >= freq => {
+                let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
+                ctx.logistics_stage = LogiStage::SyncFromWarehouses { objectives }
             }
-            record_perf(&mut perf.logistics_sync_from, start_ts);
-            let sts = Utc::now();
-            if ctx.logistics_ticks_since_delivery >= ticks_per_delivery {
-                ctx.logistics_ticks_since_delivery = 0;
-                if let Err(e) = ctx.db.deliver_production(lua) {
-                    error!("failed to deliver production {:?}", e)
+            LogiStage::Complete { last_tick: _ } => (),
+            LogiStage::SyncFromWarehouses { objectives } => match objectives.pop() {
+                Some(oid) => {
+                    let start_ts = Utc::now();
+                    if let Err(e) = ctx.db.sync_warehouse_to_objective(lua, oid) {
+                        error!("failed to sync objective {oid} from warehouse {:?}", e)
+                    }
+                    record_perf(&mut perf.logistics_sync_from, start_ts);
                 }
-                record_perf(&mut perf.logistics_deliver, sts);
-            } else {
-                ctx.logistics_ticks_since_delivery += 1;
-                if let Err(e) = ctx.db.deliver_supplies_from_logistics_hubs() {
-                    error!("failed to deliver supplies from hubs {:?}", e)
+                None => {
+                    let sts = Utc::now();
+                    if ctx.logistics_ticks_since_delivery >= ticks_per_delivery {
+                        ctx.logistics_ticks_since_delivery = 0;
+                        if let Err(e) = ctx.db.deliver_production(lua) {
+                            error!("failed to deliver production {:?}", e)
+                        }
+                        record_perf(&mut perf.logistics_deliver, sts);
+                    } else {
+                        ctx.logistics_ticks_since_delivery += 1;
+                        if let Err(e) = ctx.db.deliver_supplies_from_logistics_hubs() {
+                            error!("failed to deliver supplies from hubs {:?}", e)
+                        }
+                        record_perf(&mut perf.logistics_distribute, sts);
+                    }
+                    let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
+                    ctx.logistics_stage = LogiStage::SyncToWarehouses { objectives }
                 }
-                record_perf(&mut perf.logistics_distribute, sts);
             }
-            let sts = Utc::now();
-            if let Err(e) = ctx.db.sync_warehouses_from_objectives(lua) {
-                error!("failed to sync warehouses from objectives {:?}", e)
+            LogiStage::SyncToWarehouses { objectives } => match objectives.pop() {
+                None => {
+                    ctx.logistics_stage = LogiStage::Complete { last_tick: ts }
+                }
+                Some(oid) => {
+                    let start_ts = Utc::now();
+                    if let Err(e) = ctx.db.sync_objective_to_warehouse(lua, oid) {
+                        error!("failed to sync objective {oid} to warehouse {:?}", e)
+                    }
+                    record_perf(&mut perf.logistics_sync_to, start_ts);
+                }
             }
-            record_perf(&mut perf.logistics_sync_to, sts);
-            record_perf(&mut perf.logistics, start_ts);
         }
+        record_perf(&mut perf.logistics, start_ts);
     }
     Ok(())
 }

@@ -65,6 +65,10 @@ impl<'lua> Unit<'lua> {
         Ok(self.t.call_method("destroy", ())?)
     }
 
+    pub fn get_desc(&self) -> Result<mlua::Table<'lua>> {
+        Ok(self.t.call_method("getDesc", ())?)
+    }
+
     pub fn as_object(&self) -> Result<Object<'lua>> {
         Ok(Object::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }

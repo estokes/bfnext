@@ -740,7 +740,7 @@ impl Ephemeral {
     pub(super) fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, cfg: Cfg) -> Result<()> {
         let check_unit_classification = || -> Result<()> {
             let mut not_classified = FxHashSet::default();
-            for side in [Side::Blue, Side::Red, Side::Neutral] {
+            for side in Side::ALL {
                 let coa = miz.coalition(side)?;
                 for country in coa.countries()? {
                     let country = country?;

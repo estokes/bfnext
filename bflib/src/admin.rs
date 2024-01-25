@@ -88,7 +88,7 @@ pub enum AdminCommand {
         kind: WarehouseKind,
         airbase: String,
     },
-    LogLoadout,
+    Logdesc,
 }
 
 impl AdminCommand {
@@ -108,7 +108,7 @@ impl AdminCommand {
             "banned: list banned players",
             "search <regex>: search the player list by regular expression",
             "log-warehouse <objective|dcs> <airbase>: write the contents of the selected warehouse to the log file",
-            "log-loadout: write the loadout of the plane you are currently in to the log file"
+            "log-desc: write the getDesc of the plane you are currently in to the log file"
         ]
     }
 }
@@ -218,8 +218,8 @@ impl FromStr for AdminCommand {
                     airbase: String::from(airbase),
                 }),
             }
-        } else if s.starts_with("log-loadout") {
-            Ok(Self::LogLoadout)
+        } else if s.starts_with("log-desc") {
+            Ok(Self::Logdesc)
         } else {
             bail!("unknown command {s}")
         }
@@ -529,7 +529,7 @@ fn admin_search(
         .collect()
 }
 
-fn admin_log_loadout(ctx: &Context, lua: MizLua, ucid: &Ucid) -> Result<()> {
+fn admin_log_desc(ctx: &Context, lua: MizLua, ucid: &Ucid) -> Result<()> {
     let slot = &ctx
         .db
         .player(ucid)
@@ -545,8 +545,8 @@ fn admin_log_loadout(ctx: &Context, lua: MizLua, ucid: &Ucid) -> Result<()> {
         .ok_or_else(|| anyhow!("player {ucid} unit not found"))?;
     let unit = Unit::get_instance(lua, &id).context("getting unit")?;
     let mut tbl = FxHashMap::default();
-    let ammo = Value::Table(unit.get_ammo().context("getting ammo")?.into_inner());
-    let v = value_to_json(&mut tbl, None, &ammo);
+    let desc = Value::Table(unit.get_desc().context("getting ammo")?);
+    let v = value_to_json(&mut tbl, None, &desc);
     warn!("{v}");
     Ok(())
 }
@@ -674,11 +674,11 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     Err(e) => reply!("could not log {airbase} inventory {:?}", e),
                 }
             }
-            AdminCommand::LogLoadout => match ctx.info_by_player_id.get(&id) {
+            AdminCommand::Logdesc => match ctx.info_by_player_id.get(&id) {
                 None => reply!("no player {id}"),
-                Some(ifo) => match admin_log_loadout(ctx, lua, &ifo.ucid) {
-                    Ok(()) => reply!("{} inventory logged", ifo.ucid),
-                    Err(e) => reply!("could not log admin loadout {:?}", e),
+                Some(ifo) => match admin_log_desc(ctx, lua, &ifo.ucid) {
+                    Ok(()) => reply!("{} desc logged", ifo.ucid),
+                    Err(e) => reply!("could not log admin desc {:?}", e),
                 },
             },
         }

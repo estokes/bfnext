@@ -100,4 +100,8 @@ impl<'lua> Weapon<'lua> {
             v => Ok(Some(Object::from_lua(v, self.lua)?)),
         }
     }
+
+    pub fn get_desc(&self) -> Result<mlua::Table<'lua>> {
+        Ok(self.t.call_method("getDesc", ())?)
+    }
 }

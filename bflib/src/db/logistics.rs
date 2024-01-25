@@ -702,7 +702,7 @@ impl Db {
             had: u32,
             have: u32,
         }
-        for side in [Side::Blue, Side::Red, Side::Neutral] {
+        for side in Side::ALL {
             let mut transfers: Vec<Transfer> = vec![];
             macro_rules! schedule_transfers {
                 ($typ:expr, $from:ident, $get:ident) => {{

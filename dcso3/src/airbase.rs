@@ -67,6 +67,10 @@ impl<'lua> Airbase<'lua> {
         Ok(self.t.call_method("destroy", ())?)
     }
 
+    pub fn get_desc(&self) -> Result<mlua::Table<'lua>> {
+        Ok(self.t.call_method("getDesc", ())?)
+    }
+    
     pub fn get_point(&self) -> Result<LuaVec3> {
         Ok(self.t.call_method("getPoint", ())?)
     }

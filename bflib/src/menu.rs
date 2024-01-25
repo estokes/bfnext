@@ -967,7 +967,7 @@ pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
     let cfg = &ctx.db.ephemeral.cfg;
     let miz = Miz::singleton(lua)?;
     let mc = MissionCommands::singleton(lua)?;
-    for side in [Side::Red, Side::Blue, Side::Neutral] {
+    for side in Side::ALL {
         let coa = miz.coalition(side)?;
         for country in coa.countries()? {
             let country = country?;

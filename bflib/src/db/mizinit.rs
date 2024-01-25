@@ -249,7 +249,7 @@ impl Db {
                 t.init_objective(zone, name)?
             }
         }
-        for side in [Side::Blue, Side::Red, Side::Neutral] {
+        for side in Side::ALL {
             let coa = miz.coalition(side)?;
             for zone in miz.triggers()? {
                 let zone = zone?;

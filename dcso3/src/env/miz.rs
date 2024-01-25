@@ -538,7 +538,7 @@ impl<'lua> Miz<'lua> {
                 };
             }
         }
-        for side in [Side::Blue, Side::Red, Side::Neutral] {
+        for side in Side::ALL {
             let base = base.append(["coalition", side.to_str()]);
             idx.by_side
                 .entry(side)

@@ -15,6 +15,7 @@ for more details.
 */
 
 use super::{
+    ephemeral::{Equipment, Production},
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
 };
@@ -32,13 +33,13 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
-use fxhash::FxHashSet;
 use log::warn;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
     cmp::{max, min},
     ops::{AddAssign, SubAssign},
+    sync::Arc,
 };
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -146,181 +147,196 @@ pub struct Warehouse {
     pub(super) destination: Set<ObjectiveId>,
 }
 
-fn sync_obj_to_warehouse(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
-    let inventory = warehouse.get_inventory(None).context("getting inventory")?;
-    let weapons = inventory.weapons().context("getting weapons")?;
-    let aircraft = inventory.aircraft().context("getting aircraft")?;
-    let liquids = inventory.liquids().context("getting liquids")?;
-    macro_rules! zero {
-        ($src:ident, $dst:ident, $set:ident) => {
-            $src.for_each(|name, _| match obj.warehouse.$dst.get(&name) {
-                Some(_) => Ok(()),
-                None => warehouse.$set(name, 0),
-            })
-            .context("zeroing")?;
-        };
+fn sync_obj_to_warehouse(
+    obj: &Objective,
+    production: &Production,
+    warehouse: &warehouse::Warehouse,
+) -> Result<()> {
+    for (item, _) in &production.equipment {
+        match obj.warehouse.equipment.get(item) {
+            Some(inv) => warehouse
+                .set_item(item.clone(), inv.stored)
+                .context("setting item")?,
+            None => warehouse
+                .set_item(item.clone(), 0)
+                .context("setting item")?,
+        }
     }
-    zero!(weapons, equipment, set_item);
-    zero!(aircraft, equipment, set_item);
-    zero!(liquids, liquids, set_liquid_amount);
-    for (name, inv) in &obj.warehouse.equipment {
-        warehouse
-            .set_item(name.clone(), inv.stored)
-            .context("setting item")?
-    }
-    for (name, inv) in &obj.warehouse.liquids {
-        warehouse
-            .set_liquid_amount(*name, inv.stored)
-            .context("setting liquid")?
+    for (name, _) in &production.liquids {
+        match obj.warehouse.liquids.get(name) {
+            None => warehouse
+                .set_liquid_amount(*name, 0)
+                .context("setting liquid")?,
+            Some(inv) => warehouse
+                .set_liquid_amount(*name, inv.stored)
+                .context("setting liquid")?,
+        }
     }
     Ok(())
 }
 
-fn sync_warehouse_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
-    let inventory = warehouse.get_inventory(None).context("getting inventory")?;
-    let weapons = inventory.weapons().context("getting weapons")?;
-    let aircraft = inventory.aircraft().context("getting aircraft")?;
-    let liquids = inventory.liquids().context("getting liquids")?;
-    macro_rules! sync {
-        ($src:ident, $dst:ident) => {
-            $src.for_each(|name, qty| match obj.warehouse.$dst.get_mut_cow(&name) {
-                None => Ok(()),
-                Some(inv) => {
-                    inv.stored = qty;
-                    Ok(())
-                }
-            })
-            .context("syncing")?;
-        };
+fn sync_warehouse_to_obj(
+    obj: &mut Objective,
+    production: &Production,
+    warehouse: &warehouse::Warehouse,
+) -> Result<()> {
+    for (name, _) in &production.equipment {
+        if let Some(inv) = obj.warehouse.equipment.get_mut_cow(name) {
+            inv.stored = warehouse.get_item_count(name.clone())?;
+        }
     }
-    sync!(weapons, equipment);
-    sync!(aircraft, equipment);
-    sync!(liquids, liquids);
+    for (name, _) in &production.liquids {
+        if let Some(inv) = obj.warehouse.liquids.get_mut_cow(&name) {
+            inv.stored = warehouse.get_liquid_amount(*name)?;
+        }
+    }
     Ok(())
 }
 
-fn get_supplier<'lua>(lua: MizLua<'lua>, template: String) -> Result<warehouse::Inventory<'lua>> {
+fn get_supplier<'lua>(lua: MizLua<'lua>, template: String) -> Result<warehouse::Warehouse<'lua>> {
     Airbase::get_by_name(lua, template.clone())
         .with_context(|| format_compact!("getting airbase {}", template))?
         .get_warehouse()
-        .context("getting warehouse")?
-        .get_inventory(None)
-        .context("getting inventory")
+        .context("getting warehouse")
 }
 
 impl Db {
-    pub(super) fn init_farp_warehouse(&mut self, lua: MizLua, oid: &ObjectiveId) -> Result<()> {
+    fn init_resource_map(&mut self, lua: MizLua) -> Result<()> {
+        let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
+            None => return Ok(()),
+            Some(w) => w,
+        };
+        if self.ephemeral.production_by_side.is_empty() {
+            let map =
+                warehouse::Warehouse::get_resource_map(lua).context("getting resource map")?;
+            for side in Side::ALL {
+                let template = match whcfg.supply_source.get(&side) {
+                    Some(tmpl) => tmpl,
+                    None => continue, // side didn't produce anything, bummer
+                };
+                let w = get_supplier(lua, template.clone())
+                    .with_context(|| format_compact!("getting supplier {template}"))?;
+                let production =
+                    Arc::make_mut(self.ephemeral.production_by_side.entry(side).or_default());
+                map.for_each(|name, typ| {
+                    let qty = w
+                        .get_item_count(name.clone())
+                        .with_context(|| format_compact!("getting {name} from the warehouse"))?;
+                    if qty > 0 {
+                        production.equipment.insert(
+                            name,
+                            Equipment {
+                                category: typ.category().context("getting category")?,
+                                production: qty,
+                            },
+                        );
+                    }
+                    Ok(())
+                })
+                .context("iterating resource map")?;
+                for name in LiquidType::ALL {
+                    let qty = w.get_liquid_amount(name).context("getting liquid amount")?;
+                    if qty > 0 {
+                        production.liquids.insert(name, qty);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn init_farp_warehouse(&mut self, oid: &ObjectiveId) -> Result<()> {
         let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
             Some(cfg) => cfg,
             None => return Ok(()),
         };
         let obj = objective_mut!(self, oid)?;
-        let template = match whcfg.supply_source.get(&obj.owner) {
-            Some(tmpl) => tmpl,
-            None => return Ok(()), // side didn't produce anything, bummer
+        let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+            Some(q) => Arc::clone(q),
+            None => return Ok(()),
         };
-        let w = get_supplier(lua, template.clone())?;
-        w.weapons()?.for_each(|name, qty| {
-            if qty > 0 {
+        for (name, equip) in &production.equipment {
+            if !equip.category.is_aircraft() {
                 let inv = Inventory {
                     stored: 0,
-                    capacity: qty * whcfg.airbase_max,
+                    capacity: equip.production * whcfg.airbase_max,
                 };
-                obj.warehouse.equipment.insert_cow(name, inv);
+                obj.warehouse.equipment.insert_cow(name.clone(), inv);
             }
-            Ok(())
-        })?;
-        w.liquids()?.for_each(|name, qty| {
-            if qty > 0 {
-                let inv = Inventory {
-                    stored: 0,
-                    capacity: qty * whcfg.airbase_max,
-                };
-                obj.warehouse.liquids.insert_cow(name, inv);
-            }
-            Ok(())
-        })?;
+        }
+        for (name, qty) in &production.liquids {
+            let inv = Inventory {
+                stored: 0,
+                capacity: qty * whcfg.airbase_max,
+            };
+            obj.warehouse.liquids.insert_cow(*name, inv);
+        }
         Ok(())
     }
 
     pub(super) fn init_warehouses(&mut self, lua: MizLua) -> Result<()> {
+        self.init_resource_map(lua)
+            .context("initializing resource map")?;
         let cfg = &self.ephemeral.cfg;
         let whcfg = match cfg.warehouse.as_ref() {
             Some(cfg) => cfg,
             None => return Ok(()),
         };
-        for side in [Side::Red, Side::Blue, Side::Neutral] {
-            let oids: SmallVec<[ObjectiveId; 64]> = self
-                .persisted
-                .objectives
-                .into_iter()
-                .map(|(oid, _)| *oid)
-                .collect();
-            let template = match whcfg.supply_source.get(&side) {
-                Some(tmpl) => tmpl,
-                None => continue, // side didn't produce anything, bummer
+        let oids: SmallVec<[ObjectiveId; 64]> = self
+            .persisted
+            .objectives
+            .into_iter()
+            .map(|(oid, _)| *oid)
+            .collect();
+        for side in Side::ALL {
+            let production = match self.ephemeral.production_by_side.get(&side) {
+                None => continue,
+                Some(q) => Arc::clone(q),
             };
-            let w = get_supplier(lua, template.clone())
-                .with_context(|| format_compact!("getting supplier {template}"))?;
-            macro_rules! setup {
-                ($whname:ident, $objname:ident) => {
-                    w.$whname()
-                        .with_context(|| format_compact!("getting {}", stringify!($whname)))?
-                        .for_each(|name, qty| {
-                            if qty > 0 {
-                                for oid in &oids {
-                                    let obj = objective_mut!(self, oid)?;
-                                    let inv =
-                                        obj.warehouse.$objname.get_or_default_cow(name.clone());
-                                    let hub = self.persisted.logistics_hubs.contains(oid);
-                                    let capacity = whcfg.capacity(hub, qty);
-                                    if obj.owner == side {
-                                        inv.capacity = capacity;
-                                        inv.stored = capacity;
-                                    }
-                                }
-                            }
-                            Ok(())
-                        })
-                        .context("distributing")?;
-                };
-            }
-            setup!(weapons, equipment);
-            setup!(liquids, liquids);
-            w.aircraft()
-                .context("getting aircraft")?
-                .for_each(|name, qty| {
-                    if qty > 0 {
-                        for oid in &oids {
-                            let hub = self.persisted.logistics_hubs.contains(oid);
-                            let obj = objective_mut!(self, oid)?;
-                            let capacity = whcfg.capacity(hub, qty);
+            for (name, equip) in &production.equipment {
+                let aircraft = equip.category.is_aircraft();
+                for oid in &oids {
+                    let obj = objective_mut!(self, oid)?;
+                    if obj.owner == side {
+                        let hub = self.persisted.logistics_hubs.contains(&oid);
+                        let capacity = whcfg.capacity(hub, equip.production);
+                        if aircraft {
                             let include = hub
                                 || obj
                                     .slots
                                     .into_iter()
                                     .any(|(_, v)| v.typ.as_str() == name.as_str());
-                            if include {
-                                let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
-                                if obj.owner == side {
-                                    inv.capacity = capacity;
-                                    inv.stored = capacity;
-                                }
+                            if !include {
+                                continue;
                             }
                         }
+                        let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
+                        inv.capacity = capacity;
+                        inv.stored = capacity;
                     }
-                    Ok(())
-                })
-                .context("distributing")?;
+                }
+            }
+            for (name, qty) in &production.liquids {
+                for oid in &oids {
+                    let obj = objective_mut!(self, oid)?;
+                    if obj.owner == side {
+                        let hub = self.persisted.logistics_hubs.contains(&oid);
+                        let capacity = whcfg.capacity(hub, *qty);
+                        let inv = obj.warehouse.liquids.get_or_default_cow(*name);
+                        inv.capacity = capacity;
+                        inv.stored = capacity;
+                    }
+                }
+            }
         }
         self.ephemeral.dirty();
         Ok(())
     }
 
     pub(super) fn setup_warehouses_after_load(&mut self, lua: MizLua) -> Result<()> {
-        if self.ephemeral.cfg.warehouse.is_none() {
-            return Ok(()); // warehouse system disabled
-        }
+        self.init_resource_map(lua)
+            .context("initializing resource map")?;
+        let map = warehouse::Warehouse::get_resource_map(lua).context("getting resource map")?;
         let world = World::singleton(lua).context("getting world")?;
         let mut load_and_sync_airbases = || -> Result<()> {
             for airbase in world.get_airbases().context("getting airbases")? {
@@ -337,7 +353,7 @@ impl Db {
                     let radius2 = obj.radius.powi(2);
                     na::distance_squared(&pos.into(), &obj.pos.into()) <= radius2
                 });
-                let (oid, _) = match oid {
+                let (oid, obj) = match oid {
                     Some((oid, obj)) => {
                         airbase
                             .set_coalition(obj.owner)
@@ -355,6 +371,19 @@ impl Db {
                     oid,
                     airbase.object_id().context("getting airbase object_id")?,
                 );
+                let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+                    Some(p) => Arc::clone(p),
+                    None => return Ok(()),
+                };
+                let w = airbase
+                    .get_warehouse()
+                    .context("getting airbase warehouse")?;
+                map.for_each(|name, _| {
+                    if !production.equipment.contains_key(&name) {
+                        w.set_item(name, 0).context("zeroing item")?
+                    }
+                    Ok(())
+                })?;
             }
             let mut missing = vec![];
             for (oid, obj) in &self.persisted.objectives {
@@ -368,7 +397,7 @@ impl Db {
             Ok(())
         };
         load_and_sync_airbases().context("loading and syncing airbases")?;
-        self.deliver_production(lua)
+        self.deliver_production()
             .context("delivering production")?;
         self.ephemeral.dirty();
         self.sync_warehouses_from_objectives(lua)
@@ -381,48 +410,57 @@ impl Db {
             None => return Ok(()),
         };
         let obj = objective_mut!(self, oid)?;
-        let template = match whcfg.supply_source.get(&obj.owner) {
-            Some(tmpl) => tmpl,
-            None => return Ok(()), // side didn't produce anything, bummer
+        let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+            Some(q) => Arc::clone(q),
+            None => return Ok(()),
         };
-        let w = get_supplier(lua, template.clone())
-            .with_context(|| format_compact!("getting supplier {template}"))?;
-        let mut equipment: FxHashSet<String> = FxHashSet::default();
-        let mut liquids: FxHashSet<LiquidType> = FxHashSet::default();
+        let w = match self.ephemeral.airbase_by_oid.get(&oid) {
+            None => bail!("airbase has no warehouse"),
+            Some(aid) => Airbase::get_instance(lua, aid)
+                .context("getting airbase")?
+                .get_warehouse()
+                .context("getting warehouse")?,
+        };
+        let map = warehouse::Warehouse::get_resource_map(lua).context("getting resource map")?;
         let hub = obj.kind.is_hub();
-        macro_rules! capture {
-            ($whname:ident, $objname:ident, $all_equipment:ident) => {{
-                w.$whname()
-                    .with_context(|| format_compact!("getting {}", stringify!($whname)))?
-                    .for_each(|name, qty| {
-                        if qty > 0 {
-                            $all_equipment.insert(name.clone());
-                            let inv = obj.warehouse.$objname.get_or_default_cow(name.clone());
-                            inv.capacity = whcfg.capacity(hub, qty);
-                            if hub {
-                                inv.stored = max(inv.stored, qty * whcfg.airbase_max);
-                            }
-                        }
-                        Ok(())
-                    })?;
-                let all: SmallVec<[_; 128]> = obj
-                    .warehouse
-                    .$objname
-                    .into_iter()
-                    .map(|(k, _)| k.clone())
-                    .collect();
-                for name in all {
-                    if !$all_equipment.contains(&name) {
-                        let inv = &mut obj.warehouse.$objname[&name];
+        map.for_each(|name, _| {
+            match production.equipment.get(&name) {
+                None => {
+                    w.set_item(name.clone(), 0).context("clearing item")?;
+                    if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&name) {
                         inv.stored = 0;
                         inv.capacity = 0;
                     }
                 }
-            }};
+                Some(equip) => {
+                    let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
+                    inv.capacity = whcfg.capacity(hub, equip.production);
+                    inv.stored = w.get_item_count(name.clone()).context("getting item")?;
+                    if hub {
+                        inv.stored = max(inv.stored, equip.production * whcfg.airbase_max);
+                        w.set_item(name.clone(), inv.stored)
+                            .context("setting item")?;
+                    }
+                }
+            }
+            Ok(())
+        })?;
+        for name in LiquidType::ALL {
+            match production.liquids.get(&name) {
+                None => {
+                    w.set_liquid_amount(name, 0).context("setting liquid")?;
+                    if let Some(inv) = obj.warehouse.liquids.get_mut_cow(&name) {
+                        inv.stored = 0;
+                        inv.capacity = 0;
+                    }
+                }
+                Some(qty) => {
+                    let inv = obj.warehouse.liquids.get_or_default_cow(name);
+                    inv.capacity = whcfg.capacity(hub, *qty);
+                    inv.stored = w.get_liquid_amount(name).context("getting liquid")?;
+                }
+            }
         }
-        capture!(weapons, equipment, equipment);
-        capture!(aircraft, equipment, equipment);
-        capture!(liquids, liquids, liquids);
         Ok(())
     }
 
@@ -473,50 +511,35 @@ impl Db {
         Ok(())
     }
 
-    pub fn deliver_production(&mut self, lua: MizLua) -> Result<()> {
-        let whcfg = match self.ephemeral.cfg.warehouse.clone() {
-            Some(cfg) => cfg,
-            None => return Ok(()), // warehouse system disabled
-        };
+    pub fn deliver_production(&mut self) -> Result<()> {
+        if self.ephemeral.cfg.warehouse.is_none() {
+            return Ok(())
+        }
         self.setup_supply_lines()
             .context("setting up supply lines")?;
         let mut deliver_produced_supplies = || -> Result<()> {
-            for side in [Side::Red, Side::Blue, Side::Neutral] {
-                macro_rules! dlvr {
-                    ($dest:ident, $name:expr, $qty:expr) => {{
-                        for oid in &self.persisted.logistics_hubs {
-                            let logi = objective_mut!(self, oid)?;
-                            if logi.owner == side {
-                                if $qty > 0 {
-                                    *logi.warehouse.$dest.get_or_default_cow($name.clone()) += $qty;
-                                }
-                            }
-                        }
-                        Ok(())
-                    }};
-                }
-                let template = match whcfg.supply_source.get(&side) {
-                    Some(tmpl) => tmpl,
-                    None => continue, // side didn't produce anything, bummer
+            for side in Side::ALL {
+                let production = match self.ephemeral.production_by_side.get(&side) {
+                    Some(e) => Arc::clone(e),
+                    None => continue,
                 };
-                let w = Airbase::get_by_name(lua, template.clone())
-                    .with_context(|| format_compact!("getting airbase {}", template))?
-                    .get_warehouse()
-                    .context("getting warehouse")?
-                    .get_inventory(None)
-                    .context("getting inventory")?;
-                w.weapons()
-                    .context("getting weapons")?
-                    .for_each(|n, q| dlvr!(equipment, n, q))
-                    .context("delivering weapons")?;
-                w.aircraft()
-                    .context("getting aircraft")?
-                    .for_each(|n, q| dlvr!(equipment, n, q))
-                    .context("delivering aircraft")?;
-                w.liquids()
-                    .context("getting liquids")?
-                    .for_each(|n, q| dlvr!(liquids, n, q))
-                    .context("delivering liquids")?
+                for (name, equip) in &production.equipment {
+                    for oid in &self.persisted.logistics_hubs {
+                        let logi = objective_mut!(self, oid)?;
+                        if logi.owner == side {
+                            *logi.warehouse.equipment.get_or_default_cow(name.clone()) +=
+                                equip.production;
+                        }
+                    }
+                }
+                for (name, qty) in &production.liquids {
+                    for oid in &self.persisted.logistics_hubs {
+                        let logi = objective_mut!(self, oid)?;
+                        if logi.owner == side {
+                            *logi.warehouse.liquids.get_or_default_cow(*name) += *qty;
+                        }
+                    }
+                }
             }
             Ok(())
         };
@@ -535,12 +558,17 @@ impl Db {
             .collect();
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
+            let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+                Some(p) => Arc::clone(p),
+                None => continue,
+            };
             let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
                 .context("getting warehouse")?;
-            sync_warehouse_to_obj(obj, &warehouse).context("syncing warehouse to objective")?
+            sync_warehouse_to_obj(obj, &production, &warehouse)
+                .context("syncing warehouse to objective")?
         }
         self.ephemeral.dirty();
         Ok(())
@@ -555,12 +583,17 @@ impl Db {
             .collect();
         for oid in &oids {
             let obj = objective_mut!(self, oid)?;
+            let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+                Some(p) => p,
+                None => continue,
+            };
             let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
                 .context("getting warehouse")?;
-            sync_obj_to_warehouse(obj, &warehouse).context("syncing warehouse from objective")?
+            sync_obj_to_warehouse(obj, production, &warehouse)
+                .context("syncing warehouse from objective")?
         }
         self.ephemeral.dirty();
         Ok(())
@@ -798,7 +831,12 @@ impl Db {
             .context("getting airbase")?
             .get_warehouse()
             .context("getting warehouse")?;
-        sync_warehouse_to_obj(obj, &warehouse).context("syncing warehouse to objective")?;
+        let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+            None => return Ok((obj, warehouse)),
+            Some(p) => p,
+        };
+        sync_warehouse_to_obj(obj, production, &warehouse)
+            .context("syncing warehouse to objective")?;
         Ok((obj, warehouse))
     }
 
@@ -817,7 +855,12 @@ impl Db {
             .context("getting airbase")?
             .get_warehouse()
             .context("getting warehouse")?;
-        sync_obj_to_warehouse(obj, &warehouse).context("syncing warehouse to objective")?;
+        let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+            None => return Ok((obj, warehouse)),
+            Some(p) => p,
+        };
+        sync_obj_to_warehouse(obj, production, &warehouse)
+            .context("syncing warehouse to objective")?;
         Ok((obj, warehouse))
     }
 
@@ -832,13 +875,21 @@ impl Db {
             None => return Ok(()),
         };
         let size = whcfg.supply_transfer_size as f32 / 100.;
-        if objective!(self, from)?.owner != objective!(self, to)?.owner {
+        let side = objective!(self, from)?.owner;
+        if side != objective!(self, to)?.owner {
             bail!("can't transfer supply from an enemy objective")
         }
         let mut transfers: SmallVec<[Transfer; 128]> = smallvec![];
         let (_, from_wh) = self
             .sync_warehouse_to_objective(lua, from)
-            .context("syncing objective")?;
+            .context("syncing from objective")?;
+        let (_, to_wh) = self
+            .sync_warehouse_to_objective(lua, to)
+            .context("syncing to objective")?;
+        let production = match self.ephemeral.production_by_side.get(&side) {
+            Some(p) => Arc::clone(p),
+            None => return Ok(()),
+        };
         let from_obj = objective!(self, from)?;
         let to_obj = objective!(self, to)?;
         macro_rules! compute {
@@ -868,12 +919,11 @@ impl Db {
         }
         compute!(equipment, Equipment);
         compute!(liquids, Liquid);
-        let (_, to_wh) = self.sync_warehouse_to_objective(lua, to)?;
         for tr in transfers {
             tr.execute(self)?
         }
-        sync_obj_to_warehouse(objective!(self, from)?, &from_wh)?;
-        sync_obj_to_warehouse(objective!(self, to)?, &to_wh)?;
+        sync_obj_to_warehouse(objective!(self, from)?, &production, &from_wh)?;
+        sync_obj_to_warehouse(objective!(self, to)?, &production, &to_wh)?;
         self.update_supply_status()
             .context("updating supply status")?;
         Ok(())
@@ -904,29 +954,28 @@ impl Db {
             bail!("enter a percentage")
         }
         let percent = amount as f32 / 100.;
+        let production = match self
+            .ephemeral
+            .production_by_side
+            .get(&objective!(self, oid)?.owner)
+        {
+            Some(p) => Arc::clone(p),
+            None => return Ok(()),
+        };
         let (obj, warehouse) = self
             .sync_warehouse_to_objective(lua, oid)
             .with_context(|| format_compact!("syncing warehouses to {name}"))?;
-        let equip: SmallVec<[String; 128]> = obj
-            .warehouse
-            .equipment
-            .into_iter()
-            .map(|(k, _)| k.clone())
-            .collect();
-        for name in equip {
-            obj.warehouse.equipment[&name].reduce(percent);
+        for name in production.equipment.keys() {
+            if let Some(inv) = obj.warehouse.equipment.get_mut_cow(name) {
+                inv.reduce(percent);
+            }
         }
-        for liq in [
-            LiquidType::Avgas,
-            LiquidType::Diesel,
-            LiquidType::JetFuel,
-            LiquidType::MW50,
-        ] {
+        for liq in production.liquids.keys() {
             if let Some(inv) = obj.warehouse.liquids.get_mut_cow(&liq) {
                 inv.reduce(percent);
             }
         }
-        sync_obj_to_warehouse(obj, &warehouse).context("syncing from warehouse")?;
+        sync_obj_to_warehouse(obj, &production, &warehouse).context("syncing from warehouse")?;
         self.update_supply_status()
             .context("updating supply status")?;
         self.ephemeral.dirty();
@@ -957,14 +1006,26 @@ impl Db {
                     .context("getting airbase")?
                     .get_warehouse()
                     .context("getting warehouse")?;
+                let map =
+                    warehouse::Warehouse::get_resource_map(lua).context("getting resource map")?;
                 let mut msg = CompactString::new("");
-                let inv = wh.get_inventory(None).context("getting inventory")?;
-                inv.weapons()?
-                    .for_each(|name, qty| Ok(write!(msg, "{name}, {qty}\n")?))?;
-                inv.aircraft()?
-                    .for_each(|name, qty| Ok(write!(msg, "{name}, {qty}\n")?))?;
-                inv.liquids()?
-                    .for_each(|name, qty| Ok(write!(msg, "{:?}, {qty}\n", name)?))?;
+                map.for_each(|name, _| {
+                    let qty = wh
+                        .get_item_count(name.clone())
+                        .with_context(|| format_compact!("getting {name} count from warehouse"))?;
+                    if qty > 0 {
+                        write!(msg, "{name}, {qty}\n")?
+                    }
+                    Ok(())
+                })?;
+                for name in LiquidType::ALL {
+                    let qty = wh.get_liquid_amount(name).with_context(|| {
+                        format_compact!("getting liquid {:?} from warehouse", name)
+                    })?;
+                    if qty > 0 {
+                        write!(msg, "{:?}, {qty}", name)?
+                    }
+                }
                 warn!("{msg}")
             }
             WarehouseKind::Objective => {

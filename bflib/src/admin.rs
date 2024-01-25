@@ -596,7 +596,7 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
                     write!(msg, "failed to sync objectives from warehouses {:?} ", e)?
                 }
-                if let Err(e) = ctx.db.deliver_production(lua) {
+                if let Err(e) = ctx.db.deliver_production() {
                     error!("failed to deliver production {:?}", e)
                 }
                 if let Err(e) = ctx.db.sync_warehouses_from_objectives(lua) {

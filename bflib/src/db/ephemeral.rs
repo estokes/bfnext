@@ -30,15 +30,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
-    airbase::ClassAirbase,
-    centroid2d,
-    coalition::Side,
-    env::miz::{GroupKind, Miz, MizIndex},
-    net::{SlotId, Ucid},
-    object::{DcsObject, DcsOid},
-    trigger::{ArrowSpec, CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec},
-    unit::{ClassUnit, Unit},
-    Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
+    airbase::ClassAirbase, centroid2d, coalition::Side, env::miz::{GroupKind, Miz, MizIndex}, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, trigger::{ArrowSpec, CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec}, unit::{ClassUnit, Unit}, warehouse::{LiquidType, WSCategory}, Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::info;
@@ -340,6 +332,18 @@ pub(super) struct DeployableIndex {
     pub(super) pad_templates: FxHashSet<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Equipment {
+    pub(super) category: WSCategory,
+    pub(super) production: u32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(super) struct Production {
+    pub(super) equipment: FxHashMap<String, Equipment>,
+    pub(super) liquids: FxHashMap<LiquidType, u32>,
+}
+
 #[derive(Debug, Default)]
 pub struct Ephemeral {
     dirty: bool,
@@ -359,6 +363,7 @@ pub struct Ephemeral {
     pub(super) units_able_to_move: FxHashSet<UnitId>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
     pub(super) units_potentially_on_walkabout: FxHashSet<UnitId>,
+    pub(super) production_by_side: FxHashMap<Side, Arc<Production>>,
     pub(super) delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<(GroupId, Despawn)>,

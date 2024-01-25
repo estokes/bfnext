@@ -27,6 +27,10 @@ simple_enum!(LiquidType, u8, [
     Diesel => 3
 ]);
 
+impl LiquidType {
+    pub const ALL: [LiquidType; 4] = [Self::Avgas, Self::Diesel, Self::JetFuel, Self::MW50];
+}
+
 wrapped_table!(ItemInventory, None);
 
 impl<'lua> ItemInventory<'lua> {
@@ -72,7 +76,7 @@ impl<'lua> Inventory<'lua> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum WSAirplaneCategory {
+pub enum WSFixedWingCategory {
     Fighters,
     FastBombers,
     Interceptors,
@@ -84,7 +88,7 @@ pub enum WSAirplaneCategory {
 
 #[derive(Debug, Clone, Copy)]
 pub enum WSAircraftCategory {
-    Airplane(WSAirplaneCategory),
+    FixedWing(WSFixedWingCategory),
     Helicopters,
     None,
 }
@@ -98,6 +102,60 @@ pub enum WSCategory {
     None,
 }
 
+impl WSCategory {
+    pub fn is_aircraft(&self) -> bool {
+        match self {
+            Self::Aircraft(_) => true,
+            Self::None | Self::Ships | Self::Vehicles | Self::Weapons => false,
+        }
+    }
+
+    pub fn is_fixedwing(&self) -> bool {
+        match self {
+            Self::Aircraft(WSAircraftCategory::FixedWing(_)) => true,
+            Self::Aircraft(WSAircraftCategory::Helicopters)
+            | Self::Aircraft(WSAircraftCategory::None)
+            | Self::None
+            | Self::Ships
+            | Self::Vehicles
+            | Self::Weapons => false,
+        }
+    }
+
+    pub fn is_helicopter(&self) -> bool {
+        match self {
+            Self::Aircraft(WSAircraftCategory::Helicopters) => true,
+            Self::Aircraft(WSAircraftCategory::FixedWing(_))
+            | Self::Aircraft(WSAircraftCategory::None)
+            | Self::None
+            | Self::Ships
+            | Self::Vehicles
+            | Self::Weapons => false,
+        }
+    }
+ 
+    pub fn is_weapon(&self) -> bool {
+        match self {
+            Self::Weapons => true,
+            Self::Aircraft(_) | Self::None | Self::Ships | Self::Vehicles => false,
+        }
+    }
+    
+    pub fn is_vehicle(&self) -> bool {
+        match self {
+            Self::Vehicles => true,
+            Self::Aircraft(_) | Self::None | Self::Ships | Self::Weapons => false,
+        }
+    }
+    
+    pub fn is_ship(&self) -> bool {
+        match self {
+            Self::Ships => true,
+            Self::Aircraft(_) | Self::None | Self::Weapons | Self::Vehicles => false,
+        }
+    }
+}
+
 wrapped_table!(WSType, None);
 
 impl<'lua> WSType<'lua> {
@@ -106,15 +164,15 @@ impl<'lua> WSType<'lua> {
             0 => Ok(WSCategory::None),
             1 => match self.t.raw_get(2)? {
                 0 => Ok(WSCategory::Aircraft(WSAircraftCategory::None)),
-                1 => Ok(WSCategory::Aircraft(WSAircraftCategory::Airplane(
+                1 => Ok(WSCategory::Aircraft(WSAircraftCategory::FixedWing(
                     match self.t.raw_get(3)? {
-                        0 => WSAirplaneCategory::None,
-                        1 => WSAirplaneCategory::Fighters,
-                        2 => WSAirplaneCategory::FastBombers,
-                        3 => WSAirplaneCategory::Interceptors,
-                        4 => WSAirplaneCategory::Bombers,
-                        5 => WSAirplaneCategory::MiscSupport,
-                        6 => WSAirplaneCategory::Attack,
+                        0 => WSFixedWingCategory::None,
+                        1 => WSFixedWingCategory::Fighters,
+                        2 => WSFixedWingCategory::FastBombers,
+                        3 => WSFixedWingCategory::Interceptors,
+                        4 => WSFixedWingCategory::Bombers,
+                        5 => WSFixedWingCategory::MiscSupport,
+                        6 => WSFixedWingCategory::Attack,
                         n => bail!("unknown airplane category {n}"),
                     },
                 ))),

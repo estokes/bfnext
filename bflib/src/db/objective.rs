@@ -506,7 +506,7 @@ impl Db {
         }
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
-        self.init_farp_warehouse(spctx.lua(), &oid)
+        self.init_farp_warehouse(&oid)
             .context("initializing farp warehouse")?;
         self.sync_objectives_from_warehouses(spctx.lua())
             .context("syncing objectives from warehouses")?;
@@ -982,7 +982,7 @@ impl Db {
                     .context("syncing objectives from warehouse")?;
                 self.capture_warehouse(lua, oid)
                     .context("capturing warehouse")?;
-                self.deliver_production(lua)
+                self.deliver_production()
                     .context("delivering production")?;
                 self.sync_warehouses_from_objectives(lua)
                     .context("syncing warehouses from objectives")?;

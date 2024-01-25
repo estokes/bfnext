@@ -772,7 +772,7 @@ fn run_logistics_events(
                     let sts = Utc::now();
                     if ctx.logistics_ticks_since_delivery >= ticks_per_delivery {
                         ctx.logistics_ticks_since_delivery = 0;
-                        if let Err(e) = ctx.db.deliver_production(lua) {
+                        if let Err(e) = ctx.db.deliver_production() {
                             error!("failed to deliver production {:?}", e)
                         }
                         record_perf(&mut perf.logistics_deliver, sts);

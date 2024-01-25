@@ -54,6 +54,8 @@ impl FromStr for Side {
 }
 
 impl Side {
+    pub const ALL: [Side; 3] = [Side::Red, Side::Blue, Side::Neutral];
+
     pub fn to_str(&self) -> &'static str {
         match self {
             Side::Blue => "blue",

@@ -29,7 +29,7 @@ use dcso3::{
     airbase::Airbase,
     coalition::Side,
     object::DcsObject,
-    warehouse::{self, LiquidType, WSCategory},
+    warehouse::{self, LiquidType},
     world::World,
     MizLua, String, Vector2,
 };
@@ -240,31 +240,7 @@ impl Db {
                 }
                 Ok(())
             })
-            .context("iterating resource map")?;
-            for side in Side::ALL {
-                let template = match whcfg.supply_source.get(&side) {
-                    Some(tmpl) => tmpl,
-                    None => continue, // side didn't produce anything, bummer
-                };
-                let w = get_supplier(lua, template.clone())
-                    .with_context(|| format_compact!("getting supplier {template}"))?;
-                let production =
-                    Arc::make_mut(self.ephemeral.production_by_side.entry(side).or_default());
-                let inv = w.get_inventory(None).context("getting inventory")?;
-                inv.weapons()?.for_each(|name, qty| {
-                    dbg!((&name, qty));
-                    if qty > 0 && !production.equipment.contains_key(&name) {
-                        production.equipment.insert(
-                            dbg!(name),
-                            Equipment {
-                                category: WSCategory::Weapons,
-                                production: qty,
-                            },
-                        );
-                    }
-                    Ok(())
-                })?;
-            }
+            .context("iterating resource map")?
         }
         Ok(())
     }
@@ -318,7 +294,6 @@ impl Db {
                 Some(q) => Arc::clone(q),
             };
             for (name, equip) in &production.equipment {
-                dbg!((name, equip));
                 let aircraft = equip.category.is_aircraft();
                 for oid in &oids {
                     let obj = objective_mut!(self, oid)?;

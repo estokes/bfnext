@@ -544,13 +544,13 @@
         ],
         "template": "DEP1L13",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 8,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
             "name": "1L13 Crate",
             "weight": 2000,
-            "required": 2,
+            "required": 1,
             "pos_unit": null,
             "max_drop_height_agl": 20,
             "max_drop_speed": 350
@@ -884,13 +884,13 @@
         ],
         "template": "DEPFPS117",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 8,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
             "name": "FPS-117 Crate",
             "weight": 1000,
-            "required": 2,
+            "required": 1,
             "pos_unit": null,
             "max_drop_height_agl": 10,
             "max_drop_speed": 50

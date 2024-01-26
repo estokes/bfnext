@@ -545,9 +545,11 @@ fn admin_log_desc(ctx: &Context, lua: MizLua, ucid: &Ucid) -> Result<()> {
         .ok_or_else(|| anyhow!("player {ucid} unit not found"))?;
     let unit = Unit::get_instance(lua, &id).context("getting unit")?;
     let mut tbl = FxHashMap::default();
-    let desc = Value::Table(unit.get_desc().context("getting ammo")?);
-    let v = value_to_json(&mut tbl, None, &desc);
-    warn!("{v}");
+    let desc = Value::Table(unit.get_desc().context("getting desc")?);
+    let desc = value_to_json(&mut tbl, None, &desc);
+    let ammo = Value::Table(unit.get_ammo().context("getting ammo")?.into_inner());
+    let ammo = value_to_json(&mut tbl, None, &ammo);
+    warn!("{desc}\n{ammo}");
     Ok(())
 }
 

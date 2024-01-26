@@ -266,7 +266,7 @@ impl Color {
             a,
         }
     }
-    
+
     pub fn yellow(a: f32) -> Color {
         Color {
             r: 0.75,
@@ -394,7 +394,7 @@ macro_rules! wrapped_table {
                         let mut tbl = fxhash::FxHashMap::default();
                         let v = crate::value_to_json(&mut tbl, None, &Value::Table(self.t.clone()));
                         write!(f, "{v}")
-                    },
+                    }
                     Ok(v) => {
                         let class: String = self
                             .t
@@ -1101,7 +1101,7 @@ pub enum VolumeType {
 pub struct Sequence<'lua, T> {
     t: mlua::Table<'lua>,
     #[serde(skip)]
-    _lua: &'lua Lua,
+    lua: &'lua Lua,
     ph: PhantomData<T>,
 }
 
@@ -1110,12 +1110,12 @@ impl<'lua, T: FromLua<'lua> + 'lua> FromLua<'lua> for Sequence<'lua, T> {
         match value {
             Value::Table(t) => Ok(Self {
                 t,
-                _lua: lua,
+                lua,
                 ph: PhantomData,
             }),
             Value::Nil => Ok(Self {
                 t: lua.create_table()?,
-                _lua: lua,
+                lua,
                 ph: PhantomData,
             }),
             _ => Err(cvt_err("Sequence")),
@@ -1154,7 +1154,7 @@ impl<'lua, T: FromLua<'lua> + 'lua> Sequence<'lua, T> {
     pub fn empty(lua: &'lua Lua) -> Result<Self> {
         Ok(Self {
             t: lua.create_table()?,
-            _lua: lua,
+            lua: lua,
             ph: PhantomData,
         })
     }
@@ -1173,6 +1173,12 @@ impl<'lua, T: FromLua<'lua> + 'lua> Sequence<'lua, T> {
 
     pub fn first(&self) -> Result<T> {
         Ok(self.t.raw_get(1)?)
+    }
+
+    pub fn for_each<F: FnMut(Result<T>) -> Result<()>>(&self, mut f: F) -> Result<()> {
+        Ok(self.t.for_each(|_: Value, v: Value| {
+            f(T::from_lua(v, &self.lua).map_err(anyhow::Error::from)).map_err(lua_err)
+        })?)
     }
 }
 
@@ -1247,7 +1253,7 @@ pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
     }
 }
 
-/// return a unit vector starting at the specified origin pointing in the 
+/// return a unit vector starting at the specified origin pointing in the
 /// specified direction heading is in radians
 pub fn pointing_towards2(angle: f64, origin: Vector2) -> Vector2 {
     let mut point = Vector2::new(origin.x, origin.y + 1.);

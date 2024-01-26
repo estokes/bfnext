@@ -91,6 +91,7 @@ pub enum WSFixedWingCategory {
 pub enum WSAircraftCategory {
     FixedWing(WSFixedWingCategory),
     Helicopters,
+    Droptank,
     Other(i32),
     None,
 }
@@ -108,8 +109,16 @@ pub enum WSCategory {
 impl WSCategory {
     pub fn is_aircraft(&self) -> bool {
         match self {
-            Self::Aircraft(_) => true,
-            Self::None | Self::Ships | Self::Vehicles | Self::Weapons | Self::Other(_) => false,
+            Self::Aircraft(WSAircraftCategory::FixedWing(_))
+            | Self::Aircraft(WSAircraftCategory::Helicopters) => true,
+            Self::Aircraft(WSAircraftCategory::Droptank)
+            | Self::Aircraft(WSAircraftCategory::Other(_))
+            | Self::Aircraft(WSAircraftCategory::None)
+            | Self::None
+            | Self::Ships
+            | Self::Vehicles
+            | Self::Weapons
+            | Self::Other(_) => false,
         }
     }
 
@@ -118,6 +127,7 @@ impl WSCategory {
             Self::Aircraft(WSAircraftCategory::FixedWing(_)) => true,
             Self::Aircraft(WSAircraftCategory::Helicopters)
             | Self::Aircraft(WSAircraftCategory::None)
+            | Self::Aircraft(WSAircraftCategory::Droptank)
             | Self::Aircraft(WSAircraftCategory::Other(_))
             | Self::None
             | Self::Ships
@@ -132,6 +142,7 @@ impl WSCategory {
             Self::Aircraft(WSAircraftCategory::Helicopters) => true,
             Self::Aircraft(WSAircraftCategory::FixedWing(_))
             | Self::Aircraft(WSAircraftCategory::None)
+            | Self::Aircraft(WSAircraftCategory::Droptank)
             | Self::Aircraft(WSAircraftCategory::Other(_))
             | Self::None
             | Self::Ships
@@ -186,6 +197,7 @@ impl<'lua> WSType<'lua> {
                     },
                 ))),
                 2 => Ok(WSCategory::Aircraft(WSAircraftCategory::Helicopters)),
+                3 => Ok(WSCategory::Aircraft(WSAircraftCategory::Droptank)),
                 n => Ok(WSCategory::Aircraft(WSAircraftCategory::Other(n))),
             },
             2 => Ok(WSCategory::Vehicles),

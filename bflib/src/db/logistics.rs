@@ -29,7 +29,7 @@ use dcso3::{
     airbase::Airbase,
     coalition::Side,
     object::DcsObject,
-    warehouse::{self, LiquidType},
+    warehouse::{self, LiquidType, WSCategory},
     world::World,
     MizLua, String, Vector2,
 };
@@ -209,6 +209,38 @@ impl Db {
         if self.ephemeral.production_by_side.is_empty() {
             let map =
                 warehouse::Warehouse::get_resource_map(lua).context("getting resource map")?;
+            map.for_each(|name, typ| {
+                for side in Side::ALL {
+                    let template = match whcfg.supply_source.get(&side) {
+                        Some(tmpl) => tmpl,
+                        None => continue, // side didn't produce anything, bummer
+                    };
+                    let w = get_supplier(lua, template.clone())
+                        .with_context(|| format_compact!("getting supplier {template}"))?;
+                    let production =
+                        Arc::make_mut(self.ephemeral.production_by_side.entry(side).or_default());
+                    let qty = w
+                        .get_item_count(name.clone())
+                        .with_context(|| format_compact!("getting {name} from the warehouse"))?;
+                    if qty > 0 {
+                        production.equipment.insert(
+                            name.clone(),
+                            Equipment {
+                                category: typ.category().context("getting category")?,
+                                production: qty,
+                            },
+                        );
+                    }
+                    for name in LiquidType::ALL {
+                        let qty = w.get_liquid_amount(name).context("getting liquid amount")?;
+                        if qty > 0 {
+                            production.liquids.insert(name, qty);
+                        }
+                    }
+                }
+                Ok(())
+            })
+            .context("iterating resource map")?;
             for side in Side::ALL {
                 let template = match whcfg.supply_source.get(&side) {
                     Some(tmpl) => tmpl,
@@ -218,28 +250,20 @@ impl Db {
                     .with_context(|| format_compact!("getting supplier {template}"))?;
                 let production =
                     Arc::make_mut(self.ephemeral.production_by_side.entry(side).or_default());
-                map.for_each(|name, typ| {
-                    let qty = w
-                        .get_item_count(name.clone())
-                        .with_context(|| format_compact!("getting {name} from the warehouse"))?;
-                    if qty > 0 {
+                let inv = w.get_inventory(None).context("getting inventory")?;
+                inv.weapons()?.for_each(|name, qty| {
+                    dbg!((&name, qty));
+                    if qty > 0 && !production.equipment.contains_key(&name) {
                         production.equipment.insert(
-                            name,
+                            dbg!(name),
                             Equipment {
-                                category: typ.category().context("getting category")?,
+                                category: WSCategory::Weapons,
                                 production: qty,
                             },
                         );
                     }
                     Ok(())
-                })
-                .context("iterating resource map")?;
-                for name in LiquidType::ALL {
-                    let qty = w.get_liquid_amount(name).context("getting liquid amount")?;
-                    if qty > 0 {
-                        production.liquids.insert(name, qty);
-                    }
-                }
+                })?;
             }
         }
         Ok(())
@@ -294,6 +318,7 @@ impl Db {
                 Some(q) => Arc::clone(q),
             };
             for (name, equip) in &production.equipment {
+                dbg!((name, equip));
                 let aircraft = equip.category.is_aircraft();
                 for oid in &oids {
                     let obj = objective_mut!(self, oid)?;
@@ -339,66 +364,72 @@ impl Db {
         let map = warehouse::Warehouse::get_resource_map(lua).context("getting resource map")?;
         let world = World::singleton(lua).context("getting world")?;
         let mut load_and_sync_airbases = || -> Result<()> {
-            for airbase in world.get_airbases().context("getting airbases")? {
-                let airbase = airbase.context("getting airbase")?;
-                if !airbase.is_exist()? {
-                    continue; // can happen when farps get recycled
-                }
-                let pos3 = airbase.get_point().context("getting airbase position")?;
-                let pos = Vector2::new(pos3.x, pos3.z);
-                airbase
-                    .auto_capture(false)
-                    .context("setting airbase autocapture")?;
-                let oid = self.persisted.objectives.into_iter().find(|(_, obj)| {
-                    let radius2 = obj.radius.powi(2);
-                    na::distance_squared(&pos.into(), &obj.pos.into()) <= radius2
-                });
-                let (oid, obj) = match oid {
-                    Some((oid, obj)) => {
-                        airbase
-                            .set_coalition(obj.owner)
-                            .context("setting airbase owner")?;
-                        (*oid, obj)
+            world
+                .get_airbases()
+                .context("getting airbases")?
+                .for_each(|airbase| {
+                    let airbase = airbase.context("getting airbase")?;
+                    if !airbase.is_exist()? {
+                        return Ok(()); // can happen when farps get recycled
                     }
-                    None => {
-                        airbase
-                            .set_coalition(Side::Neutral)
-                            .context("setting airbase owner neutral")?;
-                        continue;
-                    }
-                };
-                self.ephemeral.airbase_by_oid.insert(
-                    oid,
-                    airbase.object_id().context("getting airbase object_id")?,
-                );
-                let production = match self.ephemeral.production_by_side.get(&obj.owner) {
-                    Some(p) => Arc::clone(p),
-                    None => return Ok(()),
-                };
-                let w = airbase
-                    .get_warehouse()
-                    .context("getting airbase warehouse")?;
-                map.for_each(|name, _| {
-                    if !production.equipment.contains_key(&name) {
-                        w.set_item(name, 0).context("zeroing item")?
-                    }
+                    let pos3 = airbase.get_point().context("getting airbase position")?;
+                    let pos = Vector2::new(pos3.x, pos3.z);
+                    airbase
+                        .auto_capture(false)
+                        .context("setting airbase autocapture")?;
+                    let oid = self.persisted.objectives.into_iter().find(|(_, obj)| {
+                        let radius2 = obj.radius.powi(2);
+                        na::distance_squared(&pos.into(), &obj.pos.into()) <= radius2
+                    });
+                    let w = airbase
+                        .get_warehouse()
+                        .context("getting airbase warehouse")?;
+                    let (oid, obj) = match oid {
+                        Some((oid, obj)) => {
+                            airbase
+                                .set_coalition(obj.owner)
+                                .context("setting airbase owner")?;
+                            (*oid, obj)
+                        }
+                        None => {
+                            airbase
+                                .set_coalition(Side::Neutral)
+                                .context("setting airbase owner neutral")?;
+                            map.for_each(|name, _| {
+                                w.set_item(name, 0).context("zeroing item")?;
+                                Ok(())
+                            })?;
+                            return Ok(());
+                        }
+                    };
+                    self.ephemeral.airbase_by_oid.insert(
+                        oid,
+                        airbase.object_id().context("getting airbase object_id")?,
+                    );
+                    let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+                        Some(p) => p,
+                        None => return Ok(()),
+                    };
+                    map.for_each(|name, _| {
+                        if !production.equipment.contains_key(&name) {
+                            w.set_item(name, 0).context("zeroing item")?
+                        }
+                        Ok(())
+                    })?;
                     Ok(())
-                })?;
-            }
-            let mut missing = vec![];
-            for (oid, obj) in &self.persisted.objectives {
-                if !self.ephemeral.airbase_by_oid.contains_key(oid) {
-                    missing.push(obj.name.clone());
-                }
-            }
-            if !missing.is_empty() {
-                bail!("objectives missing a warehouse {:?}", missing)
-            }
-            Ok(())
+                })
         };
         load_and_sync_airbases().context("loading and syncing airbases")?;
-        self.deliver_production()
-            .context("delivering production")?;
+        let mut missing = vec![];
+        for (oid, obj) in &self.persisted.objectives {
+            if !self.ephemeral.airbase_by_oid.contains_key(oid) {
+                missing.push(obj.name.clone());
+            }
+        }
+        if !missing.is_empty() {
+            bail!("objectives missing a warehouse {:?}", missing)
+        }
+        self.deliver_production().context("delivering production")?;
         self.ephemeral.dirty();
         self.sync_warehouses_from_objectives(lua)
             .context("syncing warehouses from objectives")
@@ -513,7 +544,7 @@ impl Db {
 
     pub fn deliver_production(&mut self) -> Result<()> {
         if self.ephemeral.cfg.warehouse.is_none() {
-            return Ok(())
+            return Ok(());
         }
         self.setup_supply_lines()
             .context("setting up supply lines")?;
@@ -562,7 +593,7 @@ impl Db {
                 Some(p) => Arc::clone(p),
                 None => continue,
             };
-            let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
+            let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "objective airbase")?;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
@@ -587,7 +618,8 @@ impl Db {
                 Some(p) => p,
                 None => continue,
             };
-            let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
+            let airbase = maybe!(self.ephemeral.airbase_by_oid, oid, "objective airbase")
+                .with_context(|| format_compact!("getting airbase for objective {}", obj.name))?;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
@@ -1023,7 +1055,7 @@ impl Db {
                         format_compact!("getting liquid {:?} from warehouse", name)
                     })?;
                     if qty > 0 {
-                        write!(msg, "{:?}, {qty}", name)?
+                        write!(msg, "{:?}, {qty}\n", name)?
                     }
                 }
                 warn!("{msg}")
@@ -1032,10 +1064,10 @@ impl Db {
                 let obj = objective!(self, oid)?;
                 let mut msg = CompactString::new("");
                 for (name, inv) in &obj.warehouse.equipment {
-                    write!(msg, "{name}, {}/{}", inv.stored, inv.capacity)?
+                    write!(msg, "{name}, {}/{}\n", inv.stored, inv.capacity)?
                 }
                 for (name, inv) in &obj.warehouse.liquids {
-                    write!(msg, "{:?}, {}/{}", name, inv.stored, inv.capacity)?
+                    write!(msg, "{:?}, {}/{}\n", name, inv.stored, inv.capacity)?
                 }
                 warn!("{msg}")
             }

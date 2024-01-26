@@ -1098,6 +1098,10 @@
     "Ka-50_3": [
       "Helicopter"
     ],
+    "GeneratorF": [
+      "Logistics",
+      "Unarmed"
+    ],
     "FARP Ammo Dump Coating": [
       "Logistics",
       "Unarmed"

@@ -192,7 +192,7 @@ impl ObjectiveMarkup {
                               marks: &[MarkId; 5],
                               val: u8| {
             msgq.text_to_all(
-                obj.owner.into(),
+                all_spec,
                 label,
                 TextSpec {
                     pos: LuaVec3(Vector3::new(pos3.x + 200., 0., pos3.z)),
@@ -208,7 +208,7 @@ impl ObjectiveMarkup {
                 let i = i as f64;
                 let (a, ba) = if (val / (j * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
                 msgq.rect_to_all(
-                    obj.owner.into(),
+                    all_spec,
                     *id,
                     RectSpec {
                         start: LuaVec3(Vector3::new(pos3.x, 0., pos3.z + i * 500.)),
@@ -243,7 +243,7 @@ impl ObjectiveMarkup {
             None,
         );
         msgq.circle_to_all(
-            obj.owner.into(),
+            all_spec,
             t.threatened_ring,
             CircleSpec {
                 center: LuaVec3(pos3),
@@ -302,7 +302,7 @@ impl ObjectiveMarkup {
                     let rdir = (pos - dobj.pos).normalize();
                     let dpos = dobj.pos + rdir * dobj.radius * 1.1;
                     msgq.arrow_to_all(
-                        obj.owner.into(),
+                        all_spec,
                         id,
                         ArrowSpec {
                             start: LuaVec3(Vector3::new(dpos.x, 0., dpos.y)),

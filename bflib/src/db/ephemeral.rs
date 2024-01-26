@@ -30,7 +30,16 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
-    airbase::ClassAirbase, centroid2d, coalition::Side, env::miz::{GroupKind, Miz, MizIndex}, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, trigger::{ArrowSpec, CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec}, unit::{ClassUnit, Unit}, warehouse::{LiquidType, WSCategory}, Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3
+    airbase::ClassAirbase,
+    centroid2d,
+    coalition::Side,
+    env::miz::{GroupKind, Miz, MizIndex},
+    net::{SlotId, Ucid},
+    object::{DcsObject, DcsOid},
+    trigger::{ArrowSpec, CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec},
+    unit::{ClassUnit, Unit},
+    warehouse::{LiquidType, WSCategory},
+    Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use log::info;
@@ -143,7 +152,11 @@ impl ObjectiveMarkup {
             self.health = obj.health;
             for (i, id) in self.healthbar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let (a, ba) = if (obj.health / (i * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
+                let (a, ba) = if (obj.health / (i * 20)) > 0 {
+                    (0.5, 1.)
+                } else {
+                    (0., 0.25)
+                };
                 msgq.set_markup_fill_color(*id, Color::green(a));
                 msgq.set_markup_color(*id, Color::black(ba));
             }
@@ -152,7 +165,11 @@ impl ObjectiveMarkup {
             self.logi = obj.logi;
             for (i, id) in self.logibar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let (a, ba) = if (obj.logi / (i * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
+                let (a, ba) = if (obj.logi / (i * 20)) > 0 {
+                    (0.5, 1.)
+                } else {
+                    (0., 0.25)
+                };
                 msgq.set_markup_fill_color(*id, Color::green(a));
                 msgq.set_markup_color(*id, Color::black(ba));
             }
@@ -161,7 +178,11 @@ impl ObjectiveMarkup {
             self.supply = obj.supply;
             for (i, id) in self.supplybar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let (a, ba) = if (obj.supply / (i * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
+                let (a, ba) = if (obj.supply / (i * 20)) > 0 {
+                    (0.5, 1.)
+                } else {
+                    (0., 0.25)
+                };
                 msgq.set_markup_fill_color(*id, Color::green(a));
                 msgq.set_markup_color(*id, Color::black(ba));
             }
@@ -170,7 +191,11 @@ impl ObjectiveMarkup {
             self.fuel = obj.fuel;
             for (i, id) in self.fuelbar.iter().enumerate() {
                 let i = (i + 1) as u8;
-                let (a, ba) = if (obj.fuel / (i * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
+                let (a, ba) = if (obj.fuel / (i * 20)) > 0 {
+                    (0.5, 1.)
+                } else {
+                    (0., 0.25)
+                };
                 msgq.set_markup_fill_color(*id, Color::green(a));
                 msgq.set_markup_color(*id, Color::black(ba));
             }
@@ -206,7 +231,11 @@ impl ObjectiveMarkup {
             for (i, id) in marks.iter().enumerate() {
                 let j = (i + 1) as u8;
                 let i = i as f64;
-                let (a, ba) = if (val / (j * 20)) > 0 { (0.5, 1.) } else { (0., 0.25) };
+                let (a, ba) = if (val / (j * 20)) > 0 {
+                    (0.5, 1.)
+                } else {
+                    (0., 0.25)
+                };
                 msgq.rect_to_all(
                     all_spec,
                     *id,

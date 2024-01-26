@@ -27,7 +27,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use chrono::prelude::*;
-use compact_str::{format_compact, CompactString};
+use compact_str::{format_compact, CompactString, ToCompactString};
 use dcso3::{
     as_tbl,
     coalition::Side,
@@ -122,15 +122,16 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     match ctx.db.load_nearby_crate(lua, &ctx.idx, &slot) {
         Ok(cr) => {
-            let (dep_name, dep) = ctx
-                .db
-                .deployable_by_crate(&side, &cr.name)
-                .ok_or_else(|| anyhow!("unknown deployable for crate {}", cr.name))?;
+            let (dep_name, limit_enforce, limit) = match ctx.db.deployable_by_crate(&side, &cr.name)
+            {
+                Some((dep_name, dep)) => (dep_name, &dep.limit_enforce, Some(dep.limit)),
+                None => (&cr.name, &LimitEnforceTyp::DenyCrate, None),
+            };
             let (n, oldest) = ctx
                 .db
                 .number_deployed(side, dep_name.as_str())
                 .with_context(|| format_compact!("getting number of {} deployed", dep_name))?;
-            let enforce = match dep.limit_enforce {
+            let enforce = match limit_enforce {
                 LimitEnforceTyp::DenyCrate => {
                     format_compact!("unpacking will be denied when the limit is exceeded")
                 }
@@ -152,10 +153,13 @@ fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
                     }
                 },
             };
+            let limit = limit
+                .map(|i| i.to_compact_string())
+                .unwrap_or_else(|| format_compact!("unlimited"));
             let msg = format_compact!(
                 "{} crate loaded\n{n} of {} {} deployed, {}",
                 cr.name,
-                dep.limit,
+                limit,
                 dep_name,
                 enforce
             );
@@ -570,7 +574,7 @@ fn add_cargo_menu_for_group(
     let root = mc.add_submenu_for_group(group, "Cargo".into(), None)?;
     mc.add_command_for_group(
         group,
-        "Unpack Nearby Crate(s)".into(),
+        "Unpakistan!".into(),
         Some(root.clone()),
         unpakistan,
         group,
@@ -672,17 +676,17 @@ fn add_cargo_menu_for_group(
 }
 
 fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
-    let root = mc.add_submenu_for_group(group, "EWR".into(), None)?;
+    let root = mc.add_submenu_for_group(group, "Where Chicken?".into(), None)?;
     mc.add_command_for_group(
         group,
-        "Enemy Report".into(),
+        "Gib BRAA!".into(),
         Some(root.clone()),
         ewr_report,
         group,
     )?;
     mc.add_command_for_group(
         group,
-        "Toggle".into(),
+        "toggle".into(),
         Some(root.clone()),
         toggle_ewr,
         group,

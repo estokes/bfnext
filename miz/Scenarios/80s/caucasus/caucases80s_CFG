@@ -193,6 +193,16 @@
       "troop_slots": 1,
       "crate_slots": 1,
       "total_slots": 1
+    },
+    "MB-339A": {
+      "troop_slots": 0,
+      "crate_slots": 1,
+      "total_slots": 1
+    },
+    "L-39ZA": {
+      "troop_slots": 0,
+      "crate_slots": 1,
+      "total_slots": 1
     }
   },
   "crate_template": {

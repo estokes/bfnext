@@ -10,5 +10,6 @@
         "path": "path/to/mission2",
         "write_protected": true
       }
-    }
+    },
+    "config" : "C:\\"
   }

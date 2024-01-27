@@ -28,7 +28,7 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
-    controller::{AltType, Task},
+    controller::Task,
     group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
@@ -456,8 +456,8 @@ impl Jtac {
                         radius: Some(10.),
                         expend_qty: Some(100),
                         weapon_type: None,
-                        altitude: Some(0.),
-                        altitude_type: Some(AltType::AGL),
+                        altitude: None,
+                        altitude_type: None,
                     })
                     .context("setting task")?;
                 }

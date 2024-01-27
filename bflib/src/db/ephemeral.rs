@@ -92,6 +92,7 @@ impl ObjectiveMarkup {
             supply: _,
             fuel: _,
             owner_ring,
+            capturable_ring,
             threatened_ring,
             name,
             health_label,
@@ -106,6 +107,7 @@ impl ObjectiveMarkup {
         } = self;
         msgq.delete_mark(owner_ring);
         msgq.delete_mark(threatened_ring);
+        msgq.delete_mark(capturable_ring);
         msgq.delete_mark(name);
         msgq.delete_mark(health_label);
         for id in healthbar {
@@ -171,7 +173,7 @@ impl ObjectiveMarkup {
             self.logi = obj.logi;
             msgq.set_markup_color(
                 self.capturable_ring,
-                Color::white(if obj.captureable { 0.75 } else { 0. }),
+                Color::white(if obj.captureable() { 0.75 } else { 0. }),
             );
             update_bar!(logibar, logi);
         }
@@ -214,7 +216,7 @@ impl ObjectiveMarkup {
             for (i, id) in marks.iter().enumerate() {
                 let j = (i + 1) as u8;
                 let i = i as f64;
-                let (a, ba) = if (i == 0 && val > 0) || (val / (j * 20)) > 0 {
+                let (a, ba) = if (i == 0. && val > 0) || (val / (j * 20)) > 0 {
                     (0.5, 1.)
                 } else {
                     (0., 0.25)

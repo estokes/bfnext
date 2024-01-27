@@ -1,5 +1,11 @@
 {
-  "admins": ["f279deb7a6b62c96a78eca3ddb2bd8d0"],
+  "admins": [
+    "f279deb7a6b62c96a78eca3ddb2bd8d0", 
+    "69d60e1a0fe1c86bc3e81792458dba61",
+    "317b35352512a554457dd1e6b07311d9", 
+    "d613f7f534f4498e47652c29d00836e6", 
+    "d931948745285fc8e42adbe35a7dfd50",
+  ],
   "repair_time": 1800,
   "repair_crate": {
     "Red": {

@@ -62,11 +62,12 @@ impl fmt::Display for PlayerId {
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum SlotIdKind {
+    Spectator,
     Normal,
-    ArtilleryCommander,
-    ForwardObserver,
-    Observer,
-    Instructor,
+    ArtilleryCommander(Side),
+    ForwardObserver(Side),
+    Observer(Side),
+    Instructor(Side),
 }
 
 wrapped_prim!(SlotId, String, Hash);
@@ -79,14 +80,29 @@ impl From<UnitId> for SlotId {
 
 impl SlotId {
     pub fn classify(&self) -> SlotIdKind {
-        if self.is_artillery_commander() {
-            SlotIdKind::ArtilleryCommander
+        fn side(s: &str) -> Side {
+            if s.starts_with("red") {
+                Side::Red
+            } else if s.starts_with("blue") {
+                Side::Blue
+            } else {
+                Side::Neutral
+            }
+        }
+        if self.is_spectator() {
+            SlotIdKind::Spectator
+        } else if self.is_artillery_commander() {
+            let s = self.0.strip_prefix("artillery_commander_").unwrap();
+            SlotIdKind::ArtilleryCommander(side(s))
         } else if self.is_observer() {
-            SlotIdKind::Observer
+            let s = self.0.strip_prefix("observer_").unwrap();
+            SlotIdKind::Observer(side(s))
         } else if self.is_forward_observer() {
-            SlotIdKind::ForwardObserver
+            let s = self.0.strip_prefix("forward_observer_").unwrap();
+            SlotIdKind::ForwardObserver(side(s))
         } else if self.is_instructor() {
-            SlotIdKind::Instructor
+            let s = self.0.strip_prefix("instructor_").unwrap();
+            SlotIdKind::Instructor(side(s))
         } else {
             SlotIdKind::Normal
         }

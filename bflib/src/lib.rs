@@ -60,7 +60,7 @@ use msgq::MsgTyp;
 use perf::Perf;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{iter, path::PathBuf, sync::Arc};
+use std::{iter, mem, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
@@ -98,10 +98,10 @@ struct Context {
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
+    menu_init_queue: SmallVec<[SlotId; 4]>,
     last_slow_timed_events: DateTime<Utc>,
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
-    menus_initialized: bool,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -477,7 +477,7 @@ fn on_player_try_change_slot(
             error!("failed to get player info for {:?} {:?}", id, e);
             Ok(Some(false))
         }
-        Ok(ifo) => match try_occupy_slot(id, &ifo, side, slot) {
+        Ok(ifo) => match try_occupy_slot(id, &ifo, side, slot.clone()) {
             Err(e) => {
                 error!("error checking slot {:?}", e);
                 Ok(Some(false))
@@ -486,6 +486,9 @@ fn on_player_try_change_slot(
             Ok(true) => Ok(None),
         },
     };
+    if let Ok(None) = res {
+        ctx.menu_init_queue.push(slot.clone());
+    }
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
         start_ts,
@@ -816,11 +819,6 @@ fn run_slow_timed_events(
     let freq = Duration::seconds(ctx.db.ephemeral.cfg.slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
-        if !ctx.menus_initialized {
-            ctx.menus_initialized = true;
-            info!("initializing menus");
-            menu::init(&ctx, lua).context("initalizing the menus")?;
-        }
         for (_, ids) in ctx.db.ephemeral.players_to_force_to_spectators(ts) {
             for ucid in ids {
                 match ctx.id_by_ucid.get(&ucid) {
@@ -919,6 +917,13 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let act = Trigger::singleton(lua)?.action()?;
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, ts) {
         error!("error running slow timed events {:?}", e)
+    }
+    if !ctx.menu_init_queue.is_empty() {
+        for slot in mem::take(&mut ctx.menu_init_queue) {
+            if let Err(e) = menu::init_for_slot(ctx, lua, &slot) {
+                error!("could not init menus for slot {:?} {:?}", slot, e)
+            }
+        }
     }
     let now = Utc::now();
     let spctx = SpawnCtx::new(lua)?;
@@ -1020,6 +1025,8 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     info!("spawning units");
     ctx.respawn_groups(lua)
         .context("setting up the mission after load")?;
+    // info!("initializing menus");
+    // menu::init(&ctx, lua).context("initalizing the menus")?;
     info!("starting timed events");
     start_timed_events(lua, path).context("starting the timed events loop")?;
     Ok(())

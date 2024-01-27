@@ -166,7 +166,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn init_objective_slots(&mut self, slot: Group) -> Result<()> {
+    pub fn init_objective_slots(&mut self, side: Side, slot: Group) -> Result<()> {
         let mut ground_start = false;
         for point in slot.route()?.points()? {
             let point = point?;
@@ -232,6 +232,8 @@ impl Db {
                 SlotInfo {
                     typ: vehicle,
                     ground_start,
+                    miz_gid: slot.id()?,
+                    side
                 },
             );
         }
@@ -269,11 +271,11 @@ impl Db {
                 let country = country?;
                 for plane in country.planes()? {
                     let plane = plane?;
-                    t.init_objective_slots(plane)?
+                    t.init_objective_slots(side, plane)?
                 }
                 for heli in country.helicopters()? {
                     let heli = heli?;
-                    t.init_objective_slots(heli)?
+                    t.init_objective_slots(side, heli)?
                 }
             }
         }

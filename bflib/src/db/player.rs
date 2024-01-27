@@ -248,7 +248,8 @@ impl Db {
             return SlotAuth::ObjectiveNotOwned(player.side);
         }
         match slot.classify() {
-            SlotIdKind::Instructor => {
+            SlotIdKind::Spectator => unreachable!(),
+            SlotIdKind::Instructor(_) => {
                 if self.ephemeral.cfg.admins.contains(ucid) {
                     player.jtac_or_spectators = true;
                     SlotAuth::Yes
@@ -256,7 +257,7 @@ impl Db {
                     SlotAuth::Denied
                 }
             }
-            SlotIdKind::ArtilleryCommander | SlotIdKind::ForwardObserver | SlotIdKind::Observer => {
+            SlotIdKind::ArtilleryCommander(_) | SlotIdKind::ForwardObserver(_) | SlotIdKind::Observer(_) => {
                 player.jtac_or_spectators = true;
                 // CR estokes: add permissions for game master
                 SlotAuth::Yes

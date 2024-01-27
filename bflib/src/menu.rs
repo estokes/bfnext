@@ -31,10 +31,10 @@ use compact_str::{format_compact, CompactString, ToCompactString};
 use dcso3::{
     as_tbl,
     coalition::Side,
-    env::miz::{Group, GroupId, Miz},
+    env::miz::{GroupId, Miz},
     lua_err,
     mission_commands::{CoalitionSubMenu, GroupSubMenu, MissionCommands},
-    net::SlotId,
+    net::{SlotId, SlotIdKind},
     MizLua, String,
 };
 use enumflags2::{BitFlag, BitFlags};
@@ -946,6 +946,17 @@ struct CarryCap {
 }
 
 impl CarryCap {
+    fn from_typ(cfg: &Cfg, typ: &str) -> CarryCap {
+        cfg.cargo
+            .get(&*typ)
+            .map(|c| CarryCap {
+                troops: c.troop_slots > 0 && c.total_slots > 0,
+                crates: c.crate_slots > 0 && c.total_slots > 0,
+            })
+            .unwrap_or_default()
+    }
+
+    /*
     fn new(cfg: &Cfg, group: &Group) -> Result<CarryCap> {
         Ok(group
             .units()?
@@ -954,18 +965,54 @@ impl CarryCap {
                 let mut acc = acc?;
                 let unit = unit?;
                 let typ = unit.typ()?;
-                match cfg.cargo.get(&**typ) {
-                    None => Ok(acc),
-                    Some(c) => {
-                        acc.troops |= c.troop_slots > 0 && c.total_slots > 0;
-                        acc.crates |= c.crate_slots > 0 && c.total_slots > 0;
-                        Ok(acc)
-                    }
-                }
+                let c = Self::from_typ(cfg, &typ);
+                acc.troops |= c.troops;
+                acc.crates |= c.crates;
+                Ok(acc)
             })?)
+    }
+    */
+}
+
+pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result<()> {
+    debug!("initializing menus");
+    let cfg = &ctx.db.ephemeral.cfg;
+    let mc = MissionCommands::singleton(lua)?;
+    let add_jtac = |side| -> Result<()> {
+        mc.remove_submenu_for_coalition(side, vec!["JTAC".into()].into())?;
+        let _ = mc.add_submenu_for_coalition(side, "JTAC".into(), None)?;
+        for (_, group, _) in ctx.db.jtacs() {
+            if group.side == side {
+                add_menu_for_jtac(lua, group.side, group.id)?
+            }
+        }
+        Ok(())
+    };
+    match slot.classify() {
+        SlotIdKind::Spectator => Ok(()),
+        SlotIdKind::ArtilleryCommander(side)
+        | SlotIdKind::ForwardObserver(side)
+        | SlotIdKind::Instructor(side)
+        | SlotIdKind::Observer(side) => add_jtac(side),
+        SlotIdKind::Normal => {
+            let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
+            let cap = CarryCap::from_typ(cfg, si.typ.as_str());
+            mc.remove_submenu_for_group(si.miz_gid, vec!["Cargo".into()].into())?;
+            if cap.crates {
+                add_cargo_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
+            }
+            mc.remove_submenu_for_group(si.miz_gid, vec!["Troops".into()].into())?;
+            if cap.troops {
+                add_troops_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
+            }
+            mc.remove_submenu_for_group(si.miz_gid, vec!["EWR".into()].into())?;
+            add_ewr_menu_for_group(&mc, si.miz_gid)?;
+            add_jtac(si.side)
+        }
     }
 }
 
+/*
 pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
     debug!("initializing menus");
     let cfg = &ctx.db.ephemeral.cfg;
@@ -1004,3 +1051,4 @@ pub(super) fn init(ctx: &Context, lua: MizLua) -> Result<()> {
     }
     Ok(())
 }
+*/

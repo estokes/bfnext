@@ -34,7 +34,7 @@ use dcso3::{
     coalition::Side,
     coord::Coord,
     cvt_err,
-    env::miz::{GroupKind, MizIndex},
+    env::miz::{self, GroupKind, MizIndex},
     land::Land,
     net::SlotId,
     object::DcsObject,
@@ -218,6 +218,8 @@ impl ObjGroup {
 pub struct SlotInfo {
     pub typ: Vehicle,
     pub ground_start: bool,
+    pub miz_gid: miz::GroupId,
+    pub side: Side,
 }
 
 atomic_id!(ObjectiveId);
@@ -298,6 +300,12 @@ impl Db {
 
     pub fn objectives(&self) -> impl Iterator<Item = (&ObjectiveId, &Objective)> {
         self.persisted.objectives.into_iter()
+    }
+
+    pub fn info_for_slot(&self, slot: &SlotId) -> Result<&SlotInfo> {
+        let oid = maybe!(self.persisted.objectives_by_slot, slot, "slot")?;
+        let obj = objective!(self, oid)?;
+        maybe!(obj.slots, slot, "objective slot")
     }
 
     /// (distance, heading from objective to point, objective)

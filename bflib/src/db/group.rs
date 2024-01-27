@@ -661,7 +661,7 @@ impl Db {
         let units = units
             .map(|i| Box::new(i) as Box<dyn Iterator<Item = UnitId>>)
             .unwrap_or_else(|| {
-                Box::new(self.ephemeral.units_able_to_move.iter().map(|i| *i))
+                Box::new(self.ephemeral.object_id_by_uid.keys().map(|i| *i))
                     as Box<dyn Iterator<Item = UnitId>>
             });
         for uid in units {

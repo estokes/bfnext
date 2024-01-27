@@ -676,10 +676,10 @@ fn add_cargo_menu_for_group(
 }
 
 fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
-    let root = mc.add_submenu_for_group(group, "Where Chicken?".into(), None)?;
+    let root = mc.add_submenu_for_group(group, "EWR".into(), None)?;
     mc.add_command_for_group(
         group,
-        "Gib BRAA!".into(),
+        "Report".into(),
         Some(root.clone()),
         ewr_report,
         group,

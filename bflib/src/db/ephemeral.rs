@@ -60,6 +60,7 @@ pub(super) struct ObjectiveMarkup {
     supply: u8,
     fuel: u8,
     owner_ring: MarkId,
+    capturable_ring: MarkId,
     threatened_ring: MarkId,
     name: MarkId,
     health_label: MarkId,
@@ -148,57 +149,39 @@ impl ObjectiveMarkup {
                 Color::yellow(if self.threatened { 0.75 } else { 0. }),
             );
         }
+        macro_rules! update_bar {
+            ($bar:ident, $field:ident) => {
+                for (i, id) in self.$bar.iter().enumerate() {
+                    let i = (i + 1) as u8;
+                    let (a, ba) = if (i == 0 && obj.$field > 0) || (obj.$field / (i * 20)) > 0 {
+                        (0.5, 1.)
+                    } else {
+                        (0., 0.25)
+                    };
+                    msgq.set_markup_fill_color(*id, Color::green(a));
+                    msgq.set_markup_color(*id, Color::black(ba));
+                }
+            }
+        }
         if self.health != obj.health {
             self.health = obj.health;
-            for (i, id) in self.healthbar.iter().enumerate() {
-                let i = (i + 1) as u8;
-                let (a, ba) = if (obj.health / (i * 20)) > 0 {
-                    (0.5, 1.)
-                } else {
-                    (0., 0.25)
-                };
-                msgq.set_markup_fill_color(*id, Color::green(a));
-                msgq.set_markup_color(*id, Color::black(ba));
-            }
+            update_bar!(healthbar, health);
         }
         if self.logi != obj.logi {
             self.logi = obj.logi;
-            for (i, id) in self.logibar.iter().enumerate() {
-                let i = (i + 1) as u8;
-                let (a, ba) = if (obj.logi / (i * 20)) > 0 {
-                    (0.5, 1.)
-                } else {
-                    (0., 0.25)
-                };
-                msgq.set_markup_fill_color(*id, Color::green(a));
-                msgq.set_markup_color(*id, Color::black(ba));
-            }
+            msgq.set_markup_color(
+                self.capturable_ring,
+                Color::white(if obj.captureable { 0.75 } else { 0. }),
+            );
+            update_bar!(logibar, logi);
         }
         if self.supply != obj.supply {
             self.supply = obj.supply;
-            for (i, id) in self.supplybar.iter().enumerate() {
-                let i = (i + 1) as u8;
-                let (a, ba) = if (obj.supply / (i * 20)) > 0 {
-                    (0.5, 1.)
-                } else {
-                    (0., 0.25)
-                };
-                msgq.set_markup_fill_color(*id, Color::green(a));
-                msgq.set_markup_color(*id, Color::black(ba));
-            }
+            update_bar!(supplybar, supply);
         }
         if self.fuel != obj.fuel {
             self.fuel = obj.fuel;
-            for (i, id) in self.fuelbar.iter().enumerate() {
-                let i = (i + 1) as u8;
-                let (a, ba) = if (obj.fuel / (i * 20)) > 0 {
-                    (0.5, 1.)
-                } else {
-                    (0., 0.25)
-                };
-                msgq.set_markup_fill_color(*id, Color::green(a));
-                msgq.set_markup_color(*id, Color::black(ba));
-            }
+            update_bar!(fuelbar, fuel);
         }
     }
 
@@ -231,7 +214,7 @@ impl ObjectiveMarkup {
             for (i, id) in marks.iter().enumerate() {
                 let j = (i + 1) as u8;
                 let i = i as f64;
-                let (a, ba) = if (val / (j * 20)) > 0 {
+                let (a, ba) = if (i == 0 && val > 0) || (val / (j * 20)) > 0 {
                     (0.5, 1.)
                 } else {
                     (0., 0.25)
@@ -278,6 +261,19 @@ impl ObjectiveMarkup {
                 center: LuaVec3(pos3),
                 radius: cfg.logistics_exclusion as f64,
                 color: Color::yellow(if obj.threatened { 0.75 } else { 0. }),
+                fill_color: Color::white(0.),
+                line_type: LineType::Solid,
+                read_only: true,
+            },
+            None,
+        );
+        msgq.circle_to_all(
+            all_spec,
+            t.capturable_ring,
+            CircleSpec {
+                center: LuaVec3(pos3),
+                radius: obj.radius as f64 * 0.9,
+                color: Color::white(if obj.captureable() { 0.75 } else { 0. }),
                 fill_color: Color::white(0.),
                 line_type: LineType::Solid,
                 read_only: true,

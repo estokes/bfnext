@@ -155,7 +155,7 @@ impl ObjectiveMarkup {
             ($bar:ident, $field:ident) => {
                 for (i, id) in self.$bar.iter().enumerate() {
                     let i = (i + 1) as u8;
-                    let (a, ba) = if (i == 0 && obj.$field > 0) || (obj.$field / (i * 20)) > 0 {
+                    let (a, ba) = if (i == 1 && obj.$field > 0) || (obj.$field / (i * 20)) > 0 {
                         (0.5, 1.)
                     } else {
                         (0., 0.25)

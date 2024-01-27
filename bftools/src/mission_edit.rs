@@ -12,7 +12,7 @@
 //edit mission table (crack open templates 1 at a time)
 
 //repack miz
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use log::{info, warn};
 use rlua::prelude::*;
 use rlua::{Table, Value};
@@ -31,6 +31,43 @@ pub struct MissionEditConfig {
     warehouse_template: PathBuf,
     option_template: PathBuf,
     weather_template_folder: PathBuf,
+}
+
+struct TriggerZone {
+    x: f32,
+    y: f32,
+    radius: f32,
+    objective_name: String,
+    spawn_count: HashMap<String, i32>,
+}
+
+impl TriggerZone {
+    pub fn new(trigger_name: String, x: f32, y: f32, radius: f32) -> Result<Self> {
+        if trigger_name.len() >= 5 {
+            if trigger_name.starts_with('O') {
+                let t = TriggerZone {
+                    objective_name: trigger_name[4..].to_string(),
+                    x,
+                    y,
+                    radius,
+                    spawn_count: HashMap::new(),
+                };
+                info!("added objective {}", trigger_name[4..].to_string());
+                return Ok(t);
+            } else {
+                bail!("invalid trigger name");
+            }
+        };
+        Err(anyhow!("trigger name too short"))
+    }
+
+    pub fn vec2_in_zone(&self, x: f32, y: f32) -> bool {
+        let dist = ((self.x - x).powi(2) + (self.y - y).powi(2)).sqrt();
+        if dist <= self.radius {
+            return true;
+        };
+        false
+    }
 }
 
 fn dump_miz_contents(miz_path: &PathBuf) -> Result<HashMap<String, PathBuf>> {
@@ -94,7 +131,6 @@ fn clean_files(map: HashMap<String, PathBuf>) -> Result<()> {
         match stripped {
             Ok(p) => {
                 let components: Vec<_> = p.components().collect();
-                dbg!(p, components[0].as_os_str());
                 let _ = fs::remove_dir_all(base_path.join(components[0].as_os_str()));
             }
             Err(_) => (),
@@ -182,6 +218,7 @@ impl MissionEditConfig {
 impl<'lua> MissionEditor {
     pub fn do_the_thing(config_path: PathBuf, lua: rlua::Lua, target_miz: PathBuf) -> Result<()> {
         let _ = lua.context(|ctx| {
+            let mut objective_triggers: Vec<TriggerZone> = Vec::new();
             let mission_config: MissionEditConfig =
                 MissionEditConfig::from_file(config_path).unwrap();
             let base_contents = dump_miz_contents(&mission_config.base_miz_path).unwrap();
@@ -319,6 +356,28 @@ impl<'lua> MissionEditor {
                     }
                 }
             }
+            //compile trigger zones
+            for trigger_zone in lua_contents
+                .get("mission")
+                .unwrap()
+                .raw_get::<_, Table>("triggers")
+                .unwrap()
+                .raw_get::<_, Table>("zones")
+                .unwrap()
+                .pairs::<Value, Table>()
+            {
+                let (_index, trigger_table) = trigger_zone.unwrap();
+                match TriggerZone::new(
+                    trigger_table.get("name").unwrap(),
+                    trigger_table.get("x").unwrap(),
+                    trigger_table.get("y").unwrap(),
+                    trigger_table.get("radius").unwrap(),
+                ) {
+                    Ok(t) => objective_triggers.push(t),
+                    Err(_) => continue,
+                }
+            }
+
             let mut replace_count: HashMap<String, isize> = HashMap::new();
             //apply weapon/APA templates to mission table in self
             info!("replacing slots with template payloads");
@@ -358,7 +417,7 @@ impl<'lua> MissionEditor {
                             let unit_type: String = unit_table.raw_get("type").unwrap();
                             match payload_templates.get(&unit_type) {
                                 Some(w) => unit_table.set("payload", w.clone()).unwrap(),
-                                None => (),
+                                None => warn!("no payload table for {unit_type}"),
                             }
                             match add_prop_aircraft_templates.get(&unit_type) {
                                 Some(w) => unit_table.set("AddPropAircraft", w.clone()).unwrap(),
@@ -369,6 +428,29 @@ impl<'lua> MissionEditor {
                                 None => (),
                             };
                             increment_key(&mut replace_count, &unit_type);
+
+                            let x = unit_table.get("x").unwrap();
+                            let y = unit_table.get("y").unwrap();
+
+                            for trigger_zone in &mut objective_triggers {
+                                if trigger_zone.vec2_in_zone(x, y) {
+                                    let count: i32 = match trigger_zone.spawn_count.get(&unit_type)
+                                    {
+                                        Some(i) => i + 1,
+                                        None => 1,
+                                    };
+
+                                    trigger_zone.spawn_count.insert(unit_type.clone(), count);
+
+                                    let new_name = format!(
+                                        "{} {} {}",
+                                        trigger_zone.objective_name, &unit_type, count
+                                    );
+                                    unit_table.set("name", new_name.clone()).unwrap();
+                                    group_table.set("name", new_name).unwrap();
+                                    break;
+                                }
+                            }
                         }
                     }
                     //helis
@@ -389,7 +471,7 @@ impl<'lua> MissionEditor {
                             let unit_type: String = unit_table.raw_get("type").unwrap();
                             match payload_templates.get(&unit_type) {
                                 Some(w) => unit_table.set("payload", w.clone()).unwrap(),
-                                None => (),
+                                None => warn!("no payload table for {unit_type}"),
                             }
                             match add_prop_aircraft_templates.get(&unit_type) {
                                 Some(w) => unit_table.set("AddPropAircraft", w.clone()).unwrap(),
@@ -432,6 +514,7 @@ impl<'lua> MissionEditor {
             )
             .unwrap();
 
+            info!("cleaning files...");
             let _ = clean_files(base_contents);
             let _ = clean_files(weapon_contents);
             let _ = clean_files(option_contents);

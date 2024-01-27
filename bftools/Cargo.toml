@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bflib = { version = "0.1", path = "../bflib" }
 dcso3 = { version = "0.1", path = "../dcso3" }
 anyhow.workspace = true
 serde.workspace = true

@@ -25,7 +25,7 @@ use dcso3::{
     DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
-use log::error;
+use log::info;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,7 +123,13 @@ impl<'lua> SpawnCtx<'lua> {
             .ok_or_else(|| anyhow!("no such trigger zone {name}"))?)
     }
 
-    pub fn move_farp_pad(&self, idx: &MizIndex, side: Side, pad_template: &str, pos: Vector2) -> Result<()> {
+    pub fn move_farp_pad(
+        &self,
+        idx: &MizIndex,
+        side: Side,
+        pad_template: &str,
+        pos: Vector2,
+    ) -> Result<()> {
         let pad = {
             let pad = self
                 .get_template(idx, GroupKind::Any, side, &pad_template)
@@ -174,7 +180,7 @@ impl<'lua> SpawnCtx<'lua> {
             Despawn::Group(name) => {
                 match dcso3::group::Group::get_by_name(self.lua, &*name) {
                     Ok(group) => group.destroy()?,
-                    Err(e) => error!("attempt to despawn unknown group {} {}", name, e),
+                    Err(e) => info!("attempt to despawn unknown group {} {}", name, e),
                 }
                 Ok(())
             }
@@ -182,7 +188,7 @@ impl<'lua> SpawnCtx<'lua> {
                 match dcso3::static_object::StaticObject::get_by_name(self.lua, &*name) {
                     Ok(Static::Airbase(obj)) => obj.destroy()?,
                     Ok(Static::Static(obj)) => obj.destroy()?,
-                    Err(e) => error!("attempt to despawn unknown static {} {}", name, e),
+                    Err(e) => info!("attempt to despawn unknown static {} {}", name, e),
                 }
                 Ok(())
             }

@@ -822,16 +822,8 @@ impl Db {
                 for gid in groups {
                     if let Some(group) = self.persisted.groups.get(gid) {
                         if group.class.is_services() {
-                            let mut despawn = false;
-                            for uid in &group.units {
-                                if self.ephemeral.object_id_by_uid.contains_key(uid) {
-                                    despawn = true
-                                }
-                            }
-                            if despawn {
-                                self.ephemeral
-                                    .push_despawn(*gid, Despawn::Group(group.name.clone()))
-                            }
+                            self.ephemeral
+                                .push_despawn(*gid, Despawn::Group(group.name.clone()))
                         }
                     }
                 }

@@ -12,17 +12,14 @@
 //edit mission table (crack open templates 1 at a time)
 
 //repack miz
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use log::{info, warn};
 use rlua::prelude::*;
-use rlua::{Lua, Table, Value};
-use serde_json::to_value;
+use rlua::{Table, Value};
 use std::{
     collections::HashMap,
-    fmt::Debug,
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Write},
-    mem::replace,
     path::PathBuf,
 };
 use zip::{read::ZipArchive, write::FileOptions, CompressionMethod, ZipWriter};
@@ -34,25 +31,6 @@ pub struct MissionEditConfig {
     warehouse_template: PathBuf,
     option_template: PathBuf,
     weather_template_folder: PathBuf,
-}
-
-enum Theatre {
-    Caucasus,
-    PersianGulf,
-    Syria,
-    Sinai,
-}
-
-impl Theatre {
-    fn from_str(s: &str) -> Result<Self> {
-        match s {
-            "Caucasus" => Ok(Theatre::Caucasus),
-            "PersianGulf" => Ok(Theatre::PersianGulf),
-            "Syria" => Ok(Theatre::Syria),
-            "Sinai" => Ok(Theatre::Sinai),
-            _ => Err(anyhow!("{} is not a valid theatre!", s)),
-        }
-    }
 }
 
 fn dump_miz_contents(miz_path: &PathBuf) -> Result<HashMap<String, PathBuf>> {
@@ -107,20 +85,25 @@ fn repack_miz(
     Ok(())
 }
 
-fn clean_files(map: HashMap<String, PathBuf>, base_path: PathBuf) -> Result<()> {
+fn clean_files(map: HashMap<String, PathBuf>) -> Result<()> {
+    let binding = map.clone();
     for (_, file_path) in map {
-        for entry in walkdir::WalkDir::new(file_path) {
-            let entry = entry?;
-            if entry.file_type().is_file() {
-                let file_path = entry.path().to_owned();
-                fs::remove_file(&file_path)?;
-                info!("File '{file_path:?}' deleted.");
-            } else if entry.file_type().is_dir() {
-                let dir_path = entry.path().to_owned();
-                fs::remove_dir_all(&dir_path)?;
-                info!("Dir '{dir_path:?}' deleted.");
-            };
-        }
+        let base_path = binding.get("mission").unwrap().parent().unwrap();
+        let stripped = file_path.strip_prefix(base_path);
+
+        match stripped {
+            Ok(p) => {
+                let components: Vec<_> = p.components().collect();
+                dbg!(p, components[0].as_os_str());
+                let _ = fs::remove_dir_all(base_path.join(components[0].as_os_str()));
+            }
+            Err(_) => (),
+        };
+
+        match fs::remove_file(&file_path) {
+            Ok(_) => info!("removed {file_path:?}"),
+            Err(_) => continue,
+        };
     }
     Ok(())
 }
@@ -182,35 +165,8 @@ fn serialize_with_cycles<'lua>(
     }
 }
 
-enum Era {
-    Sixties,
-    Seventies,
-    Eighties,
-    Nineties,
-}
-
-fn get_era(year: isize) -> Option<Era> {
-    match year {
-        1960..=1969 => Some(Era::Sixties),
-        1970..=1979 => Some(Era::Seventies),
-        1980..=1989 => Some(Era::Eighties),
-        1990..=1999 => Some(Era::Nineties),
-        _ => None,
-    }
-}
-
 pub struct MissionEditor {
     pub mission_config: MissionEditConfig,
-}
-
-pub struct Miz<'lua> {
-    tables: HashMap<String, mlua::Table<'lua>>,
-}
-
-impl<'lua> Miz<'lua> {
-    pub fn new(tables: HashMap<String, mlua::Table<'lua>>) -> Result<Self> {
-        Ok(Miz { tables })
-    }
 }
 
 impl MissionEditConfig {
@@ -225,7 +181,7 @@ impl MissionEditConfig {
 
 impl<'lua> MissionEditor {
     pub fn do_the_thing(config_path: PathBuf, lua: rlua::Lua, target_miz: PathBuf) -> Result<()> {
-        let a = lua.context(|ctx| {
+        let _ = lua.context(|ctx| {
             let mission_config: MissionEditConfig =
                 MissionEditConfig::from_file(config_path).unwrap();
             let base_contents = dump_miz_contents(&mission_config.base_miz_path).unwrap();
@@ -471,10 +427,14 @@ impl<'lua> MissionEditor {
 
             repack_miz(
                 target_miz,
-                base_contents,
+                base_contents.clone(),
                 &mission_config.base_miz_path.parent().unwrap().to_path_buf(),
             )
             .unwrap();
+
+            let _ = clean_files(base_contents);
+            let _ = clean_files(weapon_contents);
+            let _ = clean_files(option_contents);
         });
 
         Ok(())

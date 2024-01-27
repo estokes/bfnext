@@ -41,4 +41,5 @@ members = [
 	"dcso3",
 	"bflib",
 	"bfdb",
+	"bftools",
 ]

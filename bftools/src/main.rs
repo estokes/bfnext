@@ -3,10 +3,7 @@ use clap::Parser;
 use log::info;
 use mission_edit::MissionEditor;
 use serde::Serialize;
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 mod mission_edit;
 

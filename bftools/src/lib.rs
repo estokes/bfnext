@@ -1,1 +1,1 @@
-mod mission_edit;
+pub mod mission_edit;

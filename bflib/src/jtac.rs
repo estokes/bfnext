@@ -41,7 +41,7 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::{error, warn};
+use log::{error, info, warn};
 use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
 
@@ -241,7 +241,13 @@ impl Jtac {
                     .first_living_unit(&self.gid)
                     .context("getting jtac beam source")?
                     .clone();
-                let jt = Unit::get_instance(lua, &jtid)?;
+                let jt = match Unit::get_instance(lua, &jtid) {
+                    Ok(jt) => jt,
+                    Err(_) => {
+                        info!("jtac unit died while setting target {:?}", jtid);
+                        return Ok(true)
+                    },
+                };
                 let spot = Spot::create_laser(
                     lua,
                     jt.as_object()?,
@@ -306,6 +312,9 @@ impl Jtac {
     }
 
     fn shift(&mut self, db: &Db, lua: MizLua) -> Result<bool> {
+        if self.contacts.is_empty() {
+            return Ok(false)
+        }
         let i = match &self.target {
             None => 0,
             Some(target) => match self.contacts.get_index_of(&target.uid) {

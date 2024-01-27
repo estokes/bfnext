@@ -482,6 +482,28 @@ impl<'lua> MissionEditor {
                                 None => (),
                             };
                             increment_key(&mut replace_count, &unit_type);
+                            let x = unit_table.get("x").unwrap();
+                            let y = unit_table.get("y").unwrap();
+
+                            for trigger_zone in &mut objective_triggers {
+                                if trigger_zone.vec2_in_zone(x, y) {
+                                    let count: i32 = match trigger_zone.spawn_count.get(&unit_type)
+                                    {
+                                        Some(i) => i + 1,
+                                        None => 1,
+                                    };
+
+                                    trigger_zone.spawn_count.insert(unit_type.clone(), count);
+
+                                    let new_name = format!(
+                                        "{} {} {}",
+                                        trigger_zone.objective_name, &unit_type, count
+                                    );
+                                    unit_table.set("name", new_name.clone()).unwrap();
+                                    group_table.set("name", new_name).unwrap();
+                                    break;
+                                }
+                            }
                         }
                     }
                 }

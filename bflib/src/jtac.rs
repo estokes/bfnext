@@ -457,7 +457,7 @@ impl Jtac {
                         expend_qty: Some(100),
                         weapon_type: None,
                         altitude: Some(0.),
-                        altitude_type: Some(AltType::MSL),
+                        altitude_type: Some(AltType::AGL),
                     })
                     .context("setting task")?;
                 }

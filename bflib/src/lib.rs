@@ -101,6 +101,7 @@ struct Context {
     last_slow_timed_events: DateTime<Utc>,
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
+    menus_initialized: bool,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -815,6 +816,11 @@ fn run_slow_timed_events(
     let freq = Duration::seconds(ctx.db.ephemeral.cfg.slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
+        if !ctx.menus_initialized {
+            ctx.menus_initialized = true;
+            info!("initializing menus");
+            menu::init(&ctx, lua).context("initalizing the menus")?;
+        }
         for (_, ids) in ctx.db.ephemeral.players_to_force_to_spectators(ts) {
             for ucid in ids {
                 match ctx.id_by_ucid.get(&ucid) {
@@ -966,6 +972,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
 }
 
 fn start_timed_events(lua: MizLua, path: PathBuf) -> Result<()> {
+    unsafe { Context::get_mut() }.last_slow_timed_events = Utc::now();
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
@@ -1013,8 +1020,6 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     info!("spawning units");
     ctx.respawn_groups(lua)
         .context("setting up the mission after load")?;
-    info!("initializing menus");
-    menu::init(&ctx, lua).context("initalizing the menus")?;
     info!("starting timed events");
     start_timed_events(lua, path).context("starting the timed events loop")?;
     Ok(())

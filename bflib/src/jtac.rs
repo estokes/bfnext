@@ -28,7 +28,7 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
-    controller::Task,
+    controller::{AltType, Task},
     group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
@@ -245,8 +245,8 @@ impl Jtac {
                     Ok(jt) => jt,
                     Err(_) => {
                         info!("jtac unit died while setting target {:?}", jtid);
-                        return Ok(true)
-                    },
+                        return Ok(true);
+                    }
                 };
                 let spot = Spot::create_laser(
                     lua,
@@ -313,7 +313,7 @@ impl Jtac {
 
     fn shift(&mut self, db: &Db, lua: MizLua) -> Result<bool> {
         if self.contacts.is_empty() {
-            return Ok(false)
+            return Ok(false);
         }
         let i = match &self.target {
             None => 0,
@@ -456,8 +456,8 @@ impl Jtac {
                         radius: Some(10.),
                         expend_qty: Some(100),
                         weapon_type: None,
-                        altitude: None,
-                        altitude_type: None,
+                        altitude: Some(0.),
+                        altitude_type: Some(AltType::MSL),
                     })
                     .context("setting task")?;
                 }

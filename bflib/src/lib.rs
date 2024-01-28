@@ -111,6 +111,7 @@ struct Context {
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
     last_unit_position: usize,
+    welcome_banner: Option<DateTime<Utc>>,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -191,13 +192,7 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
     }
 }
 
-fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let ifo = match ctx.info_by_player_id.get(&id) {
-        None => return Ok(()),
-        Some(ifo) => ifo,
-    };
-    if ctx.db.player(&ifo.ucid).is_none() {
+fn welcome_banner(ctx: &mut Context) {
         let sideswitch = match ctx.db.ephemeral.cfg.side_switches {
             Some(n) => format_compact!("{n}"),
             None => "unlimited".into(),
@@ -208,6 +203,16 @@ fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
             .ephemeral
             .msgs()
             .panel_to_side(60, false, Side::Neutral, msg)
+}
+
+fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let ifo = match ctx.info_by_player_id.get(&id) {
+        None => return Ok(()),
+        Some(ifo) => ifo,
+    };
+    if ctx.db.player(&ifo.ucid).is_none() {
+        ctx.welcome_banner = Some(Utc::now() + Duration::seconds(10));
     }
     Ok(())
 }
@@ -928,6 +933,12 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
+    if let Some(when) = ctx.welcome_banner {
+        if ts >= when {
+            ctx.welcome_banner = None;
+            welcome_banner(ctx)
+        }
+    }
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, ts) {
         error!("error running slow timed events {:?}", e)
     }

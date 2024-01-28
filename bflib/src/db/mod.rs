@@ -152,6 +152,7 @@ impl Db {
     pub fn load(miz: &Miz, idx: &MizIndex, path: &Path) -> Result<Self> {
         let file = File::open(&path)
             .map_err(|e| anyhow!("failed to open save file {:?}, {:?}", path, e))?;
+        let file = zstd::stream::Decoder::new(file)?;
         let persisted: Persisted = serde_json::from_reader(file)
             .map_err(|e| anyhow!("failed to decode save file {:?}, {:?}", path, e))?;
         let mut db = Db {

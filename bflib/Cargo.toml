@@ -33,3 +33,4 @@ hdrhistogram = { workspace = true }
 rand = { workspace = true }
 humantime = { workspace = true }
 regex = { workspace = true }
+zstd = { workspace = true }

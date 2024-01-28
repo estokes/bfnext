@@ -34,6 +34,7 @@ hdrhistogram = { version = "7" }
 rand = { version = "0.8" }
 humantime = { version = "2" }
 regex = { version = "1" }
+zstd = { version = "0.13" }
 
 [workspace]
 resolver = "2"

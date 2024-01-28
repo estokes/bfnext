@@ -652,7 +652,7 @@ impl Db {
                     DeployKind::Objective => {
                         if groups.contains(&unit.group) {
                             let dist = na::distance_squared(&unit.pos.into(), &obj.pos.into());
-                            if dist > radius2 || self.ephemeral.units_able_to_move.contains(uid) {
+                            if dist > radius2 {
                                 is_on_walkabout.insert(*uid);
                             }
                         }
@@ -982,8 +982,7 @@ impl Db {
                     .context("syncing objectives from warehouse")?;
                 self.capture_warehouse(lua, oid)
                     .context("capturing warehouse")?;
-                self.deliver_production()
-                    .context("delivering production")?;
+                self.deliver_production().context("delivering production")?;
                 self.sync_warehouses_from_objectives(lua)
                     .context("syncing warehouses from objectives")?;
                 for (_, gid) in gids {

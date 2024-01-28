@@ -341,6 +341,52 @@ impl<'lua> Coalition<'lua> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Role {
+    pub neutrals: u8,
+    pub red: u8,
+    pub blue: u8
+}
+
+impl<'lua> FromLua<'lua> for Role {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl: LuaTable = FromLua::from_lua(value, lua)?;
+        Ok(Self {
+            neutrals: tbl.raw_get("neutrals")?,
+            red: tbl.raw_get("red")?,
+            blue: tbl.raw_get("blue")?
+        })
+    }
+}
+
+wrapped_table!(Roles, None);
+
+impl<'lua> Roles<'lua> {
+    pub fn artillery_commander(&self) -> Result<Role> {
+        Ok(self.raw_get("artillery_commander")?)
+    }
+
+    pub fn instructor(&self) -> Result<Role> {
+        Ok(self.raw_get("instructor")?)
+    }
+
+    pub fn observer(&self) -> Result<Role> {
+        Ok(self.raw_get("observer")?)
+    }
+
+    pub fn forward_observer(&self) -> Result<Role> {
+        Ok(self.raw_get("forward_observer")?)
+    }
+}
+
+wrapped_table!(GroundControl, None);
+
+impl<'lua> GroundControl<'lua> {
+    pub fn roles(&self) -> Result<Roles<'lua>> {
+        Ok(self.raw_get("roles")?)
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct IndexedGroup {
     side: Side,
@@ -412,6 +458,10 @@ impl<'lua> Miz<'lua> {
             let env: mlua::Table = lua.inner().globals().get("env")?;
             Ok(env.get("mission")?)
         }
+    }
+
+    pub fn ground_control(&self) -> Result<GroundControl> {
+        Ok(self.raw_get("groundControl")?)
     }
 
     pub fn coalition(&self, side: Side) -> Result<Coalition<'lua>> {

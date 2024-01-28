@@ -60,7 +60,7 @@ use msgq::MsgTyp;
 use perf::Perf;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{mem, path::PathBuf, sync::Arc};
+use std::{collections::VecDeque, mem, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
@@ -111,7 +111,9 @@ struct Context {
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
     last_unit_position: usize,
-    welcome_banner: Option<DateTime<Utc>>,
+    welcome_queue: VecDeque<PlayerId>,
+    free_welcome_slots: VecDeque<SlotId>,
+    used_welcome_slots: VecDeque<(SlotId, PlayerId, DateTime<Utc>)>,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -202,7 +204,7 @@ fn welcome_banner(ctx: &mut Context) {
         ctx.db
             .ephemeral
             .msgs()
-            .panel_to_side(60, false, Side::Neutral, msg)
+            .panel_to_side(60, true, Side::Neutral, msg)
 }
 
 fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
@@ -212,7 +214,7 @@ fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
         Some(ifo) => ifo,
     };
     if ctx.db.player(&ifo.ucid).is_none() {
-        ctx.welcome_banner = Some(Utc::now() + Duration::seconds(10));
+        ctx.welcome_queue.push_back(id);
     }
     Ok(())
 }
@@ -230,6 +232,9 @@ fn on_player_try_connect(
         addr, name, ucid, id
     );
     let ctx = unsafe { Context::get_mut() };
+    if !ctx.loaded {
+        return Ok(Some("the mission is still loading".into()))
+    }
     if let Some((until, _)) = ctx.db.ephemeral.cfg.banned.get(&ucid) {
         match until {
             None => return Ok(Some("you are banned forever".into())),
@@ -927,17 +932,57 @@ fn run_slow_timed_events(
     Ok(())
 }
 
+fn welcome_new_players(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) -> Result<()> {
+    while ctx.free_welcome_slots.len() > 0 && ctx.welcome_queue.len() > 0 {
+        let id = ctx.welcome_queue.pop_front().unwrap();
+        let slot = ctx.free_welcome_slots.pop_front().unwrap();
+        if let Err(e) = net.force_player_slot(id, Side::Neutral, slot.clone()) {
+            // they don't have CA, put the slot back
+            info!("can't force player {:?} to neutral observer {:?}", id, e);
+            ctx.free_welcome_slots.push_front(slot);
+        } else {
+            ctx.used_welcome_slots.push_back((slot, id, ts));
+        }
+    }
+    ctx.used_welcome_slots.retain(|(slot, id, when)| {
+        // they have registered
+        if let Some(ifo) = ctx.info_by_player_id.get(id) {
+            if ctx.db.player(&ifo.ucid).is_some() {
+                if let Ok(ifo) = net.get_player_info(*id) {
+                    if let Ok(ps) = ifo.slot() {
+                        if &ps == slot {
+                            let _ = net.force_player_slot(*id, Side::Neutral, SlotId::spectator());
+                        }
+                    }
+                }
+                ctx.free_welcome_slots.push_back(slot.clone());
+                return false;
+            }
+        }
+        if ts - when <= Duration::minutes(5) {
+            true
+        } else {
+            if let Err(e) = net.kick(*id, "idle".into()) {
+                info!("failed to disconnect idle player {:?} {:?}", id, e);
+            }
+            ctx.free_welcome_slots.push_back(slot.clone());
+            false
+        } 
+    });
+    if ctx.used_welcome_slots.len() > 0 {
+        welcome_banner(ctx)
+    }
+    Ok(())
+}
+
 fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
-    if let Some(when) = ctx.welcome_banner {
-        if ts >= when {
-            ctx.welcome_banner = None;
-            welcome_banner(ctx)
-        }
+    if let Err(e) = welcome_new_players(ctx, &net, ts) {
+        error!("failed to welcome new players {:?}", e)
     }
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, ts) {
         error!("error running slow timed events {:?}", e)
@@ -1015,6 +1060,21 @@ fn start_timed_events(lua: MizLua, path: PathBuf) -> Result<()> {
     Ok(())
 }
 
+fn setup_welcome_slots(ctx: &mut Context, miz: Miz) {
+    let mut setup = || -> Result<()> {
+        let gc = miz.ground_control().context("getting ground control")?;
+        let roles = gc.roles().context("getting roles")?;
+        let observer = roles.observer().context("getting observer")?;
+        for i in 1..observer.neutrals + 1 {
+            ctx.free_welcome_slots.push_back(SlotId::observer(Side::Neutral, i as u8));
+        }
+        Ok(())
+    };
+    if let Err(e) = setup() {
+        error!("failed to setup welcome slots {:?}", e)
+    }
+}
+
 fn delayed_init_miz(lua: MizLua) -> Result<()> {
     info!("init_miz");
     let ctx = unsafe { Context::get_mut() };
@@ -1050,8 +1110,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     info!("spawning units");
     ctx.respawn_groups(lua)
         .context("setting up the mission after load")?;
-    // info!("initializing menus");
-    // menu::init(&ctx, lua).context("initalizing the menus")?;
+    setup_welcome_slots(ctx, miz);
     info!("starting timed events");
     start_timed_events(lua, path).context("starting the timed events loop")?;
     Ok(())
@@ -1069,6 +1128,7 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
         ctx.db.player_disconnected(&ifo.ucid)
     }
+    ctx.used_welcome_slots.retain(|(_, pid, _)| &id != pid);
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
         start_ts,

@@ -112,16 +112,32 @@ impl SlotId {
         self.0.starts_with("artillery_commander_")
     }
 
+    pub fn artillery_commander(side: Side, n: u8) -> SlotId {
+        Self(String(format_compact!("artillery_commander_{side}_{n}")))
+    }
+
     pub fn is_observer(&self) -> bool {
         self.0.starts_with("observer_")
+    }
+
+    pub fn observer(side: Side, n: u8) -> SlotId {
+        Self(String(format_compact!("observer_{side}_{n}")))
     }
 
     pub fn is_forward_observer(&self) -> bool {
         self.0.starts_with("forward_observer_")
     }
 
+    pub fn forward_observer(side: Side, n: u8) -> SlotId {
+        Self(String(format_compact!("forward_observer_{side}_{n}")))
+    }
+
     pub fn is_instructor(&self) -> bool {
         self.0.starts_with("instructor_")
+    }
+    
+    pub fn instructor(side: Side, n: u8) -> SlotId {
+        Self(String(format_compact!("instructor_{side}_{n}")))
     }
 
     pub fn is_spectator(&self) -> bool {

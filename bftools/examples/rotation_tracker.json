@@ -1,0 +1,15 @@
+{
+    "active_mission": "mission1",
+    "init" : true,
+    "missions": {
+      "mission1": {
+        "path": "path/to/mission1",
+        "write_protected": false
+      },
+      "mission2": {
+        "path": "path/to/mission2",
+        "write_protected": true
+      }
+    },
+    "config" : "C:\\"
+  }

@@ -1033,8 +1033,9 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
 }
 
 fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
-    unsafe { Context::get_mut().loaded = true };
+    let ctx = unsafe { Context::get_mut() };
     debug!("mission loaded");
+
     Ok(())
 }
 

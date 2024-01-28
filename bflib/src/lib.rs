@@ -1075,8 +1075,10 @@ fn setup_welcome_slots(ctx: &mut Context, miz: Miz) {
         let coa = miz.coalition(Side::Neutral).context("getting coalition")?;
         for country in coa.countries().context("getting country")? {
             let country = country?;
+            debug!("processing neutural country {}", country.name()?);
             for plane in country.planes().context("getting aircraft")? {
                 let plane = plane?;
+                debug!("processing plane {}", plane.name()?);
                 if plane.name()?.starts_with("welcome") {
                     let unit = plane.units().context("getting units")?.first()?;
                     ctx.free_welcome_slots.push_back(unit.slot()?);

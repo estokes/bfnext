@@ -63,7 +63,7 @@ impl Persisted {
             .truncate(true)
             .create(true)
             .open(&tmp)?;
-        let file = zstd::stream::Encoder::new(file, 9)?;
+        let file = zstd::stream::Encoder::new(file, 9)?.auto_finish();
         serde_json::to_writer(file, &self)?;
         fs::rename(tmp, path)?;
         Ok(())

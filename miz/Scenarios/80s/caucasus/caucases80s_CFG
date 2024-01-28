@@ -1072,7 +1072,7 @@
     "ZSU_57_2": [
       "AAA",
       "LR",
-      "Drivable"
+      "Driveable"
     ],
     "Hawk ln": [
       "SAM",
@@ -1102,7 +1102,7 @@
       "IRGuided",
       "Launcher",
       "LightCannon",
-      "Drivable"
+      "Driveable"
     ],
     "Tor 9A331": [
       "SAM",
@@ -1112,7 +1112,7 @@
       "TrackRadar",
       "SearchRadar",
       "Launcher",
-      "Drivable"
+      "Driveable"
     ],
     "Ka-50_3": [
       "Helicopter"
@@ -1142,14 +1142,14 @@
       "ATGM",
       "HeavyCannon",
       "SmallArms",
-      "Drivable"
+      "Driveable"
     ],
     "T-55": [
       "Armor",
       "MR",
       "HeavyCannon",
       "SmallArms",
-      "Drivable"
+      "Driveable"
     ],
     "M978 HEMTT Tanker": [
       "Logistics",
@@ -1159,7 +1159,7 @@
       "AAA",
       "MR",
       "RadarGuided",
-      "Drivable"
+      "Driveable"
     ],
     "ZU-23 Emplacement": [
       "AAA",
@@ -1174,7 +1174,7 @@
       "LR",
       "Artillery",
       "SmallArms",
-      "Drivable"
+      "Driveable"
     ],
     "Roland ADS": [
       "SAM",
@@ -1184,7 +1184,7 @@
       "TrackRadar",
       "SearchRadar",
       "Launcher",
-      "Drivable"
+      "Driveable"
     ],
     "2B11 mortar": [
       "Infantry",
@@ -1218,14 +1218,14 @@
     "M-109": [
       "Armor",
       "Artillery",
-      "Drivable"
+      "Driveable"
     ],
     "M1134 Stryker ATGM": [
       "APC",
       "MR",
       "ATGM",
       "SmallArms",
-      "Drivable"
+      "Driveable"
     ],
     "Soldier stinger": [
       "SAM",
@@ -1233,7 +1233,7 @@
       "SR",
       "IRGuided",
       "Launcher",
-      "Drivable"
+      "Driveable"
     ],
     "Paratrooper RPG-16": [
       "Infantry",
@@ -1247,7 +1247,7 @@
       "TrackRadar",
       "SearchRadar",
       "Launcher",
-      "Drivable"
+      "Driveable"
     ],
     "Infantry AK": [
       "Infantry",
@@ -1267,7 +1267,7 @@
     "Ural-375": [
       "Logistics",
       "Unarmed",
-      "Drivable"
+      "Driveable"
     ],
     "Mi-24P": [
       "Helicopter"
@@ -1277,7 +1277,7 @@
       "MR",
       "ATGM",
       "LightCannon",
-      "Drivable"
+      "Driveable"
     ],
     "p-19 s-125 sr": [
       "SAM",
@@ -1298,7 +1298,7 @@
       "AAA",
       "MR",
       "RadarGuided",
-      "Drivable"
+      "Driveable"
     ],
     "Stinger comm": [
       "SAM",
@@ -1318,7 +1318,7 @@
       "IRGuided",
       "Launcher",
       "SmallArms",
-      "Drivable"
+      "Driveable"
     ],
     "F-16C_50": [
       "Aircraft"
@@ -1338,7 +1338,7 @@
       "SR",
       "IRGuided",
       "Launcher",
-      "Drivable"
+      "Driveable"
     ],
     "Kub 2P25 ln": [
       "SAM",
@@ -1355,12 +1355,12 @@
       "MR",
       "HeavyCannon",
       "SmallArms",
-      "Drivable"
+      "Driveable"
     ],
     "M 818": [
       "Logistics",
       "Unarmed",
-      "Drivable"
+      "Driveable"
     ],
     "outpost": [
       "Logistics",
@@ -1377,7 +1377,7 @@
       "MR",
       "ATGM",
       "LightCannon",
-      "Drivable"
+      "Driveable"
     ],
     "Ka-50": [
       "Helicopter"
@@ -1397,14 +1397,14 @@
       "SR",
       "IRGuided",
       "Launcher",
-      "Drivable"
+      "Driveable"
     ],
     "Strela-1 9P31": [
       "SAM",
       "SR",
       "IRGuided",
       "Launcher",
-      "Drivable"
+      "Driveable"
     ],
     "Cow": [
       "Logistics",
@@ -1463,13 +1463,13 @@
       "SR",
       "OpticallyGuided",
       "Launcher",
-      "Drivable"
+      "Driveable"
     ],
     "Gepard": [
       "AAA",
       "LR",
       "RadarGuided",
-      "Drivable"
+      "Driveable"
     ],
     "UH-1H": [
       "Helicopter"
@@ -1481,7 +1481,7 @@
     "HL_ZU-23": [
       "AAA",
       "SR",
-      "Drivable"
+      "Driveable"
     ],
     "tt_ZU-23": [
       "AAA",
@@ -1492,7 +1492,7 @@
       "MR",
       "ATGM",
       "LightCannon",
-      "Drivable"
+      "Driveable"
     ],
     "Hawk cwar": [
       "SAM",
@@ -1505,27 +1505,27 @@
       "MR",
       "ATGM",
       "LightCannon",
-      "Drivable"
+      "Driveable"
     ],
     "Leopard-2": [
       "Armor",
       "MR",
       "HeavyCannon",
       "SmallArms",
-      "Drivable"
+      "Driveable"
     ],
     "T-72B": [
       "Armor",
       "MR",
       "HeavyCannon",
       "SmallArms", 
-      "Drivable"
+      "Driveable"
     ],
     "SAU Msta": [
       "Armor",
       "Artillery",
       "SmallArms",
-      "Drivable"
+      "Driveable"
     ],
     "F-15ESE": [
       "Aircraft"

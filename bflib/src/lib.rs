@@ -934,14 +934,21 @@ fn welcome_banner(ctx: &mut Context) {
 }
 
 fn welcome_new_players(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) -> Result<()> {
+    if ctx.free_welcome_slots.is_empty() && ctx.used_welcome_slots.is_empty() {
+        ctx.welcome_queue.clear();
+        return Ok(())
+    }
     while ctx.free_welcome_slots.len() > 0 && ctx.welcome_queue.len() > 0 {
         let id = ctx.welcome_queue.pop_front().unwrap();
         let slot = ctx.free_welcome_slots.pop_front().unwrap();
+        debug!("forcing {:?} to {:?}", id, slot);
         if let Err(e) = net.force_player_slot(id, Side::Neutral, slot.clone()) {
             // they don't have CA, put the slot back
             info!("can't force player {:?} to neutral observer {:?}", id, e);
             ctx.free_welcome_slots.push_front(slot);
         } else {
+            debug!("forced successfully");
+            debug!("in slot {:?}", net.get_player_info(id).and_then(|ifo| ifo.slot()));
             ctx.used_welcome_slots.push_back((slot, id, ts));
         }
     }
@@ -957,6 +964,7 @@ fn welcome_new_players(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) -> Resul
                     }
                 }
                 ctx.free_welcome_slots.push_back(slot.clone());
+                info!("new player {:?} has registered", id);
                 return false;
             }
         }
@@ -971,6 +979,7 @@ fn welcome_new_players(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) -> Resul
         } 
     });
     if ctx.used_welcome_slots.len() > 0 {
+        debug!("showing welcome banner");
         welcome_banner(ctx)
     }
     Ok(())
@@ -1063,13 +1072,18 @@ fn start_timed_events(lua: MizLua, path: PathBuf) -> Result<()> {
 
 fn setup_welcome_slots(ctx: &mut Context, miz: Miz) {
     let mut setup = || -> Result<()> {
-        let gc = miz.ground_control().context("getting ground control")?;
-        let roles = gc.roles().context("getting roles")?;
-        let observer = roles.observer().context("getting observer")?;
-        for i in 1..observer.neutrals + 1 {
-            ctx.free_welcome_slots.push_back(SlotId::observer(Side::Neutral, i as u8));
+        let coa = miz.coalition(Side::Neutral).context("getting coalition")?;
+        for country in coa.countries().context("getting country")? {
+            let country = country?;
+            for plane in country.planes().context("getting aircraft")? {
+                let plane = plane?;
+                if plane.name()?.starts_with("welcome") {
+                    let unit = plane.units().context("getting units")?.first()?;
+                    ctx.free_welcome_slots.push_back(unit.slot()?);
+                }
+            }
         }
-        info!("I have {} welcome slots", observer.neutrals);
+        info!("I have {} welcome slots", ctx.free_welcome_slots.len());
         Ok(())
     };
     if let Err(e) = setup() {

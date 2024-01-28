@@ -603,8 +603,9 @@ impl Jtacs {
         lua: MizLua,
         db: &mut Db,
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
+        let targets: SmallVec<[UnitId; 16]> = self.jtac_targets().collect();
         let dead = db
-            .update_unit_positions(lua, Some(self.jtac_targets()))
+            .update_unit_positions(lua, &targets)
             .context("updating the position of jtac targets")?;
         for jtx in self.0.values_mut() {
             for jt in jtx.values_mut() {

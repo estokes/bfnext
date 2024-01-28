@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use std::collections::VecDeque;
+use std::{cmp::max, collections::VecDeque};
 
 use super::{
     objective::{ObjGroupClass, ObjectiveId},
@@ -247,6 +247,7 @@ impl Db {
                 .units_potentially_close_to_enemies
                 .remove(uid);
             self.ephemeral.units_potentially_on_walkabout.remove(uid);
+            self.ephemeral.units_able_to_move.remove(uid);
             if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
                 self.ephemeral.uid_by_object_id.remove(&id);
             }
@@ -536,12 +537,16 @@ impl Db {
         let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
+            let unit = unit!(self, uid)?;
             self.ephemeral.uid_by_object_id.insert(id.clone(), *uid);
             self.ephemeral.object_id_by_uid.insert(*uid, id.clone());
             self.ephemeral
                 .units_potentially_close_to_enemies
                 .insert(*uid);
             self.ephemeral.units_potentially_on_walkabout.insert(*uid);
+            if unit.tags.contains(UnitTag::Driveable) {
+                self.ephemeral.units_able_to_move.insert(*uid);
+            }
         }
         let slot = unit.slot()?;
         if let Some(oid) = self.persisted.objectives_by_slot.get(&slot) {
@@ -650,31 +655,34 @@ impl Db {
         Ok((alive, group.units.len()))
     }
 
-    pub fn update_unit_positions<'a, I: Iterator<Item = UnitId> + 'a>(
-        &'a mut self,
+    pub fn update_unit_positions_incremental(
+        &mut self,
         lua: MizLua,
-        units: Option<I>,
+        mut last: usize,
+    ) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
+        let total = self.ephemeral.units_able_to_move.len();
+        if last < total {
+            let mut uids: SmallVec<[UnitId; 64]> = smallvec![];
+            let elts = self.ephemeral.units_able_to_move.as_slice();
+            let stop = last + max(1, total >> 3);
+            while last < total && uids.len() < stop {
+                uids.push(elts[last]);
+                last += 1;
+            }
+            Ok((last, self.update_unit_positions(lua, &uids)?))
+        } else {
+            Ok((0, vec![]))
+        }
+    }
+
+    pub fn update_unit_positions(
+        &mut self,
+        lua: MizLua,
+        units: &[UnitId],
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
-        let units: SmallVec<[UnitId; 512]> = match units {
-            Some(units) => units.collect(),
-            None => self
-                .ephemeral
-                .object_id_by_uid
-                .keys()
-                .filter_map(|i| {
-                    self.persisted.units.get(i).and_then(|unit| {
-                        if unit.tags.contains(UnitTag::Driveable) {
-                            Some(unit.id)
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .collect(),
-        };
         for uid in units {
             let id = match self.ephemeral.object_id_by_uid.get(&uid) {
                 Some(id) => id,
@@ -709,8 +717,8 @@ impl Db {
                 spunit.heading = heading;
                 self.ephemeral
                     .units_potentially_close_to_enemies
-                    .insert(uid);
-                self.ephemeral.units_potentially_on_walkabout.insert(uid);
+                    .insert(*uid);
+                self.ephemeral.units_potentially_on_walkabout.insert(*uid);
             }
             unit = Some(instance);
         }

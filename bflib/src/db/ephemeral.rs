@@ -41,7 +41,8 @@ use dcso3::{
     warehouse::{LiquidType, WSCategory},
     Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
+use indexmap::IndexSet;
 use log::info;
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -163,7 +164,7 @@ impl ObjectiveMarkup {
                     msgq.set_markup_fill_color(*id, Color::green(a));
                     msgq.set_markup_color(*id, Color::black(ba));
                 }
-            }
+            };
         }
         if self.health != obj.health {
             self.health = obj.health;
@@ -387,7 +388,7 @@ pub struct Ephemeral {
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
     used_pad_templates: FxHashSet<String>,
     force_to_spectators: BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>>,
-    pub(super) units_able_to_move: FxHashSet<UnitId>,
+    pub(super) units_able_to_move: IndexSet<UnitId, FxBuildHasher>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
     pub(super) units_potentially_on_walkabout: FxHashSet<UnitId>,
     pub(super) production_by_side: FxHashMap<Side, Arc<Production>>,
@@ -723,7 +724,7 @@ impl Ephemeral {
                 self.slot_by_object_id.remove(&id);
                 if let Some(uid) = self.uid_by_object_id.remove(&id) {
                     self.object_id_by_uid.remove(&uid);
-                    self.units_able_to_move.remove(&uid);
+                    self.units_able_to_move.swap_remove(&uid);
                     return Some((uid, ucid));
                 }
             }
@@ -737,7 +738,7 @@ impl Ephemeral {
                 Some((uid, ucid)) => (uid, Some(ucid)),
                 None => return None,
             },
-            None => match self.uid_by_object_id.remove(&id) {
+            None => match self.uid_by_object_id.remove(id) {
                 Some(uid) => {
                     self.object_id_by_uid.remove(&uid);
                     (uid, None)
@@ -750,7 +751,7 @@ impl Ephemeral {
         };
         self.units_potentially_close_to_enemies.remove(&uid);
         self.units_potentially_on_walkabout.remove(&uid);
-        self.units_able_to_move.remove(&uid);
+        self.units_able_to_move.swap_remove(&uid);
         Some((uid, ucid))
     }
 

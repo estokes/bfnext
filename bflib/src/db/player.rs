@@ -463,7 +463,7 @@ impl Db {
         let mut dead = vec![];
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             let uid = *uid;
-            match self.update_unit_positions(lua, Some(std::iter::once(uid))) {
+            match self.update_unit_positions(lua, &[uid]) {
                 Ok(v) => dead = v,
                 Err(e) => error!("could not sync final CA unit position {e}"),
             }

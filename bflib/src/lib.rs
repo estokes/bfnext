@@ -60,19 +60,27 @@ use msgq::MsgTyp;
 use perf::Perf;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{iter, mem, path::PathBuf, sync::Arc};
+use std::{mem, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
 enum LogiStage {
-    Complete { last_tick: DateTime<Utc> },
-    SyncFromWarehouses { objectives: SmallVec<[ObjectiveId; 128]> },
-    SyncToWarehouses { objectives: SmallVec<[ObjectiveId; 128]> }
+    Complete {
+        last_tick: DateTime<Utc>,
+    },
+    SyncFromWarehouses {
+        objectives: SmallVec<[ObjectiveId; 128]>,
+    },
+    SyncToWarehouses {
+        objectives: SmallVec<[ObjectiveId; 128]>,
+    },
 }
 
 impl Default for LogiStage {
     fn default() -> Self {
-        Self::Complete { last_tick: DateTime::<Utc>::MIN_UTC }
+        Self::Complete {
+            last_tick: DateTime::<Utc>::MIN_UTC,
+        }
     }
 }
 
@@ -102,6 +110,7 @@ struct Context {
     last_slow_timed_events: DateTime<Utc>,
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
+    last_unit_position: usize,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -790,11 +799,9 @@ fn run_logistics_events(
                     let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
                     ctx.logistics_stage = LogiStage::SyncToWarehouses { objectives }
                 }
-            }
+            },
             LogiStage::SyncToWarehouses { objectives } => match objectives.pop() {
-                None => {
-                    ctx.logistics_stage = LogiStage::Complete { last_tick: ts }
-                }
+                None => ctx.logistics_stage = LogiStage::Complete { last_tick: ts },
                 Some(oid) => {
                     let start_ts = Utc::now();
                     if let Err(e) = ctx.db.sync_objective_to_warehouse(lua, oid) {
@@ -802,7 +809,7 @@ fn run_logistics_events(
                     }
                     record_perf(&mut perf.logistics_sync_to, start_ts);
                 }
-            }
+            },
         }
         record_perf(&mut perf.logistics, start_ts);
     }
@@ -849,9 +856,15 @@ fn run_slow_timed_events(
         record_perf(&mut perf.do_repairs, start_ts);
         let start_ts = Utc::now();
         let mut dead = vec![];
-        match ctx.db.update_unit_positions::<iter::Once<_>>(lua, None) {
+        match ctx
+            .db
+            .update_unit_positions_incremental(lua, ctx.last_unit_position)
+        {
             Err(e) => error!("could not update unit positions {e}"),
-            Ok(v) => dead = v,
+            Ok((i, v)) => {
+                ctx.last_unit_position = i;
+                dead = v
+            }
         }
         record_perf(&mut perf.unit_positions, start_ts);
         let ts = Utc::now();
@@ -1009,7 +1022,8 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
             bail!("missing sortie in miz file")
         }
         ctx.sortie = s;
-        ctx.miz_state_path = PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str());
+        ctx.miz_state_path =
+            PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str());
         ctx.miz_state_path.clone()
     };
     debug!("path to saved state is {:?}", path);

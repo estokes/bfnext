@@ -428,38 +428,46 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
 fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> Result<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
-        SlotAuth::Denied | SlotAuth::NoLives => Ok(false),
-        SlotAuth::VehicleNotAvailable(vehicle) => {
-            let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            Ok(false)
-        }
-        SlotAuth::ObjectiveHasNoLogistics => {
-            let msg = format_compact!("Objective is capturable");
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            Ok(false)
-        }
-        SlotAuth::NotRegistered(side) => {
-            let msg = String::from(format_compact!(
-                "You must join {:?} to use this slot. Type {:?} in chat.",
-                side,
-                side
-            ));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            Ok(false)
-        }
-        SlotAuth::ObjectiveNotOwned(side) => {
-            let msg = String::from(format_compact!(
-                "{:?} does not own the objective associated with this slot",
-                side
-            ));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            Ok(false)
-        }
-        SlotAuth::Yes => {
-            ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
-            Ok(true)
+    if ctx.free_welcome_slots.iter().any(|sl| sl == &slot) {
+        let msg = format_compact!("those slots are for welcoming new players");
+        ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+        Ok(false)
+    } else if ctx.used_welcome_slots.iter().any(|(sl, _, _)| sl == &slot) {
+        Ok(true)
+    } else {
+        match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
+            SlotAuth::Denied | SlotAuth::NoLives => Ok(false),
+            SlotAuth::VehicleNotAvailable(vehicle) => {
+                let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
+                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+                Ok(false)
+            }
+            SlotAuth::ObjectiveHasNoLogistics => {
+                let msg = format_compact!("Objective is capturable");
+                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+                Ok(false)
+            }
+            SlotAuth::NotRegistered(side) => {
+                let msg = String::from(format_compact!(
+                    "You must join {:?} to use this slot. Type {:?} in chat.",
+                    side,
+                    side
+                ));
+                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+                Ok(false)
+            }
+            SlotAuth::ObjectiveNotOwned(side) => {
+                let msg = String::from(format_compact!(
+                    "{:?} does not own the objective associated with this slot",
+                    side
+                ));
+                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+                Ok(false)
+            }
+            SlotAuth::Yes => {
+                ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
+                Ok(true)
+            }
         }
     }
 }
@@ -927,10 +935,14 @@ fn welcome_banner(ctx: &mut Context) {
         };
         // CR estokes: handlebars
         let msg = format_compact!("Welcome to {}.\n\nA dynamic persistant campaign with limited lives and locked sides. You must join a side before you may slot. Choose carefully, as you may only change sides {} time(s) until the map resets. Join a side by typing the name of the side in chat. E.G. type red to join red. Change sides by typing -switch <side> in chat, e.g. -switch red. Type -help in chat for more commands.\n\nGood hunting!", ctx.sortie, sideswitch);
-        ctx.db
-            .ephemeral
-            .msgs()
-            .panel_to_side(60, true, Side::Neutral, msg)
+        for (slot, _, _) in &ctx.used_welcome_slots {
+            if let Some(uid) = slot.as_unit_id() {
+                ctx.db
+                    .ephemeral
+                    .msgs()
+                    .panel_to_unit(60, true, uid, msg.clone())
+            }
+        }
 }
 
 fn welcome_new_players(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) -> Result<()> {
@@ -1072,16 +1084,16 @@ fn start_timed_events(lua: MizLua, path: PathBuf) -> Result<()> {
 
 fn setup_welcome_slots(ctx: &mut Context, miz: Miz) {
     let mut setup = || -> Result<()> {
-        let coa = miz.coalition(Side::Neutral).context("getting coalition")?;
-        for country in coa.countries().context("getting country")? {
-            let country = country?;
-            debug!("processing neutural country {}", country.name()?);
-            for plane in country.planes().context("getting aircraft")? {
-                let plane = plane?;
-                debug!("processing plane {}", plane.name()?);
-                if plane.name()?.starts_with("welcome") {
-                    let unit = plane.units().context("getting units")?.first()?;
-                    ctx.free_welcome_slots.push_back(unit.slot()?);
+        for side in Side::ALL {
+            let coa = miz.coalition(side).context("getting coalition")?;
+            for country in coa.countries().context("getting country")? {
+                let country = country?;
+                for plane in country.planes().context("getting aircraft")? {
+                    let plane = plane?;
+                    if plane.name()?.starts_with("welcome") {
+                        let unit = plane.units().context("getting units")?.first()?;
+                        ctx.free_welcome_slots.push_back(unit.slot()?);
+                    }
                 }
             }
         }

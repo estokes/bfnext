@@ -231,10 +231,7 @@ impl Db {
         slot: SlotId,
         ucid: &Ucid,
     ) -> SlotAuth {
-        if slot_side == Side::Neutral {
-            return SlotAuth::Yes
-        }
-        let player = match self.persisted.players.get_mut_cow(ucid) {
+       let player = match self.persisted.players.get_mut_cow(ucid) {
             Some(player) => player,
             None => {
                 if slot.is_spectator() {

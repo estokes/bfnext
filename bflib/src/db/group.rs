@@ -21,7 +21,7 @@ use super::{
     Db, Set,
 };
 use crate::{
-    cfg::{Crate, Deployable, Troop, UnitTags},
+    cfg::{Crate, Deployable, Troop, UnitTag, UnitTags},
     group, group_by_name, maybe, maybe_mut, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
@@ -658,12 +658,23 @@ impl Db {
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
-        let units = units
-            .map(|i| Box::new(i) as Box<dyn Iterator<Item = UnitId>>)
-            .unwrap_or_else(|| {
-                Box::new(self.ephemeral.object_id_by_uid.keys().map(|i| *i))
-                    as Box<dyn Iterator<Item = UnitId>>
-            });
+        let units: SmallVec<[UnitId; 512]> = match units {
+            Some(units) => units.collect(),
+            None => self
+                .ephemeral
+                .object_id_by_uid
+                .keys()
+                .filter_map(|i| {
+                    self.persisted.units.get(i).and_then(|unit| {
+                        if unit.tags.contains(UnitTag::Driveable) {
+                            Some(unit.id)
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .collect(),
+        };
         for uid in units {
             let id = match self.ephemeral.object_id_by_uid.get(&uid) {
                 Some(id) => id,

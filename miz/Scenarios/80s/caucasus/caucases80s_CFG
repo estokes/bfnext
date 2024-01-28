@@ -1071,7 +1071,8 @@
     ],
     "ZSU_57_2": [
       "AAA",
-      "LR"
+      "LR",
+      "Drivable"
     ],
     "Hawk ln": [
       "SAM",
@@ -1100,7 +1101,8 @@
       "SR",
       "IRGuided",
       "Launcher",
-      "LightCannon"
+      "LightCannon",
+      "Drivable"
     ],
     "Tor 9A331": [
       "SAM",
@@ -1109,7 +1111,8 @@
       "EngagesWeapons",
       "TrackRadar",
       "SearchRadar",
-      "Launcher"
+      "Launcher",
+      "Drivable"
     ],
     "Ka-50_3": [
       "Helicopter"
@@ -1138,13 +1141,15 @@
       "MR",
       "ATGM",
       "HeavyCannon",
-      "SmallArms"
+      "SmallArms",
+      "Drivable"
     ],
     "T-55": [
       "Armor",
       "MR",
       "HeavyCannon",
-      "SmallArms"
+      "SmallArms",
+      "Drivable"
     ],
     "M978 HEMTT Tanker": [
       "Logistics",
@@ -1153,7 +1158,8 @@
     "Vulcan": [
       "AAA",
       "MR",
-      "RadarGuided"
+      "RadarGuided",
+      "Drivable"
     ],
     "ZU-23 Emplacement": [
       "AAA",
@@ -1167,7 +1173,8 @@
       "Armor",
       "LR",
       "Artillery",
-      "SmallArms"
+      "SmallArms",
+      "Drivable"
     ],
     "Roland ADS": [
       "SAM",
@@ -1176,7 +1183,8 @@
       "EngagesWeapons",
       "TrackRadar",
       "SearchRadar",
-      "Launcher"
+      "Launcher",
+      "Drivable"
     ],
     "2B11 mortar": [
       "Infantry",
@@ -1209,20 +1217,23 @@
     ],
     "M-109": [
       "Armor",
-      "Artillery"
+      "Artillery",
+      "Drivable"
     ],
     "M1134 Stryker ATGM": [
       "APC",
       "MR",
       "ATGM",
-      "SmallArms"
+      "SmallArms",
+      "Drivable"
     ],
     "Soldier stinger": [
       "SAM",
       "Infantry",
       "SR",
       "IRGuided",
-      "Launcher"
+      "Launcher",
+      "Drivable"
     ],
     "Paratrooper RPG-16": [
       "Infantry",
@@ -1235,7 +1246,8 @@
       "RadarGuided",
       "TrackRadar",
       "SearchRadar",
-      "Launcher"
+      "Launcher",
+      "Drivable"
     ],
     "Infantry AK": [
       "Infantry",
@@ -1254,7 +1266,8 @@
     ],
     "Ural-375": [
       "Logistics",
-      "Unarmed"
+      "Unarmed",
+      "Drivable"
     ],
     "Mi-24P": [
       "Helicopter"
@@ -1263,7 +1276,8 @@
       "APC",
       "MR",
       "ATGM",
-      "LightCannon"
+      "LightCannon",
+      "Drivable"
     ],
     "p-19 s-125 sr": [
       "SAM",
@@ -1283,7 +1297,8 @@
     "ZSU-23-4 Shilka": [
       "AAA",
       "MR",
-      "RadarGuided"
+      "RadarGuided",
+      "Drivable"
     ],
     "Stinger comm": [
       "SAM",
@@ -1302,7 +1317,8 @@
       "SR",
       "IRGuided",
       "Launcher",
-      "SmallArms"
+      "SmallArms",
+      "Drivable"
     ],
     "F-16C_50": [
       "Aircraft"
@@ -1321,7 +1337,8 @@
       "SAM",
       "SR",
       "IRGuided",
-      "Launcher"
+      "Launcher",
+      "Drivable"
     ],
     "Kub 2P25 ln": [
       "SAM",
@@ -1337,11 +1354,13 @@
       "Armor",
       "MR",
       "HeavyCannon",
-      "SmallArms"
+      "SmallArms",
+      "Drivable"
     ],
     "M 818": [
       "Logistics",
-      "Unarmed"
+      "Unarmed",
+      "Drivable"
     ],
     "outpost": [
       "Logistics",
@@ -1357,7 +1376,8 @@
       "APC",
       "MR",
       "ATGM",
-      "LightCannon"
+      "LightCannon",
+      "Drivable"
     ],
     "Ka-50": [
       "Helicopter"
@@ -1376,13 +1396,15 @@
       "SAM",
       "SR",
       "IRGuided",
-      "Launcher"
+      "Launcher",
+      "Drivable"
     ],
     "Strela-1 9P31": [
       "SAM",
       "SR",
       "IRGuided",
-      "Launcher"
+      "Launcher",
+      "Drivable"
     ],
     "Cow": [
       "Logistics",
@@ -1440,12 +1462,14 @@
       "AAA",
       "SR",
       "OpticallyGuided",
-      "Launcher"
+      "Launcher",
+      "Drivable"
     ],
     "Gepard": [
       "AAA",
       "LR",
-      "RadarGuided"
+      "RadarGuided",
+      "Drivable"
     ],
     "UH-1H": [
       "Helicopter"
@@ -1456,7 +1480,8 @@
     ],
     "HL_ZU-23": [
       "AAA",
-      "SR"
+      "SR",
+      "Drivable"
     ],
     "tt_ZU-23": [
       "AAA",
@@ -1466,7 +1491,8 @@
       "APC",
       "MR",
       "ATGM",
-      "LightCannon"
+      "LightCannon",
+      "Drivable"
     ],
     "Hawk cwar": [
       "SAM",
@@ -1478,24 +1504,28 @@
       "APC",
       "MR",
       "ATGM",
-      "LightCannon"
+      "LightCannon",
+      "Drivable"
     ],
     "Leopard-2": [
       "Armor",
       "MR",
       "HeavyCannon",
-      "SmallArms"
+      "SmallArms",
+      "Drivable"
     ],
     "T-72B": [
       "Armor",
       "MR",
       "HeavyCannon",
-      "SmallArms"
+      "SmallArms", 
+      "Drivable"
     ],
     "SAU Msta": [
       "Armor",
       "Artillery",
-      "SmallArms"
+      "SmallArms",
+      "Drivable"
     ],
     "F-15ESE": [
       "Aircraft"

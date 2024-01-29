@@ -60,7 +60,7 @@ use msgq::MsgTyp;
 use perf::Perf;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{collections::VecDeque, mem, path::PathBuf, sync::Arc};
+use std::{mem, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
@@ -111,9 +111,6 @@ struct Context {
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
     last_unit_position: usize,
-    welcome_queue: VecDeque<PlayerId>,
-    free_welcome_slots: VecDeque<SlotId>,
-    used_welcome_slots: VecDeque<(SlotId, PlayerId, DateTime<Utc>)>,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -192,19 +189,6 @@ fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
         tbl.insert(id, PlayerInfo { name, ucid });
         Ok(&tbl[&id])
     }
-}
-
-fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let ifo = match ctx.info_by_player_id.get(&id) {
-        None => return Ok(()),
-        Some(ifo) => ifo,
-    };
-    if ctx.db.player(&ifo.ucid).is_none() {
-        info!("welcoming new player {} {}", ifo.name, ifo.ucid);
-        ctx.welcome_queue.push_back(id);
-    }
-    Ok(())
 }
 
 fn on_player_try_connect(
@@ -428,46 +412,38 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
 fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> Result<bool> {
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    if ctx.free_welcome_slots.iter().any(|sl| sl == &slot) {
-        let msg = format_compact!("those slots are for welcoming new players");
-        ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-        Ok(false)
-    } else if ctx.used_welcome_slots.iter().any(|(sl, _, _)| sl == &slot) {
-        Ok(true)
-    } else {
-        match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
-            SlotAuth::Denied | SlotAuth::NoLives => Ok(false),
-            SlotAuth::VehicleNotAvailable(vehicle) => {
-                let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
-                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-                Ok(false)
-            }
-            SlotAuth::ObjectiveHasNoLogistics => {
-                let msg = format_compact!("Objective is capturable");
-                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-                Ok(false)
-            }
-            SlotAuth::NotRegistered(side) => {
-                let msg = String::from(format_compact!(
-                    "You must join {:?} to use this slot. Type {:?} in chat.",
-                    side,
-                    side
-                ));
-                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-                Ok(false)
-            }
-            SlotAuth::ObjectiveNotOwned(side) => {
-                let msg = String::from(format_compact!(
-                    "{:?} does not own the objective associated with this slot",
-                    side
-                ));
-                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-                Ok(false)
-            }
-            SlotAuth::Yes => {
-                ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
-                Ok(true)
-            }
+    match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
+        SlotAuth::Denied | SlotAuth::NoLives => Ok(false),
+        SlotAuth::VehicleNotAvailable(vehicle) => {
+            let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            Ok(false)
+        }
+        SlotAuth::ObjectiveHasNoLogistics => {
+            let msg = format_compact!("Objective is capturable");
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            Ok(false)
+        }
+        SlotAuth::NotRegistered(side) => {
+            let msg = String::from(format_compact!(
+                "You must join {:?} to use this slot. Type {:?} in chat.",
+                side,
+                side
+            ));
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            Ok(false)
+        }
+        SlotAuth::ObjectiveNotOwned(side) => {
+            let msg = String::from(format_compact!(
+                "{:?} does not own the objective associated with this slot",
+                side
+            ));
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+            Ok(false)
+        }
+        SlotAuth::Yes => {
+            ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
+            Ok(true)
         }
     }
 }
@@ -928,84 +904,12 @@ fn run_slow_timed_events(
     Ok(())
 }
 
-fn welcome_banner(ctx: &mut Context) {
-        let sideswitch = match ctx.db.ephemeral.cfg.side_switches {
-            Some(n) => format_compact!("{n}"),
-            None => "unlimited".into(),
-        };
-        // CR estokes: handlebars
-        let msg = format_compact!("Welcome to {}.\n\nA dynamic persistant campaign with limited lives and locked sides. You must join a side before you may slot. Choose carefully, as you may only change sides {} time(s) until the map resets. Join a side by typing the name of the side in chat. E.G. type red to join red. Change sides by typing -switch <side> in chat, e.g. -switch red. Type -help in chat for more commands.\n\nGood hunting!", ctx.sortie, sideswitch);
-        for (slot, _, _) in &ctx.used_welcome_slots {
-            if let Some(uid) = slot.as_unit_id() {
-                ctx.db
-                    .ephemeral
-                    .msgs()
-                    .panel_to_unit(60, true, uid, msg.clone())
-            }
-        }
-}
-
-fn welcome_new_players(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) -> Result<()> {
-    if ctx.free_welcome_slots.is_empty() && ctx.used_welcome_slots.is_empty() {
-        ctx.welcome_queue.clear();
-        return Ok(())
-    }
-    while ctx.free_welcome_slots.len() > 0 && ctx.welcome_queue.len() > 0 {
-        let id = ctx.welcome_queue.pop_front().unwrap();
-        let slot = ctx.free_welcome_slots.pop_front().unwrap();
-        debug!("forcing {:?} to {:?}", id, slot);
-        if let Err(e) = net.force_player_slot(id, Side::Neutral, slot.clone()) {
-            // they don't have CA, put the slot back
-            info!("can't force player {:?} to neutral observer {:?}", id, e);
-            ctx.free_welcome_slots.push_front(slot);
-        } else {
-            debug!("forced successfully");
-            debug!("in slot {:?}", net.get_player_info(id).and_then(|ifo| ifo.slot()));
-            ctx.used_welcome_slots.push_back((slot, id, ts));
-        }
-    }
-    ctx.used_welcome_slots.retain(|(slot, id, when)| {
-        // they have registered
-        if let Some(ifo) = ctx.info_by_player_id.get(id) {
-            if ctx.db.player(&ifo.ucid).is_some() {
-                if let Ok(ifo) = net.get_player_info(*id) {
-                    if let Ok(ps) = ifo.slot() {
-                        if &ps == slot {
-                            let _ = net.force_player_slot(*id, Side::Neutral, SlotId::spectator());
-                        }
-                    }
-                }
-                ctx.free_welcome_slots.push_back(slot.clone());
-                info!("new player {:?} has registered", id);
-                return false;
-            }
-        }
-        if ts - when <= Duration::minutes(5) {
-            true
-        } else {
-            if let Err(e) = net.kick(*id, "idle".into()) {
-                info!("failed to disconnect idle player {:?} {:?}", id, e);
-            }
-            ctx.free_welcome_slots.push_back(slot.clone());
-            false
-        } 
-    });
-    if ctx.used_welcome_slots.len() > 0 {
-        debug!("showing welcome banner");
-        welcome_banner(ctx)
-    }
-    Ok(())
-}
-
 fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
-    if let Err(e) = welcome_new_players(ctx, &net, ts) {
-        error!("failed to welcome new players {:?}", e)
-    }
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, ts) {
         error!("error running slow timed events {:?}", e)
     }
@@ -1082,29 +986,6 @@ fn start_timed_events(lua: MizLua, path: PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn setup_welcome_slots(ctx: &mut Context, miz: Miz) {
-    let mut setup = || -> Result<()> {
-        for side in Side::ALL {
-            let coa = miz.coalition(side).context("getting coalition")?;
-            for country in coa.countries().context("getting country")? {
-                let country = country?;
-                for plane in country.planes().context("getting aircraft")? {
-                    let plane = plane?;
-                    if plane.name()?.starts_with("welcome") {
-                        let unit = plane.units().context("getting units")?.first()?;
-                        ctx.free_welcome_slots.push_back(unit.slot()?);
-                    }
-                }
-            }
-        }
-        info!("I have {} welcome slots", ctx.free_welcome_slots.len());
-        Ok(())
-    };
-    if let Err(e) = setup() {
-        error!("failed to setup welcome slots {:?}", e)
-    }
-}
-
 fn delayed_init_miz(lua: MizLua) -> Result<()> {
     info!("init_miz");
     let ctx = unsafe { Context::get_mut() };
@@ -1140,7 +1021,6 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     info!("spawning units");
     ctx.respawn_groups(lua)
         .context("setting up the mission after load")?;
-    setup_welcome_slots(ctx, miz);
     info!("starting timed events");
     start_timed_events(lua, path).context("starting the timed events loop")?;
     Ok(())
@@ -1158,7 +1038,6 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
         ctx.db.player_disconnected(&ifo.ucid)
     }
-    ctx.used_welcome_slots.retain(|(_, pid, _)| &id != pid);
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
         start_ts,
@@ -1172,7 +1051,6 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
         .on_player_try_change_slot(on_player_try_change_slot)?
         .on_mission_load_end(on_mission_load_end)?
         .on_player_try_connect(on_player_try_connect)?
-        .on_player_connect(on_player_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .on_player_disconnect(on_player_disconnect)?
         .register()?;

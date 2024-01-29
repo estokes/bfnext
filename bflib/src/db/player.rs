@@ -29,7 +29,7 @@ use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
     coalition::Side,
-    net::{SlotId, SlotIdKind, Ucid},
+    net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
     unit::{ClassUnit, Unit},
     MizLua, Position3, String, Vector2, Vector3,
@@ -254,9 +254,9 @@ impl Db {
         if slot_side != player.side {
             return SlotAuth::ObjectiveNotOwned(player.side);
         }
-        match slot.classify() {
-            SlotIdKind::Spectator => unreachable!(),
-            SlotIdKind::Instructor(_) => {
+        match slot {
+            SlotId::Spectator => unreachable!(),
+            SlotId::Instructor(_, _) => {
                 if self.ephemeral.cfg.admins.contains(ucid) {
                     player.jtac_or_spectators = true;
                     SlotAuth::Yes
@@ -264,14 +264,14 @@ impl Db {
                     SlotAuth::Denied
                 }
             }
-            SlotIdKind::ArtilleryCommander(_)
-            | SlotIdKind::ForwardObserver(_)
-            | SlotIdKind::Observer(_) => {
+            SlotId::ArtilleryCommander(_, _)
+            | SlotId::ForwardObserver(_, _)
+            | SlotId::Observer(_, _) => {
                 player.jtac_or_spectators = true;
                 // CR estokes: add permissions for game master
                 SlotAuth::Yes
             }
-            SlotIdKind::Normal => {
+            SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
                 let oid = match self.persisted.objectives_by_slot.get(&slot) {
                     None => {
                         player.changing_slots = Some(slot.clone());

@@ -34,7 +34,7 @@ use dcso3::{
     env::miz::{GroupId, Miz},
     lua_err,
     mission_commands::{CoalitionSubMenu, GroupSubMenu, MissionCommands},
-    net::{SlotId, SlotIdKind},
+    net::SlotId,
     MizLua, String,
 };
 use enumflags2::{BitFlag, BitFlags};
@@ -988,13 +988,13 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         }
         Ok(())
     };
-    match slot.classify() {
-        SlotIdKind::Spectator => Ok(()),
-        SlotIdKind::ArtilleryCommander(side)
-        | SlotIdKind::ForwardObserver(side)
-        | SlotIdKind::Instructor(side)
-        | SlotIdKind::Observer(side) => add_jtac(side),
-        SlotIdKind::Normal => {
+    match slot {
+        SlotId::Spectator => Ok(()),
+        SlotId::ArtilleryCommander(side, _)
+        | SlotId::ForwardObserver(side, _)
+        | SlotId::Instructor(side, _)
+        | SlotId::Observer(side, _) => add_jtac(*side),
+        SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
             let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
             let cap = CarryCap::from_typ(cfg, si.typ.as_str());
             mc.remove_submenu_for_group(si.miz_gid, vec!["Cargo".into()].into())?;

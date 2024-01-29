@@ -819,8 +819,7 @@ fn run_slow_timed_events(
                     None => warn!("no id for player ucid {:?}", ucid),
                     Some(id) => {
                         info!("forcing player {} to spectators", ucid);
-                        if let Err(e) =
-                            net.force_player_slot(*id, Side::Neutral, SlotId::spectator())
+                        if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator)
                         {
                             error!("error forcing player {:?} to spectators {:?}", id, e);
                         }

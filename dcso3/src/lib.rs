@@ -24,7 +24,7 @@ use std::{
     collections::hash_map::Entry,
     marker::PhantomData,
     ops::{Add, AddAssign, Deref, DerefMut, Sub},
-    panic::{self, AssertUnwindSafe},
+    panic::{self, AssertUnwindSafe}, fmt::Debug,
 };
 
 pub mod airbase;
@@ -327,7 +327,7 @@ pub fn wrap<'lua, R: Default>(name: &str, res: Result<R>) -> LuaResult<R> {
     }
 }
 
-pub fn lua_err(err: anyhow::Error) -> LuaError {
+pub fn lua_err<E: Debug>(err: E) -> LuaError {
     LuaError::RuntimeError(format!("{:?}", err))
 }
 

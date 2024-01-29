@@ -25,7 +25,7 @@ jobs:
       run: cargo build --verbose --release --package=bflib
       
     - name: Show Build Folder
-      run: ls -l $GITHUB_WORKSPACE/target/release/
+      run: ls -R $GITHUB_WORKSPACE
     
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v3

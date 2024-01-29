@@ -22,7 +22,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Set up Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1.8.0
+      uses: rust-lang/setup-rust@v1
       with:
         toolchain: stable
     - name: Set up Rust

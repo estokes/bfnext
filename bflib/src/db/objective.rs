@@ -639,28 +639,7 @@ impl Db {
         let mut to_cull: SmallVec<[ObjectiveId; 8]> = smallvec![];
         let mut threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
         let mut not_threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
-        let mut is_on_walkabout: FxHashSet<UnitId> = FxHashSet::default();
         let mut is_close_to_enemies: FxHashSet<UnitId> = FxHashSet::default();
-        let mut check_for_walkabout = |obj: &Objective, radius2: f64| -> Result<()> {
-            let groups = maybe!(obj.groups, obj.owner, "owner")?;
-            for uid in &self.ephemeral.units_potentially_on_walkabout {
-                let unit = unit!(self, uid)?;
-                match group!(self, unit.group)?.origin {
-                    DeployKind::Crate { .. }
-                    | DeployKind::Deployed { .. }
-                    | DeployKind::Troop { .. } => (),
-                    DeployKind::Objective => {
-                        if groups.contains(&unit.group) {
-                            let dist = na::distance_squared(&unit.pos.into(), &obj.pos.into());
-                            if dist > radius2 {
-                                is_on_walkabout.insert(*uid);
-                            }
-                        }
-                    }
-                }
-            }
-            Ok(())
-        };
         let mut check_close_units = |obj: &Objective, spawn: &mut bool, threat: &mut bool| {
             for uid in &self.ephemeral.units_potentially_close_to_enemies {
                 let unit = unit!(self, uid)?;
@@ -710,14 +689,10 @@ impl Db {
                 let alt = land.get_height(LuaVec2(obj.pos))?;
                 LuaVec3(Vector3::new(obj.pos.x, alt, obj.pos.y))
             };
-            let radius2 = obj.radius.powi(2);
             let mut spawn = false;
             let mut is_threatened = false;
             if let Err(e) = check_close_players(obj, pos3, &mut spawn, &mut is_threatened) {
                 error!("failed to check for close players {} {e}", obj.id)
-            }
-            if let Err(e) = check_for_walkabout(obj, radius2) {
-                error!("failed to check walkabout for {} {e}", obj.id)
             }
             if let Err(e) = check_close_units(obj, &mut spawn, &mut is_threatened) {
                 error!("failed to check close units {} {e}", obj.id)
@@ -733,9 +708,6 @@ impl Db {
                 to_cull.push(*oid);
             }
         }
-        self.ephemeral
-            .units_potentially_on_walkabout
-            .retain(|uid| is_on_walkabout.contains(uid));
         self.ephemeral
             .units_potentially_close_to_enemies
             .retain(|uid| is_close_to_enemies.contains(uid));
@@ -763,16 +735,20 @@ impl Db {
         }
         for oid in to_spawn {
             let obj = objective_mut!(self, oid)?;
+            let radius2 = obj.radius.powi(2);
             obj.spawned = true;
             for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                 let group = group!(self, gid)?;
                 let farp = obj.kind.is_farp();
                 let services = group.class.is_services() && !obj.kind.is_airbase();
-                let walkabout = group
-                    .units
-                    .into_iter()
-                    .any(|u| self.ephemeral.units_potentially_on_walkabout.contains(u));
-                if !farp && !services && !walkabout {
+                if !farp && !services {
+                    for uid in &group.units {
+                        let unit = unit_mut!(self, uid)?;
+                        if na::distance_squared(&unit.pos.into(), &obj.pos.into()) > radius2 {
+                            unit.pos = unit.spawn_pos;
+                            unit.position = unit.spawn_position;
+                        }
+                    }
                     self.ephemeral.push_spawn(*gid);
                 }
             }
@@ -786,11 +762,7 @@ impl Db {
                 let group = group!(self, gid)?;
                 let farp = obj.kind.is_farp();
                 let services = group.class.is_services() && !obj.kind.is_airbase();
-                let walkabout = group
-                    .units
-                    .into_iter()
-                    .any(|u| self.ephemeral.units_potentially_on_walkabout.contains(u));
-                if !farp && !services && !walkabout && self.group_health(gid)?.0 > 0 {
+                if !farp && !services && self.group_health(gid)?.0 > 0 {
                     match group.kind {
                         Some(_) => self
                             .ephemeral

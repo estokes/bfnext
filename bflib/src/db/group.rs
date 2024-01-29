@@ -14,15 +14,13 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use std::{cmp::max, collections::VecDeque};
-
 use super::{
     objective::{ObjGroupClass, ObjectiveId},
     Db, Set,
 };
 use crate::{
     cfg::{Crate, Deployable, Troop, UnitTag, UnitTags},
-    group, group_by_name, maybe, maybe_mut, objective_mut,
+    group, group_by_name,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
 };
@@ -30,7 +28,6 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    airbase::Airbase,
     atomic_id, azumith3d, centroid2d,
     coalition::Side,
     env::miz::{Group, GroupKind, MizIndex},
@@ -44,10 +41,11 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
-use log::{debug, error, warn};
+use log::{error, warn};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
+use std::{cmp::max, collections::VecDeque};
 
 atomic_id!(GroupId);
 atomic_id!(UnitId);
@@ -246,7 +244,6 @@ impl Db {
             self.ephemeral
                 .units_potentially_close_to_enemies
                 .remove(uid);
-            self.ephemeral.units_potentially_on_walkabout.remove(uid);
             self.ephemeral.units_able_to_move.remove(uid);
             if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
                 self.ephemeral.uid_by_object_id.remove(&id);
@@ -543,53 +540,14 @@ impl Db {
             self.ephemeral
                 .units_potentially_close_to_enemies
                 .insert(*uid);
-            self.ephemeral.units_potentially_on_walkabout.insert(*uid);
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
         }
         let slot = unit.slot()?;
         if let Some(oid) = self.persisted.objectives_by_slot.get(&slot) {
-            self.ephemeral
-                .slot_by_object_id
-                .insert(id.clone(), slot.clone());
-            self.ephemeral.object_id_by_slot.insert(slot.clone(), id);
-            let obj = objective_mut!(self, oid)?;
-            let mut adjust_warehouse = || -> Result<()> {
-                let sifo = maybe!(obj.slots, slot, "slot")?;
-                let id = maybe!(self.ephemeral.airbase_by_oid, obj.id, "airbase")?;
-                let wh = Airbase::get_instance(lua, id)
-                    .context("getting airbase")?
-                    .get_warehouse()
-                    .context("getting warehouse")?;
-                if sifo.ground_start {
-                    wh.remove_item(sifo.typ.0.clone(), 1).with_context(|| {
-                        format_compact!("removing {} from warehouse", sifo.typ.0)
-                    })?;
-                    for wep in unit.get_ammo()? {
-                        let wep = wep?;
-                        let count = wep.count()?;
-                        let typ = wep.type_name()?;
-                        let whcnt = wh.get_item_count(typ.clone())?;
-                        debug!("removing {count} {typ} from the warehouse which contains {whcnt}");
-                        wh.remove_item(typ.clone(), count)?;
-                        if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ) {
-                            inv.stored = whcnt - count;
-                        }
-                    }
-                }
-                maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored =
-                    wh.get_item_count(sifo.typ.0.clone()).with_context(|| {
-                        format_compact!("getting warehouse count for {}", sifo.typ.0)
-                    })?;
-                Ok(())
-            };
-            if let Err(e) = adjust_warehouse() {
-                error!("couldn't adjust warehouse {:?}", e)
-            }
-            self.player_entered_unit(unit)
-                .context("entering player into unit")?;
-            self.ephemeral.dirty()
+            self.player_entered_slot(lua, id, unit, slot, *oid)
+                .context("entering player into slot")?
         }
         Ok(())
     }
@@ -718,7 +676,6 @@ impl Db {
                 self.ephemeral
                     .units_potentially_close_to_enemies
                     .insert(*uid);
-                self.ephemeral.units_potentially_on_walkabout.insert(*uid);
             }
             unit = Some(instance);
         }

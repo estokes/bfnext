@@ -15,7 +15,7 @@ for more details.
 */
 
 use super::{
-    group::{DeployKind, UnitId},
+    group::DeployKind,
     objective::{ObjGroup, SlotInfo},
     Db, Map,
 };
@@ -27,7 +27,6 @@ use crate::{
     },
     group, objective_mut,
     spawnctx::{SpawnCtx, SpawnLoc},
-    unit,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -37,7 +36,6 @@ use dcso3::{
     MizLua, String, Vector2,
 };
 use log::info;
-use smallvec::SmallVec;
 
 impl Db {
     /// objectives are just trigger zones named according to type codes
@@ -233,7 +231,7 @@ impl Db {
                     typ: vehicle,
                     ground_start,
                     miz_gid: slot.id()?,
-                    side
+                    side,
                 },
             );
         }
@@ -364,7 +362,6 @@ impl Db {
                             self.ephemeral
                                 .units_potentially_close_to_enemies
                                 .insert(*uid);
-                            self.ephemeral.units_potentially_on_walkabout.insert(*uid);
                         }
                     }
                 }
@@ -374,19 +371,6 @@ impl Db {
         queue_check_walkabout_and_close_enemies().context("queuing unit pos checks")?;
         self.cull_or_respawn_objectives(spctx.lua(), Utc::now())
             .context("initial cull or respawn")?;
-        let mut spawn_units_on_walkabout = || -> Result<()> {
-            let on_walkabout: SmallVec<[UnitId; 64]> = self
-                .ephemeral
-                .units_potentially_on_walkabout
-                .iter()
-                .map(|u| *u)
-                .collect();
-            for uid in on_walkabout {
-                let gid = unit!(self, uid)?.group;
-                self.ephemeral.push_spawn(gid);
-            }
-            Ok(())
-        };
-        spawn_units_on_walkabout().context("spawning units on walkabout")
+        Ok(())
     }
 }

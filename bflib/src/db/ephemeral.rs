@@ -390,7 +390,6 @@ pub struct Ephemeral {
     force_to_spectators: BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>>,
     pub(super) units_able_to_move: IndexSet<UnitId, FxBuildHasher>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
-    pub(super) units_potentially_on_walkabout: FxHashSet<UnitId>,
     pub(super) production_by_side: FxHashMap<Side, Arc<Production>>,
     pub(super) delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
@@ -486,7 +485,6 @@ impl Ephemeral {
                         for uid in &group.units {
                             self.units_able_to_move.remove(uid);
                             self.units_potentially_close_to_enemies.remove(uid);
-                            self.units_potentially_on_walkabout.remove(uid);
                             if let Some(id) = self.object_id_by_uid.remove(uid) {
                                 self.uid_by_object_id.remove(&id);
                             }
@@ -753,7 +751,6 @@ impl Ephemeral {
             },
         };
         self.units_potentially_close_to_enemies.remove(&uid);
-        self.units_potentially_on_walkabout.remove(&uid);
         self.units_able_to_move.remove(&uid);
         Some((uid, ucid))
     }

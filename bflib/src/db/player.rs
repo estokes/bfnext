@@ -25,6 +25,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
+use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
     coalition::Side,
@@ -33,7 +34,7 @@ use dcso3::{
     unit::{ClassUnit, Unit},
     MizLua, Position3, String, Vector2, Vector3,
 };
-use log::{error, warn};
+use log::{debug, error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
@@ -429,40 +430,84 @@ impl Db {
         Ok(dead)
     }
 
-    pub fn player_entered_unit(&mut self, unit: &Unit) -> Result<()> {
-        let name = unit.get_name()?;
-        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
-            self.ephemeral.units_able_to_move.insert(*uid);
-        }
-        let slot = unit.slot()?;
-        if let Some(ucid) = self.ephemeral.players_by_slot.get(&slot).map(|u| u.clone()) {
-            if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
-                let position = unit.get_position()?;
-                let point = Vector2::new(position.p.x, position.p.z);
-                let landed_at_objective = self
-                    .persisted
-                    .objectives
-                    .into_iter()
-                    .find(|(_, obj)| {
-                        let radius2 = obj.radius.powi(2);
-                        na::distance_squared(&point.into(), &obj.pos.into()) <= radius2
-                    })
-                    .map(|(oid, _)| *oid);
-                player.current_slot = Some((
-                    slot,
-                    Some(InstancedPlayer {
-                        position,
-                        velocity: unit.get_velocity()?.0,
-                        in_air: unit.in_air()?,
-                        typ: Vehicle::from(unit.get_type_name()?),
-                        landed_at_objective,
-                    }),
-                ));
-                if let Some(_) = player.changing_slots.take() {
-                    self.ephemeral.cancel_force_to_spectators(&ucid);
+    pub fn player_entered_slot(
+        &mut self,
+        lua: MizLua,
+        id: DcsOid<ClassUnit>,
+        unit: &Unit,
+        slot: SlotId,
+        oid: ObjectiveId,
+    ) -> Result<()> {
+        self.ephemeral
+            .slot_by_object_id
+            .insert(id.clone(), slot.clone());
+        self.ephemeral.object_id_by_slot.insert(slot.clone(), id);
+        let obj = objective_mut!(self, oid)?;
+        let sifo = maybe!(obj.slots, slot, "slot")?;
+        let mut adjust_warehouse = || -> Result<()> {
+            let id = maybe!(self.ephemeral.airbase_by_oid, obj.id, "airbase")?;
+            let wh = Airbase::get_instance(lua, id)
+                .context("getting airbase")?
+                .get_warehouse()
+                .context("getting warehouse")?;
+            if sifo.ground_start {
+                wh.remove_item(sifo.typ.0.clone(), 1)
+                    .with_context(|| format_compact!("removing {} from warehouse", sifo.typ.0))?;
+                for wep in unit.get_ammo()? {
+                    let wep = wep?;
+                    let count = wep.count()?;
+                    let typ = wep.type_name()?;
+                    let whcnt = wh.get_item_count(typ.clone())?;
+                    debug!("removing {count} {typ} from the warehouse which contains {whcnt}");
+                    wh.remove_item(typ.clone(), count)?;
+                    if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ) {
+                        inv.stored = whcnt - count;
+                    }
                 }
             }
+            maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored = wh
+                .get_item_count(sifo.typ.0.clone())
+                .with_context(|| format_compact!("getting warehouse count for {}", sifo.typ.0))?;
+            Ok(())
+        };
+        if let Err(e) = adjust_warehouse() {
+            error!("couldn't adjust warehouse {:?}", e)
         }
+        if let Some(ucid) = self.ephemeral.players_by_slot.get(&slot).map(|u| u.clone()) {
+            let player = maybe_mut!(self.persisted.players, ucid, "player")?;
+            let life_typ = self.ephemeral.cfg.life_types[&sifo.typ];
+            if let Some((_, n)) = player.lives.get(&life_typ) {
+                // make absolutely sure
+                if *n == 0 {
+                    self.ephemeral.force_player_to_spectators(&ucid);
+                }
+            }
+            let position = unit.get_position()?;
+            let point = Vector2::new(position.p.x, position.p.z);
+            let landed_at_objective = self
+                .persisted
+                .objectives
+                .into_iter()
+                .find(|(_, obj)| {
+                    let radius2 = obj.radius.powi(2);
+                    na::distance_squared(&point.into(), &obj.pos.into()) <= radius2
+                })
+                .map(|(oid, _)| *oid);
+            player.current_slot = Some((
+                slot,
+                Some(InstancedPlayer {
+                    position,
+                    velocity: unit.get_velocity()?.0,
+                    in_air: unit.in_air()?,
+                    typ: Vehicle::from(unit.get_type_name()?),
+                    landed_at_objective,
+                }),
+            ));
+            if let Some(_) = player.changing_slots.take() {
+                self.ephemeral.cancel_force_to_spectators(&ucid);
+            }
+        }
+        self.ephemeral.dirty();
         Ok(())
     }
 

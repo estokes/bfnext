@@ -333,6 +333,8 @@ impl Db {
     pub fn player_connected(&mut self, ucid: Ucid, name: String) {
         if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
             if player.name != name {
+                self.persisted.players_by_name.remove_cow(&player.name);
+                self.persisted.players_by_name.insert_cow(name.clone(), ucid.clone());
                 player.alts.insert(name.clone());
                 player.name = name;
                 self.ephemeral.dirty()
@@ -346,10 +348,10 @@ impl Db {
             Some(_) => Err(RegErr::AlreadyOn(side)),
             None => {
                 self.persisted.players.insert_cow(
-                    ucid,
+                    ucid.clone(),
                     Player {
                         name: name.clone(),
-                        alts: Set::from_iter([name]),
+                        alts: Set::from_iter([name.clone()]),
                         side,
                         side_switches: self.ephemeral.cfg.side_switches,
                         lives: Map::new(),
@@ -359,6 +361,7 @@ impl Db {
                         jtac_or_spectators: true,
                     },
                 );
+                self.persisted.players_by_name.insert_cow(name, ucid);
                 self.ephemeral.dirty();
                 Ok(())
             }
@@ -441,7 +444,7 @@ impl Db {
         self.ephemeral
             .slot_by_object_id
             .insert(id.clone(), slot.clone());
-        self.ephemeral.object_id_by_slot.insert(slot.clone(), id);
+        self.ephemeral.object_id_by_slot.insert(slot.clone(), id.clone());
         let obj = objective_mut!(self, oid)?;
         let sifo = maybe!(obj.slots, slot, "slot")?;
         let mut adjust_warehouse = || -> Result<()> {
@@ -473,39 +476,54 @@ impl Db {
         if let Err(e) = adjust_warehouse() {
             error!("couldn't adjust warehouse {:?}", e)
         }
-        if let Some(ucid) = self.ephemeral.players_by_slot.get(&slot).map(|u| u.clone()) {
-            let player = maybe_mut!(self.persisted.players, ucid, "player")?;
-            let life_typ = self.ephemeral.cfg.life_types[&sifo.typ];
-            match player.lives.get(&life_typ) {
-                Some((_, n)) if *n == 0 => self.ephemeral.force_player_to_spectators(&ucid),
-                None | Some((_, _)) => self.ephemeral.cancel_force_to_spectators(&ucid),
+        self.ephemeral.dirty();
+        match self.ephemeral.players_by_slot.get(&slot).map(|u| u.clone()) {
+            None => match unit.get_player_name().context("getting player name")? {
+                None => {
+                    unit.clone().destroy().context("destroying slot unit with no player")?;
+                    self.unit_dead(lua, &id, Utc::now())?
+                },
+                Some(name) => match self.persisted.players_by_name.get(&name) {
+                    None => {
+                        unit.clone().destroy().context("destroying slot unit with unknown player")?;
+                        self.unit_dead(lua, &id, Utc::now())?
+                    },
+                    Some(ucid) => self.ephemeral.force_player_to_spectators(ucid),
+                }
             }
-            let position = unit.get_position()?;
-            let point = Vector2::new(position.p.x, position.p.z);
-            let landed_at_objective = self
-                .persisted
-                .objectives
-                .into_iter()
-                .find(|(_, obj)| {
-                    let radius2 = obj.radius.powi(2);
-                    na::distance_squared(&point.into(), &obj.pos.into()) <= radius2
-                })
-                .map(|(oid, _)| *oid);
-            player.current_slot = Some((
-                slot,
-                Some(InstancedPlayer {
-                    position,
-                    velocity: unit.get_velocity()?.0,
-                    in_air: unit.in_air()?,
-                    typ: Vehicle::from(unit.get_type_name()?),
-                    landed_at_objective,
-                }),
-            ));
-            if let Some(_) = player.changing_slots.take() {
-                self.ephemeral.cancel_force_to_spectators(&ucid);
+            Some(ucid) => {
+                let player = maybe_mut!(self.persisted.players, ucid, "player")?;
+                let life_typ = self.ephemeral.cfg.life_types[&sifo.typ];
+                match player.lives.get(&life_typ) {
+                    Some((_, n)) if *n == 0 => self.ephemeral.force_player_to_spectators(&ucid),
+                    None | Some((_, _)) => (),
+                }
+                let position = unit.get_position()?;
+                let point = Vector2::new(position.p.x, position.p.z);
+                let landed_at_objective = self
+                    .persisted
+                    .objectives
+                    .into_iter()
+                    .find(|(_, obj)| {
+                        let radius2 = obj.radius.powi(2);
+                        na::distance_squared(&point.into(), &obj.pos.into()) <= radius2
+                    })
+                    .map(|(oid, _)| *oid);
+                player.current_slot = Some((
+                    slot,
+                    Some(InstancedPlayer {
+                        position,
+                        velocity: unit.get_velocity()?.0,
+                        in_air: unit.in_air()?,
+                        typ: Vehicle::from(unit.get_type_name()?),
+                        landed_at_objective,
+                    }),
+                ));
+                if let Some(_) = player.changing_slots.take() {
+                    self.ephemeral.cancel_force_to_spectators(&ucid);
+                }
             }
         }
-        self.ephemeral.dirty();
         Ok(())
     }
 

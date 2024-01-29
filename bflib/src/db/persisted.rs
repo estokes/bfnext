@@ -50,6 +50,7 @@ pub struct Persisted {
     pub(super) objectives_by_name: Map<String, ObjectiveId>,
     pub(super) objectives_by_group: Map<GroupId, ObjectiveId>,
     pub(super) players: Map<Ucid, Player>,
+    pub(super) players_by_name: Map<String, Ucid>,
     #[serde(default)]
     pub(super) logistics_hubs: Set<ObjectiveId>,
 }

@@ -476,11 +476,9 @@ impl Db {
         if let Some(ucid) = self.ephemeral.players_by_slot.get(&slot).map(|u| u.clone()) {
             let player = maybe_mut!(self.persisted.players, ucid, "player")?;
             let life_typ = self.ephemeral.cfg.life_types[&sifo.typ];
-            if let Some((_, n)) = player.lives.get(&life_typ) {
-                // make absolutely sure
-                if *n == 0 {
-                    self.ephemeral.force_player_to_spectators(&ucid);
-                }
+            match player.lives.get(&life_typ) {
+                Some((_, n)) if *n == 0 => self.ephemeral.force_player_to_spectators(&ucid),
+                None | Some((_, _)) => self.ephemeral.cancel_force_to_spectators(&ucid),
             }
             let position = unit.get_position()?;
             let point = Vector2::new(position.p.x, position.p.z);

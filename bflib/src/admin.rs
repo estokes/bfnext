@@ -89,6 +89,9 @@ pub enum AdminCommand {
         airbase: String,
     },
     Logdesc,
+    ResetLives {
+        player: String
+    }
 }
 
 impl AdminCommand {
@@ -104,6 +107,7 @@ impl AdminCommand {
             "ban <duration|forever> <alias|playerid|ucid>: kick a player and ban them. e.g. ban 10days D4n",
             "unban <alias|ucid>: unban a player",
             "kick <alias|playerid|ucid>: kick a player",
+            "reset-lives <alias|playerid|ucid>",
             "connected: list connected players",
             "banned: list banned players",
             "search <regex>: search the player list by regular expression",
@@ -220,6 +224,9 @@ impl FromStr for AdminCommand {
             }
         } else if s.starts_with("log-desc") {
             Ok(Self::Logdesc)
+        } else if s.starts_with("reset-lives ") {
+            let s = s.strip_prefix("reset-lives ").unwrap();
+            Ok(Self::ResetLives { player: s.into() })
         } else {
             bail!("unknown command {s}")
         }
@@ -553,6 +560,11 @@ fn admin_log_desc(ctx: &Context, lua: MizLua, ucid: &Ucid) -> Result<()> {
     Ok(())
 }
 
+fn admin_reset_lives(ctx: &mut Context, player: &String) -> Result<()> {
+    let ucid = get_player_ucid(ctx, player)?;
+    ctx.db.player_reset_lives(&ucid)
+}
+
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     use std::fmt::Write;
     let mut cmds = mem::take(&mut ctx.admin_commands);
@@ -683,6 +695,10 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     Err(e) => reply!("could not log admin desc {:?}", e),
                 },
             },
+            AdminCommand::ResetLives { player } => match admin_reset_lives(ctx, &player) {
+                Ok(()) => reply!("{player} lives reset"),
+                Err(e) => reply!("could not reset {player} lives {:?}", e)
+            }
         }
     }
     ctx.admin_commands = cmds;

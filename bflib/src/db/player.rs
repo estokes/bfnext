@@ -91,6 +91,12 @@ impl Db {
         self.persisted.players.get(ucid)
     }
 
+    pub fn player_reset_lives(&mut self, ucid: &Ucid) -> Result<()> {
+        maybe_mut!(self.persisted.players, ucid, "player")?.lives = Map::new();
+        self.ephemeral.dirty();
+        Ok(())
+    }
+
     pub fn instanced_players(&self) -> impl Iterator<Item = (&Ucid, &Player, &InstancedPlayer)> {
         self.ephemeral.players_by_slot.values().filter_map(|ucid| {
             let player = &self.persisted.players[ucid];
@@ -231,7 +237,7 @@ impl Db {
         slot: SlotId,
         ucid: &Ucid,
     ) -> SlotAuth {
-       let player = match self.persisted.players.get_mut_cow(ucid) {
+        let player = match self.persisted.players.get_mut_cow(ucid) {
             Some(player) => player,
             None => {
                 if slot.is_spectator() {
@@ -257,7 +263,9 @@ impl Db {
                     SlotAuth::Denied
                 }
             }
-            SlotIdKind::ArtilleryCommander(_) | SlotIdKind::ForwardObserver(_) | SlotIdKind::Observer(_) => {
+            SlotIdKind::ArtilleryCommander(_)
+            | SlotIdKind::ForwardObserver(_)
+            | SlotIdKind::Observer(_) => {
                 player.jtac_or_spectators = true;
                 // CR estokes: add permissions for game master
                 SlotAuth::Yes

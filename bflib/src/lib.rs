@@ -527,15 +527,6 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 }
             }
         }
-        Event::PlayerEnterUnit(e) => {
-            if let Some(o) = &e.initiator {
-                if let Ok(unit) = o.as_unit() {
-                    if let Err(e) = ctx.db.player_entered_unit(&unit) {
-                        error!("player enter unit failed {:?} {:?}", unit, e)
-                    }
-                }
-            }
-        }
         Event::PlayerLeaveUnit(e) => {
             if let Some(o) = &e.initiator {
                 if let Ok(unit) = o.as_unit() {

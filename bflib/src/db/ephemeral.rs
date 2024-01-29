@@ -27,7 +27,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx},
 };
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::{prelude::*, Duration};
+use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
     airbase::ClassAirbase,
@@ -716,7 +716,7 @@ impl Ephemeral {
             if kick {
                 info!("queuing force player {ucid} to spectators");
                 self.force_to_spectators
-                    .entry(Utc::now() + Duration::seconds(5))
+                    .entry(Utc::now())
                     .or_default()
                     .push(ucid.clone());
             }

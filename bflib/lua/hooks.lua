@@ -13,5 +13,23 @@
 -- for more details.
 
 package.cpath = package.cpath .. ";" .. lfs.writedir() .. "\\Scripts\\?.dll"
+
+local function file_exists(name)
+    local f=io.open(name, "r")
+    if f ~= nil then
+        io.close(f)
+        return true
+    else
+        return false
+    end
+end
+
+local bflib_update_file = lfs.writedir() .. "\\Scripts\\_bflib.dll"
+local bflib_dll = lfs.writedir() .. "\\Scripts\\bflib.dll"
+
+if file_exists(bflib_update_file) then
+    os.rename(bflib_update_file, bflib_dll)
+end
+
 local bflib = require("bflib")
 bflib.initHooks()

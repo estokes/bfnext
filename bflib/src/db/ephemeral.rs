@@ -483,7 +483,7 @@ impl Ephemeral {
                 if let Some((gid, name)) = self.despawnq.pop_front() {
                     if let Some(group) = persisted.groups.get(&gid) {
                         for uid in &group.units {
-                            self.units_able_to_move.remove(uid);
+                            self.units_able_to_move.swap_remove(uid);
                             self.units_potentially_close_to_enemies.remove(uid);
                             if let Some(id) = self.object_id_by_uid.remove(uid) {
                                 self.uid_by_object_id.remove(&id);
@@ -725,7 +725,7 @@ impl Ephemeral {
                 self.slot_by_object_id.remove(&id);
                 if let Some(uid) = self.uid_by_object_id.remove(&id) {
                     self.object_id_by_uid.remove(&uid);
-                    self.units_able_to_move.remove(&uid);
+                    self.units_able_to_move.swap_remove(&uid);
                     return Some((uid, ucid));
                 }
             }
@@ -751,7 +751,7 @@ impl Ephemeral {
             },
         };
         self.units_potentially_close_to_enemies.remove(&uid);
-        self.units_able_to_move.remove(&uid);
+        self.units_able_to_move.swap_remove(&uid);
         Some((uid, ucid))
     }
 

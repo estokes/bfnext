@@ -536,7 +536,7 @@ impl Db {
                 Ok(v) => dead = v,
                 Err(e) => error!("could not sync final CA unit position {e}"),
             }
-            self.ephemeral.units_able_to_move.remove(&uid);
+            self.ephemeral.units_able_to_move.swap_remove(&uid);
         }
         let id = unit.object_id()?;
         if let Some(slot) = self.ephemeral.slot_by_object_id.get(&id) {

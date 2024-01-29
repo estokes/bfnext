@@ -244,7 +244,7 @@ impl Db {
             self.ephemeral
                 .units_potentially_close_to_enemies
                 .remove(uid);
-            self.ephemeral.units_able_to_move.remove(uid);
+            self.ephemeral.units_able_to_move.swap_remove(uid);
             if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
                 self.ephemeral.uid_by_object_id.remove(&id);
             }

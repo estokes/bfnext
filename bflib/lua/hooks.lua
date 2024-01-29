@@ -28,7 +28,12 @@ local bflib_update_file = lfs.writedir() .. "\\Scripts\\_bflib.dll"
 local bflib_dll = lfs.writedir() .. "\\Scripts\\bflib.dll"
 
 if file_exists(bflib_update_file) then
-    os.rename(bflib_update_file, bflib_dll)
+    local r, e = os.rename(bflib_update_file, bflib_dll)
+    if r == nil then
+       net.log("could not install updated dll " .. e) 
+    else
+       net.log("installed updated bflib.dll")
+    end
 end
 
 local bflib = require("bflib")

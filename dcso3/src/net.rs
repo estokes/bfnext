@@ -94,7 +94,7 @@ impl<'lua> FromLua<'lua> for SlotId {
                 }
             }
             Value::String(s) => Self::parse_string_slot(s.to_str().map_err(lua_err)?.trim()),
-            v => Err(lua_err(format!("invalid slot {:?}", v))),
+            v => Err(lua_err(format!("invalid slot type {:?}", v))),
         }
     }
 }
@@ -197,8 +197,14 @@ impl SlotId {
                 }
             }
         }
-        if s == "" || s == "0" {
+        if s == "" {
             Ok(Self::Spectator)
+        } else if let Ok(i) = s.parse::<i64>() {
+            if i == 0 {
+                Ok(Self::Spectator)
+            } else {
+                Ok(Self::Unit(i))
+            }
         } else if let Some(s) = s.strip_prefix("artillery_commander_") {
             let (side, n) = side_and_num(s)?;
             Ok(Self::ArtilleryCommander(side, n))
@@ -213,7 +219,7 @@ impl SlotId {
             Ok(Self::Instructor(side, n))
         } else {
             match s.split_once("_") {
-                None => Err(lua_err(format!("invalid slot {s}"))),
+                None => Err(lua_err(format!("invalid string slot {s}"))),
                 Some((i, n)) => {
                     let i = i.parse::<i64>().map_err(lua_err)?;
                     let n = n.parse::<u8>().map_err(lua_err)?;

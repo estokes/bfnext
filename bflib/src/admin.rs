@@ -11,7 +11,7 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
     degrees_to_radians,
-    net::{Net, PlayerId, Ucid},
+    net::{DcsLuaEnvironment, Net, PlayerId, Ucid},
     object::DcsObject,
     pointing_towards2,
     trigger::{MarkId, Trigger},
@@ -23,6 +23,7 @@ use dcso3::{
 use fxhash::FxHashMap;
 use log::{error, warn};
 use mlua::Value;
+use parking_lot::{Condvar, Mutex};
 use regex::{Regex, RegexBuilder};
 use smallvec::{smallvec, SmallVec};
 use std::{mem, str::FromStr, sync::Arc};
@@ -90,8 +91,9 @@ pub enum AdminCommand {
     },
     Logdesc,
     ResetLives {
-        player: String
-    }
+        player: String,
+    },
+    Shutdown,
 }
 
 impl AdminCommand {
@@ -112,7 +114,8 @@ impl AdminCommand {
             "banned: list banned players",
             "search <regex>: search the player list by regular expression",
             "log-warehouse <objective|dcs> <airbase>: write the contents of the selected warehouse to the log file",
-            "log-desc: write the getDesc of the plane you are currently in to the log file"
+            "log-desc: write the getDesc of the plane you are currently in to the log file",
+            "shutdown: shutdown the server"
         ]
     }
 }
@@ -126,8 +129,7 @@ impl FromStr for AdminCommand {
             .ok_or_else(|| anyhow!("not an admin command {s}"))?;
         if s.trim() == "help" {
             Ok(Self::Help)
-        } else if s.starts_with("reduce ") {
-            let s = s.strip_prefix("reduce ").unwrap();
+        } else if let Some(s) = s.strip_prefix("reduce ") {
             match s.split_once(" ") {
                 None => bail!("reduce <airbase> <amount>"),
                 Some((airbase, amount)) => {
@@ -138,8 +140,7 @@ impl FromStr for AdminCommand {
                     })
                 }
             }
-        } else if s.starts_with("transfer ") {
-            let s = s.strip_prefix("transfer ").unwrap();
+        } else if let Some(s) = s.strip_prefix("transfer ") {
             match s.split_once(" ") {
                 None => bail!("transfer <from> <to>"),
                 Some((from, to)) => Ok(Self::TransferSupply {
@@ -147,12 +148,11 @@ impl FromStr for AdminCommand {
                     to: to.into(),
                 }),
             }
-        } else if s.starts_with("tick") {
+        } else if let Some(_) = s.strip_prefix("tick") {
             Ok(Self::LogisticsTickNow)
-        } else if s.starts_with("deliver") {
+        } else if let Some(_) = s.strip_prefix("deliver") {
             Ok(Self::LogisticsDeliverNow)
-        } else if s.starts_with("tim ") {
-            let s = s.strip_prefix("tim ").unwrap();
+        } else if let Some(s) = s.strip_prefix("tim ") {
             match s.split_once(" ") {
                 None => Ok(Self::Tim {
                     key: String::from(s),
@@ -166,11 +166,9 @@ impl FromStr for AdminCommand {
                     })
                 }
             }
-        } else if s.starts_with("spawn ") {
-            let s = s.strip_prefix("spawn ").unwrap();
+        } else if let Some(s) = s.strip_prefix("spawn ") {
             Ok(Self::Spawn { key: s.into() })
-        } else if s.starts_with("switch ") {
-            let s = s.strip_prefix("switch ").unwrap();
+        } else if let Some(s) = s.strip_prefix("switch ") {
             match s.split_once(" ") {
                 None => bail!("switch <side> <player>"),
                 Some((side, player)) => {
@@ -181,8 +179,7 @@ impl FromStr for AdminCommand {
                     })
                 }
             }
-        } else if s.starts_with("ban ") {
-            let s = s.strip_prefix("ban ").unwrap();
+        } else if let Some(s) = s.strip_prefix("ban ") {
             match s.split_once(" ") {
                 None => bail!("ban <duration|forever> <alias|id|ucid>"),
                 Some((dur, player)) => {
@@ -198,23 +195,19 @@ impl FromStr for AdminCommand {
                     })
                 }
             }
-        } else if s.starts_with("unban ") {
-            let s = s.strip_prefix("unban ").unwrap();
+        } else if let Some(s) = s.strip_prefix("unban ") {
             Ok(Self::Unban { player: s.into() })
-        } else if s.starts_with("kick ") {
-            let s = s.strip_prefix("kick ").unwrap();
+        } else if let Some(s) = s.strip_prefix("kick ") {
             Ok(Self::Kick { player: s.into() })
-        } else if s.starts_with("connected") {
+        } else if let Some(_) = s.strip_prefix("connected") {
             Ok(Self::Connected)
-        } else if s.starts_with("banned") {
+        } else if let Some(_) = s.strip_prefix("banned") {
             Ok(Self::Banned)
-        } else if s.starts_with("search ") {
-            let s = s.strip_prefix("search ").unwrap();
+        } else if let Some(s) = s.strip_prefix("search ") {
             Ok(Self::Search {
                 expr: RegexBuilder::new(s).case_insensitive(true).build()?,
             })
-        } else if s.starts_with("log-warehouse ") {
-            let s = s.strip_prefix("log-warehouse ").unwrap();
+        } else if let Some(s) = s.strip_prefix("log-warehouse ") {
             match s.split_once(" ") {
                 None => bail!("log-warehouse <objective|dcs> <airbase>"),
                 Some((kind, airbase)) => Ok(Self::LogWarehouse {
@@ -222,11 +215,12 @@ impl FromStr for AdminCommand {
                     airbase: String::from(airbase),
                 }),
             }
-        } else if s.starts_with("log-desc") {
+        } else if let Some(_) = s.strip_prefix("log-desc") {
             Ok(Self::Logdesc)
-        } else if s.starts_with("reset-lives ") {
-            let s = s.strip_prefix("reset-lives ").unwrap();
+        } else if let Some(s) = s.strip_prefix("reset-lives ") {
             Ok(Self::ResetLives { player: s.into() })
+        } else if let Some(_) = s.strip_prefix("shutdown") {
+            Ok(Self::Shutdown)
         } else {
             bail!("unknown command {s}")
         }
@@ -697,7 +691,22 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
             },
             AdminCommand::ResetLives { player } => match admin_reset_lives(ctx, &player) {
                 Ok(()) => reply!("{player} lives reset"),
-                Err(e) => reply!("could not reset {player} lives {:?}", e)
+                Err(e) => reply!("could not reset {player} lives {:?}", e),
+            },
+            AdminCommand::Shutdown => {
+                let wait = Arc::new((Mutex::new(false), Condvar::new()));
+                ctx.do_bg_task(Task::SaveState(
+                    ctx.miz_state_path.clone(),
+                    ctx.db.persisted.clone(),
+                ));
+                ctx.do_bg_task(Task::Sync(Arc::clone(&wait)));
+                let &(ref lock, ref cvar) = &*wait;
+                let mut synced = lock.lock();
+                if !*synced {
+                    cvar.wait_for(&mut synced, std::time::Duration::from_secs(60));
+                }
+                Net::singleton(lua)?
+                    .dostring_in(DcsLuaEnvironment::Server, "DCS.exitProcess()".into())?;
             }
         }
     }

@@ -28,6 +28,7 @@ use tokio::{
     runtime::Builder,
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
 };
+use parking_lot::{Condvar, Mutex};
 
 struct LogHandle(UnboundedSender<Task>);
 
@@ -58,6 +59,7 @@ pub(super) enum Task {
     SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
     LogPerf(Arc<Perf>),
+    Sync(Arc<(Mutex<bool>, Condvar)>)
 }
 
 async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
@@ -93,6 +95,12 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
             },
             Task::WriteLog(mut buf) => log_file.write_all_buf(&mut buf).await.unwrap(),
             Task::LogPerf(perf) => perf.log(),
+            Task::Sync(a) => {
+                let &(ref lock, ref cvar) = &*a;
+                let mut synced = lock.lock();
+                *synced = true;
+                cvar.notify_all();
+            }
         }
     }
 }

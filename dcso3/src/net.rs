@@ -155,7 +155,7 @@ impl TryFrom<String> for SlotId {
                     Ok(Self::Unit(i))
                 }
             }
-            Err(_) => Ok(Self::parse_string_slot(s.as_str())?)
+            Err(_) => Ok(Self::parse_string_slot(s.as_str())?),
         }
     }
 }
@@ -323,6 +323,26 @@ impl<'lua> PlayerInfo<'lua> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum DcsLuaEnvironment {
+    /// aka hooks
+    Server,
+    Mission,
+    Config,
+    Export,
+}
+
+impl<'lua> IntoLua<'lua> for DcsLuaEnvironment {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        Ok(Value::String(match self {
+            Self::Server => lua.create_string("server"),
+            Self::Mission => lua.create_string("mission"),
+            Self::Config => lua.create_string("config"),
+            Self::Export => lua.create_string("export"),
+        }?))
+    }
+}
+
 wrapped_table!(Net, None);
 
 impl<'lua> Net<'lua> {
@@ -391,7 +411,7 @@ impl<'lua> Net<'lua> {
         Ok(self.t.call_function("json2lua", v)?)
     }
 
-    pub fn dostring_in(&self, state: String, dostring: String) -> Result<String> {
+    pub fn dostring_in(&self, state: DcsLuaEnvironment, dostring: String) -> Result<String> {
         Ok(self.t.call_function("dostring_in", (state, dostring))?)
     }
 

@@ -574,7 +574,7 @@ fn add_cargo_menu_for_group(
     let root = mc.add_submenu_for_group(group, "Cargo".into(), None)?;
     mc.add_command_for_group(
         group,
-        "Unpakistan!".into(),
+        "Unpack Nearby Crate(s)".into(),
         Some(root.clone()),
         unpakistan,
         group,

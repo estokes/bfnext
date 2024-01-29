@@ -1161,6 +1161,16 @@ fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
     Ok(())
 }
 
+fn on_player_connect(_: HooksLua, id: PlayerId) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+        if ctx.db.player(&ifo.ucid).is_none() {
+            ctx.welcome_queue.push_back(id)
+        }
+    }
+    Ok(())
+}
+
 fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
@@ -1180,6 +1190,7 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
         .on_player_try_change_slot(on_player_try_change_slot)?
         .on_mission_load_end(on_mission_load_end)?
         .on_player_try_connect(on_player_try_connect)?
+        .on_player_connect(on_player_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .on_player_disconnect(on_player_disconnect)?
         .register()?;

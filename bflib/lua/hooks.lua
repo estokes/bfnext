@@ -12,6 +12,8 @@
 -- FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 -- for more details.
 
+net.log("loading bflib.dll")
+
 package.cpath = package.cpath .. ";" .. lfs.writedir() .. "\\Scripts\\?.dll"
 
 local function file_exists(name)

@@ -10,22 +10,26 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  LUA_LIB: $GITHUB_WORKSPACE
+  LUA_LIB: ${{ github.workspace }}
   LUA_LINK: "dylib"
   LUA_LIB_NAME: "lua"
 
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v3
+    - name: Set up Rust
+      uses: actions/setup-rust@v2
+      with:
+        toolchain: stable
     - name: Build
       run: cargo build --verbose --release --package=bflib
       
     - name: Show Build Folder
-      run: ls -l $GITHUB_WORKSPACE/target/release/
+      run: dir /s ${{ github.workspace }}
     
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v3

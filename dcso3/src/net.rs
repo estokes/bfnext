@@ -63,6 +63,8 @@ impl fmt::Display for PlayerId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(into = "crate::String")]
+#[serde(try_from = "crate::String")]
 pub enum SlotId {
     Unit(i64),
     MultiCrew(i64, u8),
@@ -75,21 +77,6 @@ pub enum SlotId {
 
 impl<'lua> FromLua<'lua> for SlotId {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
-        fn side_and_num(s: &str) -> LuaResult<(Side, u8)> {
-            match s.split_once("_") {
-                None => Err(lua_err(format_compact!("side number {s}"))),
-                Some((s, n)) => {
-                    let side = match s {
-                        "red" => Ok(Side::Red),
-                        "blue" => Ok(Side::Blue),
-                        "neutrals" => Ok(Side::Neutral),
-                        s => Err(lua_err(format_compact!("slot side {s}"))),
-                    }?;
-                    let n = n.parse::<u8>().map_err(lua_err)?;
-                    Ok((side, n))
-                }
-            }
-        }
         match value {
             Value::Integer(i) => {
                 if i == 0 {
@@ -106,33 +93,7 @@ impl<'lua> FromLua<'lua> for SlotId {
                     Ok(Self::Unit(i))
                 }
             }
-            Value::String(s) => {
-                let s = s.to_str().map_err(lua_err)?.trim();
-                if s == "" || s == "0" {
-                    Ok(Self::Spectator)
-                } else if let Some(s) = s.strip_prefix("artillery_commander_") {
-                    let (side, n) = side_and_num(s)?;
-                    Ok(Self::ArtilleryCommander(side, n))
-                } else if let Some(s) = s.strip_prefix("observer_") {
-                    let (side, n) = side_and_num(s)?;
-                    Ok(Self::Observer(side, n))
-                } else if let Some(s) = s.strip_prefix("forward_observer_") {
-                    let (side, n) = side_and_num(s)?;
-                    Ok(Self::ForwardObserver(side, n))
-                } else if let Some(s) = s.strip_prefix("instructor_") {
-                    let (side, n) = side_and_num(s)?;
-                    Ok(Self::Instructor(side, n))
-                } else {
-                    match s.split_once("_") {
-                        None => Err(lua_err(format!("invalid slot {s}"))),
-                        Some((i, n)) => {
-                            let i = i.parse::<i64>().map_err(lua_err)?;
-                            let n = n.parse::<u8>().map_err(lua_err)?;
-                            Ok(Self::MultiCrew(i, n))
-                        }
-                    }
-                }
-            }
+            Value::String(s) => Self::parse_string_slot(s.to_str().map_err(lua_err)?.trim()),
             v => Err(lua_err(format!("invalid slot {:?}", v))),
         }
     }
@@ -182,6 +143,37 @@ impl<'lua> IntoLua<'lua> for SlotId {
     }
 }
 
+impl TryFrom<String> for SlotId {
+    type Error = anyhow::Error;
+
+    fn try_from(s: String) -> Result<Self> {
+        match s.parse::<i64>() {
+            Ok(i) => {
+                if i == 0 {
+                    Ok(Self::Spectator)
+                } else {
+                    Ok(Self::Unit(i))
+                }
+            }
+            Err(_) => Ok(Self::parse_string_slot(s.as_str())?)
+        }
+    }
+}
+
+impl Into<String> for SlotId {
+    fn into(self) -> String {
+        String::from(match self {
+            Self::Unit(i) => format_compact!("{i}"),
+            Self::Spectator => format_compact!("0"),
+            Self::ArtilleryCommander(s, n) => format_compact!("artillery_commander_{s}_{n}"),
+            Self::ForwardObserver(s, n) => format_compact!("forward_observer_{s}_{n}"),
+            Self::Instructor(s, n) => format_compact!("instructor_{s}_{n}"),
+            Self::Observer(s, n) => format_compact!("observer_{s}_{n}"),
+            Self::MultiCrew(i, n) => format_compact!("{i}_{n}"),
+        })
+    }
+}
+
 impl From<UnitId> for SlotId {
     fn from(value: UnitId) -> Self {
         Self::Unit(value.inner())
@@ -189,6 +181,48 @@ impl From<UnitId> for SlotId {
 }
 
 impl SlotId {
+    fn parse_string_slot(s: &str) -> LuaResult<SlotId> {
+        fn side_and_num(s: &str) -> LuaResult<(Side, u8)> {
+            match s.split_once("_") {
+                None => Err(lua_err(format_compact!("side number {s}"))),
+                Some((s, n)) => {
+                    let side = match s {
+                        "red" => Ok(Side::Red),
+                        "blue" => Ok(Side::Blue),
+                        "neutrals" => Ok(Side::Neutral),
+                        s => Err(lua_err(format_compact!("slot side {s}"))),
+                    }?;
+                    let n = n.parse::<u8>().map_err(lua_err)?;
+                    Ok((side, n))
+                }
+            }
+        }
+        if s == "" || s == "0" {
+            Ok(Self::Spectator)
+        } else if let Some(s) = s.strip_prefix("artillery_commander_") {
+            let (side, n) = side_and_num(s)?;
+            Ok(Self::ArtilleryCommander(side, n))
+        } else if let Some(s) = s.strip_prefix("observer_") {
+            let (side, n) = side_and_num(s)?;
+            Ok(Self::Observer(side, n))
+        } else if let Some(s) = s.strip_prefix("forward_observer_") {
+            let (side, n) = side_and_num(s)?;
+            Ok(Self::ForwardObserver(side, n))
+        } else if let Some(s) = s.strip_prefix("instructor_") {
+            let (side, n) = side_and_num(s)?;
+            Ok(Self::Instructor(side, n))
+        } else {
+            match s.split_once("_") {
+                None => Err(lua_err(format!("invalid slot {s}"))),
+                Some((i, n)) => {
+                    let i = i.parse::<i64>().map_err(lua_err)?;
+                    let n = n.parse::<u8>().map_err(lua_err)?;
+                    Ok(Self::MultiCrew(i, n))
+                }
+            }
+        }
+    }
+
     pub fn is_artillery_commander(&self) -> bool {
         match self {
             Self::ArtilleryCommander(_, _) => true,

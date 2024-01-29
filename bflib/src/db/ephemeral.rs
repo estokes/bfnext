@@ -716,7 +716,7 @@ impl Ephemeral {
             if kick {
                 info!("queuing force player {ucid} to spectators");
                 self.force_to_spectators
-                    .entry(Utc::now() + Duration::seconds(30))
+                    .entry(Utc::now() + Duration::seconds(5))
                     .or_default()
                     .push(ucid.clone());
             }

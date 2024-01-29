@@ -698,6 +698,7 @@ impl Ephemeral {
     }
 
     pub fn cancel_force_to_spectators(&mut self, ucid: &Ucid) {
+        info!("canceling force to spectators for {ucid}");
         self.force_to_spectators.retain(|_, ids| {
             ids.retain(|pucid| pucid != ucid);
             !ids.is_empty()
@@ -713,7 +714,9 @@ impl Ephemeral {
 
     pub(super) fn player_deslot(&mut self, slot: &SlotId, kick: bool) -> Option<(UnitId, Ucid)> {
         if let Some(ucid) = self.players_by_slot.remove(slot) {
+            info!("deslotting player {ucid} from dead unit");
             if kick {
+                info!("queuing force player {ucid} to spectators");
                 self.force_to_spectators
                     .entry(Utc::now() + Duration::seconds(30))
                     .or_default()
@@ -724,7 +727,7 @@ impl Ephemeral {
                 self.slot_by_object_id.remove(&id);
                 if let Some(uid) = self.uid_by_object_id.remove(&id) {
                     self.object_id_by_uid.remove(&uid);
-                    self.units_able_to_move.swap_remove(&uid);
+                    self.units_able_to_move.remove(&uid);
                     return Some((uid, ucid));
                 }
             }
@@ -751,7 +754,7 @@ impl Ephemeral {
         };
         self.units_potentially_close_to_enemies.remove(&uid);
         self.units_potentially_on_walkabout.remove(&uid);
-        self.units_able_to_move.swap_remove(&uid);
+        self.units_able_to_move.remove(&uid);
         Some((uid, ucid))
     }
 

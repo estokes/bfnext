@@ -42,7 +42,7 @@ pub enum SlotAuth {
     Yes,
     ObjectiveNotOwned(Side),
     ObjectiveHasNoLogistics,
-    NoLives,
+    NoLives(LifeType),
     NotRegistered(Side),
     VehicleNotAvailable(Vehicle),
     Denied,
@@ -310,7 +310,7 @@ impl Db {
                                 player.lives.remove_cow(&life_type);
                                 self.ephemeral.dirty();
                             } else if n == 0 {
-                                break SlotAuth::NoLives;
+                                break SlotAuth::NoLives(life_type);
                             } else {
                                 yes!();
                             }

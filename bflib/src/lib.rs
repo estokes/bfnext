@@ -205,7 +205,7 @@ fn on_player_try_connect(
     );
     let ctx = unsafe { Context::get_mut() };
     if !ctx.loaded {
-        return Ok(Some("the mission is still loading".into()))
+        return Ok(Some("the mission is still loading".into()));
     }
     if let Some((until, _)) = ctx.db.ephemeral.cfg.banned.get(&ucid) {
         match until {
@@ -413,7 +413,21 @@ fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> 
     let now = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
-        SlotAuth::Denied | SlotAuth::NoLives => Ok(false),
+        SlotAuth::Denied => Ok(false),
+        SlotAuth::NoLives(typ) => {
+            let msg = match lives(&mut ctx.db, &ifo.ucid, Some(typ)) {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("failed to get lives for {} {:?}", ifo.ucid, e);
+                    "".into()
+                }
+            };
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                format_compact!("you have no {:?} lives remaining. {}", typ, msg),
+            );
+            Ok(false)
+        }
         SlotAuth::VehicleNotAvailable(vehicle) => {
             let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
@@ -813,6 +827,7 @@ fn run_slow_timed_events(
                 match ctx.id_by_ucid.get(&ucid) {
                     None => warn!("no id for player ucid {:?}", ucid),
                     Some(id) => {
+                        info!("forcing player {} to spectators", ucid);
                         if let Err(e) =
                             net.force_player_slot(*id, Side::Neutral, SlotId::spectator())
                         {

@@ -381,7 +381,7 @@ impl Db {
             if let Some((_, lives)) = player.lives.get_mut_cow(&lt) {
                 *lives += 1;
                 if *lives >= self.ephemeral.cfg.default_lives[&lt].0 {
-                    player.lives.remove(&lt);
+                    player.lives.remove_cow(&lt);
                 }
                 self.ephemeral.dirty = true;
             }

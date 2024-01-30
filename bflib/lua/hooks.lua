@@ -28,19 +28,22 @@ end
 
 local function copy_file(from, to)
     local fromf, fe = io.open(from, "rb")
+    local tof, te = io.open(to, "wb")
     if fromf == nil then
         return fe
     end
-    local dll = fromf:read("*a")
-    if dll == nil then
-        return "could not read file"
-    end
-    local tof, te = io.open(to, "wb")
-    if to == nil then
+    if tof == nil then
         return te
     end
-    to:setvbuf("no")
-    to:write(dll)
+    while true do
+        local chunk = fromf:read(16384)
+        if not chunk then
+            break
+        end
+        tof:write(chunk)
+    end
+    fromf:close()
+    tof:close()
 end
 
 local bflib_update_file = lfs.writedir() .. "\\Scripts\\_bflib.dll"

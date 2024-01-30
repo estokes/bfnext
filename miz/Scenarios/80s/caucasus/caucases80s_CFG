@@ -7,6 +7,7 @@
     {"d931948745285fc8e42adbe35a7dfd50": "admin" }
   ],
   "repair_time": 1800,
+  "shutdown": 10,
   "repair_crate": {
     "Red": {
       "name": "Logistics Repair",

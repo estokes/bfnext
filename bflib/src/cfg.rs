@@ -19,7 +19,7 @@ use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{coalition::Side, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
@@ -91,7 +91,7 @@ pub enum UnitTag {
     SmallArms,
     Unarmed,
     Invincible,
-    Driveable
+    Driveable,
 }
 
 #[derive(
@@ -318,7 +318,7 @@ impl WarehouseConfig {
 pub struct Cfg {
     /// ucids in this list are able to run admin commands
     #[serde(default)]
-    pub admins: FxHashSet<Ucid>,
+    pub admins: FxHashMap<Ucid, String>,
     /// ucids in this list are banned
     #[serde(default)]
     pub banned: FxHashMap<Ucid, (Option<DateTime<Utc>>, String)>,
@@ -1271,9 +1271,18 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("Hawk sr".into(), SAM | LR | RadarGuided | SearchRadar),
             ("Hawk tr".into(), SAM | LR | RadarGuided | TrackRadar),
             ("Hawk ln".into(), SAM | LR | RadarGuided | Launcher),
-            ("M1134 Stryker ATGM".into(), APC | MR | ATGM | SmallArms | Driveable),
-            ("M-2 Bradley".into(), APC | MR | ATGM | LightCannon | Driveable),
-            ("M-1 Abrams".into(), Armor | MR | HeavyCannon | SmallArms | Driveable),
+            (
+                "M1134 Stryker ATGM".into(),
+                APC | MR | ATGM | SmallArms | Driveable,
+            ),
+            (
+                "M-2 Bradley".into(),
+                APC | MR | ATGM | LightCannon | Driveable,
+            ),
+            (
+                "M-1 Abrams".into(),
+                Armor | MR | HeavyCannon | SmallArms | Driveable,
+            ),
             ("outpost".into(), Logistics | SR | SmallArms),
             ("bofors40".into(), AAA | LR),
             ("M 818".into(), Logistics | Unarmed),
@@ -1282,7 +1291,13 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("HL_ZU-23".into(), AAA | SR),
             (
                 "Roland ADS".into(),
-                SAM | MR | RadarGuided | EngagesWeapons | Launcher | SearchRadar | TrackRadar | Driveable,
+                SAM | MR
+                    | RadarGuided
+                    | EngagesWeapons
+                    | Launcher
+                    | SearchRadar
+                    | TrackRadar
+                    | Driveable,
             ),
             ("Vulcan".into(), AAA | MR | RadarGuided | Driveable),
             ("Gepard".into(), AAA | LR | RadarGuided | Driveable),
@@ -1297,12 +1312,24 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
                 "Stinger comm".into(),
                 SAM | Infantry | ControlUnit | Unarmed,
             ),
-            ("T155_Firtina".into(), Armor | LR | Artillery | SmallArms | Driveable),
-            ("Leopard-2".into(), Armor | MR | HeavyCannon | SmallArms | Driveable),
+            (
+                "T155_Firtina".into(),
+                Armor | LR | Artillery | SmallArms | Driveable,
+            ),
+            (
+                "Leopard-2".into(),
+                Armor | MR | HeavyCannon | SmallArms | Driveable,
+            ),
             ("ZSU-23-4 Shilka".into(), AAA | MR | RadarGuided | Driveable),
             ("ZSU_57_2".into(), AAA | LR | Driveable),
-            ("Strela-10M3".into(), SAM | SR | IRGuided | Launcher | Driveable),
-            ("Strela-1 9P31".into(), SAM | SR | IRGuided | Launcher | Driveable),
+            (
+                "Strela-10M3".into(),
+                SAM | SR | IRGuided | Launcher | Driveable,
+            ),
+            (
+                "Strela-1 9P31".into(),
+                SAM | SR | IRGuided | Launcher | Driveable,
+            ),
             (
                 "SA-11 Buk CC 9S470M1".into(),
                 SAM | LR | RadarGuided | ControlUnit,
@@ -1318,9 +1345,18 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("BMD-1".into(), APC | MR | ATGM | LightCannon | Driveable),
             ("BMP-1".into(), APC | MR | ATGM | LightCannon | Driveable),
             ("BMP-3".into(), APC | MR | ATGM | LightCannon | Driveable),
-            ("T-80UD".into(), Armor | MR | ATGM | HeavyCannon | SmallArms | Driveable),
-            ("T-72B".into(), Armor | MR | HeavyCannon | SmallArms | Driveable),
-            ("T-55".into(), Armor | MR | HeavyCannon | SmallArms | Driveable),
+            (
+                "T-80UD".into(),
+                Armor | MR | ATGM | HeavyCannon | SmallArms | Driveable,
+            ),
+            (
+                "T-72B".into(),
+                Armor | MR | HeavyCannon | SmallArms | Driveable,
+            ),
+            (
+                "T-55".into(),
+                Armor | MR | HeavyCannon | SmallArms | Driveable,
+            ),
             ("S-60_Type59_Artillery".into(), AAA | LR),
             ("ZU-23 Emplacement Closed".into(), AAA | SR),
             ("ATZ-10".into(), Logistics | Unarmed),
@@ -1335,7 +1371,13 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("Kub 2P25 ln".into(), SAM | MR | RadarGuided | Launcher),
             (
                 "Tor 9A331".into(),
-                SAM | MR | RadarGuided | EngagesWeapons | SearchRadar | TrackRadar | Launcher | Driveable,
+                SAM | MR
+                    | RadarGuided
+                    | EngagesWeapons
+                    | SearchRadar
+                    | TrackRadar
+                    | Launcher
+                    | Driveable,
             ),
             (
                 "Osa 9A33 ln".into(),
@@ -1370,7 +1412,10 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("UH-1H".into(), Helicopter.into()),
             ("M-2000C".into(), Aircraft.into()),
             ("Mi-8MT".into(), Helicopter.into()),
-            ("SA-18 Igla-S manpad".into(), SAM | SR | IRGuided | Launcher | Driveable),
+            (
+                "SA-18 Igla-S manpad".into(),
+                SAM | SR | IRGuided | Launcher | Driveable,
+            ),
             ("SA-18 Igla comm".into(), SAM | SR | IRGuided | ControlUnit),
             (
                 "SA-18 Igla-S comm".into(),
@@ -1466,7 +1511,7 @@ fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
 impl Default for Cfg {
     fn default() -> Self {
         Self {
-            admins: FxHashSet::default(),
+            admins: FxHashMap::default(),
             banned: FxHashMap::default(),
             repair_time: 1800,
             repair_crate: default_repair_crate(),

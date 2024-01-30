@@ -344,7 +344,7 @@ fn do_admin_command(id: PlayerId, cmd: String) {
         Some(ifo) => ifo,
         None => return,
     };
-    if !ctx.db.ephemeral.cfg.admins.contains(&ifo.ucid) {
+    if !ctx.db.ephemeral.cfg.admins.contains_key(&ifo.ucid) {
         return;
     }
     match cmd.parse::<AdminCommand>() {
@@ -364,6 +364,46 @@ fn do_admin_command(id: PlayerId, cmd: String) {
     }
 }
 
+fn time_command(id: PlayerId, now: DateTime<Utc>) {
+    let ctx = unsafe { Context::get_mut() };
+    match ctx.shutdown.as_ref() {
+        None => ctx.db.ephemeral.msgs().send(
+            MsgTyp::Chat(Some(id)),
+            "The server isn't configured to restart automatically",
+        ),
+        Some(asd) => {
+            let remains = format_duration(asd.when - now);
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                format_compact!("The server will shutdown in {remains}"),
+            )
+        }
+    }
+}
+
+fn help_command(id: PlayerId) {
+    let ctx = unsafe { Context::get_mut() };
+    let admin = match ctx.info_by_player_id.get(&id) {
+        None => false,
+        Some(ifo) => ctx.db.ephemeral.cfg.admins.contains_key(&ifo.ucid),
+    };
+    for cmd in [
+        " blue: join the blue team",
+        " red: join the red team",
+        " -switch <color>: side switch to <color>",
+        " -lives: display your current lives",
+        " -time: how long until server restart",
+    ] {
+        ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
+    }
+    if admin {
+        ctx.db.ephemeral.msgs().send(
+            MsgTyp::Chat(Some(id)),
+            " -admin <command>: run admin commands, -admin help for details",
+        );
+    }
+}
+
 fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
     let start_ts = Utc::now();
     info!(
@@ -378,42 +418,23 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         if let Err(e) = lives_command(id) {
             error!("lives command failed for player {:?} {:?}", id, e);
         }
-        record_perf(
-            &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
-            start_ts,
-        );
+        Ok("".into())
+    } else if msg.eq_ignore_ascii_case("-time") {
+        time_command(id, start_ts);
         Ok("".into())
     } else if msg.starts_with("-admin ") {
         do_admin_command(id, msg);
         Ok("".into())
     } else if msg.starts_with("-help") {
-        let ctx = unsafe { Context::get_mut() };
-        let admin = match ctx.info_by_player_id.get(&id) {
-            None => false,
-            Some(ifo) => ctx.db.ephemeral.cfg.admins.contains(&ifo.ucid),
-        };
-        for cmd in [
-            " blue: join the blue team",
-            " red: join the red team",
-            " -switch <color>: side switch to <color>",
-            " -lives: display your current lives",
-        ] {
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
-        }
-        if admin {
-            ctx.db.ephemeral.msgs().send(
-                MsgTyp::Chat(Some(id)),
-                " -admin <command>: run admin commands, -admin help for details",
-            );
-        }
+        help_command(id);
         Ok("".into())
     } else {
-        record_perf(
-            &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
-            start_ts,
-        );
         Ok(msg)
     };
+    record_perf(
+        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+        start_ts,
+    );
     match r {
         Ok(s) => Ok(s),
         Err(e) => {
@@ -627,6 +648,13 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     Ok(())
 }
 
+fn format_duration(d: Duration) -> CompactString {
+    let hrs = d.num_hours();
+    let min = d.num_minutes() - hrs * 60;
+    let sec = d.num_seconds() - hrs * 3600 - min * 60;
+    format_compact!("{:02}:{:02}:{:02}", hrs, min, sec)
+}
+
 fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<CompactString> {
     db.maybe_reset_lives(ucid, Utc::now())?;
     let player = db
@@ -642,16 +670,9 @@ fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<Compac
                 None => msg.push_str(&format_compact!("{typ} {n}/{n}\n")),
                 Some((reset, cur)) => {
                     let since_reset = now - *reset;
-                    let reset = Duration::seconds(*reset_after as i64) - since_reset;
-                    let hrs = reset.num_hours();
-                    let min = reset.num_minutes() - hrs * 60;
-                    let sec = reset.num_seconds() - hrs * 3600 - min * 60;
-                    msg.push_str(&format_compact!(
-                        "{typ} {cur}/{n} resetting in {:02}:{:02}:{:02}\n",
-                        hrs,
-                        min,
-                        sec
-                    ));
+                    let reset =
+                        format_duration(Duration::seconds(*reset_after as i64) - since_reset);
+                    msg.push_str(&format_compact!("{typ} {cur}/{n} resetting in {reset}\n"));
                 }
             }
         }

@@ -261,7 +261,7 @@ impl Db {
         match slot {
             SlotId::Spectator => unreachable!(),
             SlotId::Instructor(_, _) => {
-                if self.ephemeral.cfg.admins.contains(ucid) {
+                if self.ephemeral.cfg.admins.contains_key(ucid) {
                     player.jtac_or_spectators = true;
                     SlotAuth::Yes
                 } else {

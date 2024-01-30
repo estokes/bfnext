@@ -368,6 +368,24 @@ impl Db {
             }
             Ok(())
         };
+        // return lives to pilots who were airborne on the last restart
+        let airborne_players = self
+            .persisted
+            .players
+            .into_iter()
+            .filter_map(|(ucid, p)| p.airborne.and_then(|lt| Some((ucid.clone(), lt))))
+            .collect::<Vec<_>>();
+        for (ucid, lt) in airborne_players {
+            let player = &mut self.persisted.players[&ucid];
+            player.airborne = None;
+            if let Some((_, lives)) = player.lives.get_mut_cow(&lt) {
+                *lives += 1;
+                if *lives >= self.ephemeral.cfg.default_lives[&lt].0 {
+                    player.lives.remove(&lt);
+                }
+                self.ephemeral.dirty = true;
+            }
+        }
         queue_check_walkabout_and_close_enemies().context("queuing unit pos checks")?;
         self.cull_or_respawn_objectives(spctx.lua(), Utc::now())
             .context("initial cull or respawn")?;

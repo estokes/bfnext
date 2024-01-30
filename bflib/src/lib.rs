@@ -90,10 +90,28 @@ struct PlayerInfo {
     ucid: Ucid,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct AutoShutdown {
+    when: DateTime<Utc>,
+    thirty_minute_warning: bool,
+    ten_minute_warning: bool,
+    five_minute_warning: bool,
+    one_minute_warning: bool,
+}
+
+impl AutoShutdown {
+    fn new(ts: DateTime<Utc>) -> Self {
+        let mut t = Self::default();
+        t.when = ts;
+        t
+    }
+}
+
 #[derive(Debug, Default)]
 struct Context {
     sortie: String,
     miz_state_path: PathBuf,
+    shutdown: Option<AutoShutdown>,
     last_perf_log: DateTime<Utc>,
     loaded: bool,
     idx: env::miz::MizIndex,
@@ -803,6 +821,43 @@ fn run_logistics_events(
     Ok(())
 }
 
+fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) {
+    if let Some(asd) = ctx.shutdown.as_mut() {
+        if asd.when - now <= Duration::minutes(30) && !asd.thirty_minute_warning {
+            asd.thirty_minute_warning = true;
+            ctx.db.ephemeral.msgs().panel_to_all(
+                60,
+                false,
+                "The server will restart in 30 minutes",
+            );
+        }
+        if asd.when - now <= Duration::minutes(10) && !asd.ten_minute_warning {
+            asd.ten_minute_warning = true;
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_all(60, true, "The server will restart in 10 minutes");
+        }
+        if asd.when - now <= Duration::minutes(5) && !asd.five_minute_warning {
+            asd.five_minute_warning = true;
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_all(60, true, "The server will restart in 5 minutes")
+        }
+        if asd.when - now <= Duration::minutes(1) && !asd.one_minute_warning {
+            asd.one_minute_warning = true;
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_all(60, true, "The server will restart in one minute")
+        }
+        if now > asd.when {
+            let _ = admin::admin_shutdown(ctx, lua);
+        }
+    }
+}
+
 fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
@@ -813,6 +868,7 @@ fn run_slow_timed_events(
     let freq = Duration::seconds(ctx.db.ephemeral.cfg.slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
+        check_auto_shutdown(ctx, lua, ts);
         for (_, ids) in ctx.db.ephemeral.players_to_force_to_spectators(ts) {
             for ucid in ids {
                 match ctx.id_by_ucid.get(&ucid) {
@@ -1023,6 +1079,12 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         debug!("saved state exists, loading it");
         ctx.db = Db::load(&miz, &ctx.idx, &path).context("loading the saved state")?;
     }
+    ctx.shutdown = ctx
+        .db
+        .ephemeral
+        .cfg
+        .shutdown
+        .map(|hrs| AutoShutdown::new(Utc::now() + Duration::hours(hrs as i64)));
     info!("spawning units");
     ctx.respawn_groups(lua)
         .context("setting up the mission after load")?;

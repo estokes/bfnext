@@ -71,6 +71,8 @@ pub struct Player {
     pub side_switches: Option<u8>,
     pub lives: Map<LifeType, (DateTime<Utc>, u8)>,
     pub crates: Set<GroupId>,
+    #[serde(default)]
+    pub airborne: Option<LifeType>,
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
     #[serde(skip)]
@@ -152,6 +154,7 @@ impl Db {
         if is_on_owned_objective {
             if *player_lives > 0 {
                 // paranoia
+                player.airborne = Some(life_type);
                 *player_lives -= 1;
             }
             self.ephemeral.dirty();
@@ -194,6 +197,7 @@ impl Db {
             });
         if is_on_owned_objective {
             *player_lives += 1;
+            player.airborne = None;
             if *player_lives >= self.ephemeral.cfg.default_lives[&life_type].0 {
                 player.lives.remove_cow(&life_type);
             }
@@ -354,6 +358,7 @@ impl Db {
                         side_switches: self.ephemeral.cfg.side_switches,
                         lives: Map::new(),
                         crates: Set::new(),
+                        airborne: None,
                         current_slot: None,
                         changing_slots: None,
                         jtac_or_spectators: true,

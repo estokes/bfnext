@@ -374,7 +374,7 @@ pub(super) struct Production {
 
 #[derive(Debug, Default)]
 pub struct Ephemeral {
-    dirty: bool,
+    pub(super) dirty: bool,
     pub cfg: Arc<Cfg>,
     pub(super) players_by_slot: FxHashMap<SlotId, Ucid>,
     pub(super) cargo: FxHashMap<SlotId, Cargo>,

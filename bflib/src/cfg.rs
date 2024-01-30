@@ -322,6 +322,10 @@ pub struct Cfg {
     /// ucids in this list are banned
     #[serde(default)]
     pub banned: FxHashMap<Ucid, (Option<DateTime<Utc>>, String)>,
+    /// shutdown after the specified number of hours, don't shutdown
+    /// if None.
+    #[serde(default)]
+    pub shutdown: Option<u32>,
     /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
     /// The base repair crate
@@ -1466,6 +1470,7 @@ impl Default for Cfg {
             banned: FxHashMap::default(),
             repair_time: 1800,
             repair_crate: default_repair_crate(),
+            shutdown: Some(10),
             warehouse: Some(WarehouseConfig {
                 hub_max: 25,
                 airbase_max: 5,

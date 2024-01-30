@@ -35,13 +35,7 @@ local function copy_file(from, to)
     if tof == nil then
         return te
     end
-    while true do
-        local chunk = fromf:read(16384)
-        if not chunk then
-            break
-        end
-        tof:write(chunk)
-    end
+    tof:write(fromf:read("*a"))
     fromf:close()
     tof:close()
 end

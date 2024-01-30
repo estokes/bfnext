@@ -1,9 +1,5 @@
 use crate::{
-    bg::Task,
-    db::{group::DeployKind, Set},
-    msgq::MsgTyp,
-    spawnctx::{SpawnCtx, SpawnLoc},
-    Context,
+    bg::Task, db::{group::DeployKind, Set}, msgq::MsgTyp, return_lives, spawnctx::{SpawnCtx, SpawnLoc}, Context
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use chrono::{prelude::*, Duration};
@@ -559,6 +555,23 @@ fn admin_reset_lives(ctx: &mut Context, player: &String) -> Result<()> {
     ctx.db.player_reset_lives(&ucid)
 }
 
+pub(super) fn admin_shutdown(ctx: &mut Context, lua: MizLua) -> Result<()> {
+    let wait = Arc::new((Mutex::new(false), Condvar::new()));
+    return_lives(lua, ctx, DateTime::<Utc>::MAX_UTC);
+    ctx.do_bg_task(Task::SaveState(
+        ctx.miz_state_path.clone(),
+        ctx.db.persisted.clone(),
+    ));
+    ctx.do_bg_task(Task::Sync(Arc::clone(&wait)));
+    let &(ref lock, ref cvar) = &*wait;
+    let mut synced = lock.lock();
+    if !*synced {
+        cvar.wait_for(&mut synced, std::time::Duration::from_secs(60));
+    }
+    Net::singleton(lua)?.dostring_in(DcsLuaEnvironment::Server, "DCS.exitProcess()".into())?;
+    Ok(())
+}
+
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     use std::fmt::Write;
     let mut cmds = mem::take(&mut ctx.admin_commands);
@@ -693,21 +706,10 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 Ok(()) => reply!("{player} lives reset"),
                 Err(e) => reply!("could not reset {player} lives {:?}", e),
             },
-            AdminCommand::Shutdown => {
-                let wait = Arc::new((Mutex::new(false), Condvar::new()));
-                ctx.do_bg_task(Task::SaveState(
-                    ctx.miz_state_path.clone(),
-                    ctx.db.persisted.clone(),
-                ));
-                ctx.do_bg_task(Task::Sync(Arc::clone(&wait)));
-                let &(ref lock, ref cvar) = &*wait;
-                let mut synced = lock.lock();
-                if !*synced {
-                    cvar.wait_for(&mut synced, std::time::Duration::from_secs(60));
-                }
-                Net::singleton(lua)?
-                    .dostring_in(DcsLuaEnvironment::Server, "DCS.exitProcess()".into())?;
-            }
+            AdminCommand::Shutdown => match admin_shutdown(ctx, lua) {
+                Ok(()) => reply!("shutting down"),
+                Err(e) => reply!("failed to shutdown {:?}", e),
+            },
         }
     }
     ctx.admin_commands = cmds;

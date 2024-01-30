@@ -26,14 +26,32 @@ local function file_exists(name)
     end
 end
 
+local function copy_file(from, to)
+    local fromf, fe = io.open(from, "rb")
+    if fromf == nil then
+        return fe
+    end
+    local dll = fromf:read("a")
+    if dll == nil then
+        return "could not read file"
+    end
+    local tof, te = io.open(to, "wb")
+    if to == nil then
+        return te
+    end
+    to:setvbuf("no")
+    to:write(dll)
+end
+
 local bflib_update_file = lfs.writedir() .. "\\Scripts\\_bflib.dll"
 local bflib_dll = lfs.writedir() .. "\\Scripts\\bflib.dll"
 
 if file_exists(bflib_update_file) then
-    local r, e = os.rename(bflib_update_file, bflib_dll)
-    if r == nil then
+    local e = copy_file(bflib_update_file, bflib_dll)
+    if e ~= nil then
        net.log("could not install updated dll " .. e) 
     else
+       os.remove(bflib_update_file)
        net.log("installed updated bflib.dll")
     end
 end

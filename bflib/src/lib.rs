@@ -992,7 +992,7 @@ fn start_timed_events(lua: MizLua, path: PathBuf) -> Result<()> {
 }
 
 fn delayed_init_miz(lua: MizLua) -> Result<()> {
-    info!("init_miz");
+    info!("init_miz: welcome to blue flag v3");
     let ctx = unsafe { Context::get_mut() };
     info!("indexing the miz");
     let miz = Miz::singleton(lua)?;

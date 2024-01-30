@@ -31,7 +31,7 @@ local function copy_file(from, to)
     if fromf == nil then
         return fe
     end
-    local dll = fromf:read("a")
+    local dll = fromf:read("*a")
     if dll == nil then
         return "could not read file"
     end

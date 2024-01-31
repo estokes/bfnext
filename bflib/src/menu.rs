@@ -900,53 +900,30 @@ fn jtac_stop_artillery_mission(lua: MizLua, arg: ArgTuple<DbGid, DbGid>) -> Resu
     Ok(())
 }
 
-fn jtac_adjust_solution(
-    _lua: MizLua,
-    arg: ArgQuad<DbGid, DbGid, AdjustmentDir, u16>,
-) -> Result<()> {
+fn jtac_adjust_solution(_lua: MizLua, arg: ArgTriple<DbGid, AdjustmentDir, u16>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let side = ctx.db.group(&arg.fst)?.side;
-    match ctx
-        .jtac
-        .adjust_artillery_solution(&arg.fst, &arg.snd, arg.trd, arg.fth)
-    {
-        Ok(()) => ctx.db.ephemeral.msgs().panel_to_side(
-            10,
-            false,
-            side,
-            format_compact!(
-                "jtac {} artillery solution for {} adjusted",
-                arg.fst,
-                arg.snd
-            ),
-        ),
-        Err(e) => ctx.db.ephemeral.msgs().panel_to_side(
-            10,
-            false,
-            side,
-            format_compact!("jtac {} could not adjust solution {:?}", arg.fst, e),
-        ),
-    }
+    ctx.jtac
+        .adjust_artillery_solution(&arg.fst, arg.snd, arg.trd);
+    ctx.db.ephemeral.msgs().panel_to_side(
+        10,
+        false,
+        side,
+        format_compact!("artillery solution for {} adjusted", arg.fst),
+    );
     Ok(())
 }
 
-fn jtac_show_adjustment(_lua: MizLua, arg: ArgTuple<DbGid, DbGid>) -> Result<()> {
+fn jtac_show_adjustment(_lua: MizLua, arg: DbGid) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let side = ctx.db.group(&arg.fst)?.side;
-    match ctx.jtac.get_artillery_adjustment(&arg.fst, &arg.snd) {
-        Ok(a) => ctx.db.ephemeral.msgs().panel_to_side(
-            10,
-            false,
-            side,
-            format_compact!("jtac {} adjustment for {} is {:?}", arg.fst, arg.snd, a),
-        ),
-        Err(e) => ctx.db.ephemeral.msgs().panel_to_side(
-            10,
-            false,
-            side,
-            format_compact!("jtac {} {:?}", arg.fst, e),
-        ),
-    }
+    let side = ctx.db.group(&arg)?.side;
+    let a = ctx.jtac.get_artillery_adjustment(&arg);
+    ctx.db.ephemeral.msgs().panel_to_side(
+        10,
+        false,
+        side,
+        format_compact!("adjustment for {} is {:?}", arg, a),
+    );
     Ok(())
 }
 
@@ -1009,11 +986,10 @@ fn add_artillery_menu_for_jtac(
                 "10m".into(),
                 Some(root.clone()),
                 jtac_adjust_solution,
-                ArgQuad {
-                    fst: jtac,
-                    snd: *gid,
-                    trd: dir,
-                    fth: 10,
+                ArgTriple {
+                    fst: *gid,
+                    snd: dir,
+                    trd: 10,
                 },
             )?;
             mc.add_command_for_coalition(
@@ -1021,11 +997,10 @@ fn add_artillery_menu_for_jtac(
                 "25m".into(),
                 Some(root.clone()),
                 jtac_adjust_solution,
-                ArgQuad {
-                    fst: jtac,
-                    snd: *gid,
-                    trd: dir,
-                    fth: 25,
+                ArgTriple {
+                    fst: *gid,
+                    snd: dir,
+                    trd: 25,
                 },
             )?;
             mc.add_command_for_coalition(
@@ -1033,11 +1008,10 @@ fn add_artillery_menu_for_jtac(
                 "50m".into(),
                 Some(root.clone()),
                 jtac_adjust_solution,
-                ArgQuad {
-                    fst: jtac,
-                    snd: *gid,
-                    trd: dir,
-                    fth: 50,
+                ArgTriple {
+                    fst: *gid,
+                    snd: dir,
+                    trd: 50,
                 },
             )?;
             mc.add_command_for_coalition(
@@ -1045,11 +1019,10 @@ fn add_artillery_menu_for_jtac(
                 "100m".into(),
                 Some(root.clone()),
                 jtac_adjust_solution,
-                ArgQuad {
-                    fst: jtac,
-                    snd: *gid,
-                    trd: dir,
-                    fth: 100,
+                ArgTriple {
+                    fst: *gid,
+                    snd: dir,
+                    trd: 100,
                 },
             )?;
             Ok(())
@@ -1105,10 +1078,7 @@ fn add_artillery_menu_for_jtac(
             "Show Adjustment".into(),
             Some(root.clone()),
             jtac_show_adjustment,
-            ArgTuple {
-                fst: jtac,
-                snd: *gid,
-            },
+            *gid,
         )?;
         let short =
             mc.add_submenu_for_coalition(side, "Report Short".into(), Some(root.clone()))?;

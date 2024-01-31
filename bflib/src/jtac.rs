@@ -132,7 +132,6 @@ struct Jtac {
     gid: GroupId,
     side: Side,
     contacts: IndexMap<UnitId, Contact>,
-    artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
     filter: BitFlags<UnitTag>,
     priority: Vec<UnitTags>,
     target: Option<JtacTarget>,
@@ -148,7 +147,6 @@ impl Jtac {
             gid,
             side,
             contacts: IndexMap::default(),
-            artillery_adjustment: FxHashMap::default(),
             filter: BitFlags::default(),
             priority,
             target: None,
@@ -476,7 +474,14 @@ impl Jtac {
         Ok(())
     }
 
-    fn artillery_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId, n: u8) -> Result<()> {
+    fn artillery_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        adjustment: ArtilleryAdjustment,
+        gid: &GroupId,
+        n: u8,
+    ) -> Result<()> {
         self.cancel_artillery_mission(db, lua, gid)
             .context("canceling artillery mission")?;
         match self.target.as_mut() {
@@ -485,12 +490,6 @@ impl Jtac {
                 let group = db.group(gid)?;
                 let apos = db.group_center(gid)?;
                 let pos = db.unit(&target.uid)?.pos;
-                let adjustment = self
-                    .artillery_adjustment
-                    .get(gid)
-                    .map(|a| *a)
-                    .unwrap_or_default();
-                debug!("artillery adjustment {:?}", adjustment);
                 let pos = adjustment.compute_final_solution(apos, pos);
                 let con = Group::get_by_name(lua, &group.name)
                     .with_context(|| format_compact!("getting group {}", group.name))?
@@ -512,31 +511,24 @@ impl Jtac {
         }
         Ok(())
     }
-
-    fn adjust_artillery_solution(&mut self, gid: &GroupId, dir: AdjustmentDir, mag: u16) {
-        let adj = self.artillery_adjustment.entry(*gid).or_default();
-        match dir {
-            AdjustmentDir::Long => adj.short_long -= mag as i16,
-            AdjustmentDir::Short => adj.short_long += mag as i16,
-            AdjustmentDir::Left => adj.left_right -= mag as i16,
-            AdjustmentDir::Right => adj.left_right += mag as i16,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Jtacs(FxHashMap<Side, FxHashMap<GroupId, Jtac>>);
+pub struct Jtacs {
+    jtacs: FxHashMap<Side, FxHashMap<GroupId, Jtac>>,
+    artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
+}
 
 impl Jtacs {
     fn get(&self, gid: &GroupId) -> Result<&Jtac> {
-        self.0
+        self.jtacs
             .iter()
             .find_map(|(_, jtx)| jtx.get(gid))
             .ok_or_else(|| anyhow!("no such jtac {gid}"))
     }
 
     fn get_mut(&mut self, gid: &GroupId) -> Result<&mut Jtac> {
-        self.0
+        self.jtacs
             .iter_mut()
             .find_map(|(_, jtx)| jtx.get_mut(gid))
             .ok_or_else(|| anyhow!("no such jtac"))
@@ -562,7 +554,14 @@ impl Jtacs {
         arty: &GroupId,
         n: u8,
     ) -> Result<()> {
-        self.get_mut(jtac)?.artillery_mission(db, lua, arty, n)
+        let adjustment = self
+            .artillery_adjustment
+            .get(arty)
+            .map(|a| *a)
+            .unwrap_or_default();
+        debug!("artillery adjustment {:?}", adjustment);
+        self.get_mut(jtac)?
+            .artillery_mission(db, lua, adjustment, arty, n)
     }
 
     pub fn cancel_artillery_mission(
@@ -575,29 +574,21 @@ impl Jtacs {
         self.get_mut(jtac)?.cancel_artillery_mission(db, lua, arty)
     }
 
-    pub fn adjust_artillery_solution(
-        &mut self,
-        jtac: &GroupId,
-        arty: &GroupId,
-        dir: AdjustmentDir,
-        mag: u16,
-    ) -> Result<()> {
-        self.get_mut(jtac)?
-            .adjust_artillery_solution(arty, dir, mag);
-        Ok(())
+    pub fn adjust_artillery_solution(&mut self, arty: &GroupId, dir: AdjustmentDir, mag: u16) {
+        let adj = self.artillery_adjustment.entry(*arty).or_default();
+        match dir {
+            AdjustmentDir::Long => adj.short_long -= mag as i16,
+            AdjustmentDir::Short => adj.short_long += mag as i16,
+            AdjustmentDir::Left => adj.left_right -= mag as i16,
+            AdjustmentDir::Right => adj.left_right += mag as i16,
+        }
     }
 
-    pub fn get_artillery_adjustment(
-        &mut self,
-        jtac: &GroupId,
-        arty: &GroupId,
-    ) -> Result<ArtilleryAdjustment> {
-        Ok(self
-            .get(jtac)?
-            .artillery_adjustment
+    pub fn get_artillery_adjustment(&mut self, arty: &GroupId) -> ArtilleryAdjustment {
+        self.artillery_adjustment
             .get(arty)
             .map(|a| *a)
-            .unwrap_or_default())
+            .unwrap_or_default()
     }
 
     pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {
@@ -658,7 +649,7 @@ impl Jtacs {
     }
 
     pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = UnitId> + 'a {
-        self.0.values().flat_map(|j| {
+        self.jtacs.values().flat_map(|j| {
             j.values()
                 .filter_map(|jt| jt.target.as_ref().map(|target| target.uid))
         })
@@ -667,7 +658,7 @@ impl Jtacs {
     pub fn unit_dead(&mut self, lua: MizLua, db: &mut Db, id: &DcsOid<ClassUnit>) -> Result<()> {
         if let Some(uid) = db.ephemeral.get_uid_by_object_id(id) {
             let uid = *uid;
-            for (side, jtx) in self.0.iter_mut() {
+            for (side, jtx) in self.jtacs.iter_mut() {
                 jtx.retain(|gid, jt| {
                     if let Ok(spu) = db.unit(&uid) {
                         let group = spu.group;
@@ -686,7 +677,7 @@ impl Jtacs {
                                 }
                             }
                         }
-                        let arty = jt.artillery_adjustment.contains_key(&group)
+                        let arty = self.artillery_adjustment.contains_key(&group)
                             || jt
                                 .target
                                 .as_ref()
@@ -697,7 +688,7 @@ impl Jtacs {
                                 .unwrap_or(false);
                         if arty {
                             if db.group_health(&group).unwrap_or((0, 0)).0 <= 1 {
-                                jt.artillery_adjustment.remove(&group);
+                                self.artillery_adjustment.remove(&group);
                                 if let Some(tgt) = jt.target.as_mut() {
                                     tgt.artillery_mission.remove(&group);
                                     tgt.nearby_artillery.retain(|gid| gid != &group);
@@ -738,7 +729,7 @@ impl Jtacs {
         let dead = db
             .update_unit_positions(lua, &targets)
             .context("updating the position of jtac targets")?;
-        for jtx in self.0.values_mut() {
+        for jtx in self.jtacs.values_mut() {
             for jt in jtx.values_mut() {
                 if let Some(target) = &jt.target {
                     let unit = db.unit(&target.uid)?;
@@ -774,7 +765,7 @@ impl Jtacs {
             let range = (ifo.range as f64).powi(2);
             pos.y += 10.;
             let jtac = self
-                .0
+                .jtacs
                 .entry(group.side)
                 .or_default()
                 .entry(group.id)
@@ -812,7 +803,7 @@ impl Jtacs {
                 }
             }
         }
-        for (side, jtx) in self.0.iter_mut() {
+        for (side, jtx) in self.jtacs.iter_mut() {
             jtx.retain(|gid, jt| {
                 saw_jtacs.contains(gid) || {
                     if let Err(e) = jt.remove_target(db, lua) {
@@ -823,7 +814,7 @@ impl Jtacs {
                 }
             })
         }
-        for (side, jtx) in self.0.iter_mut() {
+        for (side, jtx) in self.jtacs.iter_mut() {
             for jtac in jtx.values_mut() {
                 for uid in jtac.contacts.keys() {
                     if !saw_units.contains(&uid) {
@@ -850,7 +841,7 @@ impl Jtacs {
             }
         }
         let mut new_contacts: SmallVec<[&Jtac; 32]> = smallvec![];
-        for j in self.0.values_mut() {
+        for j in self.jtacs.values_mut() {
             for (_, jtac) in j.iter_mut() {
                 match jtac.sort_contacts(db, lua) {
                     Ok(false) => (),

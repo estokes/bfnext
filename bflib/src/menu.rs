@@ -915,7 +915,7 @@ fn jtac_adjust_solution(
             false,
             side,
             format_compact!(
-                "jtac {} artillery soltion for {} adjusted",
+                "jtac {} artillery solution for {} adjusted",
                 arg.fst,
                 arg.snd
             ),
@@ -925,6 +925,26 @@ fn jtac_adjust_solution(
             false,
             side,
             format_compact!("jtac {} could not adjust solution {:?}", arg.fst, e),
+        ),
+    }
+    Ok(())
+}
+
+fn jtac_show_adjustment(_lua: MizLua, arg: ArgTuple<DbGid, DbGid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let side = ctx.db.group(&arg.fst)?.side;
+    match ctx.jtac.get_artillery_adjustment(&arg.fst, &arg.snd) {
+        Ok(a) => ctx.db.ephemeral.msgs().panel_to_side(
+            10,
+            false,
+            side,
+            format_compact!("jtac {} adjustment for {} is {:?}", arg.fst, arg.snd, a),
+        ),
+        Err(e) => ctx.db.ephemeral.msgs().panel_to_side(
+            10,
+            false,
+            side,
+            format_compact!("jtac {} {:?}", arg.fst, e),
         ),
     }
     Ok(())
@@ -1045,16 +1065,6 @@ fn add_artillery_menu_for_jtac(
                 trd: 1,
             },
         )?;
-        let short =
-            mc.add_submenu_for_coalition(side, "Report Short".into(), Some(root.clone()))?;
-        add_adjust(&short, AdjustmentDir::Short)?;
-        let long = mc.add_submenu_for_coalition(side, "Report Long".into(), Some(root.clone()))?;
-        add_adjust(&long, AdjustmentDir::Long)?;
-        let left = mc.add_submenu_for_coalition(side, "Report Left".into(), Some(root.clone()))?;
-        add_adjust(&left, AdjustmentDir::Left)?;
-        let right =
-            mc.add_submenu_for_coalition(side, "Report Right".into(), Some(root.clone()))?;
-        add_adjust(&right, AdjustmentDir::Right)?;
         let for_effect =
             mc.add_submenu_for_coalition(side, "Fire For Effect".into(), Some(root.clone()))?;
         mc.add_command_for_coalition(
@@ -1090,6 +1100,26 @@ fn add_artillery_menu_for_jtac(
                 trd: 20,
             },
         )?;
+        mc.add_command_for_coalition(
+            side,
+            "Show Adjustment".into(),
+            Some(root.clone()),
+            jtac_show_adjustment,
+            ArgTuple {
+                fst: jtac,
+                snd: *gid,
+            },
+        )?;
+        let short =
+            mc.add_submenu_for_coalition(side, "Report Short".into(), Some(root.clone()))?;
+        add_adjust(&short, AdjustmentDir::Short)?;
+        let long = mc.add_submenu_for_coalition(side, "Report Long".into(), Some(root.clone()))?;
+        add_adjust(&long, AdjustmentDir::Long)?;
+        let left = mc.add_submenu_for_coalition(side, "Report Left".into(), Some(root.clone()))?;
+        add_adjust(&left, AdjustmentDir::Left)?;
+        let right =
+            mc.add_submenu_for_coalition(side, "Report Right".into(), Some(root.clone()))?;
+        add_adjust(&right, AdjustmentDir::Right)?;
         mc.add_command_for_coalition(
             side,
             "Hold Fire".into(),

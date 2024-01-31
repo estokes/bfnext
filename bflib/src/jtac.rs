@@ -68,9 +68,9 @@ simple_enum!(AdjustmentDir, u8, [
 ]);
 
 #[derive(Debug, Clone, Copy, Default)]
-struct ArtilleryAdjustment {
-    short_long: i16,
-    left_right: i16,
+pub struct ArtilleryAdjustment {
+    pub short_long: i16,
+    pub left_right: i16,
 }
 
 impl ArtilleryAdjustment {
@@ -78,7 +78,10 @@ impl ArtilleryAdjustment {
         let v = (tp - ip).normalize();
         let normal = Vector2::new(-v.y, v.x) * self.left_right.signum() as f64;
         let res = tp + (v * self.short_long as f64) + (normal * self.left_right as f64);
-        debug!("v: {:?}, normal: {:?}, tp: {:?}, final: {:?}", v, normal, tp, res);
+        debug!(
+            "v: {:?}, normal: {:?}, tp: {:?}, final: {:?}",
+            v, normal, tp, res
+        );
         res
     }
 }
@@ -582,6 +585,19 @@ impl Jtacs {
         self.get_mut(jtac)?
             .adjust_artillery_solution(arty, dir, mag);
         Ok(())
+    }
+
+    pub fn get_artillery_adjustment(
+        &mut self,
+        jtac: &GroupId,
+        arty: &GroupId,
+    ) -> Result<ArtilleryAdjustment> {
+        Ok(self
+            .get(jtac)?
+            .artillery_adjustment
+            .get(arty)
+            .map(|a| *a)
+            .unwrap_or_default())
     }
 
     pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {

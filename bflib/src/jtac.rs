@@ -57,6 +57,20 @@ fn ui_jtac_dead(db: &mut Ephemeral, lua: MizLua, side: Side, gid: GroupId) {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum AdjustmentDir {
+    Short,
+    Long,
+    Left,
+    Right
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ArtilleryAdjustment {
+    short_long: i16,
+    left_right: i16
+}
+
 #[derive(Debug, Clone, Default)]
 struct Contact {
     pos: Vector3,
@@ -102,7 +116,7 @@ struct Jtac {
     gid: GroupId,
     side: Side,
     contacts: IndexMap<UnitId, Contact>,
-    artillery_adjustment: FxHashMap<GroupId, Vector2>,
+    artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
     filter: BitFlags<UnitTag>,
     priority: Vec<UnitTags>,
     target: Option<JtacTarget>,
@@ -500,7 +514,7 @@ impl Jtac {
         Ok(())
     }
 
-    fn adjust_artillery_solution(&mut self, gid: &GroupId, v: Vector2) {
+    fn adjust_artillery_solution(&mut self, gid: &GroupId, dir: ArtilleryAdjustment, mag: u16) {
         *self
             .artillery_adjustment
             .entry(*gid)
@@ -526,12 +540,25 @@ impl Jtacs {
             .ok_or_else(|| anyhow!("no such jtac"))
     }
 
-    pub fn artillery_mission(&mut self, lua: MizLua, db: &Db, gid: &GroupId) -> Result<()> {
-        self.get_mut(gid)?.artillery_mission(db, lua)
+    pub fn artillery_mission(
+        &mut self,
+        lua: MizLua,
+        db: &Db,
+        jtac: &GroupId,
+        arty: &GroupId,
+        n: u8,
+    ) -> Result<()> {
+        self.get_mut(jtac)?.artillery_mission(db, lua, arty, n)
     }
 
-    pub fn cancel_artillery_mission(&mut self, lua: MizLua, db: &Db, gid: &GroupId) -> Result<()> {
-        self.get_mut(gid)?.cancel_artillery_mission(db, lua)
+    pub fn cancel_artillery_mission(
+        &mut self,
+        lua: MizLua,
+        db: &Db,
+        jtac: &GroupId,
+        arty: &GroupId,
+    ) -> Result<()> {
+        self.get_mut(jtac)?.cancel_artillery_mission(db, lua, arty)
     }
 
     pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {

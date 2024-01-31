@@ -968,22 +968,14 @@ pub fn remove_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()>
     )
 }
 
-pub fn add_artillery_menu_for_jtac(
+fn add_artillery_menu_for_jtac(
     lua: MizLua,
     side: Side,
+    root: CoalitionSubMenu,
     jtac: DbGid,
     arty: &[DbGid],
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-    let root = CoalitionSubMenu::from(vec!["JTAC".into(), format_compact!("{jtac}").into()]);
-    mc.remove_submenu_for_coalition(
-        side,
-        CoalitionSubMenu::from(vec![
-            "JTAC".into(),
-            format_compact!("{jtac}").into(),
-            "Artillery".into(),
-        ]),
-    )?;
     let root = mc.add_submenu_for_coalition(side, "Artillery".into(), Some(root.clone()))?;
     for gid in arty {
         let root = mc.add_submenu_for_coalition(
@@ -1112,9 +1104,13 @@ pub fn add_artillery_menu_for_jtac(
     Ok(())
 }
 
-pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
+pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid, arty: &[DbGid]) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root = CoalitionSubMenu::from(vec!["JTAC".into()]);
+    mc.remove_submenu_for_coalition(
+        side,
+        CoalitionSubMenu::from(vec!["JTAC".into(), format_compact!("{group}").into()]),
+    )?;
     let root = mc.add_submenu_for_coalition(side, format_compact!("{group}").into(), Some(root))?;
     mc.add_command_for_coalition(
         side,
@@ -1144,7 +1140,6 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
         jtac_smoke_target,
         group,
     )?;
-    mc.add_submenu_for_coalition(side, "Artillery".into(), Some(root.clone()))?;
     mc.add_command_for_coalition(side, "Shift".into(), Some(root.clone()), jtac_shift, group)?;
     let mut filter_root =
         mc.add_submenu_for_coalition(side, "Filter".into(), Some(root.clone()))?;
@@ -1191,6 +1186,7 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
             )?;
         }
     }
+    add_artillery_menu_for_jtac(lua, side, root, group, arty)?;
     Ok(())
 }
 
@@ -1210,23 +1206,6 @@ impl CarryCap {
             })
             .unwrap_or_default()
     }
-
-    /*
-    fn new(cfg: &Cfg, group: &Group) -> Result<CarryCap> {
-        Ok(group
-            .units()?
-            .into_iter()
-            .fold(Ok(Self::default()), |acc: Result<Self>, unit| {
-                let mut acc = acc?;
-                let unit = unit?;
-                let typ = unit.typ()?;
-                let c = Self::from_typ(cfg, &typ);
-                acc.troops |= c.troops;
-                acc.crates |= c.crates;
-                Ok(acc)
-            })?)
-    }
-    */
 }
 
 pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result<()> {
@@ -1238,7 +1217,7 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         let _ = mc.add_submenu_for_coalition(side, "JTAC".into(), None)?;
         for (_, group, _) in ctx.db.jtacs() {
             if group.side == side {
-                add_menu_for_jtac(lua, group.side, group.id)?
+                ctx.jtac.add_menu(lua, &group.id)?
             }
         }
         Ok(())

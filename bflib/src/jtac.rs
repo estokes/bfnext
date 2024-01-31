@@ -308,8 +308,7 @@ impl Jtac {
                     nearby_artillery: db.artillery_near_point(Vector2::new(pos.x, pos.z)),
                 });
                 let arty = &self.target.as_ref().unwrap().nearby_artillery;
-                menu::add_artillery_menu_for_jtac(lua, self.side, self.gid, arty)
-                    .context("adding arty menu")?;
+                menu::add_menu_for_jtac(lua, self.side, self.gid, arty).context("adding menu")?;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }
@@ -531,6 +530,18 @@ impl Jtacs {
             .ok_or_else(|| anyhow!("no such jtac"))
     }
 
+    pub fn add_menu(&self, lua: MizLua, gid: &GroupId) -> Result<()> {
+        if let Ok(jt) = self.get(gid) {
+            let arty = jt
+                .target
+                .as_ref()
+                .map(|t| &*t.nearby_artillery)
+                .unwrap_or(&[]);
+            menu::add_menu_for_jtac(lua, jt.side, jt.gid, arty)?
+        }
+        Ok(())
+    }
+
     pub fn artillery_mission(
         &mut self,
         lua: MizLua,
@@ -636,8 +647,7 @@ impl Jtacs {
                     if let Ok(spu) = db.unit(&uid) {
                         let group = spu.group;
                         if &group == gid {
-                            let alive = db.group_health(gid).unwrap_or((0, 0)).0;
-                            if alive <= 1 {
+                            if db.group_health(gid).unwrap_or((0, 0)).0 <= 1 {
                                 if let Err(e) = jt.remove_target(db, lua) {
                                     warn!("0 could not remove jtac target {:?}", e)
                                 }
@@ -661,19 +671,18 @@ impl Jtacs {
                                 })
                                 .unwrap_or(false);
                         if arty {
-                            let (alive, _) = db.group_health(&group).unwrap_or((0, 0));
-                            if alive == 0 || alive - 1 == 0 {
+                            if db.group_health(&group).unwrap_or((0, 0)).0 <= 1 {
                                 jt.artillery_adjustment.remove(&group);
                                 if let Some(tgt) = jt.target.as_mut() {
                                     tgt.artillery_mission.remove(&group);
                                     tgt.nearby_artillery.retain(|gid| gid != &group);
-                                    if let Err(e) = menu::add_artillery_menu_for_jtac(
+                                    if let Err(e) = menu::add_menu_for_jtac(
                                         lua,
                                         jt.side,
                                         jt.gid,
                                         &tgt.nearby_artillery,
                                     ) {
-                                        warn!("could not add artillery menu {:?}", e)
+                                        warn!("could not add menu {:?}", e)
                                     }
                                 }
                             }
@@ -745,7 +754,7 @@ impl Jtacs {
                 .or_default()
                 .entry(group.id)
                 .or_insert_with(|| {
-                    if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id) {
+                    if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id, &[]) {
                         error!("could not add menu for jtac {} {e}", group.id)
                     }
                     Jtac::new(group.id, group.side, db.ephemeral.cfg.jtac_priority.clone())

@@ -72,7 +72,7 @@ struct JtacTarget {
     spot: DcsOid<ClassSpot>,
     ir_pointer: Option<DcsOid<ClassSpot>>,
     mark: Option<MarkId>,
-    artillery_mission: Option<SmallVec<[GroupId; 8]>>,
+    artillery_mission: FxHashSet<GroupId>,
 }
 
 impl JtacTarget {
@@ -102,6 +102,7 @@ struct Jtac {
     gid: GroupId,
     side: Side,
     contacts: IndexMap<UnitId, Contact>,
+    artillery_adjustment: FxHashMap<GroupId, Vector2>,
     filter: BitFlags<UnitTag>,
     priority: Vec<UnitTags>,
     target: Option<JtacTarget>,
@@ -117,6 +118,7 @@ impl Jtac {
             gid,
             side,
             contacts: IndexMap::default(),
+            artillery_adjustment: FxHashMap::default(),
             filter: BitFlags::default(),
             priority,
             target: None,
@@ -191,7 +193,7 @@ impl Jtac {
     }
 
     fn remove_target(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        if let Err(e) = self.cancel_artillery_mission(db, lua) {
+        if let Err(e) = self.cancel_artillery_missions(db, lua) {
             warn!(
                 "could not cancel artillery mission for jtac {} {:?}",
                 self.gid, e
@@ -277,8 +279,11 @@ impl Jtac {
                     ir_pointer,
                     mark: None,
                     uid,
-                    artillery_mission: None,
+                    artillery_mission: FxHashSet::default(),
                 });
+                let arty = self.artillery_near_target(db).unwrap_or_default();
+                menu::add_artillery_menu_for_jtac(lua, self.side, self.gid, &arty)
+                    .context("adding arty menu")?;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }
@@ -399,72 +404,107 @@ impl Jtac {
         Ok(())
     }
 
-    fn cancel_artillery_mission(&mut self, db: &Db, lua: MizLua) -> Result<()> {
+    fn cancel_artillery_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
         if let Some(target) = self.target.as_mut() {
-            if let Some(artillery) = target.artillery_mission.take() {
-                for gid in artillery {
-                    // the jtac might BE the artillery and it might be gone
-                    if let Ok(group) = db.group(&gid) {
-                        let con = Group::get_by_name(lua, &group.name)
-                            .with_context(|| format_compact!("getting group {}", group.name))?
-                            .get_controller()
-                            .context("getting controller")?;
-                        con.reset_task().context("resetting task")?
-                    }
+            if target.artillery_mission.remove(gid) {
+                // the jtac might BE the artillery and it might be gone
+                if let Ok(group) = db.group(&gid) {
+                    let con = Group::get_by_name(lua, &group.name)
+                        .with_context(|| format_compact!("getting group {}", group.name))?
+                        .get_controller()
+                        .context("getting controller")?;
+                    con.reset_task().context("resetting task")?
                 }
             }
         }
         Ok(())
     }
 
-    fn artillery_mission(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        self.cancel_artillery_mission(db, lua)
-            .context("canceling artillery mission")?;
-        match &mut self.target {
-            None => bail!("can't start an artillery mission without a target"),
-            Some(target) => {
-                let range2 = (db.ephemeral.cfg.artillery_mission_range as f64).powi(2);
-                let pos = db.unit(&target.uid)?.pos;
-                let artillery = db
-                    .deployed()
-                    .filter_map(|group| {
-                        if group.tags.contains(UnitTag::Artillery) {
-                            let center = db.group_center(&group.id).ok()?;
-                            if na::distance_squared(&center.into(), &pos.into()) <= range2 {
-                                Some(group)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<SmallVec<[&SpawnedGroup; 8]>>();
-                if artillery.is_empty() {
-                    bail!(
-                        "no artillery within {} meters of the jtac target",
-                        db.ephemeral.cfg.artillery_mission_range
-                    );
+    fn cancel_artillery_missions(&mut self, db: &Db, lua: MizLua) -> Result<()> {
+        let cancel = |gid: GroupId| -> Result<()> {
+            // the jtac might BE the artillery and it might be gone
+            if let Ok(group) = db.group(&gid) {
+                let con = Group::get_by_name(lua, &group.name)
+                    .with_context(|| format_compact!("getting group {}", group.name))?
+                    .get_controller()
+                    .context("getting controller")?;
+                con.reset_task().context("resetting task")?
+            }
+            Ok(())
+        };
+        if let Some(target) = self.target.as_mut() {
+            for gid in target.artillery_mission.drain() {
+                if let Err(e) = cancel(gid) {
+                    warn!("could not cancel artillery mission for {gid} {:?}", e)
                 }
-                for group in &artillery {
-                    let con = Group::get_by_name(lua, &group.name)
-                        .with_context(|| format_compact!("getting group {}", group.name))?
-                        .get_controller()
-                        .context("getting controller")?;
-                    con.set_task(Task::FireAtPoint {
-                        point: LuaVec2(pos),
-                        radius: Some(10.),
-                        expend_qty: Some(100),
-                        weapon_type: None,
-                        altitude: None,
-                        altitude_type: None,
-                    })
-                    .context("setting task")?;
-                }
-                target.artillery_mission = Some(artillery.into_iter().map(|g| g.id).collect());
             }
         }
         Ok(())
+    }
+
+    fn artillery_near_target<'a>(&self, db: &'a Db) -> Option<SmallVec<[GroupId; 8]>> {
+        self.target.as_ref().and_then(|target| {
+            let range2 = (db.ephemeral.cfg.artillery_mission_range as f64).powi(2);
+            let pos = db.unit(&target.uid).ok()?.pos;
+            let artillery = db
+                .deployed()
+                .filter_map(|group| {
+                    if group.tags.contains(UnitTag::Artillery) {
+                        let center = db.group_center(&group.id).ok()?;
+                        if na::distance_squared(&center.into(), &pos.into()) <= range2 {
+                            Some(group.id)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect::<SmallVec<[GroupId; 8]>>();
+            if artillery.is_empty() {
+                None
+            } else {
+                Some(artillery)
+            }
+        })
+    }
+
+    fn artillery_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId, n: u8) -> Result<()> {
+        self.cancel_artillery_mission(db, lua, gid)
+            .context("canceling artillery mission")?;
+        match self.target.as_mut() {
+            None => bail!("no target"),
+            Some(target) => {
+                let group = db.group(gid)?;
+                let adjustment = self
+                    .artillery_adjustment
+                    .get(gid)
+                    .unwrap_or(&Vector2::new(0., 0.));
+                let pos = db.unit(&target.uid)?.pos + adjustment;
+                let con = Group::get_by_name(lua, &group.name)
+                    .with_context(|| format_compact!("getting group {}", group.name))?
+                    .get_controller()
+                    .context("getting controller")?;
+                con.set_task(Task::FireAtPoint {
+                    point: LuaVec2(pos),
+                    radius: Some(10.),
+                    expend_qty: Some(n as i64),
+                    weapon_type: None,
+                    altitude: None,
+                    altitude_type: None,
+                })
+                .context("setting task")?;
+                target.artillery_mission.insert(*gid);
+            }
+        }
+        Ok(())
+    }
+
+    fn adjust_artillery_solution(&mut self, gid: &GroupId, v: Vector2) {
+        *self
+            .artillery_adjustment
+            .entry(*gid)
+            .or_insert(Vector2::new(0., 0.)) += v;
     }
 }
 

@@ -56,8 +56,8 @@ where
 {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<LuaValue<'lua>> {
         let tbl = lua.create_table()?;
-        tbl.raw_set("fst", self.fst)?;
-        tbl.raw_set("snd", self.snd)?;
+        tbl.raw_set(1, self.fst)?;
+        tbl.raw_set(2, self.snd)?;
         Ok(Value::Table(tbl))
     }
 }
@@ -70,8 +70,46 @@ where
     fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("ArgTuple", None, value).map_err(lua_err)?;
         Ok(Self {
-            fst: tbl.raw_get("fst")?,
-            snd: tbl.raw_get("snd")?,
+            fst: tbl.raw_get(1)?,
+            snd: tbl.raw_get(2)?,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct ArgTriple<T, U, V> {
+    fst: T,
+    snd: U,
+    trd: V,
+}
+
+impl<'lua, T, U, V> IntoLua<'lua> for ArgTriple<T, U, V>
+where
+    T: IntoLua<'lua>,
+    U: IntoLua<'lua>,
+    V: IntoLua<'lua>,
+{
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<LuaValue<'lua>> {
+        let tbl = lua.create_table()?;
+        tbl.raw_set(1, self.fst)?;
+        tbl.raw_set(2, self.snd)?;
+        tbl.raw_set(3, self.trd)?;
+        Ok(Value::Table(tbl))
+    }
+}
+
+impl<'lua, T, U, V> FromLua<'lua> for ArgTriple<T, U, V>
+where
+    T: FromLua<'lua>,
+    U: FromLua<'lua>,
+    V: FromLua<'lua>,
+{
+    fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("ArgTriple", None, value).map_err(lua_err)?;
+        Ok(Self {
+            fst: tbl.raw_get(1)?,
+            snd: tbl.raw_get(2)?,
+            trd: tbl.raw_get(3)?,
         })
     }
 }
@@ -844,6 +882,142 @@ pub fn remove_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()>
     )
 }
 
+pub fn add_artillery_menu_for_jtac(
+    lua: MizLua,
+    side: Side,
+    jtac: DbGid,
+    arty: &[DbGid],
+) -> Result<()> {
+    let mc = MissionCommands::singleton(lua)?;
+    let root = CoalitionSubMenu::from(vec!["JTAC".into(), format_compact!("{jtac}").into()]);
+    mc.remove_submenu_for_coalition(
+        side,
+        CoalitionSubMenu::from(vec![
+            "JTAC".into(),
+            format_compact!("{jtac}").into(),
+            "Artillery".into(),
+        ]),
+    );
+    let root = mc.add_submenu_for_coalition(side, "Artillery".into(), Some(root.clone()))?;
+    for gid in arty {
+        let root = mc.add_submenu_for_coalition(
+            side,
+            format_compact!("{gid}").into(),
+            Some(root.clone()),
+        )?;
+        let add_adjust = |f, root: &CoalitionSubMenu| {
+            mc.add_command_for_coalition(
+                side,
+                "10m".into(),
+                Some(root.clone()),
+                f,
+                ArgTriple {
+                    fst: jtac,
+                    snd: *gid,
+                    trd: 10,
+                },
+            )?;
+            mc.add_command_for_coalition(
+                side,
+                "25m".into(),
+                Some(root.clone()),
+                f,
+                ArgTriple {
+                    fst: jtac,
+                    snd: *gid,
+                    trd: 25,
+                },
+            )?;
+            mc.add_command_for_coalition(
+                side,
+                "50m".into(),
+                Some(root.clone()),
+                f,
+                ArgTriple {
+                    fst: jtac,
+                    snd: *gid,
+                    trd: 50,
+                },
+            )?;
+            mc.add_command_for_coalition(
+                side,
+                "100m".into(),
+                Some(root.clone()),
+                f,
+                ArgTriple {
+                    fst: jtac,
+                    snd: *gid,
+                    trd: 100,
+                },
+            )?;
+            Ok(())
+        };
+        mc.add_command_for_coalition(
+            side,
+            "Fire One".into(),
+            Some(root.clone()),
+            jtac_arty_fire_one,
+            ArgTuple {
+                fst: jtac,
+                snd: *gid,
+            },
+        )?;
+        let short =
+            mc.add_submenu_for_coalition(side, "Report Short".into(), Some(root.clone()))?;
+        add_adjust(jtac_artillery_report_short, &short)?;
+        let long = mc.add_submenu_for_coalition(side, "Report Long".into(), Some(root.clone()))?;
+        add_adjust(jtac_artillery_report_long, &long)?;
+        let left = mc.add_submenu_for_coalition(side, "Report Left".into(), Some(root.clone()))?;
+        add_adjust(jtac_artillery_report_left, &left)?;
+        let right =
+            mc.add_submenu_for_coalition(side, "Report Right".into(), Some(root.clone()))?;
+        add_adjust(jtac_artillery_report_right, &right)?;
+        let for_effect =
+            mc.add_submenu_for_coalition(side, "Fire For Effect".into(), Some(root.clone()))?;
+        mc.add_command_for_coalition(
+            side,
+            "5".into(),
+            Some(for_effect.clone()),
+            jtac_artillery_fire_for_effect,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: 5,
+            },
+        )?;
+        mc.add_command_for_coalition(
+            side,
+            "10".into(),
+            Some(for_effect.clone()),
+            jtac_artillery_fire_for_effect,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: 10,
+            },
+        )?;
+        mc.add_command_for_coalition(
+            side,
+            "20".into(),
+            Some(for_effect.clone()),
+            jtac_artillery_fire_for_effect,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: 20,
+            },
+        )?;
+        mc.add_command_for_coalition(
+            side,
+            "Hold Fire".into(),
+            Some(root.clone()),
+            jtac_artillery_hold_file,
+            *gid,
+        )?;
+    }
+    Ok(())
+}
+
 pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root = CoalitionSubMenu::from(vec!["JTAC".into()]);
@@ -876,20 +1050,7 @@ pub fn add_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
         jtac_smoke_target,
         group,
     )?;
-    mc.add_command_for_coalition(
-        side,
-        "Start Artillery Mission".into(),
-        Some(root.clone()),
-        jtac_artillery_mission,
-        group,
-    )?;
-    mc.add_command_for_coalition(
-        side,
-        "Stop Artillery Mission".into(),
-        Some(root.clone()),
-        jtac_stop_artillery_mission,
-        group,
-    )?;
+    mc.add_submenu_for_coalition(side, "Artillery".into(), Some(root.clone()))?;
     mc.add_command_for_coalition(side, "Shift".into(), Some(root.clone()), jtac_shift, group)?;
     let mut filter_root =
         mc.add_submenu_for_coalition(side, "Filter".into(), Some(root.clone()))?;

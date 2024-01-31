@@ -18,7 +18,7 @@ use crate::{
     cfg::{UnitTag, UnitTags},
     db::{
         ephemeral::Ephemeral,
-        group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+        group::{GroupId, SpawnedUnit, UnitId},
         Db,
     },
     menu,
@@ -32,18 +32,21 @@ use dcso3::{
     group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
-    radians_to_degrees,
+    radians_to_degrees, simple_enum,
     spot::{ClassSpot, Spot},
     trigger::{MarkId, SmokeColor, Trigger},
     unit::{ClassUnit, Unit},
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
+    cvt_err
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{error, info, warn};
+use mlua::{FromLua, IntoLua, Value, Lua, prelude::LuaResult};
 use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
+use serde::{Serialize, Deserialize};
 
 fn ui_jtac_dead(db: &mut Ephemeral, lua: MizLua, side: Side, gid: GroupId) {
     db.msgs().panel_to_side(
@@ -57,18 +60,25 @@ fn ui_jtac_dead(db: &mut Ephemeral, lua: MizLua, side: Side, gid: GroupId) {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum AdjustmentDir {
-    Short,
-    Long,
-    Left,
-    Right
-}
+simple_enum!(AdjustmentDir, u8, [
+    Short => 0,
+    Long => 1,
+    Left => 2,
+    Right => 3
+]);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct ArtilleryAdjustment {
     short_long: i16,
-    left_right: i16
+    left_right: i16,
+}
+
+impl ArtilleryAdjustment {
+    fn compute_final_solution(&self, ip: Vector2, tp: Vector2) -> Vector2 {
+        let v = (ip - tp).normalize();
+        let normal = Vector2::new(-v.y, v.x) * self.left_right.signum() as f64;
+        tp + (v * self.short_long as f64) + (normal * self.left_right as f64)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -490,11 +500,14 @@ impl Jtac {
             None => bail!("no target"),
             Some(target) => {
                 let group = db.group(gid)?;
+                let apos = db.group_center(gid)?;
+                let pos = db.unit(&target.uid)?.pos;
                 let adjustment = self
                     .artillery_adjustment
                     .get(gid)
-                    .unwrap_or(&Vector2::new(0., 0.));
-                let pos = db.unit(&target.uid)?.pos + adjustment;
+                    .map(|a| *a)
+                    .unwrap_or_default();
+                let pos = adjustment.compute_final_solution(apos, pos);
                 let con = Group::get_by_name(lua, &group.name)
                     .with_context(|| format_compact!("getting group {}", group.name))?
                     .get_controller()
@@ -514,11 +527,14 @@ impl Jtac {
         Ok(())
     }
 
-    fn adjust_artillery_solution(&mut self, gid: &GroupId, dir: ArtilleryAdjustment, mag: u16) {
-        *self
-            .artillery_adjustment
-            .entry(*gid)
-            .or_insert(Vector2::new(0., 0.)) += v;
+    fn adjust_artillery_solution(&mut self, gid: &GroupId, dir: AdjustmentDir, mag: u16) {
+        let adj = self.artillery_adjustment.entry(*gid).or_default();
+        match dir {
+            AdjustmentDir::Long => adj.short_long -= mag as i16,
+            AdjustmentDir::Short => adj.short_long += mag as i16,
+            AdjustmentDir::Left => adj.left_right -= mag as i16,
+            AdjustmentDir::Right => adj.left_right += mag as i16,
+        }
     }
 }
 
@@ -559,6 +575,18 @@ impl Jtacs {
         arty: &GroupId,
     ) -> Result<()> {
         self.get_mut(jtac)?.cancel_artillery_mission(db, lua, arty)
+    }
+
+    pub fn adjust_artillery_solution(
+        &mut self,
+        jtac: &GroupId,
+        arty: &GroupId,
+        dir: AdjustmentDir,
+        mag: u16,
+    ) -> Result<()> {
+        self.get_mut(jtac)?
+            .adjust_artillery_solution(arty, dir, mag);
+        Ok(())
     }
 
     pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {

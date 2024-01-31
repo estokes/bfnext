@@ -42,7 +42,7 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -75,9 +75,11 @@ struct ArtilleryAdjustment {
 
 impl ArtilleryAdjustment {
     fn compute_final_solution(&self, ip: Vector2, tp: Vector2) -> Vector2 {
-        let v = (ip - tp).normalize();
+        let v = (tp - ip).normalize();
         let normal = Vector2::new(-v.y, v.x) * self.left_right.signum() as f64;
-        tp + (v * self.short_long as f64) + (normal * self.left_right as f64)
+        let res = tp + (v * self.short_long as f64) + (normal * self.left_right as f64);
+        debug!("v: {:?}, normal: {:?}, tp: {:?}, final: {:?}", v, normal, tp, res);
+        res
     }
 }
 
@@ -431,6 +433,7 @@ impl Jtac {
 
     fn cancel_artillery_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
         if let Some(target) = self.target.as_mut() {
+            debug!("canceling artillery mission");
             if target.artillery_mission.remove(gid) {
                 // the jtac might BE the artillery and it might be gone
                 if let Ok(group) = db.group(&gid) {
@@ -438,7 +441,8 @@ impl Jtac {
                         .with_context(|| format_compact!("getting group {}", group.name))?
                         .get_controller()
                         .context("getting controller")?;
-                    con.reset_task().context("resetting task")?
+                    debug!("popping task");
+                    con.pop_task().context("pop task")?
                 }
             }
         }
@@ -447,13 +451,15 @@ impl Jtac {
 
     fn cancel_artillery_missions(&mut self, db: &Db, lua: MizLua) -> Result<()> {
         let cancel = |gid: GroupId| -> Result<()> {
+            debug!("canceling artillery mission");
             // the jtac might BE the artillery and it might be gone
             if let Ok(group) = db.group(&gid) {
                 let con = Group::get_by_name(lua, &group.name)
                     .with_context(|| format_compact!("getting group {}", group.name))?
                     .get_controller()
                     .context("getting controller")?;
-                con.reset_task().context("resetting task")?
+                debug!("popping task");
+                con.pop_task().context("pop task")?
             }
             Ok(())
         };
@@ -481,20 +487,23 @@ impl Jtac {
                     .get(gid)
                     .map(|a| *a)
                     .unwrap_or_default();
+                debug!("artillery adjustment {:?}", adjustment);
                 let pos = adjustment.compute_final_solution(apos, pos);
                 let con = Group::get_by_name(lua, &group.name)
                     .with_context(|| format_compact!("getting group {}", group.name))?
                     .get_controller()
                     .context("getting controller")?;
-                con.set_task(Task::FireAtPoint {
+                let task = Task::FireAtPoint {
                     point: LuaVec2(pos),
                     radius: Some(10.),
                     expend_qty: Some(n as i64),
                     weapon_type: None,
                     altitude: None,
                     altitude_type: None,
-                })
-                .context("setting task")?;
+                };
+                debug!("artillery mission {:?}", task);
+                con.pop_task().context("pop task")?;
+                con.set_task(task).context("setting task")?;
                 target.artillery_mission.insert(*gid);
             }
         }

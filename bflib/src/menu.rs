@@ -900,7 +900,10 @@ fn jtac_stop_artillery_mission(lua: MizLua, arg: ArgTuple<DbGid, DbGid>) -> Resu
     Ok(())
 }
 
-fn jtac_adjust_solution(_lua: MizLua, arg: ArgQuad<DbGid, DbGid, AdjustmentDir, u16>) -> Result<()> {
+fn jtac_adjust_solution(
+    _lua: MizLua,
+    arg: ArgQuad<DbGid, DbGid, AdjustmentDir, u16>,
+) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let side = ctx.db.group(&arg.fst)?.side;
     match ctx

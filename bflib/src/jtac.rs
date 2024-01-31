@@ -29,6 +29,7 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
     controller::Task,
+    cvt_err,
     group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
@@ -37,16 +38,15 @@ use dcso3::{
     trigger::{MarkId, SmokeColor, Trigger},
     unit::{ClassUnit, Unit},
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
-    cvt_err
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{error, info, warn};
-use mlua::{FromLua, IntoLua, Value, Lua, prelude::LuaResult};
+use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Value};
 use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use serde::{Serialize, Deserialize};
 
 fn ui_jtac_dead(db: &mut Ephemeral, lua: MizLua, side: Side, gid: GroupId) {
     db.msgs().panel_to_side(
@@ -97,6 +97,7 @@ struct JtacTarget {
     ir_pointer: Option<DcsOid<ClassSpot>>,
     mark: Option<MarkId>,
     artillery_mission: FxHashSet<GroupId>,
+    nearby_artillery: SmallVec<[GroupId; 8]>,
 }
 
 impl JtacTarget {
@@ -304,9 +305,10 @@ impl Jtac {
                     mark: None,
                     uid,
                     artillery_mission: FxHashSet::default(),
+                    nearby_artillery: db.artillery_near_point(Vector2::new(pos.x, pos.z)),
                 });
-                let arty = self.artillery_near_target(db).unwrap_or_default();
-                menu::add_artillery_menu_for_jtac(lua, self.side, self.gid, &arty)
+                let arty = &self.target.as_ref().unwrap().nearby_artillery;
+                menu::add_artillery_menu_for_jtac(lua, self.side, self.gid, arty)
                     .context("adding arty menu")?;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
@@ -464,33 +466,6 @@ impl Jtac {
             }
         }
         Ok(())
-    }
-
-    fn artillery_near_target<'a>(&self, db: &'a Db) -> Option<SmallVec<[GroupId; 8]>> {
-        self.target.as_ref().and_then(|target| {
-            let range2 = (db.ephemeral.cfg.artillery_mission_range as f64).powi(2);
-            let pos = db.unit(&target.uid).ok()?.pos;
-            let artillery = db
-                .deployed()
-                .filter_map(|group| {
-                    if group.tags.contains(UnitTag::Artillery) {
-                        let center = db.group_center(&group.id).ok()?;
-                        if na::distance_squared(&center.into(), &pos.into()) <= range2 {
-                            Some(group.id)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .collect::<SmallVec<[GroupId; 8]>>();
-            if artillery.is_empty() {
-                None
-            } else {
-                Some(artillery)
-            }
-        })
     }
 
     fn artillery_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId, n: u8) -> Result<()> {
@@ -672,6 +647,33 @@ impl Jtacs {
                                 if &target.source == id {
                                     if let Err(e) = jt.reset_target(db, lua) {
                                         warn!("could not reset jtac target {:?}", e)
+                                    }
+                                }
+                            }
+                        }
+                        let arty = jt.artillery_adjustment.contains_key(&group)
+                            || jt
+                                .target
+                                .as_ref()
+                                .map(|t| {
+                                    t.artillery_mission.contains(&group)
+                                        || t.nearby_artillery.contains(&group)
+                                })
+                                .unwrap_or(false);
+                        if arty {
+                            let (alive, _) = db.group_health(&group).unwrap_or((0, 0));
+                            if alive == 0 || alive - 1 == 0 {
+                                jt.artillery_adjustment.remove(&group);
+                                if let Some(tgt) = jt.target.as_mut() {
+                                    tgt.artillery_mission.remove(&group);
+                                    tgt.nearby_artillery.retain(|gid| gid != &group);
+                                    if let Err(e) = menu::add_artillery_menu_for_jtac(
+                                        lua,
+                                        jt.side,
+                                        jt.gid,
+                                        &tgt.nearby_artillery,
+                                    ) {
+                                        warn!("could not add artillery menu {:?}", e)
                                     }
                                 }
                             }

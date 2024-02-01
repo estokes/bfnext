@@ -76,7 +76,7 @@ pub struct ArtilleryAdjustment {
 impl ArtilleryAdjustment {
     fn compute_final_solution(&self, ip: Vector2, tp: Vector2) -> Vector2 {
         let v = (tp - ip).normalize();
-        let normal = Vector2::new(-v.y, v.x) * self.left_right.signum() as f64;
+        let normal = Vector2::new(v.y, -v.x) * self.left_right.signum() as f64;
         tp + (v * self.short_long as f64) + (normal * self.left_right as f64)
     }
 }

@@ -30,6 +30,7 @@ use dcso3::{
     coalition::Side,
     controller::Task,
     cvt_err,
+    env::miz,
     group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
@@ -251,6 +252,11 @@ impl Jtac {
             .ok_or_else(|| anyhow!("no such target"))?;
         let uid = *uid;
         let pos = ct.pos;
+        let prev_arty = self
+            .target
+            .as_ref()
+            .map(|t| t.nearby_artillery.clone())
+            .unwrap_or_default();
         match &self.target {
             Some(target) if target.uid == uid => Ok(false),
             Some(_) | None => {
@@ -298,7 +304,9 @@ impl Jtac {
                     nearby_artillery: db.artillery_near_point(Vector2::new(pos.x, pos.z)),
                 });
                 let arty = &self.target.as_ref().unwrap().nearby_artillery;
-                menu::add_menu_for_jtac(lua, self.side, self.gid, arty).context("adding menu")?;
+                if &prev_arty != arty {
+                    menu::update_jtac_menu(db, lua, self.gid, arty).context("adding menu")?;
+                }
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }
@@ -473,14 +481,14 @@ impl Jtacs {
             .ok_or_else(|| anyhow!("no such jtac"))
     }
 
-    pub fn add_menu(&self, lua: MizLua, gid: &GroupId) -> Result<()> {
+    pub fn add_menu(&self, lua: MizLua, mizgid: miz::GroupId, gid: &GroupId) -> Result<()> {
         if let Ok(jt) = self.get(gid) {
             let arty = jt
                 .target
                 .as_ref()
                 .map(|t| &*t.nearby_artillery)
                 .unwrap_or(&[]);
-            menu::add_menu_for_jtac(lua, jt.side, jt.gid, arty)?
+            menu::add_menu_for_jtac(lua, mizgid, jt.gid, arty)?
         }
         Ok(())
     }
@@ -672,7 +680,7 @@ impl Jtacs {
                 .or_default()
                 .entry(group.id)
                 .or_insert_with(|| {
-                    if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id, &[]) {
+                    if let Err(e) = menu::update_jtac_menu(db, lua, group.id, &[]) {
                         error!("could not add menu for jtac {} {e}", group.id)
                     }
                     Jtac::new(group.id, group.side, db.ephemeral.cfg.jtac_priority.clone())

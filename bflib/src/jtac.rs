@@ -442,8 +442,7 @@ impl Jtac {
                         .with_context(|| format_compact!("getting group {}", group.name))?
                         .get_controller()
                         .context("getting controller")?;
-                    debug!("popping task");
-                    con.pop_task().context("pop task")?
+                    con.reset_task()?
                 }
             }
         }
@@ -459,8 +458,7 @@ impl Jtac {
                     .with_context(|| format_compact!("getting group {}", group.name))?
                     .get_controller()
                     .context("getting controller")?;
-                debug!("popping task");
-                con.pop_task().context("pop task")?
+                con.reset_task()?
             }
             Ok(())
         };
@@ -504,7 +502,6 @@ impl Jtac {
                     altitude_type: None,
                 };
                 debug!("artillery mission {:?}", task);
-                con.pop_task().context("pop task")?;
                 con.set_task(task).context("setting task")?;
                 target.artillery_mission.insert(*gid);
             }

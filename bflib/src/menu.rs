@@ -905,11 +905,12 @@ fn jtac_adjust_solution(_lua: MizLua, arg: ArgTriple<DbGid, AdjustmentDir, u16>)
     let side = ctx.db.group(&arg.fst)?.side;
     ctx.jtac
         .adjust_artillery_solution(&arg.fst, arg.snd, arg.trd);
+    let a = ctx.jtac.get_artillery_adjustment(&arg.fst);
     ctx.db.ephemeral.msgs().panel_to_side(
         10,
         false,
         side,
-        format_compact!("artillery solution for {} adjusted", arg.fst),
+        format_compact!("artillery solution for {} adjusted now {:?}", arg.fst, a),
     );
     Ok(())
 }

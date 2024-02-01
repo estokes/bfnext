@@ -174,6 +174,18 @@ pub struct ArrowSpec {
 wrapped_table!(Action, None);
 
 impl<'lua> Action<'lua> {
+    pub fn set_user_flag<K: IntoLua<'lua>, V: IntoLua<'lua>>(
+        &self,
+        key: K,
+        value: V,
+    ) -> Result<()> {
+        Ok(self.call_function("setUserFlag", (key, value))?)
+    }
+
+    pub fn set_ai_task(&self, group: GroupId, num: i64) -> Result<()> {
+        Ok(self.call_function("setAITask", (group, num))?)
+    }
+
     pub fn explosion(&self, position: LuaVec3, power: f32) -> Result<()> {
         Ok(self.call_function("explosion", (position, power))?)
     }

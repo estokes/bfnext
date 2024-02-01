@@ -18,7 +18,7 @@ use crate::{
     cfg::{UnitTag, UnitTags},
     db::{
         ephemeral::Ephemeral,
-        group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+        group::{GroupId, SpawnedUnit, UnitId},
         Db,
     },
     menu,
@@ -29,10 +29,12 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
     controller::Task,
+    cvt_err,
+    env::miz,
     group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
-    radians_to_degrees,
+    radians_to_degrees, simple_enum,
     spot::{ClassSpot, Spot},
     trigger::{MarkId, SmokeColor, Trigger},
     unit::{ClassUnit, Unit},
@@ -42,7 +44,9 @@ use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{error, info, warn};
+use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Value};
 use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
 fn ui_jtac_dead(db: &mut Ephemeral, lua: MizLua, side: Side, gid: GroupId) {
@@ -54,6 +58,27 @@ fn ui_jtac_dead(db: &mut Ephemeral, lua: MizLua, side: Side, gid: GroupId) {
     );
     if let Err(e) = menu::remove_menu_for_jtac(lua, side, gid) {
         warn!("could not remove menu for jtac {gid} {e}")
+    }
+}
+
+simple_enum!(AdjustmentDir, u8, [
+    Short => 0,
+    Long => 1,
+    Left => 2,
+    Right => 3
+]);
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ArtilleryAdjustment {
+    pub short_long: i16,
+    pub left_right: i16,
+}
+
+impl ArtilleryAdjustment {
+    fn compute_final_solution(&self, ip: Vector2, tp: Vector2) -> Vector2 {
+        let v = (tp - ip).normalize();
+        let normal = Vector2::new(v.y, -v.x) * self.left_right.signum() as f64;
+        tp + (v * self.short_long as f64) + (normal * self.left_right as f64)
     }
 }
 
@@ -72,7 +97,7 @@ struct JtacTarget {
     spot: DcsOid<ClassSpot>,
     ir_pointer: Option<DcsOid<ClassSpot>>,
     mark: Option<MarkId>,
-    artillery_mission: Option<SmallVec<[GroupId; 8]>>,
+    nearby_artillery: SmallVec<[GroupId; 8]>,
 }
 
 impl JtacTarget {
@@ -190,13 +215,7 @@ impl Jtac {
         ct.typ = unit.typ.clone();
     }
 
-    fn remove_target(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        if let Err(e) = self.cancel_artillery_mission(db, lua) {
-            warn!(
-                "could not cancel artillery mission for jtac {} {:?}",
-                self.gid, e
-            )
-        }
+    fn remove_target(&mut self, _db: &Db, lua: MizLua) -> Result<()> {
         if let Some(target) = self.target.take() {
             target
                 .destroy(lua)
@@ -233,6 +252,11 @@ impl Jtac {
             .ok_or_else(|| anyhow!("no such target"))?;
         let uid = *uid;
         let pos = ct.pos;
+        let prev_arty = self
+            .target
+            .as_ref()
+            .map(|t| t.nearby_artillery.clone())
+            .unwrap_or_default();
         match &self.target {
             Some(target) if target.uid == uid => Ok(false),
             Some(_) | None => {
@@ -277,8 +301,12 @@ impl Jtac {
                     ir_pointer,
                     mark: None,
                     uid,
-                    artillery_mission: None,
+                    nearby_artillery: db.artillery_near_point(Vector2::new(pos.x, pos.z)),
                 });
+                let arty = &self.target.as_ref().unwrap().nearby_artillery;
+                if &prev_arty != arty {
+                    menu::update_jtac_menu(db, lua, self.gid, arty).context("adding menu")?;
+                }
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }
@@ -399,69 +427,33 @@ impl Jtac {
         Ok(())
     }
 
-    fn cancel_artillery_mission(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        if let Some(target) = self.target.as_mut() {
-            if let Some(artillery) = target.artillery_mission.take() {
-                for gid in artillery {
-                    // the jtac might BE the artillery and it might be gone
-                    if let Ok(group) = db.group(&gid) {
-                        let con = Group::get_by_name(lua, &group.name)
-                            .with_context(|| format_compact!("getting group {}", group.name))?
-                            .get_controller()
-                            .context("getting controller")?;
-                        con.reset_task().context("resetting task")?
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn artillery_mission(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        self.cancel_artillery_mission(db, lua)
-            .context("canceling artillery mission")?;
-        match &mut self.target {
-            None => bail!("can't start an artillery mission without a target"),
+    fn artillery_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        adjustment: ArtilleryAdjustment,
+        gid: &GroupId,
+        n: u8,
+    ) -> Result<()> {
+        match self.target.as_mut() {
+            None => bail!("no target"),
             Some(target) => {
-                let range2 = (db.ephemeral.cfg.artillery_mission_range as f64).powi(2);
+                let name = db.group(gid)?.name.clone();
+                let apos = db.group_center(gid)?;
                 let pos = db.unit(&target.uid)?.pos;
-                let artillery = db
-                    .deployed()
-                    .filter_map(|group| {
-                        if group.tags.contains(UnitTag::Artillery) {
-                            let center = db.group_center(&group.id).ok()?;
-                            if na::distance_squared(&center.into(), &pos.into()) <= range2 {
-                                Some(group)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<SmallVec<[&SpawnedGroup; 8]>>();
-                if artillery.is_empty() {
-                    bail!(
-                        "no artillery within {} meters of the jtac target",
-                        db.ephemeral.cfg.artillery_mission_range
-                    );
-                }
-                for group in &artillery {
-                    let con = Group::get_by_name(lua, &group.name)
-                        .with_context(|| format_compact!("getting group {}", group.name))?
-                        .get_controller()
-                        .context("getting controller")?;
-                    con.set_task(Task::FireAtPoint {
-                        point: LuaVec2(pos),
-                        radius: Some(10.),
-                        expend_qty: Some(100),
-                        weapon_type: None,
-                        altitude: None,
-                        altitude_type: None,
-                    })
-                    .context("setting task")?;
-                }
-                target.artillery_mission = Some(artillery.into_iter().map(|g| g.id).collect());
+                let pos = adjustment.compute_final_solution(apos, pos);
+                let task = Task::FireAtPoint {
+                    point: LuaVec2(pos),
+                    radius: None,
+                    expend_qty: Some(n as i64),
+                    weapon_type: None,
+                    altitude: None,
+                    altitude_type: None,
+                };
+                let group = Group::get_by_name(lua, &name)
+                    .with_context(|| format_compact!("getting group {}", name))?;
+                let con = group.get_controller().context("getting controller")?;
+                con.set_task(task)?;
             }
         }
         Ok(())
@@ -469,29 +461,70 @@ impl Jtac {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Jtacs(FxHashMap<Side, FxHashMap<GroupId, Jtac>>);
+pub struct Jtacs {
+    jtacs: FxHashMap<Side, FxHashMap<GroupId, Jtac>>,
+    artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
+}
 
 impl Jtacs {
     fn get(&self, gid: &GroupId) -> Result<&Jtac> {
-        self.0
+        self.jtacs
             .iter()
             .find_map(|(_, jtx)| jtx.get(gid))
             .ok_or_else(|| anyhow!("no such jtac {gid}"))
     }
 
     fn get_mut(&mut self, gid: &GroupId) -> Result<&mut Jtac> {
-        self.0
+        self.jtacs
             .iter_mut()
             .find_map(|(_, jtx)| jtx.get_mut(gid))
             .ok_or_else(|| anyhow!("no such jtac"))
     }
 
-    pub fn artillery_mission(&mut self, lua: MizLua, db: &Db, gid: &GroupId) -> Result<()> {
-        self.get_mut(gid)?.artillery_mission(db, lua)
+    pub fn add_menu(&self, lua: MizLua, mizgid: miz::GroupId, gid: &GroupId) -> Result<()> {
+        if let Ok(jt) = self.get(gid) {
+            let arty = jt
+                .target
+                .as_ref()
+                .map(|t| &*t.nearby_artillery)
+                .unwrap_or(&[]);
+            menu::add_menu_for_jtac(lua, mizgid, jt.gid, arty)?
+        }
+        Ok(())
     }
 
-    pub fn cancel_artillery_mission(&mut self, lua: MizLua, db: &Db, gid: &GroupId) -> Result<()> {
-        self.get_mut(gid)?.cancel_artillery_mission(db, lua)
+    pub fn artillery_mission(
+        &mut self,
+        lua: MizLua,
+        db: &Db,
+        jtac: &GroupId,
+        arty: &GroupId,
+        n: u8,
+    ) -> Result<()> {
+        let adjustment = self
+            .artillery_adjustment
+            .get(arty)
+            .map(|a| *a)
+            .unwrap_or_default();
+        self.get_mut(jtac)?
+            .artillery_mission(db, lua, adjustment, arty, n)
+    }
+
+    pub fn adjust_artillery_solution(&mut self, arty: &GroupId, dir: AdjustmentDir, mag: u16) {
+        let adj = self.artillery_adjustment.entry(*arty).or_default();
+        match dir {
+            AdjustmentDir::Long => adj.short_long -= mag as i16,
+            AdjustmentDir::Short => adj.short_long += mag as i16,
+            AdjustmentDir::Left => adj.left_right -= mag as i16,
+            AdjustmentDir::Right => adj.left_right += mag as i16,
+        }
+    }
+
+    pub fn get_artillery_adjustment(&mut self, arty: &GroupId) -> ArtilleryAdjustment {
+        self.artillery_adjustment
+            .get(arty)
+            .map(|a| *a)
+            .unwrap_or_default()
     }
 
     pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {
@@ -552,7 +585,7 @@ impl Jtacs {
     }
 
     pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = UnitId> + 'a {
-        self.0.values().flat_map(|j| {
+        self.jtacs.values().flat_map(|j| {
             j.values()
                 .filter_map(|jt| jt.target.as_ref().map(|target| target.uid))
         })
@@ -561,13 +594,12 @@ impl Jtacs {
     pub fn unit_dead(&mut self, lua: MizLua, db: &mut Db, id: &DcsOid<ClassUnit>) -> Result<()> {
         if let Some(uid) = db.ephemeral.get_uid_by_object_id(id) {
             let uid = *uid;
-            for (side, jtx) in self.0.iter_mut() {
+            for (side, jtx) in self.jtacs.iter_mut() {
                 jtx.retain(|gid, jt| {
                     if let Ok(spu) = db.unit(&uid) {
                         let group = spu.group;
                         if &group == gid {
-                            let alive = db.group_health(gid).unwrap_or((0, 0)).0;
-                            if alive <= 1 {
+                            if db.group_health(gid).unwrap_or((0, 0)).0 <= 1 {
                                 if let Err(e) = jt.remove_target(db, lua) {
                                     warn!("0 could not remove jtac target {:?}", e)
                                 }
@@ -607,7 +639,7 @@ impl Jtacs {
         let dead = db
             .update_unit_positions(lua, &targets)
             .context("updating the position of jtac targets")?;
-        for jtx in self.0.values_mut() {
+        for jtx in self.jtacs.values_mut() {
             for jt in jtx.values_mut() {
                 if let Some(target) = &jt.target {
                     let unit = db.unit(&target.uid)?;
@@ -643,12 +675,12 @@ impl Jtacs {
             let range = (ifo.range as f64).powi(2);
             pos.y += 10.;
             let jtac = self
-                .0
+                .jtacs
                 .entry(group.side)
                 .or_default()
                 .entry(group.id)
                 .or_insert_with(|| {
-                    if let Err(e) = menu::add_menu_for_jtac(lua, group.side, group.id) {
+                    if let Err(e) = menu::update_jtac_menu(db, lua, group.id, &[]) {
                         error!("could not add menu for jtac {} {e}", group.id)
                     }
                     Jtac::new(group.id, group.side, db.ephemeral.cfg.jtac_priority.clone())
@@ -681,7 +713,7 @@ impl Jtacs {
                 }
             }
         }
-        for (side, jtx) in self.0.iter_mut() {
+        for (side, jtx) in self.jtacs.iter_mut() {
             jtx.retain(|gid, jt| {
                 saw_jtacs.contains(gid) || {
                     if let Err(e) = jt.remove_target(db, lua) {
@@ -692,7 +724,7 @@ impl Jtacs {
                 }
             })
         }
-        for (side, jtx) in self.0.iter_mut() {
+        for (side, jtx) in self.jtacs.iter_mut() {
             for jtac in jtx.values_mut() {
                 for uid in jtac.contacts.keys() {
                     if !saw_units.contains(&uid) {
@@ -719,7 +751,7 @@ impl Jtacs {
             }
         }
         let mut new_contacts: SmallVec<[&Jtac; 32]> = smallvec![];
-        for j in self.0.values_mut() {
+        for j in self.jtacs.values_mut() {
             for (_, jtac) in j.iter_mut() {
                 match jtac.sort_contacts(db, lua) {
                     Ok(false) => (),

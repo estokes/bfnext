@@ -257,8 +257,8 @@ pub struct TaskStopCond<'lua> {
     pub time: Option<Time>,
     pub user_flag: Option<Value<'lua>>,
     pub user_flag_value: Option<Value<'lua>>,
-    pub last_waypoint: i64,
-    pub duration: Time,
+    pub last_waypoint: Option<i64>,
+    pub duration: Option<Time>,
     pub condition: Option<String>, // lua code
 }
 
@@ -415,7 +415,7 @@ pub enum Task<'lua> {
     ControlledTask {
         task: Box<Task<'lua>>,
         condition: TaskStartCond<'lua>,
-        stop_condition: Option<TaskStopCond<'lua>>,
+        stop_condition: TaskStopCond<'lua>,
     },
     WrappedCommand(Command),
     WrappedOption(AiOption<'lua>),

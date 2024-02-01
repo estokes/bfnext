@@ -874,32 +874,6 @@ fn jtac_artillery_mission(lua: MizLua, arg: ArgTriple<DbGid, DbGid, u8>) -> Resu
     Ok(())
 }
 
-fn jtac_stop_artillery_mission(lua: MizLua, arg: ArgTuple<DbGid, DbGid>) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let side = ctx.db.group(&arg.fst)?.side;
-    match ctx
-        .jtac
-        .cancel_artillery_mission(lua, &ctx.db, &arg.fst, &arg.snd)
-    {
-        Ok(()) => ctx.db.ephemeral.msgs().panel_to_side(
-            10,
-            false,
-            side,
-            format!(
-                "jtac {} artillery fire mission stopped for {}",
-                arg.fst, arg.snd
-            ),
-        ),
-        Err(e) => ctx.db.ephemeral.msgs().panel_to_side(
-            10,
-            false,
-            side,
-            format!("jtac {} could not stop artillery mission {:?}", arg.fst, e),
-        ),
-    }
-    Ok(())
-}
-
 fn jtac_adjust_solution(_lua: MizLua, arg: ArgTriple<DbGid, AdjustmentDir, u16>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let side = ctx.db.group(&arg.fst)?.side;
@@ -1091,16 +1065,6 @@ fn add_artillery_menu_for_jtac(
         let right =
             mc.add_submenu_for_coalition(side, "Report Right".into(), Some(root.clone()))?;
         add_adjust(&right, AdjustmentDir::Right)?;
-        mc.add_command_for_coalition(
-            side,
-            "Hold Fire".into(),
-            Some(root.clone()),
-            jtac_stop_artillery_mission,
-            ArgTuple {
-                fst: jtac,
-                snd: *gid,
-            },
-        )?;
     }
     Ok(())
 }

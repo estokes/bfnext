@@ -14,11 +14,6 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
-
 use crate::{
     cfg::{UnitTag, UnitTags},
     db::{
@@ -40,7 +35,6 @@ use dcso3::{
     object::{DcsObject, DcsOid},
     radians_to_degrees, simple_enum,
     spot::{ClassSpot, Spot},
-    timer::Timer,
     trigger::{MarkId, SmokeColor, Trigger},
     unit::{ClassUnit, Unit},
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
@@ -48,7 +42,7 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -83,60 +77,7 @@ impl ArtilleryAdjustment {
     fn compute_final_solution(&self, ip: Vector2, tp: Vector2) -> Vector2 {
         let v = (tp - ip).normalize();
         let normal = Vector2::new(-v.y, v.x) * self.left_right.signum() as f64;
-        let res = tp + (v * self.short_long as f64) + (normal * self.left_right as f64);
-        debug!(
-            "v: {:?}, normal: {:?}, tp: {:?}, final: {:?}",
-            v, normal, tp, res
-        );
-        res
-    }
-}
-
-#[derive(Debug)]
-struct QueuedMissionInner {
-    name: String,
-    canceled: AtomicBool,
-    started: AtomicBool,
-}
-
-#[derive(Debug, Clone)]
-struct QueuedMission(Arc<QueuedMissionInner>);
-
-impl QueuedMission {
-    fn new(name: String) -> Self {
-        Self(Arc::new(QueuedMissionInner {
-            name,
-            canceled: AtomicBool::new(false),
-            started: AtomicBool::new(false),
-        }))
-    }
-
-    fn set_started(&self) {
-        AtomicBool::store(&self.0.started, true, Ordering::Relaxed)
-    }
-
-    fn set_canceled(&self) {
-        AtomicBool::store(&self.0.canceled, true, Ordering::Relaxed)
-    }
-
-    fn is_canceled(&self) -> bool {
-        AtomicBool::load(&self.0.canceled, Ordering::Relaxed)
-    }
-
-    fn is_started(&self) -> bool {
-        AtomicBool::load(&self.0.started, Ordering::Relaxed)
-    }
-
-    fn cancel_mission(&self, lua: MizLua) -> Result<()> {
-        self.set_canceled();
-        if self.is_started() {
-            let con = Group::get_by_name(lua, &self.0.name)
-                .with_context(|| format_compact!("getting group {}", self.0.name))?
-                .get_controller()
-                .context("getting controller")?;
-            con.reset_task()?
-        }
-        Ok(())
+        tp + (v * self.short_long as f64) + (normal * self.left_right as f64)
     }
 }
 
@@ -155,7 +96,6 @@ struct JtacTarget {
     spot: DcsOid<ClassSpot>,
     ir_pointer: Option<DcsOid<ClassSpot>>,
     mark: Option<MarkId>,
-    artillery_mission: FxHashMap<GroupId, QueuedMission>,
     nearby_artillery: SmallVec<[GroupId; 8]>,
 }
 
@@ -176,14 +116,6 @@ impl JtacTarget {
                 .action()?
                 .remove_mark(id)
                 .context("removing mark")?
-        }
-        for (_, qm) in self.artillery_mission {
-            if let Err(e) = qm.cancel_mission(lua) {
-                warn!(
-                    "while destroying target could not cancel artillery mission {:?}",
-                    e
-                )
-            }
         }
         Ok(())
     }
@@ -282,13 +214,7 @@ impl Jtac {
         ct.typ = unit.typ.clone();
     }
 
-    fn remove_target(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        if let Err(e) = self.cancel_artillery_missions(db, lua) {
-            warn!(
-                "could not cancel artillery mission for jtac {} {:?}",
-                self.gid, e
-            )
-        }
+    fn remove_target(&mut self, _db: &Db, lua: MizLua) -> Result<()> {
         if let Some(target) = self.target.take() {
             target
                 .destroy(lua)
@@ -369,7 +295,6 @@ impl Jtac {
                     ir_pointer,
                     mark: None,
                     uid,
-                    artillery_mission: FxHashMap::default(),
                     nearby_artillery: db.artillery_near_point(Vector2::new(pos.x, pos.z)),
                 });
                 let arty = &self.target.as_ref().unwrap().nearby_artillery;
@@ -494,40 +419,6 @@ impl Jtac {
         Ok(())
     }
 
-    fn cancel_artillery_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
-        if let Some(target) = self.target.as_mut() {
-            debug!("canceling artillery mission");
-            if let Some(qm) = target.artillery_mission.remove(gid) {
-                qm.set_canceled();
-                // the jtac might BE the artillery and it might be gone
-                if db.group(&gid).is_ok() {
-                    qm.cancel_mission(lua)?
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn cancel_artillery_missions(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        let cancel = |gid: GroupId, qm: QueuedMission| -> Result<()> {
-            debug!("canceling artillery mission");
-            qm.set_canceled();
-            // the jtac might BE the artillery and it might be gone
-            if db.group(&gid).is_ok() {
-                qm.cancel_mission(lua)?
-            }
-            Ok(())
-        };
-        if let Some(target) = self.target.as_mut() {
-            for (gid, qm) in target.artillery_mission.drain() {
-                if let Err(e) = cancel(gid, qm) {
-                    warn!("could not cancel artillery mission for {gid} {:?}", e)
-                }
-            }
-        }
-        Ok(())
-    }
-
     fn artillery_mission(
         &mut self,
         db: &Db,
@@ -536,47 +427,25 @@ impl Jtac {
         gid: &GroupId,
         n: u8,
     ) -> Result<()> {
-        self.cancel_artillery_mission(db, lua, gid)
-            .context("canceling artillery mission")?;
         match self.target.as_mut() {
             None => bail!("no target"),
             Some(target) => {
-                let group = db.group(gid)?;
+                let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
                 let pos = db.unit(&target.uid)?.pos;
                 let pos = adjustment.compute_final_solution(apos, pos);
-                let name = group.name.clone();
-                let con = Group::get_by_name(lua, &name)
-                    .with_context(|| format_compact!("getting group {}", group.name))?
-                    .get_controller()
-                    .context("getting controller")?;
                 let task = Task::FireAtPoint {
                     point: LuaVec2(pos),
-                    radius: Some(10.),
+                    radius: None,
                     expend_qty: Some(n as i64),
                     weapon_type: None,
                     altitude: None,
                     altitude_type: None,
                 };
-                debug!("artillery mission {:?}", task);
-                let qm = QueuedMission::new(name.clone());
-                con.reset_task()?;
-                let timer = Timer::singleton(lua)?;
-                timer.schedule_function(timer.get_time()? + 10., Value::Nil, {
-                    let qm = qm.clone();
-                    move |lua, _, _| {
-                        if !qm.is_canceled() {
-                            qm.set_started();
-                            let con = Group::get_by_name(lua, &name)
-                                .with_context(|| format_compact!("getting group {}", name))?
-                                .get_controller()
-                                .context("getting controller")?;
-                            con.set_task(task.clone())?;
-                        }
-                        Ok(None)
-                    }
-                })?;
-                target.artillery_mission.insert(*gid, qm);
+                let group = Group::get_by_name(lua, &name)
+                    .with_context(|| format_compact!("getting group {}", name))?;
+                let con = group.get_controller().context("getting controller")?;
+                con.set_task(task)?;
             }
         }
         Ok(())
@@ -629,19 +498,8 @@ impl Jtacs {
             .get(arty)
             .map(|a| *a)
             .unwrap_or_default();
-        debug!("artillery adjustment {:?}", adjustment);
         self.get_mut(jtac)?
             .artillery_mission(db, lua, adjustment, arty, n)
-    }
-
-    pub fn cancel_artillery_mission(
-        &mut self,
-        lua: MizLua,
-        db: &Db,
-        jtac: &GroupId,
-        arty: &GroupId,
-    ) -> Result<()> {
-        self.get_mut(jtac)?.cancel_artillery_mission(db, lua, arty)
     }
 
     pub fn adjust_artillery_solution(&mut self, arty: &GroupId, dir: AdjustmentDir, mag: u16) {
@@ -743,34 +601,6 @@ impl Jtacs {
                                 if &target.source == id {
                                     if let Err(e) = jt.reset_target(db, lua) {
                                         warn!("could not reset jtac target {:?}", e)
-                                    }
-                                }
-                            }
-                        }
-                        let arty = self.artillery_adjustment.contains_key(&group)
-                            || jt
-                                .target
-                                .as_ref()
-                                .map(|t| {
-                                    t.artillery_mission.contains_key(&group)
-                                        || t.nearby_artillery.contains(&group)
-                                })
-                                .unwrap_or(false);
-                        if arty {
-                            if db.group_health(&group).unwrap_or((0, 0)).0 <= 1 {
-                                self.artillery_adjustment.remove(&group);
-                                if let Some(tgt) = jt.target.as_mut() {
-                                    if let Some(qm) = tgt.artillery_mission.remove(&group) {
-                                        let _ = qm.cancel_mission(lua);
-                                    }
-                                    tgt.nearby_artillery.retain(|gid| gid != &group);
-                                    if let Err(e) = menu::add_menu_for_jtac(
-                                        lua,
-                                        jt.side,
-                                        jt.gid,
-                                        &tgt.nearby_artillery,
-                                    ) {
-                                        warn!("could not add menu {:?}", e)
                                     }
                                 }
                             }

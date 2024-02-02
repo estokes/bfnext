@@ -3,6 +3,9 @@ name = "bftools"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "bftools"
+
 [dependencies]
 anyhow = "1"
 serde = "1"

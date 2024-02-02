@@ -12,10 +12,10 @@
 //edit mission table (crack open templates 1 at a time)
 
 //repack miz
+use crate::Miz;
 use anyhow::{bail, Context, Result};
 use log::{info, warn};
 use mlua::{Lua, Table, Value};
-use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -23,22 +23,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use zip::{read::ZipArchive, write::FileOptions, ZipWriter};
-
-#[derive(Serialize, Deserialize)]
-pub struct Config {
-    pub base_miz_path: PathBuf,
-    weapon_template: PathBuf,
-    warehouse_template: PathBuf,
-    option_template: PathBuf,
-    weather_template_folder: PathBuf,
-}
-
-impl Config {
-    pub fn from_file(file_path: &Path) -> Result<Self> {
-        let file = File::open(file_path).context("opening file")?;
-        Ok(serde_json::from_reader(file).context("deserializing")?)
-    }
-}
 
 struct TriggerZone {
     x: f32,
@@ -260,13 +244,10 @@ impl LoadedMiz {
     }
 }
 
-pub fn process_mission(config_path: PathBuf, target_miz: PathBuf) -> Result<()> {
+pub fn run(cfg: &Miz) -> Result<()> {
     let mut objective_triggers: Vec<TriggerZone> = Vec::new();
-    let mission_config: Config = Config::from_file(&config_path)
-        .with_context(|| format!("loading config file {:?}", config_path))?;
-    let base = LoadedMiz::new(&mission_config.base_miz_path).context("loading base mission")?;
-    let weapon_template =
-        LoadedMiz::new(&mission_config.weapon_template).context("loading weapon template")?;
+    let base = LoadedMiz::new(&cfg.base).context("loading base mission")?;
+    let weapon_template = LoadedMiz::new(&cfg.weapon).context("loading weapon template")?;
     let mut payload_templates: HashMap<String, Table> = HashMap::new();
     let mut add_prop_aircraft_templates: HashMap<String, Table> = HashMap::new();
     let mut radio_templates: HashMap<String, Table> = HashMap::new();
@@ -383,22 +364,13 @@ pub fn process_mission(config_path: PathBuf, target_miz: PathBuf) -> Result<()> 
     fs::write(base.miz.files.get("mission").unwrap(), s).context("writing mission file")?;
     info!("wrote serialized mission to mission file.");
     //replace options file
-    let options_template =
-        UnpackedMiz::new(&mission_config.option_template).context("loading options template")?;
+    let options_template = UnpackedMiz::new(&cfg.options).context("loading options template")?;
     let source_options_path = options_template.files.get("options").unwrap();
     let destination_options_path = base.miz.files.get("options").unwrap();
     fs::rename(source_options_path, destination_options_path)
         .context("replacing the options file")?;
-    info!(
-        "replaced options file from {:?}",
-        &mission_config.option_template
-    );
-    let mut output = base.miz.root.clone();
-    let mut name = output.file_name().unwrap().to_string_lossy().into_owned();
-    name.push_str("_result");
-    output.set_file_name(name);
-    output.set_extension("miz");
-    info!("saving finalized mission to {output:?}");
-    base.miz.pack(&output).context("repacking mission")?;
+    info!("replaced options file from {:?}", &cfg.options);
+    info!("saving finalized mission to {:?}", cfg.output);
+    base.miz.pack(&cfg.output).context("repacking mission")?;
     Ok(())
 }

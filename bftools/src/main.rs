@@ -1,8 +1,7 @@
 use anyhow::{bail, Result};
 use clap::Parser;
 use log::info;
-use mission_edit::MissionEditor;
-use serde::Serialize;
+use serde_derive::Serialize;
 use std::path::{Path, PathBuf};
 
 mod mission_edit;
@@ -52,14 +51,8 @@ fn main() -> Result<()> {
     match bftools_args.tool {
         Tools::MissionEdit => {
             let config = dbg!(verify_files(bftools_args.mission_path)?);
-            let _ = MissionEditor::do_the_thing(
-                config,
-                rlua::Lua::new(),
-                bftools_args.editable_mission_path,
-            )?;
+            mission_edit::process_mission(config, bftools_args.editable_mission_path)?;
         }
     };
     Ok(())
 }
-//
-//

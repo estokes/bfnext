@@ -78,9 +78,6 @@ impl Drop for UnpackedMiz {
 
 impl UnpackedMiz {
     fn new(path: &Path) -> Result<Self> {
-        if !path.is_absolute() {
-            bail!("you must specify the absolute path to the mission you want to unpack {path:?}")
-        }
         let mut files: HashMap<String, PathBuf> = HashMap::new();
         let mut archive = ZipArchive::new(File::open(path).context("opening miz file")?)
             .context("unzipping miz")?;
@@ -187,8 +184,6 @@ fn serialize_with_cycles<'lua>(
 }
 
 struct LoadedMiz {
-    #[allow(dead_code)]
-    lua: &'static Lua,
     miz: UnpackedMiz,
     mission: Table<'static>,
     #[allow(dead_code)]
@@ -198,9 +193,8 @@ struct LoadedMiz {
 }
 
 impl LoadedMiz {
-    fn new(path: &Path) -> Result<Self> {
+    fn new(lua: &'static Lua, path: &Path) -> Result<Self> {
         let miz = UnpackedMiz::new(path).with_context(|| format!("unpacking {path:?}"))?;
-        let lua = Box::leak(Box::new(Lua::new()));
         let mut mission = lua.create_table()?;
         let mut options = lua.create_table()?;
         let mut warehouses = lua.create_table()?;
@@ -243,7 +237,6 @@ impl LoadedMiz {
             bail!("{path:?} did not contain a warehouses file")
         }
         Ok(Self {
-            lua,
             miz,
             mission,
             options,
@@ -530,16 +523,18 @@ fn compile_objectives(base: &LoadedMiz) -> Result<Vec<TriggerZone>> {
 }
 
 pub fn run(cfg: &Miz) -> Result<()> {
-    let mut base = LoadedMiz::new(&cfg.base).context("loading base mission")?;
+    let lua = Box::leak(Box::new(Lua::new()));
+    lua.gc_stop();
+    let mut base = LoadedMiz::new(lua, &cfg.base).context("loading base mission")?;
     let mut objectives = compile_objectives(&base).context("compiling objectives")?;
     let vehicle_templates = {
-        let wep = LoadedMiz::new(&cfg.weapon).context("loading weapon template")?;
+        let wep = LoadedMiz::new(lua, &cfg.weapon).context("loading weapon template")?;
         VehicleTemplates::new(&wep).context("loading templates")?
     };
     let warehouse_template = match cfg.warehouse.as_ref() {
         None => None,
         Some(wh) => {
-            let wht = LoadedMiz::new(wh).context("loading warehouse template")?;
+            let wht = LoadedMiz::new(lua, wh).context("loading warehouse template")?;
             Some(WarehouseTemplate::new(&wht, cfg).context("compiling warehouse template")?)
         }
     };

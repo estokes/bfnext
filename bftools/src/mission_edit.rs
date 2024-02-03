@@ -206,7 +206,7 @@ impl LoadedMiz {
         let mut options = lua.create_table()?;
         let mut warehouses = lua.create_table()?;
         for (file_name, file) in &miz.files {
-            if file_name != "mission" || file_name != "warehouses" || file_name != "options" {
+            if file_name != "mission" && file_name != "warehouses" && file_name != "options" {
                 continue;
             }
             info!("processing {file_name}");
@@ -233,6 +233,15 @@ impl LoadedMiz {
                     .raw_get("options")
                     .context("extracting options")?;
             }
+        }
+        if mission.is_empty() {
+            bail!("{path:?} did not contain a mission file")
+        }
+        if options.is_empty() {
+            bail!("{path:?} did not contain an options file")
+        }
+        if warehouses.is_empty() {
+            bail!("{path:?} did not contain a warehouses file")
         }
         Ok(Self {
             lua,
@@ -507,8 +516,8 @@ fn compile_objectives(base: &LoadedMiz) -> Result<Vec<TriggerZone>> {
     let mut objectives = Vec::new();
     for zone in base
         .mission
-        .raw_get::<_, Table>("triggers")?
-        .raw_get::<_, Table>("zones")?
+        .raw_get::<_, Table>("triggers").context("getting triggers")?
+        .raw_get::<_, Table>("zones").context("getting zones")?
         .pairs::<Value, Table>()
     {
         let zone = zone?.1;

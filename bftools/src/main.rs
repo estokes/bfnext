@@ -8,20 +8,24 @@ mod mission_edit;
 #[derive(Args, Clone, Debug, Serialize)]
 struct Miz {
     /// the final miz file to output
-    #[clap(short, long)]
+    #[clap(long)]
     output: PathBuf,
     /// the base mission file
-    #[clap(short, long)]
+    #[clap(long)]
     base: PathBuf,
     /// the weapon template
-    #[clap(short, long)]
+    #[clap(long)]
     weapon: PathBuf,
     /// the options template
-    #[clap(short, long)]
+    #[clap(long)]
     options: PathBuf,
     /// the warehouse template
-    #[clap(short, long)]
+    #[clap(long)]
     warehouse: Option<PathBuf>,
+    #[clap(long, default_value = "BINVENTORY")]
+    blue_production_template: String,
+    #[clap(long, default_value = "RINVENTORY")]
+    red_production_template: String
 }
 
 #[derive(Subcommand, Clone, Debug, Serialize)]

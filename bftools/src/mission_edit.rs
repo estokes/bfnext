@@ -244,57 +244,267 @@ impl LoadedMiz {
     }
 }
 
-pub fn run(cfg: &Miz) -> Result<()> {
-    let mut objective_triggers: Vec<TriggerZone> = Vec::new();
-    let base = LoadedMiz::new(&cfg.base).context("loading base mission")?;
-    let weapon_template = LoadedMiz::new(&cfg.weapon).context("loading weapon template")?;
-    let mut payload_templates: HashMap<String, Table> = HashMap::new();
-    let mut add_prop_aircraft_templates: HashMap<String, Table> = HashMap::new();
-    let mut radio_templates: HashMap<String, Table> = HashMap::new();
-    fn vehicle(
-        country: &Table<'static>,
-        name: &str,
-    ) -> Result<impl Iterator<Item = Result<Table<'static>>>> {
-        Ok(country
-            .raw_get::<_, Table>(name)?
-            .raw_get::<_, Table>("group")?
-            .pairs::<Value, Table>()
-            .map(|r| Ok(r?.1)))
-    }
-    fn increment_key(map: &mut HashMap<String, isize>, key: &str) -> isize {
-        let n = map.entry(key.to_string()).or_default();
-        *n += 1;
-        *n
-    }
-    //gather payloads/APA from the template file for helis and planes
-    for coa in weapon_template
-        .mission
-        .raw_get::<_, Table>("coalition")?
+fn vehicle(
+    country: &Table<'static>,
+    name: &str,
+) -> Result<impl Iterator<Item = Result<Table<'static>>>> {
+    Ok(country
+        .raw_get::<_, Table>(name)?
+        .raw_get::<_, Table>("group")?
         .pairs::<Value, Table>()
-    {
-        let coa = coa?.1;
-        for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
-            let country = country?.1;
-            for group in vehicle(&country, "plane")?.chain(vehicle(&country, "helicopter")?) {
-                let group = group?;
-                for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
-                    let unit = unit?.1;
-                    let unit_type: String = unit.raw_get("type")?;
-                    info!("adding payload template: {unit_type}");
-                    if let Ok(w) = unit.raw_get("payload") {
-                        payload_templates.insert(unit_type.clone(), w);
-                    }
-                    if let Ok(w) = unit.raw_get("AddPropAircraft") {
-                        add_prop_aircraft_templates.insert(unit_type.clone(), w);
-                    }
-                    if let Ok(w) = unit.raw_get("Radio") {
-                        radio_templates.insert(unit_type, w);
+        .map(|r| Ok(r?.1)))
+}
+
+fn increment_key(map: &mut HashMap<String, isize>, key: &str) -> isize {
+    let n = map.entry(key.to_string()).or_default();
+    *n += 1;
+    *n
+}
+
+struct VehicleTemplates {
+    payload: HashMap<String, Table<'static>>,
+    prop_aircraft: HashMap<String, Table<'static>>,
+    radio: HashMap<String, Table<'static>>,
+}
+
+impl VehicleTemplates {
+    fn new(wep: &LoadedMiz) -> Result<Self> {
+        let mut payload: HashMap<String, Table> = HashMap::new();
+        let mut prop_aircraft: HashMap<String, Table> = HashMap::new();
+        let mut radio: HashMap<String, Table> = HashMap::new();
+        for coa in wep
+            .mission
+            .raw_get::<_, Table>("coalition")?
+            .pairs::<Value, Table>()
+        {
+            let coa = coa?.1;
+            for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
+                let country = country?.1;
+                for group in vehicle(&country, "plane")?.chain(vehicle(&country, "helicopter")?) {
+                    let group = group?;
+                    for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
+                        let unit = unit?.1;
+                        let unit_type: String = unit.raw_get("type")?;
+                        info!("adding payload template: {unit_type}");
+                        if let Ok(w) = unit.raw_get("payload") {
+                            payload.insert(unit_type.clone(), w);
+                        }
+                        if let Ok(w) = unit.raw_get("AddPropAircraft") {
+                            prop_aircraft.insert(unit_type.clone(), w);
+                        }
+                        if let Ok(w) = unit.raw_get("Radio") {
+                            radio.insert(unit_type, w);
+                        }
                     }
                 }
             }
         }
+        Ok(Self {
+            payload,
+            prop_aircraft,
+            radio,
+        })
     }
-    //compile trigger zones
+
+    fn apply(&self, objectives: &mut Vec<TriggerZone>, base: &mut LoadedMiz) -> Result<()> {
+        let mut replace_count: HashMap<String, isize> = HashMap::new();
+        //apply weapon/APA templates to mission table in self
+        info!("replacing slots with template payloads");
+        for coa in base
+            .mission
+            .raw_get::<_, Table>("coalition")?
+            .pairs::<Value, Table>()
+        {
+            let coa = coa?.1;
+            for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
+                let country = country?.1;
+                if !country.contains_key("plane")? {
+                    continue;
+                }
+                for group in vehicle(&country, "plane")?.chain(vehicle(&country, "helicopter")?) {
+                    let group = group?;
+                    for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
+                        let unit = unit?.1;
+                        let unit_type: String = unit.raw_get("type")?;
+                        match self.payload.get(&unit_type) {
+                            Some(w) => unit.set("payload", w.clone())?,
+                            None => warn!("no payload table for {unit_type}"),
+                        }
+                        if let Some(w) = self.prop_aircraft.get(&unit_type) {
+                            unit.set("AddPropAircraft", w.clone())?
+                        }
+                        if let Some(w) = self.radio.get(&unit_type) {
+                            unit.set("Radio", w.clone())?
+                        }
+                        increment_key(&mut replace_count, &unit_type);
+                        let x = unit.get("x")?;
+                        let y = unit.get("y")?;
+                        for trigger_zone in &mut *objectives {
+                            if trigger_zone.vec2_in_zone(x, y) {
+                                let count =
+                                    increment_key(&mut trigger_zone.spawn_count, &unit_type);
+                                let new_name = format!(
+                                    "{} {} {}",
+                                    trigger_zone.objective_name, &unit_type, count
+                                );
+                                unit.set("name", new_name.clone())?;
+                                group.set("name", new_name)?;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (unit_type, amount) in replace_count {
+            info!("replaced {amount} radio/payloads for {unit_type}");
+        }
+        Ok(())
+    }
+}
+
+struct WarehouseTemplate {
+    blue_inventory: Table<'static>,
+    red_inventory: Table<'static>,
+    default: Table<'static>,
+}
+
+impl WarehouseTemplate {
+    fn new(wht: &LoadedMiz, cfg: &Miz) -> Result<Self> {
+        let mut blue_inventory_id = 0;
+        let mut red_inventory_id = 0;
+        let mut default_id = 0;
+        for coa in wht
+            .mission
+            .raw_get::<_, Table>("coalition")?
+            .pairs::<Value, Table>()
+        {
+            let coa = coa?.1;
+            for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
+                let country = country?.1;
+                for group in vehicle(&country, "static")? {
+                    let group = group?;
+                    for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
+                        let unit = unit?.1;
+                        if unit.raw_get::<_, String>("type")? == "Invisible FARP" {
+                            let name = unit.raw_get::<_, String>("name")?;
+                            let id = unit.raw_get::<_, i64>("unitId")?;
+                            if name == "DEFAULT" {
+                                default_id = id;
+                            } else if name == cfg.blue_production_template {
+                                blue_inventory_id = id;
+                            } else if name == cfg.red_production_template {
+                                red_inventory_id = id;
+                            } else {
+                                bail!(
+                                    "invalid warehouse template, unexpected {name} invisible farp"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if blue_inventory_id == 0 {
+            bail!(
+                "missing warehouse template {}",
+                cfg.blue_production_template
+            )
+        }
+        if red_inventory_id == 0 {
+            bail!("missing warehouse template {}", cfg.red_production_template)
+        }
+        if default_id == 0 {
+            bail!("missing warehouse template DEFAULT")
+        }
+        let warehouses = wht
+            .warehouses
+            .raw_get::<_, Table>("warehouses")
+            .context("getting warehouses")?;
+        Ok(Self {
+            blue_inventory: warehouses
+                .raw_get(blue_inventory_id)
+                .context("getting blue inventory")?,
+            red_inventory: warehouses
+                .raw_get(red_inventory_id)
+                .context("getting red inventory")?,
+            default: warehouses
+                .raw_get(default_id)
+                .context("getting default inventory")?,
+        })
+    }
+
+    fn apply(&self, cfg: &Miz, base: &mut LoadedMiz) -> Result<()> {
+        let mut blue_inventory = 0;
+        let mut red_inventory = 0;
+        let mut whids = vec![];
+        for coa in base
+            .mission
+            .raw_get::<_, Table>("coalition")?
+            .pairs::<Value, Table>()
+        {
+            let coa = coa?.1;
+            for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
+                let country = country?.1;
+                for group in vehicle(&country, "static")? {
+                    let group = group?;
+                    for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
+                        let unit = unit?.1;
+                        let typ: String = unit.raw_get("type")?;
+                        let name: String = unit.raw_get("name")?;
+                        let id: i64 = unit.raw_get("unitId")?;
+                        if typ == "FARP"
+                            || typ == "SINGLE_HELIPAD"
+                            || typ == "FARP_SINGLE_01"
+                            || typ == "Invisible FARP"
+                        {
+                            if name == cfg.blue_production_template {
+                                blue_inventory = id;
+                            } else if name == cfg.red_production_template {
+                                red_inventory = id;
+                            } else {
+                                whids.push(id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let airports = base
+            .warehouses
+            .raw_get::<_, Table>("airports")
+            .context("getting airports")?;
+        let warehouses = base
+            .warehouses
+            .raw_get::<_, Table>("warehouses")
+            .context("getting warehouses")?;
+        let mut airport_ids = vec![];
+        for wh in airports.clone().pairs::<i64, Table>() {
+            let (id, _) = wh?;
+            airport_ids.push(id);
+        }
+        for id in airport_ids {
+            airports
+                .raw_set(id, self.default.clone())
+                .with_context(|| format!("setting airport {id}"))?;
+        }
+        for id in whids {
+            warehouses
+                .raw_set(id, self.default.clone())
+                .with_context(|| format!("setting warehouse {id}"))?
+        }
+        warehouses
+            .raw_set(red_inventory, self.red_inventory.clone())
+            .context("setting red inventory")?;
+        warehouses
+            .raw_set(blue_inventory, self.blue_inventory.clone())
+            .context("setting blue inventory")?;
+        Ok(())
+    }
+}
+
+fn compile_objectives(base: &LoadedMiz) -> Result<Vec<TriggerZone>> {
+    let mut objectives = Vec::new();
     for zone in base
         .mission
         .raw_get::<_, Table>("triggers")?
@@ -303,65 +513,45 @@ pub fn run(cfg: &Miz) -> Result<()> {
     {
         let zone = zone?.1;
         if let Some(t) = TriggerZone::new(&zone)? {
-            objective_triggers.push(t);
+            objectives.push(t);
         }
     }
+    Ok(objectives)
+}
 
-    let mut replace_count: HashMap<String, isize> = HashMap::new();
-    //apply weapon/APA templates to mission table in self
-    info!("replacing slots with template payloads");
-    for coa in base
-        .mission
-        .raw_get::<_, Table>("coalition")?
-        .pairs::<Value, Table>()
-    {
-        let coa = coa?.1;
-        for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
-            let country = country?.1;
-            if !country.contains_key("plane")? {
-                continue;
-            }
-            for group in vehicle(&country, "plane")?.chain(vehicle(&country, "helicopter")?) {
-                let group = group?;
-                for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
-                    let unit = unit?.1;
-                    let unit_type: String = unit.raw_get("type")?;
-                    match payload_templates.get(&unit_type) {
-                        Some(w) => unit.set("payload", w.clone())?,
-                        None => warn!("no payload table for {unit_type}"),
-                    }
-                    if let Some(w) = add_prop_aircraft_templates.get(&unit_type) {
-                        unit.set("AddPropAircraft", w.clone())?
-                    }
-                    if let Some(w) = radio_templates.get(&unit_type) {
-                        unit.set("Radio", w.clone())?
-                    }
-                    increment_key(&mut replace_count, &unit_type);
-                    let x = unit.get("x")?;
-                    let y = unit.get("y")?;
-                    for trigger_zone in &mut objective_triggers {
-                        if trigger_zone.vec2_in_zone(x, y) {
-                            let count = increment_key(&mut trigger_zone.spawn_count, &unit_type);
-                            let new_name =
-                                format!("{} {} {}", trigger_zone.objective_name, &unit_type, count);
-                            unit.set("name", new_name.clone())?;
-                            group.set("name", new_name)?;
-                            break;
-                        }
-                    }
-                }
-            }
+pub fn run(cfg: &Miz) -> Result<()> {
+    let mut base = LoadedMiz::new(&cfg.base).context("loading base mission")?;
+    let mut objectives = compile_objectives(&base).context("compiling objectives")?;
+    let vehicle_templates = {
+        let wep = LoadedMiz::new(&cfg.weapon).context("loading weapon template")?;
+        VehicleTemplates::new(&wep).context("loading templates")?
+    };
+    let warehouse_template = match cfg.warehouse.as_ref() {
+        None => None,
+        Some(wh) => {
+            let wht = LoadedMiz::new(wh).context("loading warehouse template")?;
+            Some(WarehouseTemplate::new(&wht, cfg).context("compiling warehouse template")?)
         }
-    }
-    for (unit_type, amount) in replace_count {
-        info!("replaced {amount} radio/payloads for {unit_type}");
-    }
+    };
+    vehicle_templates
+        .apply(&mut objectives, &mut base)
+        .context("applying vehicle templates")?;
     let s = serialize_with_cycles(
-        "mission".to_string(),
+        "mission".into(),
         Value::Table(base.mission.clone()),
         &mut HashMap::new(),
     );
-    fs::write(base.miz.files.get("mission").unwrap(), s).context("writing mission file")?;
+    fs::write(&base.miz.files["mission"], s).context("writing mission file")?;
+    if let Some(wht) = warehouse_template {
+        wht.apply(&cfg, &mut base)
+            .context("applying warehouse template")?;
+        let s = serialize_with_cycles(
+            "warehouses".into(),
+            Value::Table(base.warehouses.clone()),
+            &mut HashMap::new(),
+        );
+        fs::write(&base.miz.files["warehouses"], s).context("writing warehouse file")?;
+    }
     info!("wrote serialized mission to mission file.");
     //replace options file
     let options_template = UnpackedMiz::new(&cfg.options).context("loading options template")?;

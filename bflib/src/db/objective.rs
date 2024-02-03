@@ -704,7 +704,11 @@ impl Db {
             }
             if !obj.spawned && spawn {
                 to_spawn.push(*oid);
-            } else if obj.spawned && !spawn && now - obj.last_cull >= Duration::seconds(300) {
+            } else if obj.spawned
+                && !spawn
+                && !obj.threatened
+                && now - obj.last_cull >= Duration::seconds(300)
+            {
                 to_cull.push(*oid);
             }
         }

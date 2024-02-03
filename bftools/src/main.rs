@@ -1,48 +1,42 @@
-use anyhow::{bail, Result};
-use clap::Parser;
-use log::info;
-use mission_edit::MissionEditor;
-use serde::Serialize;
-use std::path::{Path, PathBuf};
+use anyhow::Result;
+use clap::{Args, Parser, Subcommand};
+use serde_derive::Serialize;
+use std::path::PathBuf;
 
 mod mission_edit;
 
-#[derive(clap::ValueEnum, Clone, Debug, Serialize)]
+#[derive(Args, Clone, Debug, Serialize)]
+struct Miz {
+    /// the final miz file to output
+    #[clap(long)]
+    output: PathBuf,
+    /// the base mission file
+    #[clap(long)]
+    base: PathBuf,
+    /// the weapon template
+    #[clap(long)]
+    weapon: PathBuf,
+    /// the options template
+    #[clap(long)]
+    options: PathBuf,
+    /// the warehouse template
+    #[clap(long)]
+    warehouse: Option<PathBuf>,
+    #[clap(long, default_value = "BINVENTORY")]
+    blue_production_template: String,
+    #[clap(long, default_value = "RINVENTORY")]
+    red_production_template: String
+}
+
+#[derive(Subcommand, Clone, Debug, Serialize)]
 enum Tools {
-    MissionEdit,
+    Miz(Miz),
 }
 
 #[derive(Parser)]
 struct BftoolsArgs {
-    #[clap(short, long)]
+    #[clap(subcommand)]
     tool: Tools,
-    #[clap(short, long)]
-    mission_path: PathBuf,
-    #[clap(short, long)]
-    editable_mission_path: PathBuf,
-}
-
-fn verify_files(path: PathBuf) -> Result<PathBuf> {
-    match path.extension() {
-        Some(extension) => {
-            if extension != Path::new("miz") {
-                bail!("not a valid miz file!")
-            }
-        }
-        None => bail!("{path:?} not a .miz!"),
-    };
-    let json_path = Path::new(&format!(
-        "{}\\{}{}",
-        path.parent().unwrap().display(),
-        path.file_stem().unwrap().to_str().unwrap(),
-        ".json"
-    ))
-    .to_path_buf();
-    if !json_path.is_file() {
-        bail!("config for {path:?} doesnt exist!");
-    }
-    info!("{path:?} is valid and has config, continuing");
-    Ok(json_path)
 }
 
 fn main() -> Result<()> {
@@ -50,16 +44,7 @@ fn main() -> Result<()> {
     env_logger::init();
 
     match bftools_args.tool {
-        Tools::MissionEdit => {
-            let config = dbg!(verify_files(bftools_args.mission_path)?);
-            let _ = MissionEditor::do_the_thing(
-                config,
-                rlua::Lua::new(),
-                bftools_args.editable_mission_path,
-            )?;
-        }
+        Tools::Miz(cfg) => mission_edit::run(&cfg)?,
     };
     Ok(())
 }
-//
-//

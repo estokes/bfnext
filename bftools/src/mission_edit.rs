@@ -38,22 +38,21 @@ impl TriggerZone {
         let x: f32 = zone.get("x")?;
         let y: f32 = zone.get("y")?;
         let radius: f32 = zone.get("radius")?;
-        if name.len() >= 5 {
-            if name.starts_with('O') {
-                let t = TriggerZone {
-                    objective_name: name[4..].to_string(),
-                    x,
-                    y,
-                    radius,
-                    spawn_count: HashMap::new(),
-                };
-                info!("added objective {}", &name[4..]);
-                Ok(Some(t))
-            } else {
-                Ok(None)
+        if name.starts_with('O') {
+            if name.len() < 5 {
+                bail!("trigger name {name} too short")
             }
+            let t = TriggerZone {
+                objective_name: name[4..].to_string(),
+                x,
+                y,
+                radius,
+                spawn_count: HashMap::new(),
+            };
+            info!("added objective {}", &name[4..]);
+            Ok(Some(t))
         } else {
-            bail!("trigger name {name} too short")
+            Ok(None)
         }
     }
 
@@ -516,8 +515,10 @@ fn compile_objectives(base: &LoadedMiz) -> Result<Vec<TriggerZone>> {
     let mut objectives = Vec::new();
     for zone in base
         .mission
-        .raw_get::<_, Table>("triggers").context("getting triggers")?
-        .raw_get::<_, Table>("zones").context("getting zones")?
+        .raw_get::<_, Table>("triggers")
+        .context("getting triggers")?
+        .raw_get::<_, Table>("zones")
+        .context("getting zones")?
         .pairs::<Value, Table>()
     {
         let zone = zone?.1;

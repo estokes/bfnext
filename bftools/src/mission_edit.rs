@@ -447,24 +447,26 @@ impl WarehouseTemplate {
             let coa = coa?.1;
             for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
                 let country = country?.1;
-                for group in vehicle(&country, "static")? {
-                    let group = group?;
-                    for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
-                        let unit = unit?.1;
-                        let typ: String = unit.raw_get("type")?;
-                        let name: String = unit.raw_get("name")?;
-                        let id: i64 = unit.raw_get("unitId")?;
-                        if typ == "FARP"
-                            || typ == "SINGLE_HELIPAD"
-                            || typ == "FARP_SINGLE_01"
-                            || typ == "Invisible FARP"
-                        {
-                            if name == cfg.blue_production_template {
-                                blue_inventory = id;
-                            } else if name == cfg.red_production_template {
-                                red_inventory = id;
-                            } else {
-                                whids.push(id);
+                if let Ok(iter) = vehicle(&country, "static") {
+                    for group in iter {
+                        let group = group?;
+                        for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
+                            let unit = unit?.1;
+                            let typ: String = unit.raw_get("type")?;
+                            let name: String = unit.raw_get("name")?;
+                            let id: i64 = unit.raw_get("unitId")?;
+                            if typ == "FARP"
+                                || typ == "SINGLE_HELIPAD"
+                                || typ == "FARP_SINGLE_01"
+                                || typ == "Invisible FARP"
+                            {
+                                if name == cfg.blue_production_template {
+                                    blue_inventory = id;
+                                } else if name == cfg.red_production_template {
+                                    red_inventory = id;
+                                } else {
+                                    whids.push(id);
+                                }
                             }
                         }
                     }
@@ -500,6 +502,8 @@ impl WarehouseTemplate {
         warehouses
             .raw_set(blue_inventory, self.blue_inventory.clone())
             .context("setting blue inventory")?;
+        base.warehouses.raw_set("airports", airports)?;
+        base.warehouses.raw_set("warehouses", warehouses)?;
         Ok(())
     }
 }
@@ -547,6 +551,7 @@ pub fn run(cfg: &Miz) -> Result<()> {
         &mut HashMap::new(),
     );
     fs::write(&base.miz.files["mission"], s).context("writing mission file")?;
+    info!("wrote serialized mission to mission file.");
     if let Some(wht) = warehouse_template {
         wht.apply(&cfg, &mut base)
             .context("applying warehouse template")?;
@@ -556,8 +561,8 @@ pub fn run(cfg: &Miz) -> Result<()> {
             &mut HashMap::new(),
         );
         fs::write(&base.miz.files["warehouses"], s).context("writing warehouse file")?;
+        info!("wrote serialized warehouses to warehouse file.");
     }
-    info!("wrote serialized mission to mission file.");
     //replace options file
     let options_template = UnpackedMiz::new(&cfg.options).context("loading options template")?;
     let source_options_path = options_template.files.get("options").unwrap();

@@ -33,6 +33,7 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
+use fxhash::{FxBuildHasher, FxHashSet};
 use log::warn;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -152,25 +153,16 @@ fn sync_obj_to_warehouse(
     production: &Production,
     warehouse: &warehouse::Warehouse,
 ) -> Result<()> {
-    for (item, _) in &production.equipment {
-        match obj.warehouse.equipment.get(item) {
-            Some(inv) => warehouse
-                .set_item(item.clone(), inv.stored)
-                .context("setting item")?,
-            None => warehouse
-                .set_item(item.clone(), 0)
-                .context("setting item")?,
-        }
+    for (item, inv) in &obj.warehouse.equipment {
+        present.insert(item);
+        warehouse
+            .set_item(item.clone(), inv.stored)
+            .context("setting item")?
     }
-    for (name, _) in &production.liquids {
-        match obj.warehouse.liquids.get(name) {
-            None => warehouse
-                .set_liquid_amount(*name, 0)
-                .context("setting liquid")?,
-            Some(inv) => warehouse
-                .set_liquid_amount(*name, inv.stored)
-                .context("setting liquid")?,
-        }
+    for (name, inv) in &obj.warehouse.liquids {
+        warehouse
+            .set_liquid_amount(*name, inv.stored)
+            .context("setting liquid")?
     }
     Ok(())
 }
@@ -180,15 +172,11 @@ fn sync_warehouse_to_obj(
     production: &Production,
     warehouse: &warehouse::Warehouse,
 ) -> Result<()> {
-    for (name, _) in &production.equipment {
-        if let Some(inv) = obj.warehouse.equipment.get_mut_cow(name) {
-            inv.stored = warehouse.get_item_count(name.clone())?;
-        }
+    for (name, inv) in obj.warehouse.equipment.iter_mut_cow() {
+        inv.stored = warehouse.get_item_count(name.clone())?;
     }
-    for (name, _) in &production.liquids {
-        if let Some(inv) = obj.warehouse.liquids.get_mut_cow(&name) {
-            inv.stored = warehouse.get_liquid_amount(*name)?;
-        }
+    for (name, inv) in obj.warehouse.liquids.iter_mut_cow() {
+        inv.stored = warehouse.get_liquid_amount(*name)?;
     }
     Ok(())
 }
@@ -282,12 +270,6 @@ impl Db {
             Some(cfg) => cfg,
             None => return Ok(()),
         };
-        let oids: SmallVec<[ObjectiveId; 64]> = self
-            .persisted
-            .objectives
-            .into_iter()
-            .map(|(oid, _)| *oid)
-            .collect();
         for side in Side::ALL {
             let production = match self.ephemeral.production_by_side.get(&side) {
                 None => continue,
@@ -295,8 +277,7 @@ impl Db {
             };
             for (name, equip) in &production.equipment {
                 let aircraft = equip.category.is_aircraft();
-                for oid in &oids {
-                    let obj = objective_mut!(self, oid)?;
+                for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
                     if obj.owner == side {
                         let hub = self.persisted.logistics_hubs.contains(&oid);
                         let capacity = whcfg.capacity(hub, equip.production);
@@ -317,8 +298,7 @@ impl Db {
                 }
             }
             for (name, qty) in &production.liquids {
-                for oid in &oids {
-                    let obj = objective_mut!(self, oid)?;
+                for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
                     if obj.owner == side {
                         let hub = self.persisted.logistics_hubs.contains(&oid);
                         let capacity = whcfg.capacity(hub, *qty);
@@ -455,6 +435,7 @@ impl Db {
         if !missing.is_empty() {
             bail!("objectives missing a warehouse {:?}", missing)
         }
+        self.ephemeral.dirty();
         self.deliver_production().context("delivering production")?;
         self.ephemeral.dirty();
         self.sync_warehouses_from_objectives(lua)
@@ -577,23 +558,17 @@ impl Db {
         let mut deliver_produced_supplies = || -> Result<()> {
             for side in Side::ALL {
                 let production = match self.ephemeral.production_by_side.get(&side) {
-                    Some(e) => Arc::clone(e),
+                    Some(e) => e,
                     None => continue,
                 };
-                for (name, equip) in &production.equipment {
-                    for oid in &self.persisted.logistics_hubs {
-                        let logi = objective_mut!(self, oid)?;
-                        if logi.owner == side {
-                            *logi.warehouse.equipment.get_or_default_cow(name.clone()) +=
-                                equip.production;
+                for oid in &self.persisted.logistics_hubs {
+                    let logi = objective_mut!(self, oid)?;
+                    if logi.owner == side {
+                        for (name, inv) in logi.warehouse.equipment.iter_mut_cow() {
+                            *inv += production.equipment[name].production;
                         }
-                    }
-                }
-                for (name, qty) in &production.liquids {
-                    for oid in &self.persisted.logistics_hubs {
-                        let logi = objective_mut!(self, oid)?;
-                        if logi.owner == side {
-                            *logi.warehouse.liquids.get_or_default_cow(*name) += *qty;
+                        for (name, inv) in logi.warehouse.liquids.iter_mut_cow() {
+                            *inv += *production.liquids[name];
                         }
                     }
                 }
@@ -601,20 +576,14 @@ impl Db {
             Ok(())
         };
         deliver_produced_supplies().context("delivering produced supplies")?;
+        self.ephemeral.dirty();
         self.deliver_supplies_from_logistics_hubs()
             .context("delivering supplies from logistics hubs")?;
         Ok(())
     }
 
     pub fn sync_objectives_from_warehouses(&mut self, lua: MizLua) -> Result<()> {
-        let oids: SmallVec<[ObjectiveId; 64]> = self
-            .persisted
-            .objectives
-            .into_iter()
-            .map(|(oid, _)| *oid)
-            .collect();
-        for oid in &oids {
-            let obj = objective_mut!(self, oid)?;
+        for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
             let production = match self.ephemeral.production_by_side.get(&obj.owner) {
                 Some(p) => Arc::clone(p),
                 None => continue,
@@ -632,14 +601,7 @@ impl Db {
     }
 
     pub fn sync_warehouses_from_objectives(&mut self, lua: MizLua) -> Result<()> {
-        let oids: SmallVec<[ObjectiveId; 64]> = self
-            .persisted
-            .objectives
-            .into_iter()
-            .map(|(oid, _)| *oid)
-            .collect();
-        for oid in &oids {
-            let obj = objective_mut!(self, oid)?;
+        for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
             let production = match self.ephemeral.production_by_side.get(&obj.owner) {
                 Some(p) => p,
                 None => continue,
@@ -843,14 +805,7 @@ impl Db {
     }
 
     fn update_supply_status(&mut self) -> Result<()> {
-        let oids: SmallVec<[ObjectiveId; 64]> = self
-            .persisted
-            .objectives
-            .into_iter()
-            .map(|(id, _)| *id)
-            .collect();
-        for oid in oids {
-            let obj = objective_mut!(self, oid)?;
+        for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
             let mut n = 0;
             let mut sum: u32 = 0;
             for (_, inv) in &obj.warehouse.equipment {

@@ -17,7 +17,6 @@ for more details.
 use crate::{
     cfg::{UnitTag, UnitTags},
     db::{
-        ephemeral::Ephemeral,
         group::{GroupId, SpawnedUnit, UnitId},
         Db,
     },
@@ -49,14 +48,14 @@ use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
-fn ui_jtac_dead(db: &mut Ephemeral, lua: MizLua, side: Side, gid: GroupId) {
-    db.msgs().panel_to_side(
+fn ui_jtac_dead(db: &mut Db, lua: MizLua, side: Side, gid: GroupId) {
+    db.ephemeral.msgs().panel_to_side(
         10,
         false,
         side,
         format_compact!("JTAC {gid} is no longer available"),
     );
-    if let Err(e) = menu::remove_menu_for_jtac(lua, side, gid) {
+    if let Err(e) = menu::remove_menu_for_jtac(db, lua, gid) {
         warn!("could not remove menu for jtac {gid} {e}")
     }
 }
@@ -275,7 +274,7 @@ impl Jtac {
                 let spot = Spot::create_laser(
                     lua,
                     jt.as_object()?,
-                    Some(LuaVec3(Vector3::new(0., 5., 0.))),
+                    Some(LuaVec3(Vector3::new(0., 10., 0.))),
                     LuaVec3(pos),
                     self.code,
                 )
@@ -301,7 +300,8 @@ impl Jtac {
                     ir_pointer,
                     mark: None,
                     uid,
-                    nearby_artillery: db.artillery_near_point(Vector2::new(pos.x, pos.z)),
+                    nearby_artillery: db
+                        .artillery_near_point(self.side, Vector2::new(pos.x, pos.z)),
                 });
                 let arty = &self.target.as_ref().unwrap().nearby_artillery;
                 if &prev_arty != arty {
@@ -603,7 +603,7 @@ impl Jtacs {
                                 if let Err(e) = jt.remove_target(db, lua) {
                                     warn!("0 could not remove jtac target {:?}", e)
                                 }
-                                ui_jtac_dead(&mut db.ephemeral, lua, *side, *gid);
+                                ui_jtac_dead(db, lua, *side, *gid);
                                 return false;
                             } else if let Some(target) = &jt.target {
                                 if &target.source == id {
@@ -719,7 +719,7 @@ impl Jtacs {
                     if let Err(e) = jt.remove_target(db, lua) {
                         warn!("2 could not remove jtac target {:?}", e)
                     }
-                    ui_jtac_dead(&mut db.ephemeral, lua, *side, *gid);
+                    ui_jtac_dead(db, lua, *side, *gid);
                     false
                 }
             })

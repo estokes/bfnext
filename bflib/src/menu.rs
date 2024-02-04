@@ -34,7 +34,7 @@ use dcso3::{
     coalition::Side,
     env::miz::{GroupId, Miz},
     lua_err,
-    mission_commands::{CoalitionSubMenu, GroupSubMenu, MissionCommands},
+    mission_commands::{GroupSubMenu, MissionCommands},
     net::SlotId,
     MizLua, String,
 };
@@ -932,12 +932,20 @@ fn jtac_set_code(lua: MizLua, arg: ArgTuple<DbGid, u16>) -> Result<()> {
     jtac_status(lua, arg.fst)
 }
 
-pub fn remove_menu_for_jtac(lua: MizLua, side: Side, group: DbGid) -> Result<()> {
+pub fn remove_menu_for_jtac(db: &Db, lua: MizLua, group: DbGid) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-    mc.remove_submenu_for_coalition(
-        side,
-        CoalitionSubMenu::from(vec!["JTAC".into(), format_compact!("{group}").into()]),
-    )
+    for (_, p, _) in db.instanced_players() {
+        let (slot, _) = p
+            .current_slot
+            .as_ref()
+            .ok_or_else(|| anyhow!("expected slot"))?;
+        let ifo = db.info_for_slot(slot)?;
+        mc.remove_submenu_for_group(
+            ifo.miz_gid,
+            GroupSubMenu::from(vec!["JTAC".into(), format_compact!("{group}").into()]),
+        )?
+    }
+    Ok(())
 }
 
 fn add_artillery_menu_for_jtac(
@@ -1173,12 +1181,7 @@ impl CarryCap {
     }
 }
 
-pub(super) fn update_jtac_menu(
-    db: &Db,
-    lua: MizLua,
-    jtac: DbGid,
-    arty: &[DbGid],
-) -> Result<()> {
+pub(super) fn update_jtac_menu(db: &Db, lua: MizLua, jtac: DbGid, arty: &[DbGid]) -> Result<()> {
     for (_, player, _) in db.instanced_players() {
         if let Some((sl, _)) = player.current_slot.as_ref() {
             let si = db.info_for_slot(sl).context("getting slot")?;

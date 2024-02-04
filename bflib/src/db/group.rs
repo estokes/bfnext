@@ -613,12 +613,12 @@ impl Db {
         Ok((alive, group.units.len()))
     }
     
-    pub fn artillery_near_point(&self, pos: Vector2) -> SmallVec<[GroupId; 8]> {
+    pub fn artillery_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
         let range2 = (self.ephemeral.cfg.artillery_mission_range as f64).powi(2);
         let artillery = self 
             .deployed()
             .filter_map(|group| {
-                if group.tags.contains(UnitTag::Artillery) {
+                if group.tags.contains(UnitTag::Artillery) && group.side == side {
                     let center = self.group_center(&group.id).ok()?;
                     if na::distance_squared(&center.into(), &pos.into()) <= range2 {
                         Some(group.id)

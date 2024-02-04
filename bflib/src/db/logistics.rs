@@ -15,7 +15,7 @@ for more details.
 */
 
 use super::{
-    ephemeral::{Equipment, Production},
+    ephemeral::Equipment,
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
 };
@@ -33,7 +33,6 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
-use fxhash::{FxBuildHasher, FxHashSet};
 use log::warn;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -148,13 +147,8 @@ pub struct Warehouse {
     pub(super) destination: Set<ObjectiveId>,
 }
 
-fn sync_obj_to_warehouse(
-    obj: &Objective,
-    production: &Production,
-    warehouse: &warehouse::Warehouse,
-) -> Result<()> {
+fn sync_obj_to_warehouse(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
     for (item, inv) in &obj.warehouse.equipment {
-        present.insert(item);
         warehouse
             .set_item(item.clone(), inv.stored)
             .context("setting item")?
@@ -167,11 +161,7 @@ fn sync_obj_to_warehouse(
     Ok(())
 }
 
-fn sync_warehouse_to_obj(
-    obj: &mut Objective,
-    production: &Production,
-    warehouse: &warehouse::Warehouse,
-) -> Result<()> {
+fn sync_warehouse_to_obj(obj: &mut Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
     for (name, inv) in obj.warehouse.equipment.iter_mut_cow() {
         inv.stored = warehouse.get_item_count(name.clone())?;
     }
@@ -568,7 +558,7 @@ impl Db {
                             *inv += production.equipment[name].production;
                         }
                         for (name, inv) in logi.warehouse.liquids.iter_mut_cow() {
-                            *inv += *production.liquids[name];
+                            *inv += production.liquids[name];
                         }
                     }
                 }
@@ -584,17 +574,12 @@ impl Db {
 
     pub fn sync_objectives_from_warehouses(&mut self, lua: MizLua) -> Result<()> {
         for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
-            let production = match self.ephemeral.production_by_side.get(&obj.owner) {
-                Some(p) => Arc::clone(p),
-                None => continue,
-            };
             let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "objective airbase")?;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
                 .context("getting warehouse")?;
-            sync_warehouse_to_obj(obj, &production, &warehouse)
-                .context("syncing warehouse to objective")?
+            sync_warehouse_to_obj(obj, &warehouse).context("syncing warehouse to objective")?
         }
         self.ephemeral.dirty();
         Ok(())
@@ -602,18 +587,13 @@ impl Db {
 
     pub fn sync_warehouses_from_objectives(&mut self, lua: MizLua) -> Result<()> {
         for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
-            let production = match self.ephemeral.production_by_side.get(&obj.owner) {
-                Some(p) => p,
-                None => continue,
-            };
             let airbase = maybe!(self.ephemeral.airbase_by_oid, oid, "objective airbase")
                 .with_context(|| format_compact!("getting airbase for objective {}", obj.name))?;
             let warehouse = Airbase::get_instance(lua, airbase)
                 .context("getting airbase")?
                 .get_warehouse()
                 .context("getting warehouse")?;
-            sync_obj_to_warehouse(obj, production, &warehouse)
-                .context("syncing warehouse from objective")?
+            sync_obj_to_warehouse(obj, &warehouse).context("syncing warehouse from objective")?
         }
         self.ephemeral.dirty();
         Ok(())
@@ -805,7 +785,7 @@ impl Db {
     }
 
     fn update_supply_status(&mut self) -> Result<()> {
-        for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
+        for (_, obj) in self.persisted.objectives.iter_mut_cow() {
             let mut n = 0;
             let mut sum: u32 = 0;
             for (_, inv) in &obj.warehouse.equipment {
@@ -844,12 +824,7 @@ impl Db {
             .context("getting airbase")?
             .get_warehouse()
             .context("getting warehouse")?;
-        let production = match self.ephemeral.production_by_side.get(&obj.owner) {
-            None => return Ok((obj, warehouse)),
-            Some(p) => p,
-        };
-        sync_warehouse_to_obj(obj, production, &warehouse)
-            .context("syncing warehouse to objective")?;
+        sync_warehouse_to_obj(obj, &warehouse).context("syncing warehouse to objective")?;
         Ok((obj, warehouse))
     }
 
@@ -868,12 +843,7 @@ impl Db {
             .context("getting airbase")?
             .get_warehouse()
             .context("getting warehouse")?;
-        let production = match self.ephemeral.production_by_side.get(&obj.owner) {
-            None => return Ok((obj, warehouse)),
-            Some(p) => p,
-        };
-        sync_obj_to_warehouse(obj, production, &warehouse)
-            .context("syncing warehouse to objective")?;
+        sync_obj_to_warehouse(obj, &warehouse).context("syncing warehouse to objective")?;
         Ok((obj, warehouse))
     }
 
@@ -899,10 +869,6 @@ impl Db {
         let (_, to_wh) = self
             .sync_warehouse_to_objective(lua, to)
             .context("syncing to objective")?;
-        let production = match self.ephemeral.production_by_side.get(&side) {
-            Some(p) => Arc::clone(p),
-            None => return Ok(()),
-        };
         let from_obj = objective!(self, from)?;
         let to_obj = objective!(self, to)?;
         macro_rules! compute {
@@ -935,8 +901,8 @@ impl Db {
         for tr in transfers {
             tr.execute(self)?
         }
-        sync_obj_to_warehouse(objective!(self, from)?, &production, &from_wh)?;
-        sync_obj_to_warehouse(objective!(self, to)?, &production, &to_wh)?;
+        sync_obj_to_warehouse(objective!(self, from)?, &from_wh)?;
+        sync_obj_to_warehouse(objective!(self, to)?, &to_wh)?;
         self.update_supply_status()
             .context("updating supply status")?;
         Ok(())
@@ -988,7 +954,7 @@ impl Db {
                 inv.reduce(percent);
             }
         }
-        sync_obj_to_warehouse(obj, &production, &warehouse).context("syncing from warehouse")?;
+        sync_obj_to_warehouse(obj, &warehouse).context("syncing from warehouse")?;
         self.update_supply_status()
             .context("updating supply status")?;
         self.ephemeral.dirty();

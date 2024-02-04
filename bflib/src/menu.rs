@@ -932,22 +932,6 @@ fn jtac_set_code(lua: MizLua, arg: ArgTuple<DbGid, u16>) -> Result<()> {
     jtac_status(lua, arg.fst)
 }
 
-pub fn remove_menu_for_jtac(db: &Db, lua: MizLua, group: DbGid) -> Result<()> {
-    let mc = MissionCommands::singleton(lua)?;
-    for (_, p, _) in db.instanced_players() {
-        let (slot, _) = p
-            .current_slot
-            .as_ref()
-            .ok_or_else(|| anyhow!("expected slot"))?;
-        let ifo = db.info_for_slot(slot)?;
-        mc.remove_submenu_for_group(
-            ifo.miz_gid,
-            GroupSubMenu::from(vec!["JTAC".into(), format_compact!("{group}").into()]),
-        )?
-    }
-    Ok(())
-}
-
 fn add_artillery_menu_for_jtac(
     lua: MizLua,
     mizgid: GroupId,
@@ -1179,6 +1163,20 @@ impl CarryCap {
             })
             .unwrap_or_default()
     }
+}
+
+pub fn remove_menu_for_jtac(db: &Db, lua: MizLua, group: DbGid) -> Result<()> {
+    let mc = MissionCommands::singleton(lua)?;
+    for (_, player, _) in db.instanced_players() {
+        if let Some((sl, _)) = player.current_slot.as_ref() {
+            let ifo = db.info_for_slot(sl)?;
+            mc.remove_submenu_for_group(
+                ifo.miz_gid,
+                GroupSubMenu::from(vec!["JTAC".into(), format_compact!("{group}").into()]),
+            )?
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn update_jtac_menu(db: &Db, lua: MizLua, jtac: DbGid, arty: &[DbGid]) -> Result<()> {

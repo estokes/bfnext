@@ -257,7 +257,13 @@ impl Jtac {
             .map(|t| t.nearby_artillery.clone())
             .unwrap_or_default();
         match &self.target {
-            Some(target) if target.uid == uid => Ok(false),
+            Some(target) if target.uid == uid => {
+                let arty = db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
+                if prev_arty != arty {
+                    menu::update_jtac_menu(db, lua, self.gid, &arty).context("adding menu")?;
+                }
+                Ok(false)
+            },
             Some(_) | None => {
                 self.remove_target(db, lua)?;
                 let jtid = db

@@ -923,7 +923,7 @@ impl Db {
         }
         let mut actually_captured = smallvec![];
         for (oid, gids) in captured {
-            let (side, _) = gids.first().unwrap();
+            let (side, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
             if gids.iter().all(|(s, _)| side == s) {
                 let obj = objective_mut!(self, oid)?;
                 let old_supplier = obj.warehouse.supplier;

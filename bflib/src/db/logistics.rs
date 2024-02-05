@@ -555,10 +555,22 @@ impl Db {
                     let logi = objective_mut!(self, oid)?;
                     if logi.owner == side {
                         for (name, inv) in logi.warehouse.equipment.iter_mut_cow() {
-                            *inv += production.equipment[name].production;
+                            match production.equipment.get(name) {
+                                Some(eq) => *inv += eq.production,
+                                None => {
+                                    inv.capacity = 0;
+                                    inv.stored = 0;
+                                }
+                            }
                         }
                         for (name, inv) in logi.warehouse.liquids.iter_mut_cow() {
-                            *inv += production.liquids[name];
+                            match production.liquids.get(name) {
+                                Some(pr) => *inv += *pr,
+                                None => {
+                                    inv.capacity = 0;
+                                    inv.stored = 0;
+                                }
+                            }
                         }
                     }
                 }

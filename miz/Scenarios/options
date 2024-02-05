@@ -276,7 +276,8 @@ options =
             ["sarpp"] = 1,
             ["CPLocalList"] = "default",
             ["CPLocalZAList"] = "default",
-            ["gunCamera"] = 1,
+            ["gunCamera"] = 0,
+	    ["sarpp"] = 0,
         }, -- end of ["L-39C"]
         ["AV8BNA"] = 
         {

@@ -425,11 +425,12 @@ impl Db {
         if !missing.is_empty() {
             bail!("objectives missing a warehouse {:?}", missing)
         }
-        self.ephemeral.dirty();
+        self.update_supply_status().context("updating supply status")?;
         self.deliver_production().context("delivering production")?;
-        self.ephemeral.dirty();
         self.sync_warehouses_from_objectives(lua)
-            .context("syncing warehouses from objectives")
+            .context("syncing warehouses from objectives")?;
+        self.ephemeral.dirty();
+        Ok(())
     }
 
     pub(super) fn capture_warehouse(&mut self, lua: MizLua, oid: ObjectiveId) -> Result<()> {
@@ -623,6 +624,7 @@ impl Db {
     }
 
     pub fn deliver_supplies_from_logistics_hubs(&mut self) -> Result<()> {
+        self.update_supply_status().context("updating supply status")?;
         let mut transfers: Vec<Transfer> = vec![];
         for lid in &self.persisted.logistics_hubs {
             let logi = objective!(self, lid)?;

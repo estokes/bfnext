@@ -1,5 +1,4 @@
 * text eol=lf
 *.dll binary
 *.exe binary
-lua.dll binary
 *.miz binary

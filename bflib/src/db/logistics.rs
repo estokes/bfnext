@@ -336,6 +336,10 @@ impl Db {
     pub(super) fn setup_warehouses_after_load(&mut self, lua: MizLua) -> Result<()> {
         self.init_resource_map(lua)
             .context("initializing resource map")?;
+        let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
+            Some(cfg) => cfg,
+            None => return Ok(()),
+        };
         let map = warehouse::Warehouse::get_resource_map(lua).context("getting resource map")?;
         let world = World::singleton(lua).context("getting world")?;
         let mut load_and_sync_airbases = || -> Result<()> {
@@ -395,6 +399,53 @@ impl Db {
                 })
         };
         load_and_sync_airbases().context("loading and syncing airbases")?;
+        let mut adjust_warehouses_for_miz_changes = || -> Result<()> {
+            for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
+                let mut del_eq: SmallVec<[String; 8]> = smallvec![];
+                let mut del_l: SmallVec<[LiquidType; 4]> = smallvec![];
+                if let Some(prod) = self.ephemeral.production_by_side.get(&obj.owner) {
+                    let hub = self.persisted.logistics_hubs.contains(oid);
+                    for (name, _) in &obj.warehouse.equipment {
+                        if !prod.equipment.contains_key(name) {
+                            del_eq.push(name.clone());
+                        }
+                    }
+                    for name in del_eq {
+                        obj.warehouse.equipment.remove_cow(&name);
+                    }
+                    for (liq, _) in &obj.warehouse.liquids {
+                        if !prod.liquids.contains_key(liq) {
+                            del_l.push(*liq);
+                        }
+                    }
+                    for liq in del_l {
+                        obj.warehouse.liquids.remove_cow(&liq);
+                    }
+                    for (name, eqip) in &prod.equipment {
+                        let capacity = whcfg.capacity(hub, eqip.production);
+                        if eqip.category.is_aircraft() {
+                            let include = hub
+                                || obj
+                                    .slots
+                                    .into_iter()
+                                    .any(|(_, v)| v.typ.as_str() == name.as_str());
+                            if !include {
+                                continue;
+                            }
+                        }
+                        let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
+                        inv.capacity = capacity;
+                    }
+                    for (name, prod) in &prod.liquids {
+                        let capacity = whcfg.capacity(hub, *prod);
+                        let inv = obj.warehouse.liquids.get_or_default_cow(*name);
+                        inv.capacity = capacity;
+                    }
+                }
+            }
+            Ok(())
+        };
+        adjust_warehouses_for_miz_changes().context("adjusting warehouses for miz changes")?;
         let mut missing = vec![];
         for (oid, obj) in &self.persisted.objectives {
             if !self.ephemeral.airbase_by_oid.contains_key(oid) {

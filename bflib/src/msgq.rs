@@ -297,7 +297,7 @@ impl MsgQ {
     }
 
     pub fn process(&mut self, net: &Net, act: &Action) {
-        for _ in 0..max(1, self.0.len() >> 4) {
+        for _ in 0..max(2, self.0.len() >> 4) {
             let cmd = match self.0.pop_front() {
                 Some(cmd) => cmd,
                 None => return,

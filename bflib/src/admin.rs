@@ -1,5 +1,5 @@
 use crate::{
-    bg::Task, db::{group::DeployKind, Set}, msgq::MsgTyp, return_lives, spawnctx::{SpawnCtx, SpawnLoc}, Context
+    bg::Task, db::{group::DeployKind, objective::ObjectiveId, Set}, msgq::MsgTyp, return_lives, spawnctx::{SpawnCtx, SpawnLoc}, Context
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use chrono::{prelude::*, Duration};
@@ -55,6 +55,7 @@ pub enum AdminCommand {
     },
     LogisticsTickNow,
     LogisticsDeliverNow,
+    Repair { airbase: String },
     Tim {
         key: String,
         size: usize,
@@ -99,6 +100,7 @@ impl AdminCommand {
             "transfer <from-objective> <to-objective>: transfer supplies between two objectives",
             "tick: execute a logistics tick now",
             "deliver: execute a logistics delivery now",
+            "repair <airbase>: repair one step at the specified airbase",
             "tim <key> [size]: create explosions of [size] default 3000 at every f10 mark with text <key>",
             "spawn <key>: spawn at f10 mark. <key> <troop|deployable> <side> <heading> <name>",
             "switch <side> <alias|playerid|ucid>: force side switch a player",
@@ -148,6 +150,8 @@ impl FromStr for AdminCommand {
             Ok(Self::LogisticsTickNow)
         } else if let Some(_) = s.strip_prefix("deliver") {
             Ok(Self::LogisticsDeliverNow)
+        } else if let Some(s) = s.strip_prefix("repair ") {
+            Ok(Self::Repair { airbase: s.into() })
         } else if let Some(s) = s.strip_prefix("tim ") {
             match s.split_once(" ") {
                 None => Ok(Self::Tim {
@@ -426,6 +430,28 @@ fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
     bail!("no player found for alias, player id, or ucid \"{}\"", key)
 }
 
+fn get_airbase(ctx: &Context, name: &str) -> Result<ObjectiveId> {
+    for (oid, obj) in ctx.db.objectives() {
+        if obj.name.as_str() == name {
+            return Ok(*oid)
+        }
+    }
+    let re = RegexBuilder::new(name).case_insensitive(true).build().context("building regex")?;
+    let mut candidates: SmallVec<[(ObjectiveId, String); 32]> = smallvec![];
+    for (oid, obj) in ctx.db.objectives() {
+        if re.is_match(obj.name.as_str()) {
+            candidates.push((*oid, obj.name.clone()));
+        }
+    }
+    if candidates.len() == 0 {
+        bail!("no objective name matches {name}")
+    } else if candidates.len() == 1 {
+        Ok(candidates[0].0)
+    } else {
+        bail!("multiple objectives match {name}, matches: {candidates:?}")
+    }
+}
+
 fn admin_sideswitch(ctx: &mut Context, side: Side, name: String) -> Result<()> {
     let ucid = get_player_ucid(ctx, name.as_str())?;
     ctx.db.force_sideswitch_player(&ucid, side)
@@ -581,16 +607,29 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), format_compact!($($arg),+))
             }
         }
+        macro_rules! airbase {
+            ($name:expr) => {
+                match get_airbase(ctx, $name) {
+                    Ok(oid) => oid,
+                    Err(e) => {
+                        reply!("{e:?}");
+                        continue
+                    }
+                }
+            }
+        }
         match cmd {
             AdminCommand::Help => (),
             AdminCommand::ReduceInventory { airbase, amount } => {
-                match ctx.db.admin_reduce_inventory(lua, airbase.as_str(), amount) {
+                match ctx.db.admin_reduce_inventory(lua, airbase!(&airbase), amount) {
                     Err(e) => reply!("reduce inventory failed: {:?}", e),
                     Ok(()) => reply!("inventory reduced"),
                 }
             }
             AdminCommand::TransferSupply { from, to } => {
-                match ctx.db.admin_transfer_supplies(lua, &from, &to) {
+                let from = airbase!(&from);
+                let to = airbase!(&to);
+                match ctx.db.transfer_supplies(lua, from, to) {
                     Err(e) => reply!("transfer inventory failed {:?}", e),
                     Ok(()) => reply!("transfer complete. disconnect"),
                 }
@@ -627,6 +666,12 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     reply!("deliver complete")
                 } else {
                     ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg)
+                }
+            }
+            AdminCommand::Repair { airbase } => {
+                match ctx.db.repair_objective(airbase!(&airbase), Utc::now()) {
+                    Ok(()) => reply!("repaired {airbase}"),
+                    Err(e) => reply!("failed to repair {e:?}")
                 }
             }
             AdminCommand::Tim { key, size } => {
@@ -690,7 +735,7 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 }
             }
             AdminCommand::LogWarehouse { kind, airbase } => {
-                match ctx.db.admin_log_inventory(lua, kind, &airbase) {
+                match ctx.db.admin_log_inventory(lua, kind, airbase!(&airbase)) {
                     Ok(()) => reply!("{airbase} inventory logged"),
                     Err(e) => reply!("could not log {airbase} inventory {:?}", e),
                 }

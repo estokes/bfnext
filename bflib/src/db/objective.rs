@@ -227,7 +227,7 @@ atomic_id!(ObjectiveId);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     pub(super) id: ObjectiveId,
-    pub(super) name: String,
+    pub name: String,
     pub(super) pos: Vector2,
     pub(super) radius: f64,
     pub(super) owner: Side,
@@ -556,7 +556,7 @@ impl Db {
         Ok(())
     }
 
-    fn repair_objective(&mut self, oid: ObjectiveId, now: DateTime<Utc>) -> Result<()> {
+    pub fn repair_objective(&mut self, oid: ObjectiveId, now: DateTime<Utc>) -> Result<()> {
         let obj = self
             .persisted
             .objectives

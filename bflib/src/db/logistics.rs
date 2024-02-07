@@ -921,28 +921,8 @@ impl Db {
         Ok(())
     }
 
-    pub fn admin_transfer_supplies(&mut self, lua: MizLua, from: &str, to: &str) -> Result<()> {
-        let from = self
-            .persisted
-            .objectives_by_name
-            .get(from)
-            .ok_or_else(|| anyhow!("not such objective {from}"))?;
-        let to = self
-            .persisted
-            .objectives_by_name
-            .get(to)
-            .ok_or_else(|| anyhow!("no such objective {to}"))?;
-        self.transfer_supplies(lua, *from, *to)
-    }
-
-    pub fn admin_reduce_inventory(&mut self, lua: MizLua, name: &str, amount: u8) -> Result<()> {
-        let oid = self
-            .persisted
-            .objectives_by_name
-            .get(name)
-            .map(|oid| *oid)
-            .ok_or_else(|| anyhow!("no such objective {name}"))?;
-        if amount > 100 {
+    pub fn admin_reduce_inventory(&mut self, lua: MizLua, oid: ObjectiveId, amount: u8) -> Result<()> {
+       if amount > 100 {
             bail!("enter a percentage")
         }
         let percent = amount as f32 / 100.;
@@ -956,7 +936,7 @@ impl Db {
         };
         let (obj, warehouse) = self
             .sync_warehouse_to_objective(lua, oid)
-            .with_context(|| format_compact!("syncing warehouses to {name}"))?;
+            .with_context(|| format_compact!("syncing warehouses to {oid}"))?;
         for name in production.equipment.keys() {
             if let Some(inv) = obj.warehouse.equipment.get_mut_cow(name) {
                 inv.reduce(percent);
@@ -978,15 +958,9 @@ impl Db {
         &mut self,
         lua: MizLua,
         kind: WarehouseKind,
-        name: &str,
+        oid: ObjectiveId
     ) -> Result<()> {
         use std::fmt::Write;
-        let oid = self
-            .persisted
-            .objectives_by_name
-            .get(name)
-            .map(|oid| *oid)
-            .ok_or_else(|| anyhow!("no such objective {name}"))?;
         match kind {
             WarehouseKind::DCS => {
                 let abid = self

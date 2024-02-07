@@ -86,6 +86,7 @@ pub struct Player {
 impl Db {
     pub fn player_deslot(&mut self, ucid: &Ucid, kick: bool) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
+            player.airborne = None;
             if let Some((slot, _)) = player.current_slot.take() {
                 let _ = self.ephemeral.player_deslot(&slot, kick);
             }

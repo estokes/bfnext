@@ -686,7 +686,7 @@ impl Db {
         };
         for (oid, obj) in &self.persisted.objectives {
             let pos3 = {
-                let alt = land.get_height(LuaVec2(obj.pos))?;
+                let alt = land.get_height(LuaVec2(obj.pos))? + 50.;
                 LuaVec3(Vector3::new(obj.pos.x, alt, obj.pos.y))
             };
             let mut spawn = false;

@@ -33,13 +33,12 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
+use fxhash::FxHashMap;
 use log::warn;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
-    cmp::{max, min},
-    ops::{AddAssign, SubAssign},
-    sync::Arc,
+    cmp::{max, min}, mem, ops::{AddAssign, SubAssign}, sync::Arc
 };
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -521,13 +520,15 @@ impl Db {
             match obj.kind {
                 ObjectiveKind::Logistics => (),
                 ObjectiveKind::Airbase | ObjectiveKind::Farp { .. } | ObjectiveKind::Fob => {
-                    suppliers.push((*oid, self.compute_supplier(obj)?));
+                    let hub = self.compute_supplier(obj)?;
+                    suppliers.push((*oid, hub));
                 }
             }
         }
+        let mut current: FxHashMap<ObjectiveId, Set<ObjectiveId>> = FxHashMap::default();
         for oid in &self.persisted.logistics_hubs {
             let obj = objective_mut!(self, oid)?;
-            obj.warehouse.destination = Set::new();
+            current.insert(*oid, mem::take(&mut obj.warehouse.destination));
         }
         for (oid, supplier) in suppliers {
             let obj = objective_mut!(self, oid)?;
@@ -535,6 +536,12 @@ impl Db {
             if let Some(id) = supplier {
                 let logi = objective_mut!(self, id)?;
                 logi.warehouse.destination.insert_cow(oid);
+            }
+        }
+        for (oid, current) in current {
+            let obj = objective!(self, oid)?;
+            if obj.warehouse.destination != current {
+                self.ephemeral.create_objective_markup(obj, &self.persisted)
             }
         }
         Ok(())

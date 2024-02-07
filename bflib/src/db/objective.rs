@@ -926,7 +926,6 @@ impl Db {
             let (side, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
             if gids.iter().all(|(s, _)| side == s) {
                 let obj = objective_mut!(self, oid)?;
-                let old_supplier = obj.warehouse.supplier;
                 obj.spawned = false;
                 obj.threatened = true;
                 obj.last_threatened_ts = now;
@@ -967,14 +966,6 @@ impl Db {
                 }
                 let obj = objective!(self, oid)?;
                 self.ephemeral.create_objective_markup(obj, &self.persisted);
-                if let Some(lid) = obj.warehouse.supplier {
-                    self.ephemeral
-                        .create_objective_markup(objective!(self, lid)?, &self.persisted);
-                }
-                if let Some(lid) = old_supplier {
-                    self.ephemeral
-                        .create_objective_markup(objective!(self, lid)?, &self.persisted)
-                }
                 self.ephemeral.dirty();
             }
         }

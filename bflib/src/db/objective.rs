@@ -939,6 +939,13 @@ impl Db {
                         }
                     }
                 }
+                for gid in obj.groups.get(&obj.owner.opposite()).unwrap_or(&Set::new()) {
+                    for uid in &group!(self, gid)?.units {
+                        if self.ephemeral.object_id_by_uid.contains_key(uid) {
+                            self.ephemeral.units_potentially_close_to_enemies.insert(*uid);
+                        }
+                    }
+                }
                 let abid = self
                     .ephemeral
                     .airbase_by_oid

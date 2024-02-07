@@ -570,38 +570,61 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::PlayerLeaveUnit(e) => {
-            if let Some(o) = &e.initiator {
-                if let Ok(unit) = o.as_unit() {
-                    info!("player leave unit {:?}", unit.slot()?);
-                    if let Err(e) = ctx.db.player_left_unit(lua, &unit) {
-                        error!("player left unit failed {:?} {:?}", unit, e)
+            if let Some(unit) = e.initiator.and_then(|u| u.as_unit().ok()) {
+                if let Err(e) = ctx.db.player_left_unit(lua, &unit) {
+                    error!("player left unit failed {:?} {:?}", unit, e)
+                }
+            }
+        }
+        Event::Hit(e) | Event::Kill(e) => {
+            if let Some(target) = e.target.and_then(|t| t.as_unit().ok()) {
+                let dead = target.get_life()? < 1;
+                if ctx.db.ephemeral.cfg.points.is_some() {
+                    if let Some(shooter) = e.initiator.and_then(|u| u.as_unit().ok()) {
+                        if let Err(e) = ctx.shots_out.hit(
+                            &ctx.db,
+                            start_ts,
+                            dead,
+                            &target,
+                            &shooter,
+                            e.weapon_name,
+                        ) {
+                            error!("error processing hit event {:?}", e)
+                        }
+                    }
+                }
+                if dead {
+                    if let Err(e) = unit_killed(lua, ctx, target.object_id()?) {
+                        error!("0 unit killed failed {:?}", e)
                     }
                 }
             }
         }
-        Event::Hit(e) => {
-            if let Some(unit) = e.target {
-                if let Ok(unit) = unit.as_unit() {
-                    if unit.get_life()? < 1 {
-                        if let Err(e) = unit_killed(lua, ctx, unit.object_id()?) {
-                            error!("0 unit killed failed {:?}", e)
-                        }
-                    }
+        Event::Shot(e) => {
+            if ctx.db.ephemeral.cfg.points.is_some() {
+                if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, e) {
+                    error!("error processing shot event {:?}", e)
                 }
             }
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
-            if let Some(unit) = e.initiator {
-                if let Ok(unit) = unit.as_unit() {
-                    if let Err(e) = unit_killed(lua, ctx, unit.object_id()?) {
-                        error!("1 unit killed failed {:?}", e)
-                    }
+            if let Some(unit) = e.initiator.and_then(|u| u.as_unit().ok()) {
+                let id = unit.object_id()?;
+                if ctx.db.ephemeral.cfg.points.is_some() {
+                    ctx.shots_out.dead(id.clone(), start_ts);
+                }
+                if let Err(e) = unit_killed(lua, ctx, id) {
+                    error!("1 unit killed failed {:?}", e)
                 }
             }
         }
         Event::Ejection(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
-                if let Err(e) = unit_killed(lua, ctx, unit.object_id()?) {
+                let id = unit.object_id()?;
+                if ctx.db.ephemeral.cfg.points.is_some() {
+                    ctx.shots_out.dead(id.clone(), start_ts);
+                }
+                if let Err(e) = unit_killed(lua, ctx, id) {
                     error!("2 unit killed failed {}", e)
                 }
             }
@@ -917,6 +940,11 @@ fn run_slow_timed_events(
             }
         }
         return_lives(lua, ctx, ts);
+        if let Some(points) = ctx.db.ephemeral.cfg.points {
+            for dead in ctx.shots_out.bring_out_your_dead(ts) {
+                ctx.db.award_points(points, dead)
+            }
+        }
         let start_ts = Utc::now();
         if let Err(e) = ctx.db.maybe_do_repairs(ts) {
             error!("error doing repairs {:?}", e)

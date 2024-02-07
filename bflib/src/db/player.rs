@@ -20,8 +20,9 @@ use super::{
     Db, Map, Set,
 };
 use crate::{
-    cfg::{LifeType, Vehicle},
+    cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
     maybe, maybe_mut, objective_mut,
+    shots::Dead,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -74,7 +75,7 @@ pub struct Player {
     #[serde(default)]
     pub airborne: Option<LifeType>,
     #[serde(default)]
-    pub points: u32,
+    pub points: i32,
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
     #[serde(skip)]
@@ -392,7 +393,7 @@ impl Db {
                             .ephemeral
                             .cfg
                             .points
-                            .map(|p| p.new_player_join)
+                            .map(|p| p.new_player_join as i32)
                             .unwrap_or(0),
                         current_slot: None,
                         changing_slots: None,
@@ -635,5 +636,73 @@ impl Db {
             }
         }
         self.player_deslot(ucid, false);
+    }
+
+    pub fn award_points(&mut self, cfg: PointsCfg, dead: Dead) {
+        let mut hit_by: SmallVec<[Ucid; 4]> = smallvec![];
+        for shot in &dead.shots {
+            if shot.hit {
+                if !hit_by.contains(&shot.shooter_ucid) {
+                    hit_by.push(shot.shooter_ucid.clone())
+                }
+            }
+        }
+        if hit_by.is_empty() {
+            for shot in &dead.shots {
+                if dead.time - shot.time <= Duration::minutes(3) {
+                    hit_by.push(shot.shooter_ucid.clone())
+                }
+            }
+        }
+        if !hit_by.is_empty() {
+            let total_points = if dead.victim_ucid.is_some() {
+                cfg.air_kill
+            } else {
+                (&dead.shots)
+                    .into_iter()
+                    .find(|s| s.target_typ.trim() != "")
+                    .map(|s| s.target_typ.clone())
+                    .and_then(|typ| self.ephemeral.cfg.unit_classification.get(&Vehicle(typ)))
+                    .map(|tags| {
+                        if tags.intersects(UnitTag::LR | UnitTag::TrackRadar) {
+                            cfg.ground_kill + cfg.lr_sam_bonus
+                        } else {
+                            cfg.ground_kill
+                        }
+                    })
+                    .unwrap_or(cfg.ground_kill)
+            };
+            let points_per_shooter = (total_points as f32 / hit_by.len() as f32).ceil() as i32;
+            for ucid in hit_by {
+                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+                    player.points += points_per_shooter;
+                    let ifo = player.current_slot.as_ref().and_then(|(s, _)| {
+                        self.persisted.objectives_by_slot.get(s).and_then(|i| {
+                            self.persisted
+                                .objectives
+                                .get(i)
+                                .and_then(|o| o.slots.get(s))
+                        })
+                    });
+                    if let Some(ifo) = ifo {
+                        let miz_id = ifo.miz_gid;
+                        let msg = match dead
+                            .victim_ucid
+                            .as_ref()
+                            .and_then(|i| self.persisted.players.get(i))
+                        {
+                            Some(player) => {
+                                format_compact!(
+                                    "+{points_per_shooter} points for killing {}",
+                                    player.name
+                                )
+                            }
+                            None => format_compact!("+{points_per_shooter} points"),
+                        };
+                        self.ephemeral.msgs().panel_to_group(5, false, miz_id, msg);
+                    }
+                }
+            }
+        }
     }
 }

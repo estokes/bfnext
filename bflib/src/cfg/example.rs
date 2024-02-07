@@ -14,427 +14,9 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use anyhow::{anyhow, Context, Result};
-use chrono::prelude::*;
-use compact_str::format_compact;
-use dcso3::{coalition::Side, net::Ucid, String};
-use enumflags2::{bitflags, BitFlags};
+use super::*;
+use dcso3::coalition::Side;
 use fxhash::FxHashMap;
-use serde_derive::{Deserialize, Serialize};
-use std::{
-    borrow::Borrow,
-    fmt,
-    fs::{self, File},
-    io,
-    ops::{Deref, DerefMut},
-    path::{Path, PathBuf},
-};
-
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct Vehicle(pub String);
-
-impl<'a> From<&'a str> for Vehicle {
-    fn from(value: &'a str) -> Self {
-        Self(value.into())
-    }
-}
-
-impl From<String> for Vehicle {
-    fn from(value: String) -> Self {
-        Vehicle(value)
-    }
-}
-
-impl Borrow<str> for Vehicle {
-    fn borrow(&self) -> &str {
-        &*self.0
-    }
-}
-
-impl Vehicle {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[bitflags]
-#[repr(u64)]
-pub enum UnitTag {
-    SAM,
-    AAA,
-    Armor,
-    APC,
-    Logistics,
-    Infantry,
-    EWR,
-    Aircraft,
-    Helicopter,
-    LR,
-    SR,
-    MR,
-    IRGuided,
-    RadarGuided,
-    OpticallyGuided,
-    EngagesWeapons,
-    Unguided,
-    TrackRadar,
-    SearchRadar,
-    AuxRadarUnit,
-    ControlUnit,
-    Launcher,
-    ATGM,
-    Artillery,
-    LightCannon,
-    HeavyCannon,
-    RPG,
-    SmallArms,
-    Unarmed,
-    Invincible,
-    Driveable,
-}
-
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
-)]
-#[serde(from = "Vec<UnitTag>", into = "Vec<UnitTag>")]
-pub struct UnitTags(pub BitFlags<UnitTag>);
-
-impl Deref for UnitTags {
-    type Target = BitFlags<UnitTag>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for UnitTags {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl From<Vec<UnitTag>> for UnitTags {
-    fn from(value: Vec<UnitTag>) -> Self {
-        Self(value.into_iter().collect())
-    }
-}
-
-impl From<BitFlags<UnitTag>> for UnitTags {
-    fn from(value: BitFlags<UnitTag>) -> Self {
-        Self(value)
-    }
-}
-
-impl Into<Vec<UnitTag>> for UnitTags {
-    fn into(self) -> Vec<UnitTag> {
-        self.0.into_iter().collect()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
-pub enum LifeType {
-    Standard,
-    Intercept,
-    Logistics,
-    Attack,
-    Recon,
-}
-
-impl fmt::Display for LifeType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Self::Standard => "standard",
-            Self::Intercept => "intercept",
-            Self::Logistics => "logistics",
-            Self::Attack => "attack",
-            Self::Recon => "recon",
-        };
-        write!(f, "{s}")
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PersistTyp {
-    /// The deployable persists until it is destroyed
-    Forever,
-    /// The deployable doesn't persist across restarts
-    UntilRestart,
-    /// The deployable persists for the specified number of
-    /// real world seconds
-    WallTime(f32),
-    /// The deployable persists for the the specified number
-    /// of server restart cycles
-    Restarts(u32),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum LimitEnforceTyp {
-    /// Handle the limit by removing the oldest instance of the deployable when
-    /// a new one is unpacked. (lifo)
-    DeleteOldest,
-    /// Handle the limit by refusing to spawn new construction crates for
-    /// the deployable
-    DenyCrate,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Crate {
-    /// The name of the crate in the menu
-    pub name: String,
-    /// The weight of the crate in kg
-    pub weight: u32,
-    /// The number of crates of this type required to build the deployable
-    pub required: u32,
-    /// The type of unit in the associated deployable group that will inherit
-    /// this crate's position when the deployable is spawned. This is only
-    /// needed for multi unit groups with distinct parts.
-    pub pos_unit: Option<String>,
-    /// the maximum height in meters agl that the user can drop this crate from
-    pub max_drop_height_agl: u32,
-    /// the maximum speed in m/s that the user can be going when they drop this
-    /// cargo
-    pub max_drop_speed: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DeployableLogistics {
-    pub pad_templates: Vec<String>,
-    pub ammo_template: String,
-    pub fuel_template: String,
-    pub barracks_template: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DeployableEwr {
-    /// range for likely detection (Meters)
-    pub range: u32,
-    // CR estokes: Actual radar simulation ...
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DeployableJtac {
-    /// jtac detection and lasing range (Meters)
-    pub range: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Deployable {
-    /// The full menu path of the deployable in the menu
-    pub path: Vec<String>,
-    /// The template used to spawn the deployable
-    pub template: String,
-    /// How the deployable should persist across restarts
-    pub persist: PersistTyp,
-    /// How many instances are allowed at the same time
-    pub limit: u32,
-    /// How to deal with it when the max number of instances are deployed and
-    /// a player wants to deploy a new instance
-    pub limit_enforce: LimitEnforceTyp,
-    /// What crates are required to build the deployable
-    pub crates: Vec<Crate>,
-    /// Can the damaged deployable be repaired, and if so, by which crate.
-    pub repair_crate: Option<Crate>,
-    /// Does this deployable provide logistics services
-    pub logistics: Option<DeployableLogistics>,
-    /// Is this unit an early warning radar
-    pub ewr: Option<DeployableEwr>,
-    /// Is this unit a jtac
-    pub jtac: Option<DeployableJtac>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Troop {
-    /// The name of the squad in the menu
-    pub name: String,
-    /// The name of the template used to spawn the group
-    pub template: String,
-    /// How the troops will persist
-    pub persist: PersistTyp,
-    /// Can the troops capture objectives?
-    pub can_capture: bool,
-    /// How many simultaneous instances of the group are allowed
-    pub limit: u32,
-    /// How to deal with it when the max number of instances are deployed and the user
-    /// wants to deploy an additional instance
-    pub limit_enforce: LimitEnforceTyp,
-    /// How much weight does the group add to the carrier unit
-    pub weight: u32,
-    /// Can laser designate and scout
-    pub jtac: Option<DeployableJtac>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CargoConfig {
-    /// How many troop slots does this vehicle have
-    pub troop_slots: u8,
-    /// How many crate slots does this vehicle have
-    pub crate_slots: u8,
-    /// How many total troops and crates can this vehicle carry.
-    /// e.g. if troop_slots is 1, crate_slots is 1, and total_slots is 1
-    /// then the vehicle can carry either a troop or a crate but not both.
-    pub total_slots: u16,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WarehouseConfig {
-    /// Logistics hub max supply stock as a multiple of the delivery amount
-    pub hub_max: u32,
-    /// Airbase max supply stock as a multiple of the delivery amount
-    pub airbase_max: u32,
-    /// Logistics tick in minutes. Supplies move automatically every tick
-    pub tick: u32,
-    /// How many logistics ticks does it take before supplies are delivered
-    /// from outside
-    pub ticks_per_delivery: u32,
-    /// The supply transfer crate
-    pub supply_transfer_crate: FxHashMap<Side, Crate>,
-    /// The percentage of supply that is transfered by a transfer crate
-    pub supply_transfer_size: u8,
-    /// The name of the warehouse that is the source of supply every
-    /// restart
-    pub supply_source: FxHashMap<Side, String>,
-}
-
-impl WarehouseConfig {
-    pub fn capacity(&self, hub: bool, qty: u32) -> u32 {
-        if hub {
-            qty * self.hub_max
-        } else {
-            qty * self.airbase_max
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Cfg {
-    /// ucids in this list are able to run admin commands
-    #[serde(default)]
-    pub admins: FxHashMap<Ucid, String>,
-    /// ucids in this list are banned
-    #[serde(default)]
-    pub banned: FxHashMap<Ucid, (Option<DateTime<Utc>>, String)>,
-    /// shutdown after the specified number of hours, don't shutdown
-    /// if None.
-    #[serde(default)]
-    pub shutdown: Option<u32>,
-    /// how often a base will repair if it has full logistics (Seconds)
-    pub repair_time: u32,
-    /// The base repair crate
-    pub repair_crate: FxHashMap<Side, Crate>,
-    /// If the warehouse system is to be used then this should be specified,
-    /// otherwise warehouses will be ignored and you should set them to unlimited
-    pub warehouse: Option<WarehouseConfig>,
-    /// how far must you fly from an objective to spawn deployables
-    /// without penalty (Meters)
-    pub logistics_exclusion: u32,
-    /// an objective will cull it's units if there are no enemy units
-    /// within this distance (Meters)
-    pub unit_cull_distance: u32,
-    /// an objective will cull it's units if there are no enemy ground units
-    /// within this distance (Meters)
-    pub ground_vehicle_cull_distance: u32,
-    /// how often to do more expensive checks such as unit culling and
-    /// updating unit positions (Seconds)
-    pub slow_timed_events_freq: u32,
-    /// how close various kinds of enemy units can be (with LOS) for an objective
-    /// to be considered threatened. Threatened objectives can't spawn deployables
-    /// within the exclusion zone. (Meters)
-    pub threatened_distance: FxHashMap<Vehicle, u32>,
-    /// how long before threatened is removed if no enemy can be seen
-    pub threatened_cooldown: u32,
-    /// how far can a crate be from the player and still be
-    /// loadable (Meters)
-    pub crate_load_distance: u32,
-    /// how far crates apart crates can be and still unpack (Meters)
-    pub crate_spread: u32,
-    /// how close must artillery be to participate in an artillery mission
-    /// (meters).
-    pub artillery_mission_range: u32,
-    /// how many times a user may switch sides in a given round,
-    /// or None for unlimited side switches
-    pub side_switches: Option<u8>,
-    /// How many crates a player may spawn at the same time
-    pub max_crates: Option<u32>,
-    /// the life types different vehicles use
-    pub life_types: FxHashMap<Vehicle, LifeType>,
-    /// the life reset configuration for each life type. A pair
-    /// of number of lives per reset, and reset time in seconds.
-    pub default_lives: FxHashMap<LifeType, (u8, u32)>,
-    /// vehicle cargo configuration
-    pub cargo: FxHashMap<Vehicle, CargoConfig>,
-    /// The name of the crate group for each side
-    pub crate_template: FxHashMap<Side, String>,
-    /// deployables configuration for each side
-    pub deployables: FxHashMap<Side, Vec<Deployable>>,
-    /// deployable troops configuration for each side
-    pub troops: FxHashMap<Side, Vec<Troop>>,
-    /// classification of ground units in the mission
-    pub unit_classification: FxHashMap<Vehicle, UnitTags>,
-    /// The jtac target priority list
-    pub jtac_priority: Vec<UnitTags>,
-}
-
-impl Cfg {
-    fn path(miz_state_path: &Path) -> PathBuf {
-        let mut path = PathBuf::from(miz_state_path);
-        let file_name = path
-            .file_name()
-            .map(|s| {
-                let mut s = s.to_string_lossy().into_owned();
-                s.push_str("_CFG");
-                s
-            })
-            .unwrap_or_else(|| "CFG".into());
-        path.set_file_name(file_name);
-        path
-    }
-
-    pub fn load(miz_state_path: &Path) -> Result<Self> {
-        let path = Self::path(miz_state_path);
-        let file = loop {
-            match File::open(&path) {
-                Ok(f) => break f,
-                Err(e) => match e.kind() {
-                    io::ErrorKind::NotFound => {
-                        let file = File::create(&path)
-                            .map_err(|e| anyhow!("could not create default config {}", e))?;
-                        serde_json::to_writer_pretty(file, &Cfg::default())
-                            .map_err(|e| anyhow!("could not write default config {}", e))?;
-                    }
-                    e => {
-                        return Err(anyhow!("error opening config file {:?}", e));
-                    }
-                },
-            }
-        };
-        let cfg: Self = serde_json::from_reader(file)
-            .map_err(|e| anyhow!("failed to decode cfg file {:?}, {:?}", path, e))?;
-        Ok(cfg)
-    }
-
-    pub fn save(&self, miz_state_path: &Path) -> Result<()> {
-        let mut path = Self::path(miz_state_path);
-        path.set_extension("bak");
-        let fd = File::options()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&path)
-            .with_context(|| format_compact!("opening {:?}", path))?;
-        serde_json::to_writer_pretty(fd, self).context("serializing cfg")?;
-        fs::rename(&path, Self::path(miz_state_path)).context("moving new file into place")?;
-        Ok(())
-    }
-}
 
 fn default_red_troops() -> Vec<Troop> {
     vec![
@@ -446,6 +28,7 @@ fn default_red_troops() -> Vec<Troop> {
             jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 0,
             weight: 800,
         },
         Troop {
@@ -456,6 +39,7 @@ fn default_red_troops() -> Vec<Troop> {
             jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 1,
             weight: 1000,
         },
         Troop {
@@ -466,6 +50,7 @@ fn default_red_troops() -> Vec<Troop> {
             jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 5,
             weight: 1200,
         },
         Troop {
@@ -476,6 +61,7 @@ fn default_red_troops() -> Vec<Troop> {
             jtac: None,
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 5,
             weight: 500,
         },
     ]
@@ -491,6 +77,7 @@ fn default_blue_troops() -> Vec<Troop> {
             jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 0,
             weight: 800,
         },
         Troop {
@@ -501,6 +88,7 @@ fn default_blue_troops() -> Vec<Troop> {
             jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 1,
             weight: 1000,
         },
         Troop {
@@ -511,6 +99,7 @@ fn default_blue_troops() -> Vec<Troop> {
             jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 5,
             weight: 1200,
         },
         Troop {
@@ -521,6 +110,7 @@ fn default_blue_troops() -> Vec<Troop> {
             jtac: Some(DeployableJtac { range: 8000 }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 5,
             weight: 500,
         },
     ]
@@ -534,6 +124,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             persist: PersistTyp::Forever,
             limit: 4,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 25,
             crates: vec![
                 Crate {
                     name: "Kub Launcher".into(),
@@ -570,6 +161,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             persist: PersistTyp::Forever,
             limit: 2,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 50,
             crates: vec![
                 Crate {
                     name: "SA11 Launcher".into(),
@@ -614,6 +206,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             persist: PersistTyp::Forever,
             limit: 2,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 50,
             crates: vec![Crate {
                 name: "SA15 Tor".into(),
                 weight: 2000,
@@ -633,6 +226,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             persist: PersistTyp::Forever,
             limit: 4,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 15,
             crates: vec![Crate {
                 name: "SA8 Osa".into(),
                 weight: 2000,
@@ -652,6 +246,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             persist: PersistTyp::Forever,
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
+            cost: 5,
             crates: vec![Crate {
                 name: "ZU23 Emplacement".into(),
                 weight: 1000,
@@ -670,6 +265,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "DEPSHILKA".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Shilka Crate".into(),
@@ -689,6 +285,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "DEPTUNGUSKA".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 15,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Tunguska Crate".into(),
@@ -708,6 +305,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "DEPSA13".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 15,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "SA13 Strela Crate".into(),
@@ -727,6 +325,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "DEPMSTA".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 15,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "MSTA Crate".into(),
@@ -746,6 +345,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "DEPT72".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 50,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "T72 Crate".into(),
@@ -765,6 +365,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "DEPBMP3".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 25,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "BMP3 Crate".into(),
@@ -784,6 +385,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "DEPRAMMO".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 5,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Ammo Truck Crate".into(),
@@ -803,6 +405,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "DEP1L13".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 5,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "1L13 Crate".into(),
@@ -822,6 +425,7 @@ fn default_red_deployables() -> Vec<Deployable> {
             template: "RDEPFARP".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 50,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "FARP Crate".into(),
@@ -856,6 +460,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPROLAND".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 35,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Roland".into(),
@@ -875,6 +480,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPHAWK".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 35,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![
                 Crate {
@@ -927,6 +533,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPAVENGER".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 15,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Avenger Crate".into(),
@@ -946,6 +553,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPLINEBACKER".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 25,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Linebacker Crate".into(),
@@ -965,6 +573,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPGEPARD".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 25,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Flakpanzergepard Crate".into(),
@@ -984,6 +593,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPVULKAN".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 15,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Vulkan Crate".into(),
@@ -1003,6 +613,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPFIRTINA".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 15,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Firtina Crate".into(),
@@ -1022,6 +633,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPBRADLEY".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 25,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Bradley Crate".into(),
@@ -1041,6 +653,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPLEOPARD".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 50,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Leopard Crate".into(),
@@ -1060,6 +673,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPBAMMO".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 5,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "Ammo Truck Crate".into(),
@@ -1079,6 +693,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "DEPFPS117".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 5,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "FPS-117 Crate".into(),
@@ -1098,6 +713,7 @@ fn default_blue_deployables() -> Vec<Deployable> {
             template: "BDEPFARP".into(),
             persist: PersistTyp::Forever,
             limit: 4,
+            cost: 50,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             crates: vec![Crate {
                 name: "FARP Crate".into(),
@@ -1508,6 +1124,17 @@ fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
     ])
 }
 
+fn default_actions() -> FxHashMap<Action, ActionCost> {
+    FxHashMap::from_iter([
+        (Action::Awacs, ActionCost { cost: 100, limit: None }),
+        (Action::AwacsWaypoint, ActionCost { cost: 5, limit: None }),
+        (Action::Bomber, ActionCost { cost: 100, limit: None }),
+        (Action::Tanker, ActionCost { cost: 50, limit: None }),
+        (Action::TankerWaypoint, ActionCost { cost: 5, limit: None }),
+        (Action::Paratrooper, ActionCost { cost: 50, limit: None })
+    ])
+}
+
 impl Default for Cfg {
     fn default() -> Self {
         Self {
@@ -1516,6 +1143,23 @@ impl Default for Cfg {
             repair_time: 1800,
             repair_crate: default_repair_crate(),
             shutdown: Some(10),
+            rules: Rules {
+                actions: Rule::AlwaysAllowed,
+                cargo: Rule::AlwaysAllowed,
+                troops: Rule::AlwaysAllowed,
+                jtac: Rule::AlwaysAllowed,
+                ca: Rule::AlwaysAllowed
+            },
+            points: Some(PointsCfg {
+                new_player_join: 25,
+                air_kill: 25,
+                ground_kill: 2,
+                lr_sam_bonus: 5,
+                logistics_repair: 25,
+                logistics_transfer: 15,
+                capture: 15,
+                ewr_deploy: 5,
+            }),
             warehouse: Some(WarehouseConfig {
                 hub_max: 25,
                 airbase_max: 5,
@@ -1547,6 +1191,7 @@ impl Default for Cfg {
                 (LifeType::Recon, (6, 21600)),
             ]),
             life_types: default_life_types(),
+            actions: default_actions(),
             cargo: default_cargo(),
             crate_template: FxHashMap::from_iter([
                 (Side::Red, "RCRATE".into()),

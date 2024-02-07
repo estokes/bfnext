@@ -884,6 +884,7 @@ fn run_slow_timed_events(
     ctx: &mut Context,
     perf: &mut Perf,
     net: &Net,
+    path: &PathBuf,
     ts: DateTime<Utc>,
 ) -> Result<()> {
     let freq = Duration::seconds(ctx.db.ephemeral.cfg.slow_timed_events_freq as i64);
@@ -981,6 +982,11 @@ fn run_slow_timed_events(
             error!("could not update jtac contacts {e}")
         }
         record_perf(&mut perf.update_jtac_contacts, ts);
+        let now = Utc::now();
+        if let Some(snap) = ctx.db.maybe_snapshot() {
+            ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
+        }
+        record_perf(&mut perf.snapshot, now);
         record_perf(&mut perf.slow_timed, start_ts);
     }
     Ok(())
@@ -992,7 +998,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
-    if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, ts) {
+    if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, path, ts) {
         error!("error running slow timed events {:?}", e)
     }
     if !ctx.menu_init_queue.is_empty() {
@@ -1037,11 +1043,6 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let now = Utc::now();
     ctx.db.ephemeral.msgs().process(&net, &act);
     record_perf(&mut perf.process_messages, now);
-    let now = Utc::now();
-    if let Some(snap) = ctx.db.maybe_snapshot() {
-        ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
-    }
-    record_perf(&mut perf.snapshot, now);
     if let Err(e) = run_logistics_events(lua, ctx, perf, ts) {
         error!("error running logistics events {:?}", e)
     }

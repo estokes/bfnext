@@ -73,6 +73,8 @@ pub struct Player {
     pub crates: Set<GroupId>,
     #[serde(default)]
     pub airborne: Option<LifeType>,
+    #[serde(default)]
+    pub points: u32,
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
     #[serde(skip)]
@@ -359,6 +361,12 @@ impl Db {
                         lives: Map::new(),
                         crates: Set::new(),
                         airborne: None,
+                        points: self
+                            .ephemeral
+                            .cfg
+                            .points
+                            .map(|p| p.new_player_join)
+                            .unwrap_or(0),
                         current_slot: None,
                         changing_slots: None,
                         jtac_or_spectators: true,
@@ -446,13 +454,17 @@ impl Db {
         self.ephemeral
             .slot_by_object_id
             .insert(id.clone(), slot.clone());
-        self.ephemeral.object_id_by_slot.insert(slot.clone(), id.clone());
+        self.ephemeral
+            .object_id_by_slot
+            .insert(slot.clone(), id.clone());
         self.ephemeral.dirty();
         match self.ephemeral.players_by_slot.get(&slot).map(|u| u.clone()) {
             None => {
-                unit.clone().destroy().context("destroying slot unit with no player")?;
+                unit.clone()
+                    .destroy()
+                    .context("destroying slot unit with no player")?;
                 self.unit_dead(lua, &id, Utc::now())?
-            }             
+            }
             Some(ucid) => {
                 let obj = objective_mut!(self, oid)?;
                 let sifo = maybe!(obj.slots, slot, "slot")?;
@@ -463,23 +475,27 @@ impl Db {
                         .get_warehouse()
                         .context("getting warehouse")?;
                     if sifo.ground_start {
-                        wh.remove_item(sifo.typ.0.clone(), 1)
-                            .with_context(|| format_compact!("removing {} from warehouse", sifo.typ.0))?;
+                        wh.remove_item(sifo.typ.0.clone(), 1).with_context(|| {
+                            format_compact!("removing {} from warehouse", sifo.typ.0)
+                        })?;
                         for wep in unit.get_ammo()? {
                             let wep = wep?;
                             let count = wep.count()?;
                             let typ = wep.type_name()?;
                             let whcnt = wh.get_item_count(typ.clone())?;
-                            debug!("removing {count} {typ} from the warehouse which contains {whcnt}");
+                            debug!(
+                                "removing {count} {typ} from the warehouse which contains {whcnt}"
+                            );
                             wh.remove_item(typ.clone(), count)?;
                             if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ) {
                                 inv.stored = whcnt - count;
                             }
                         }
                     }
-                    maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored = wh
-                        .get_item_count(sifo.typ.0.clone())
-                        .with_context(|| format_compact!("getting warehouse count for {}", sifo.typ.0))?;
+                    maybe_mut!(obj.warehouse.equipment, sifo.typ.0, "equip")?.stored =
+                        wh.get_item_count(sifo.typ.0.clone()).with_context(|| {
+                            format_compact!("getting warehouse count for {}", sifo.typ.0)
+                        })?;
                     Ok(())
                 };
                 if let Err(e) = adjust_warehouse() {

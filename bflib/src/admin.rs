@@ -1,5 +1,11 @@
 use crate::{
-    bg::Task, db::{group::DeployKind, objective::ObjectiveId, Set}, msgq::MsgTyp, return_lives, spawnctx::{SpawnCtx, SpawnLoc}, Context
+    bg::Task,
+    cfg::Cfg,
+    db::{group::DeployKind, objective::ObjectiveId, Set},
+    msgq::MsgTyp,
+    return_lives,
+    spawnctx::{SpawnCtx, SpawnLoc},
+    Context,
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use chrono::{prelude::*, Duration};
@@ -55,7 +61,9 @@ pub enum AdminCommand {
     },
     LogisticsTickNow,
     LogisticsDeliverNow,
-    Repair { airbase: String },
+    Repair {
+        airbase: String,
+    },
     Tim {
         key: String,
         size: usize,
@@ -90,6 +98,12 @@ pub enum AdminCommand {
     ResetLives {
         player: String,
     },
+    AddAdmin {
+        player: String,
+    },
+    RemoveAdmin {
+        player: String,
+    },
     Shutdown,
 }
 
@@ -113,6 +127,8 @@ impl AdminCommand {
             "search <regex>: search the player list by regular expression",
             "log-warehouse <objective|dcs> <airbase>: write the contents of the selected warehouse to the log file",
             "log-desc: write the getDesc of the plane you are currently in to the log file",
+            "add-admin <player>: make the specified player a server admin",
+            "remove-admin <player>: remove the specified player from the admin list",
             "shutdown: shutdown the server"
         ]
     }
@@ -221,6 +237,10 @@ impl FromStr for AdminCommand {
             Ok(Self::ResetLives { player: s.into() })
         } else if let Some(_) = s.strip_prefix("shutdown") {
             Ok(Self::Shutdown)
+        } else if let Some(s) = s.strip_prefix("add-admin ") {
+            Ok(Self::AddAdmin { player: s.into() })
+        } else if let Some(s) = s.strip_prefix("remove-admin ") {
+            Ok(Self::RemoveAdmin { player: s.into() })
         } else {
             bail!("unknown command {s}")
         }
@@ -433,10 +453,13 @@ fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
 fn get_airbase(ctx: &Context, name: &str) -> Result<ObjectiveId> {
     for (oid, obj) in ctx.db.objectives() {
         if obj.name.as_str() == name {
-            return Ok(*oid)
+            return Ok(*oid);
         }
     }
-    let re = RegexBuilder::new(name).case_insensitive(true).build().context("building regex")?;
+    let re = RegexBuilder::new(name)
+        .case_insensitive(true)
+        .build()
+        .context("building regex")?;
     let mut candidates: SmallVec<[(ObjectiveId, String); 32]> = smallvec![];
     for (oid, obj) in ctx.db.objectives() {
         if re.is_match(obj.name.as_str()) {
@@ -457,6 +480,16 @@ fn admin_sideswitch(ctx: &mut Context, side: Side, name: String) -> Result<()> {
     ctx.db.force_sideswitch_player(&ucid, side)
 }
 
+fn with_mut_cfg<F: FnOnce(&mut Cfg) -> Result<()>>(ctx: &mut Context, f: F) -> Result<()> {
+    {
+        let cfg = Arc::make_mut(&mut ctx.db.ephemeral.cfg);
+        f(cfg)?
+    }
+    let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
+    ctx.do_bg_task(Task::SaveConfig(ctx.miz_state_path.clone(), cfg));
+    Ok(())
+}
+
 fn admin_ban(
     ctx: &mut Context,
     lua: MizLua,
@@ -468,13 +501,11 @@ fn admin_ban(
         .db
         .player(&ucid)
         .map(|p| p.name.clone())
-        .unwrap_or_else(|| name.clone())
-        .clone();
-    Arc::make_mut(&mut ctx.db.ephemeral.cfg)
-        .banned
-        .insert(ucid.clone(), (until, name));
-    let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
-    ctx.do_bg_task(Task::SaveConfig(ctx.miz_state_path.clone(), cfg));
+        .unwrap_or_else(|| name.clone());
+    with_mut_cfg(ctx, |cfg| {
+        cfg.banned.insert(ucid.clone(), (until, name));
+        Ok(())
+    })?;
     if let Some(id) = ctx.id_by_ucid.get(&ucid) {
         let msg = match until {
             None => format_compact!("you are banned forever"),
@@ -497,16 +528,10 @@ fn admin_kick(ctx: &mut Context, lua: MizLua, name: &String) -> Result<()> {
 // FreeDanielUnjustifiedBan
 fn admin_unban(ctx: &mut Context, name: &String) -> Result<()> {
     let ucid = get_player_ucid(ctx, name.as_str())?;
-    {
-        let cfg = Arc::make_mut(&mut ctx.db.ephemeral.cfg);
-        match cfg.banned.remove(&ucid) {
-            None => bail!("was not banned"),
-            Some(_) => (),
-        }
-    }
-    let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
-    ctx.do_bg_task(Task::SaveConfig(ctx.miz_state_path.clone(), cfg));
-    Ok(())
+    with_mut_cfg(ctx, |cfg| match cfg.banned.remove(&ucid) {
+        None => bail!("was not banned"),
+        Some(_) => Ok(()),
+    })
 }
 
 fn admin_list_banned(ctx: &Context) -> SmallVec<[(Ucid, String, Option<DateTime<Utc>>); 16]> {
@@ -598,6 +623,26 @@ pub(super) fn admin_shutdown(ctx: &mut Context, lua: MizLua) -> Result<()> {
     Ok(())
 }
 
+fn add_admin(ctx: &mut Context, player: &String) -> Result<()> {
+    let ucid = get_player_ucid(ctx, player)?;
+    let name = ctx
+        .db
+        .player(&ucid)
+        .ok_or_else(|| anyhow!("missing info for admin {ucid}"))?.name.clone();
+    with_mut_cfg(ctx, move |cfg| {
+        cfg.admins.insert(ucid, name);
+        Ok(())
+    })
+}
+
+fn remove_admin(ctx: &mut Context, player: &String) -> Result<()> {
+    let ucid = get_player_ucid(ctx, player)?;
+    with_mut_cfg(ctx, |cfg| {
+        cfg.admins.remove(&ucid);
+        Ok(())
+    })
+}
+
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     use std::fmt::Write;
     let mut cmds = mem::take(&mut ctx.admin_commands);
@@ -613,15 +658,18 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     Ok(oid) => oid,
                     Err(e) => {
                         reply!("{e:?}");
-                        continue
+                        continue;
                     }
                 }
-            }
+            };
         }
         match cmd {
             AdminCommand::Help => (),
             AdminCommand::ReduceInventory { airbase, amount } => {
-                match ctx.db.admin_reduce_inventory(lua, airbase!(&airbase), amount) {
+                match ctx
+                    .db
+                    .admin_reduce_inventory(lua, airbase!(&airbase), amount)
+                {
                     Err(e) => reply!("reduce inventory failed: {:?}", e),
                     Ok(()) => reply!("inventory reduced"),
                 }
@@ -671,7 +719,7 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
             AdminCommand::Repair { airbase } => {
                 match ctx.db.repair_objective(airbase!(&airbase), Utc::now()) {
                     Ok(()) => reply!("repaired {airbase}"),
-                    Err(e) => reply!("failed to repair {e:?}")
+                    Err(e) => reply!("failed to repair {e:?}"),
                 }
             }
             AdminCommand::Tim { key, size } => {
@@ -754,6 +802,14 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
             AdminCommand::Shutdown => match admin_shutdown(ctx, lua) {
                 Ok(()) => reply!("shutting down"),
                 Err(e) => reply!("failed to shutdown {:?}", e),
+            },
+            AdminCommand::AddAdmin { player } => match add_admin(ctx, &player) {
+                Ok(()) => reply!("{player} is now an admin"),
+                Err(e) => reply!("failed to make {player} an admin {e:?}"),
+            },
+            AdminCommand::RemoveAdmin { player } => match remove_admin(ctx, &player) {
+                Ok(()) => reply!("{player} is no longer an admin"),
+                Err(e) => reply!("failed to remove {player} from the admin list {e:?}"),
             },
         }
     }

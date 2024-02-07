@@ -59,7 +59,7 @@ use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
 use perf::Perf;
-use shots::Shots;
+use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
 use std::{mem, path::PathBuf, sync::Arc};
@@ -126,7 +126,7 @@ struct Context {
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
-    shots_out: Shots,
+    shots_out: ShotDb,
     menu_init_queue: SmallVec<[SlotId; 4]>,
     last_slow_timed_events: DateTime<Utc>,
     logistics_stage: LogiStage,

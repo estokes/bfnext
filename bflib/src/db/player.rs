@@ -15,7 +15,7 @@ for more details.
 */
 
 use super::{
-    group::GroupId,
+    group::{DeployKind, GroupId},
     objective::{ObjectiveId, ObjectiveKind},
     Db, Map, Set,
 };
@@ -112,6 +112,32 @@ impl Db {
                 .and_then(|(_, inst)| inst.as_ref())
                 .map(|inst| (ucid, player, inst))
         })
+    }
+
+    pub fn player_in_unit(&self, include_deployed: bool, id: &DcsOid<ClassUnit>) -> Option<Ucid> {
+        match self
+            .ephemeral
+            .get_slot_by_object_id(id)
+            .and_then(|s| self.ephemeral.players_by_slot.get(s))
+        {
+            Some(ucid) => Some(ucid.clone()),
+            None => {
+                if !include_deployed {
+                    None
+                } else {
+                    self.ephemeral
+                        .uid_by_object_id
+                        .get(id)
+                        .and_then(|uid| self.persisted.units.get(uid))
+                        .and_then(|unit| self.persisted.groups.get(&unit.group))
+                        .and_then(|group| match &group.origin {
+                            DeployKind::Deployed { player, spec: _ } => Some(player.clone()),
+                            DeployKind::Troop { player, spec: _ } => Some(player.clone()),
+                            DeployKind::Crate { .. } | DeployKind::Objective => None,
+                        })
+                }
+            }
+        }
     }
 
     pub fn takeoff(

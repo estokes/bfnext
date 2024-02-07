@@ -23,6 +23,7 @@ pub mod jtac;
 pub mod menu;
 pub mod msgq;
 pub mod perf;
+pub mod shots;
 pub mod spawnctx;
 
 extern crate nalgebra as na;
@@ -58,6 +59,7 @@ use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
 use perf::Perf;
+use shots::Shots;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
 use std::{mem, path::PathBuf, sync::Arc};
@@ -124,6 +126,7 @@ struct Context {
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
+    shots_out: Shots,
     menu_init_queue: SmallVec<[SlotId; 4]>,
     last_slow_timed_events: DateTime<Utc>,
     logistics_stage: LogiStage,

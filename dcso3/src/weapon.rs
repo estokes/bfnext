@@ -12,12 +12,12 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use super::{as_tbl, object::Object, unit::Unit};
-use crate::{simple_enum, wrapped_table, cvt_err};
-use anyhow::Result;
+use crate::{cvt_err, object::{DcsObject, DcsOid}, simple_enum, wrapped_table, LuaEnv, MizLua};
+use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
 use serde::Deserialize;
 use serde_derive::Serialize;
-use std::ops::Deref;
+use std::{marker::PhantomData, ops::Deref};
 
 // the documentation is unfortunately not sufficient for this to be a
 // proper bitflags
@@ -90,6 +90,18 @@ impl<'lua> Weapon<'lua> {
         Ok(Object::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 
+    pub fn is_exist(&self) -> Result<bool> {
+        Ok(self.t.call_method("isExist", ())?)
+    }
+
+    pub fn get_name(&self) -> Result<String> {
+        Ok(self.t.call_method("getName", ())?)
+    }
+
+    pub fn get_type(&self) -> Result<String> {
+        Ok(self.t.call_method("getTypeName", ())?)
+    }
+
     pub fn get_launcher(&self) -> Result<Unit<'lua>> {
         Ok(self.t.call_method("getLauncher", ())?)
     }
@@ -103,5 +115,53 @@ impl<'lua> Weapon<'lua> {
 
     pub fn get_desc(&self) -> Result<mlua::Table<'lua>> {
         Ok(self.t.call_method("getDesc", ())?)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassWeapon;
+
+impl<'lua> DcsObject<'lua> for Weapon<'lua> {
+    type Class = ClassWeapon;
+
+    fn get_instance(lua: MizLua<'lua>, id: &DcsOid<Self::Class>) -> Result<Self> {
+        let t = lua.inner().create_table()?;
+        t.set_metatable(Some(lua.inner().globals().raw_get(&**id.class)?));
+        t.raw_set("id_", id.id)?;
+        let t = Weapon {
+            t,
+            lua: lua.inner(),
+        };
+        if !t.is_exist()? {
+            bail!("{} is an invalid weapon", id.id)
+        }
+        Ok(t)
+    }
+
+    fn get_instance_dyn<T>(lua: MizLua<'lua>, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(lua, "Weapon")?;
+        let id = DcsOid {
+            id: id.id,
+            class: id.class.clone(),
+            t: PhantomData,
+        };
+        Self::get_instance(lua, &id)
+    }
+
+    fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
+        self.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid weapon", id.id)
+        }
+        Ok(self)
+    }
+
+    fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
+        id.check_implements(MizLua(self.lua), "Weapon")?;
+        self.t.raw_set("id_", id.id)?;
+        if !self.is_exist()? {
+            bail!("{} is an invalid weapon", id.id)
+        }
+        Ok(self)
     }
 }

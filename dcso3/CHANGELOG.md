@@ -1,3 +1,8 @@
+## 0.1.3
+
+- weapon dcsoid implementation
+- some common object methods on weapon
+
 ## 0.1.2
 
 - alter the return type of on_player_try_connect to allow returning a

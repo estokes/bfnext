@@ -186,7 +186,7 @@
       21600
     ]
   },
-  "actions": {},
+  "actions": [],
   "cargo": {
     "MB-339A": {
       "troop_slots": 0,

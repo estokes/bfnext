@@ -56,6 +56,7 @@ pub struct Shot {
 pub struct ShotDb {
     by_target: FxHashMap<DcsOid<ClassUnit>, SmallVec<[Shot; 8]>>,
     dead: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
+    recently_dead: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     last_gc: DateTime<Utc>,
 }
 
@@ -90,6 +91,9 @@ impl ShotDb {
         let target = ok!(some!(e.weapon.get_target()?).as_unit());
         let target_typ = target.get_type_name()?;
         let target = target.object_id()?;
+        if self.dead.contains_key(&target) || self.recently_dead.contains_key(&target) {
+            return Ok(());
+        }
         self.by_target
             .entry(target.clone())
             .or_default()
@@ -120,7 +124,7 @@ impl ShotDb {
         let shooter_ucid = some!(db.player_in_unit(true, &shooter));
         let target_oid = target.object_id()?;
         let target_typ = target.get_type_name()?;
-        if self.dead.contains_key(&target_oid) {
+        if self.dead.contains_key(&target_oid) || self.recently_dead.contains_key(&target_oid) {
             return Ok(());
         }
         let target = target_oid;
@@ -164,11 +168,15 @@ impl ShotDb {
                     kill.shots.push(shot);
                 }
             }
+            self.recently_dead.insert(target, time);
         }
-        if now - self.last_gc >= Duration::minutes(30) {
+        let five_min = Duration::minutes(5);
+        self.recently_dead.retain(|_, t| now - *t <= five_min);
+        let thirty_min = Duration::minutes(30);
+        if now - self.last_gc >= thirty_min {
             self.last_gc = now;
             self.by_target.retain(|_, shots| {
-                shots.retain(|shot| now - shot.time <= Duration::minutes(30));
+                shots.retain(|shot| now - shot.time <= thirty_min);
                 !shots.is_empty()
             });
         }

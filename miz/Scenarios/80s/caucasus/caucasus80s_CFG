@@ -2,7 +2,8 @@
   "admins": {
     "f279deb7a6b62c96a78eca3ddb2bd8d0": "REAPER 32 | EvilKipper",
     "69d60e1a0fe1c86bc3e81792458dba61": "<64>Cookie",
-    "c67cf1bb193dd406d0b29c2cb444b189": "REAPER 61 | dIce"
+    "c67cf1bb193dd406d0b29c2cb444b189": "REAPER 61 | dIce",
+    "4c27ed606a78717da9d96a49b1aa54db": "REAPER 43 | Fragal"
   },
   "banned": {},
   "rules": {
@@ -265,7 +266,7 @@
           "max_drop_speed": 50
         },
         "logistics": null,
-        "cost": 0,
+        "cost": 50,
         "ewr": {
           "range": 30000
         },
@@ -315,7 +316,7 @@
           "max_drop_speed": 50
         },
         "logistics": null,
-        "cost": 0,
+        "cost": 100,
         "ewr": {
           "range": 60000
         },
@@ -342,7 +343,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 100,
         "ewr": {
           "range": 20000
         },
@@ -369,7 +370,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -394,7 +395,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 5,
         "ewr": null,
         "jtac": null
       },
@@ -419,7 +420,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 15,
         "ewr": null,
         "jtac": null
       },
@@ -444,7 +445,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -469,7 +470,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -494,7 +495,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -519,7 +520,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 100,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -546,7 +547,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 50,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -573,7 +574,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 5,
         "ewr": null,
         "jtac": null
       },
@@ -634,7 +635,7 @@
           "fuel_template": "DEPRFARPFUEL",
           "barracks_template": "DEPRFARPTENT"
         },
-        "cost": 0,
+        "cost": 100,
         "ewr": null,
         "jtac": null
       }
@@ -661,7 +662,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 50,
         "ewr": {
           "range": 20000
         },
@@ -719,7 +720,7 @@
           "max_drop_speed": 50
         },
         "logistics": null,
-        "cost": 0,
+        "cost": 75,
         "ewr": {
           "range": 60000
         },
@@ -746,7 +747,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -771,7 +772,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -796,7 +797,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -821,7 +822,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 15,
         "ewr": null,
         "jtac": null
       },
@@ -846,7 +847,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -871,7 +872,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 50,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -898,7 +899,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 100,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -925,7 +926,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 0,
+        "cost": 5,
         "ewr": null,
         "jtac": null
       },
@@ -986,7 +987,7 @@
           "fuel_template": "DEPBFARPFUEL",
           "barracks_template": "DEPBFARPTENT"
         },
-        "cost": 0,
+        "cost": 100,
         "ewr": null,
         "jtac": null
       }
@@ -1015,7 +1016,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 1000,
-        "cost": 0,
+        "cost": 2,
         "jtac": {
           "range": 8000
         }
@@ -1028,7 +1029,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 1200,
-        "cost": 0,
+        "cost": 5,
         "jtac": {
           "range": 8000
         }
@@ -1041,7 +1042,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
-        "cost": 0,
+        "cost": 25,
         "jtac": null
       }
     ],
@@ -1067,7 +1068,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
-        "cost": 0,
+        "cost": 2,
         "jtac": {
           "range": 8000
         }
@@ -1080,7 +1081,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
-        "cost": 0,
+        "cost": 5,
         "jtac": {
           "range": 8000
         }
@@ -1093,7 +1094,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
-        "cost": 0,
+        "cost": 25,
         "jtac": {
           "range": 8000
         }

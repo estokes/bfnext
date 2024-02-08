@@ -687,7 +687,7 @@ impl Db {
                     .map(|s| s.target_typ.clone())
                     .and_then(|typ| self.ephemeral.cfg.unit_classification.get(&Vehicle(typ)))
                     .map(|tags| {
-                        if tags.intersects(UnitTag::LR | UnitTag::TrackRadar | UnitTag::SAM) {
+                        if tags.contains(UnitTag::LR | UnitTag::TrackRadar | UnitTag::SAM) {
                             cfg.ground_kill + cfg.lr_sam_bonus
                         } else {
                             cfg.ground_kill

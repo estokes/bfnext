@@ -98,6 +98,25 @@ impl Db {
         self.persisted.players.get(ucid)
     }
 
+    pub fn transfer_points(&mut self, source: &Ucid, target: &Ucid, amount: u32) -> Result<()> {
+        let sp = self.persisted.players.get_mut_cow(source).ok_or_else(|| anyhow!("source player not found"))?;
+        if sp.points < amount as i32 {
+            bail!("insufficient balance, you have {}, you requested {}", sp.points, amount)
+        }
+        sp.points -= amount as i32;
+        match self.persisted.players.get_mut_cow(target) {
+            Some(tp) => {
+                tp.points += amount as i32;
+                self.ephemeral.dirty();
+                Ok(())
+            }
+            None => {
+                self.persisted.players[source].points += amount as i32;
+                bail!("target player not found")
+            }
+        }
+    }
+
     pub fn player_reset_lives(&mut self, ucid: &Ucid) -> Result<()> {
         maybe_mut!(self.persisted.players, ucid, "player")?.lives = Map::new();
         self.ephemeral.dirty();
@@ -689,6 +708,18 @@ impl Db {
                     };
                     self.ephemeral.panel_to_player(&self.persisted, &ucid, msg)
                 }
+            }
+        }
+    }
+
+    pub fn adjust_points(&mut self, ucid: &Ucid, amount: i32) {
+        if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
+            player.points += amount;
+            let pp = player.points;
+            if amount != 0 {
+                let m = format_compact!("{}({}) points", pp, amount);
+                self.ephemeral.panel_to_player(&self.persisted, ucid, m);
+                self.ephemeral.dirty();
             }
         }
     }

@@ -21,7 +21,7 @@ use super::{
     Db,
 };
 use crate::{
-    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, PointsCfg, Troop, Vehicle},
+    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     db::group::DeployKind,
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -734,30 +734,6 @@ impl Db {
             }
             Ok(())
         }
-        fn award_points<F: FnOnce(&PointsCfg) -> u32>(db: &mut Db, ucid: &Ucid, f: F) {
-            if let Some(player) = db.persisted.players.get_mut_cow(ucid) {
-                if let Some(p) = db.ephemeral.cfg.points.as_ref().map(f) {
-                    player.points += p as i32;
-                    let pp = player.points;
-                    if p > 0 {
-                        let m = format_compact!("{pp}(+{p}) points");
-                        db.ephemeral.panel_to_player(&db.persisted, ucid, m);
-                        db.ephemeral.dirty();
-                    }
-                }
-            }
-        }
-        fn take_points(db: &mut Db, ucid: &Ucid, cost: u32) {
-            if let Some(player) = db.persisted.players.get_mut_cow(ucid) {
-                player.points -= cost as i32;
-                let pp = player.points;
-                if cost > 0 {
-                    let m = format_compact!("{}(-{}) points", pp, cost);
-                    db.ephemeral.panel_to_player(&db.persisted, ucid, m);
-                    db.ephemeral.dirty();
-                }
-            }
-        }
         let st = SlotStats::get(self, lua, slot)?;
         if st.in_air {
             bail!("you must land to unpack crates")
@@ -788,7 +764,9 @@ impl Db {
                 } else {
                     self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
-                    award_points(self, &st.ucid, |p| p.logistics_repair);
+                    if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_repair) {
+                        self.adjust_points(&st.ucid, amount as i32);
+                    }
                     let obj = objective!(self, oid)?;
                     return Ok(Unpakistan::RepairedBase(obj.name.clone(), obj.logi()));
                 }
@@ -811,7 +789,9 @@ impl Db {
                 {
                     self.transfer_supplies(lua, from, to)?;
                     self.delete_group(&gid)?;
-                    award_points(self, &st.ucid, |p| p.logistics_transfer);
+                    if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_transfer) {
+                        self.adjust_points(&st.ucid, amount as i32);
+                    }
                     return Ok(Unpakistan::TransferedSupplies(
                         objective!(self, from)?.name.clone(),
                         objective!(self, to)?.name.clone(),
@@ -848,7 +828,7 @@ impl Db {
                                 }
                                 let oid =
                                     self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
-                                take_points(self, &st.ucid, spec.cost);
+                                self.adjust_points(&st.ucid, - (spec.cost as i32));
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name, oid));
                             }
@@ -872,7 +852,7 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                take_points(self, &st.ucid, spec.cost);
+                                self.adjust_points(&st.ucid, - (spec.cost as i32));
                                 return Ok(Unpakistan::Unpacked(dep, gid));
                             }
                         },
@@ -1054,7 +1034,7 @@ impl Db {
             .cloned()
             .ok_or_else(|| anyhow!("can't find player in slot {slot:?}"))?;
         if self.ephemeral.cfg.points.is_some() {
-            if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+            if let Some(player) = self.persisted.players.get(&ucid) {
                 if troop_cfg.cost > 0 && player.points < troop_cfg.cost as i32 {
                     bail!(
                         "you have {} points, this troop costs {} points",
@@ -1062,12 +1042,7 @@ impl Db {
                         troop_cfg.cost
                     )
                 }
-                player.points -= troop_cfg.cost as i32;
-                if troop_cfg.cost > 0 {
-                    let m = format_compact!("{}(-{}) points", player.points, troop_cfg.cost);
-                    self.ephemeral.panel_to_player(&self.persisted, &ucid, m);
-                    self.ephemeral.dirty()
-                }
+                self.adjust_points(&ucid, - (troop_cfg.cost as i32));
             }
         }
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
@@ -1172,16 +1147,7 @@ impl Db {
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
-        if self.ephemeral.cfg.points.is_some() {
-            if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
-                player.points += troop_cfg.cost as i32;
-                if troop_cfg.cost > 0 {
-                    let m = format_compact!("{}(+{}) points", player.points, troop_cfg.cost);
-                    self.ephemeral.panel_to_player(&self.persisted, &ucid, m);
-                    self.ephemeral.dirty()
-                }
-            }
-        }
+        self.adjust_points(&ucid, troop_cfg.cost as i32);
         Ok(troop_cfg)
     }
 

@@ -60,6 +60,14 @@ macro_rules! atomic_id {
             #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
             pub struct $name(i64);
 
+            impl std::str::FromStr for $name {
+                type Err = anyhow::Error;
+
+                fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+                    Ok(Self(s.parse::<i64>()?))
+                }
+            }
+
             impl serde::Serialize for $name {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
                     serializer.serialize_i64(self.0)

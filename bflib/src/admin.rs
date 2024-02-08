@@ -403,7 +403,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
     Ok(())
 }
 
-fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
+pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
     if let Ok(id) = key.parse::<PlayerId>() {
         if let Some(ifo) = ctx.info_by_player_id.get(&id) {
             return Ok(ifo.ucid.clone());

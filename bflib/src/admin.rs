@@ -17,7 +17,7 @@ for more details.
 use crate::{
     bg::Task,
     cfg::Cfg,
-    db::{group::DeployKind, objective::ObjectiveId, Set},
+    db::{group::{DeployKind, GroupId}, objective::ObjectiveId, Set},
     msgq::MsgTyp,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -120,6 +120,16 @@ pub enum AdminCommand {
     RemoveAdmin {
         player: String,
     },
+    Balance {
+        player: String,
+    },
+    SetPoints {
+        amount: i32,
+        player: String,
+    },
+    Delete {
+        group: GroupId,
+    },
     Shutdown,
 }
 
@@ -145,6 +155,9 @@ impl AdminCommand {
             "log-desc: write the getDesc of the plane you are currently in to the log file",
             "add-admin <player>: make the specified player a server admin",
             "remove-admin <player>: remove the specified player from the admin list",
+            "balance <player>: show <player>'s point balance",
+            "set-points <n> <player>: set <player>'s point balance to <n>",
+            "delete <groupid>: delete deployed group, now with 100% less mess",
             "shutdown: shutdown the server"
         ]
     }
@@ -257,6 +270,18 @@ impl FromStr for AdminCommand {
             Ok(Self::AddAdmin { player: s.into() })
         } else if let Some(s) = s.strip_prefix("remove-admin ") {
             Ok(Self::RemoveAdmin { player: s.into() })
+        } else if let Some(s) = s.strip_prefix("balance ") {
+            Ok(Self::Balance { player: s.into() })
+        } else if let Some(s) = s.strip_prefix("set-points ") {
+            match s.split_once(" ") {
+                None => bail!("set-points: <amount> <player>"),
+                Some((amount, player)) => Ok(Self::SetPoints {
+                    amount: amount.parse::<i32>()?,
+                    player: player.into(),
+                }),
+            }
+        } else if let Some(s) = s.strip_prefix("delete ") {
+            Ok(Self::Delete { group: s.parse()? })
         } else {
             bail!("unknown command {s}")
         }
@@ -644,7 +669,9 @@ fn add_admin(ctx: &mut Context, player: &String) -> Result<()> {
     let name = ctx
         .db
         .player(&ucid)
-        .ok_or_else(|| anyhow!("missing info for admin {ucid}"))?.name.clone();
+        .ok_or_else(|| anyhow!("missing info for admin {ucid}"))?
+        .name
+        .clone();
     with_mut_cfg(ctx, move |cfg| {
         cfg.admins.insert(ucid, name);
         Ok(())
@@ -657,6 +684,29 @@ fn remove_admin(ctx: &mut Context, player: &String) -> Result<()> {
         cfg.admins.remove(&ucid);
         Ok(())
     })
+}
+
+fn balance(ctx: &Context, player: &String) -> Result<i32> {
+    let ucid = get_player_ucid(ctx, player)?;
+    let player = ctx.db.player(&ucid).ok_or_else(|| anyhow!("no such player {player}"))?;
+    Ok(player.points)
+}
+
+fn set_points(ctx: &mut Context, player: &String, amount: i32) -> Result<()> {
+    let ucid = get_player_ucid(ctx, player)?;
+    let player = ctx.db.player_mut(&ucid).ok_or_else(|| anyhow!("no such player {player}"))?;
+    player.points = amount;
+    ctx.db.ephemeral.dirty();
+    Ok(())
+}
+
+fn delete(ctx: &mut Context, id: &GroupId) -> Result<()> {
+    match &ctx.db.group(id)?.origin {
+        DeployKind::Objective => bail!("you can't delete objective groups"),
+        DeployKind::Crate { .. } | DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
+            ctx.db.delete_group(id)
+        }
+    }
 }
 
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
@@ -827,6 +877,18 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 Ok(()) => reply!("{player} is no longer an admin"),
                 Err(e) => reply!("failed to remove {player} from the admin list {e:?}"),
             },
+            AdminCommand::Balance { player } => match balance(ctx, &player) {
+                Ok(b) => reply!("{player}'s balance is {b}"),
+                Err(e) => reply!("could not get {player}'s balance {e:?}")
+            }
+            AdminCommand::SetPoints { amount, player } => match set_points(ctx, &player, amount) {
+                Ok(()) => reply!("{player}'s points set to {amount}"),
+                Err(e) => reply!("could not set {player}'s points {e:?}")
+            }
+            AdminCommand::Delete { group } => match delete(ctx, &group) {
+                Ok(()) => reply!("{group} deleted"),
+                Err(e) => reply!("could not delete group {e:?}")
+            }
         }
     }
     ctx.admin_commands = cmds;

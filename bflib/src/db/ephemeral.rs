@@ -666,7 +666,7 @@ impl Ephemeral {
         Ok(())
     }
 
-    pub(super) fn dirty(&mut self) {
+    pub fn dirty(&mut self) {
         self.dirty = true
     }
 

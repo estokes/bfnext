@@ -97,6 +97,10 @@ impl Db {
     pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
         self.persisted.players.get(ucid)
     }
+    
+    pub fn player_mut(&mut self, ucid: &Ucid) -> Option<&mut Player> {
+        self.persisted.players.get_mut_cow(ucid)
+    }
 
     pub fn transfer_points(&mut self, source: &Ucid, target: &Ucid, amount: u32) -> Result<()> {
         let sp = self.persisted.players.get_mut_cow(source).ok_or_else(|| anyhow!("source player not found"))?;

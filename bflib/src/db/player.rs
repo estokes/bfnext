@@ -672,37 +672,22 @@ impl Db {
                     })
                     .unwrap_or(cfg.ground_kill)
             };
-            let points_per_shooter = (total_points as f32 / hit_by.len() as f32).ceil() as i32;
+            let pps = (total_points as f32 / hit_by.len() as f32).ceil() as i32;
             for ucid in hit_by {
                 if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
-                    player.points += points_per_shooter;
-                    let total = player.points;
-                    let ifo = player.current_slot.as_ref().and_then(|(s, _)| {
-                        self.persisted.objectives_by_slot.get(s).and_then(|i| {
-                            self.persisted
-                                .objectives
-                                .get(i)
-                                .and_then(|o| o.slots.get(s))
-                        })
-                    });
-                    if let Some(ifo) = ifo {
-                        let miz_id = ifo.miz_gid;
-                        let msg = match dead
-                            .victim_ucid
-                            .as_ref()
-                            .and_then(|i| self.persisted.players.get(i))
-                        {
-                            Some(victim) => {
-                                format_compact!(
-                                    "{}(+{points_per_shooter}) points for killing {}",
-                                    total,
-                                    victim.name
-                                )
-                            }
-                            None => format_compact!("{}(+{points_per_shooter}) points", total),
-                        };
-                        self.ephemeral.msgs().panel_to_group(5, false, miz_id, msg);
-                    }
+                    player.points += pps;
+                    let tp = player.points;
+                    let msg = match dead
+                        .victim_ucid
+                        .as_ref()
+                        .and_then(|i| self.persisted.players.get(i))
+                    {
+                        None => format_compact!("{tp}(+{pps}) points"),
+                        Some(victim) => {
+                            format_compact!("{tp}(+{pps}) points, killed {}", victim.name)
+                        }
+                    };
+                    self.ephemeral.panel_to_player(&self.persisted, &ucid, msg)
                 }
             }
         }

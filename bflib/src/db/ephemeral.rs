@@ -568,7 +568,10 @@ impl Ephemeral {
             miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
                 .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
             if !points && dep.cost > 0 {
-                bail!("the points system is disabled, but {:?} costs points", dep.path)
+                bail!(
+                    "the points system is disabled, but {:?} costs points",
+                    dep.path
+                )
             }
             let name = match dep.path.last() {
                 None => bail!("deployable with empty path {:?}", dep),
@@ -769,6 +772,26 @@ impl Ephemeral {
             .and_then(|slot| self.players_by_slot.get(slot))
     }
 
+    pub fn panel_to_player<S: Into<String>>(
+        &mut self,
+        persisted: &Persisted,
+        ucid: &Ucid,
+        msg: S,
+    ) {
+        if let Some(player) = persisted.players.get(ucid) {
+            let ifo = player.current_slot.as_ref().and_then(|(s, _)| {
+                persisted
+                    .objectives_by_slot
+                    .get(s)
+                    .and_then(|i| persisted.objectives.get(i).and_then(|o| o.slots.get(s)))
+            });
+            if let Some(ifo) = ifo {
+                let miz_id = ifo.miz_gid;
+                self.msgs().panel_to_group(5, false, miz_id, msg);
+            }
+        }
+    }
+
     pub(super) fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, cfg: Cfg) -> Result<()> {
         let check_unit_classification = || -> Result<()> {
             let mut not_classified = FxHashSet::default();
@@ -826,7 +849,10 @@ impl Ephemeral {
                 miz.get_group_by_name(mizidx, GroupKind::Any, *side, &troop.template)?
                     .ok_or_else(|| anyhow!("missing troop template {:?} {:?}", side, troop.name))?;
                 if !points && troop.cost > 0 {
-                    bail!("the points system is disabled but {} troops cost points", troop.name)
+                    bail!(
+                        "the points system is disabled but {} troops cost points",
+                        troop.name
+                    )
                 }
                 match idx.squads_by_name.entry(troop.name.clone()) {
                     Entry::Occupied(_) => bail!("duplicate squad name {}", troop.name),

@@ -21,7 +21,7 @@ use super::{
     Db,
 };
 use crate::{
-    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
+    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, PointsCfg, Troop, Vehicle},
     db::group::DeployKind,
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -708,7 +708,17 @@ impl Db {
             side: Side,
             spec: &Deployable,
             dep: &String,
+            ucid: &Ucid,
         ) -> Result<()> {
+            if let Some(player) = db.persisted.players.get(ucid) {
+                if spec.cost as i32 > player.points {
+                    bail!(
+                        "you have {} points, this deployable costs {} points to unpack",
+                        player.points,
+                        spec.cost
+                    )
+                }
+            }
             let (n, oldest) = db.number_deployed(side, &**dep)?;
             if n >= spec.limit as usize {
                 match spec.limit_enforce {
@@ -723,6 +733,30 @@ impl Db {
                 }
             }
             Ok(())
+        }
+        fn award_points<F: FnOnce(&PointsCfg) -> u32>(db: &mut Db, ucid: &Ucid, f: F) {
+            if let Some(player) = db.persisted.players.get_mut_cow(ucid) {
+                if let Some(p) = db.ephemeral.cfg.points.as_ref().map(f) {
+                    player.points += p as i32;
+                    let pp = player.points;
+                    if p > 0 {
+                        let m = format_compact!("{pp}(+{p}) points");
+                        db.ephemeral.panel_to_player(&db.persisted, ucid, m);
+                        db.ephemeral.dirty();
+                    }
+                }
+            }
+        }
+        fn take_points(db: &mut Db, ucid: &Ucid, cost: u32) {
+            if let Some(player) = db.persisted.players.get_mut_cow(ucid) {
+                player.points -= cost as i32;
+                let pp = player.points;
+                if cost > 0 {
+                    let m = format_compact!("{}(-{}) points", pp, cost);
+                    db.ephemeral.panel_to_player(&db.persisted, ucid, m);
+                    db.ephemeral.dirty();
+                }
+            }
         }
         let st = SlotStats::get(self, lua, slot)?;
         if st.in_air {
@@ -754,6 +788,7 @@ impl Db {
                 } else {
                     self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
+                    award_points(self, &st.ucid, |p| p.logistics_repair);
                     let obj = objective!(self, oid)?;
                     return Ok(Unpakistan::RepairedBase(obj.name.clone(), obj.logi()));
                 }
@@ -776,6 +811,7 @@ impl Db {
                 {
                     self.transfer_supplies(lua, from, to)?;
                     self.delete_group(&gid)?;
+                    award_points(self, &st.ucid, |p| p.logistics_transfer);
                     return Ok(Unpakistan::TransferedSupplies(
                         objective!(self, from)?.name.clone(),
                         objective!(self, to)?.name.clone(),
@@ -803,7 +839,7 @@ impl Db {
                     }
                 } else {
                     let spctx = SpawnCtx::new(lua)?;
-                    match enforce_deploy_limits(self, st.side, &spec, &dep) {
+                    match enforce_deploy_limits(self, st.side, &spec, &dep, &st.ucid) {
                         Err(e) => reasons.push(format_compact!("{e}")),
                         Ok(()) => match &spec.logistics {
                             Some(parts) => {
@@ -812,6 +848,7 @@ impl Db {
                                 }
                                 let oid =
                                     self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
+                                take_points(self, &st.ucid, spec.cost);
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name, oid));
                             }
@@ -820,7 +857,7 @@ impl Db {
                                 let spawnloc =
                                     compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
                                 let origin = DeployKind::Deployed {
-                                    player: st.ucid,
+                                    player: st.ucid.clone(),
                                     spec: spec.clone(),
                                 };
                                 let gid = self.add_and_queue_group(
@@ -835,6 +872,7 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
+                                take_points(self, &st.ucid, spec.cost);
                                 return Ok(Unpakistan::Unpacked(dep, gid));
                             }
                         },

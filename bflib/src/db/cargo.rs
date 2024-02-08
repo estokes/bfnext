@@ -201,9 +201,6 @@ impl Db {
         name: &str,
     ) -> Result<SlotStats> {
         debug!("db spawning crate");
-        if self.ephemeral.slot_instance_unit(lua, slot)?.in_air()? {
-            bail!("you must land to spawn a crate")
-        }
         let st = SlotStats::get(self, lua, slot)?;
         if st.in_air {
             bail!("you must land to spawn crates")
@@ -225,13 +222,30 @@ impl Db {
             }
         });
         let (oid, _) = self.point_near_logistics(st.side, st.point)?;
-        let crate_cfg = self
+        let dep_idx = self
             .ephemeral
             .deployable_idx
             .get(&st.side)
-            .and_then(|idx| idx.crates_by_name.get(name))
+            .ok_or_else(|| anyhow!("{} doesn't have any deployables", st.side))?;
+        let crate_cfg = dep_idx
+            .crates_by_name
+            .get(name)
             .ok_or_else(|| anyhow!("no such crate {name}"))?
             .clone();
+        if let Some((dep, player)) = dep_idx
+            .deployables_by_crates
+            .get(&crate_cfg.name)
+            .and_then(|n| dep_idx.deployables_by_name.get(n))
+            .and_then(|d| self.persisted.players.get(&st.ucid).map(|p| (d, p)))
+        {
+            if player.points < dep.cost as i32 {
+                bail!(
+                    "you have {} points, and this deployable costs {} points",
+                    player.points,
+                    dep.cost
+                )
+            }
+        }
         let template = self
             .ephemeral
             .cfg

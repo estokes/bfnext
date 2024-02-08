@@ -676,6 +676,7 @@ impl Db {
             for ucid in hit_by {
                 if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
                     player.points += points_per_shooter;
+                    let total = player.points;
                     let ifo = player.current_slot.as_ref().and_then(|(s, _)| {
                         self.persisted.objectives_by_slot.get(s).and_then(|i| {
                             self.persisted
@@ -691,13 +692,14 @@ impl Db {
                             .as_ref()
                             .and_then(|i| self.persisted.players.get(i))
                         {
-                            Some(player) => {
+                            Some(victim) => {
                                 format_compact!(
-                                    "+{points_per_shooter} points for killing {}",
-                                    player.name
+                                    "{}(+{points_per_shooter}) points for killing {}",
+                                    total,
+                                    victim.name
                                 )
                             }
-                            None => format_compact!("+{points_per_shooter} points"),
+                            None => format_compact!("{}(+{points_per_shooter}) points", total),
                         };
                         self.ephemeral.msgs().panel_to_group(5, false, miz_id, msg);
                     }

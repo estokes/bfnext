@@ -64,7 +64,7 @@ pub enum Rule {
     Whitelist { allowed: FxHashMap<Ucid, String> },
     Blacklist { denied: FxHashMap<Ucid, String> },
     AlwaysAllowed,
-    NeverAllowed
+    NeverAllowed,
 }
 
 impl Default for Rule {
@@ -90,12 +90,12 @@ impl Rule {
             }
             Self::Whitelist { allowed } => {
                 allowed.remove(&ucid);
-            },
+            }
             Self::AlwaysAllowed => {
                 let denied = FxHashMap::from_iter([(ucid, name)]);
                 *self = Self::Blacklist { denied };
             }
-            Self::NeverAllowed => ()
+            Self::NeverAllowed => (),
         }
     }
 
@@ -391,24 +391,39 @@ pub struct PointsCfg {
     pub ewr_deploy: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Action {
-    Tanker,
-    Awacs,
-    Bomber,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ActionKind {
+    Tanker {
+        duration: u8,
+    },
+    Awacs {
+        duration: u8,
+    },
+    Bomber {
+        targets: u32,
+        power: u32,
+        // in meters radius around the target point
+        accuracy: u32,
+    },
+    CruiseMissileStrike {
+        missiles: u32,
+    },
     TankerWaypoint,
     AwacsWaypoint,
-    Paratrooper
+    Paratrooper {
+        troop: String,
+    },
+    PalletDrop {
+        deployable: String,
+    }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ActionCost {
-    /// how many points does the action cost.
-    cost: u32,
-    /// how many times can the action be triggered
-    /// per restart. None means unlimited.
-    limit: Option<u32>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Action {
+    pub kind: ActionKind,
+    pub cost: u32,
+    pub penalty: Option<u32>,
+    pub limit: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -490,9 +505,9 @@ pub struct Cfg {
     /// the life reset configuration for each life type. A pair
     /// of number of lives per reset, and reset time in seconds.
     pub default_lives: FxHashMap<LifeType, (u8, u32)>,
-    /// Actions
+    /// Available actions
     #[serde(default)]
-    pub actions: FxHashMap<Action, ActionCost>,
+    pub actions: Vec<Action>,
     /// vehicle cargo configuration
     #[serde(default)]
     pub cargo: FxHashMap<Vehicle, CargoConfig>,

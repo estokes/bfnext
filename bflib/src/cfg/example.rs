@@ -1124,15 +1124,57 @@ fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
     ])
 }
 
-fn default_actions() -> FxHashMap<Action, ActionCost> {
-    FxHashMap::from_iter([
-        (Action::Awacs, ActionCost { cost: 100, limit: None }),
-        (Action::AwacsWaypoint, ActionCost { cost: 5, limit: None }),
-        (Action::Bomber, ActionCost { cost: 100, limit: None }),
-        (Action::Tanker, ActionCost { cost: 50, limit: None }),
-        (Action::TankerWaypoint, ActionCost { cost: 5, limit: None }),
-        (Action::Paratrooper, ActionCost { cost: 50, limit: None })
-    ])
+fn default_actions() -> Vec<Action> {
+    vec![
+        Action {
+            cost: 100,
+            penalty: Some(100),
+            limit: None,
+            kind: ActionKind::Awacs { duration: 5 },
+        },
+        Action {
+            cost: 10,
+            penalty: None,
+            limit: None,
+            kind: ActionKind::AwacsWaypoint,
+        },
+        Action {
+            cost: 50,
+            penalty: Some(50),
+            limit: None,
+            kind: ActionKind::Tanker { duration: 5 },
+        },
+        Action {
+            cost: 10,
+            penalty: None,
+            limit: None,
+            kind: ActionKind::TankerWaypoint,
+        },
+        Action {
+            cost: 100,
+            penalty: Some(100),
+            limit: None,
+            kind: ActionKind::Bomber {
+                targets: 15,
+                power: 1000,
+                accuracy: 15,
+            },
+        },
+        Action {
+            cost: 150,
+            penalty: None,
+            limit: None,
+            kind: ActionKind::CruiseMissileStrike { missiles: 10 },
+        },
+        Action {
+            cost: 50,
+            penalty: Some(100),
+            limit: None,
+            kind: ActionKind::Paratrooper {
+                troop: "Standard".into(),
+            },
+        },
+    ]
 }
 
 impl Default for Cfg {
@@ -1148,7 +1190,7 @@ impl Default for Cfg {
                 cargo: Rule::AlwaysAllowed,
                 troops: Rule::AlwaysAllowed,
                 jtac: Rule::AlwaysAllowed,
-                ca: Rule::AlwaysAllowed
+                ca: Rule::AlwaysAllowed,
             },
             points: Some(PointsCfg {
                 new_player_join: 25,

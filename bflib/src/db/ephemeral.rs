@@ -547,6 +547,7 @@ impl Ephemeral {
         side: Side,
         repair_crate: Crate,
         whcfg: &Option<WarehouseConfig>,
+        points: bool,
         deployables: &[Deployable],
     ) -> Result<()> {
         let idx = Arc::make_mut(self.deployable_idx.entry(side).or_default());
@@ -566,6 +567,9 @@ impl Ephemeral {
         for dep in deployables.iter() {
             miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
                 .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
+            if !points && dep.cost > 0 {
+                bail!("the points system is disabled, but {:?} costs points", dep.path)
+            }
             let name = match dep.path.last() {
                 None => bail!("deployable with empty path {:?}", dep),
                 Some(name) => name,
@@ -802,6 +806,7 @@ impl Ephemeral {
                 .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
         }
         let mut global_pad_templates = FxHashSet::default();
+        let points = cfg.points.is_some();
         for (side, deployables) in cfg.deployables.iter() {
             let repair_crate = maybe!(cfg.repair_crate, side, "side repair crate")?.clone();
             self.index_deployables_for_side(
@@ -811,6 +816,7 @@ impl Ephemeral {
                 *side,
                 repair_crate,
                 &cfg.warehouse,
+                points,
                 deployables,
             )?
         }
@@ -819,6 +825,9 @@ impl Ephemeral {
             for troop in troops {
                 miz.get_group_by_name(mizidx, GroupKind::Any, *side, &troop.template)?
                     .ok_or_else(|| anyhow!("missing troop template {:?} {:?}", side, troop.name))?;
+                if !points && troop.cost > 0 {
+                    bail!("the points system is disabled but {} troops cost points", troop.name)
+                }
                 match idx.squads_by_name.entry(troop.name.clone()) {
                     Entry::Occupied(_) => bail!("duplicate squad name {}", troop.name),
                     Entry::Vacant(e) => e.insert(troop.clone()),

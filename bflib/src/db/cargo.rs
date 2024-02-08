@@ -1048,6 +1048,21 @@ impl Db {
             .and_then(|idx| idx.squads_by_name.get(name))
             .ok_or_else(|| anyhow!("no such squad {name}"))?
             .clone();
+        if self.ephemeral.cfg.points.is_some() {
+            if let Some(ucid) = self.ephemeral.player_in_slot(slot).cloned() {
+                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+                    if troop_cfg.cost > 0 && player.points < troop_cfg.cost as i32 {
+                        bail!("you have {} points, this troop costs {} points", player.points, troop_cfg.cost)
+                    }
+                    player.points -= troop_cfg.cost as i32;
+                    if troop_cfg.cost > 0 {
+                        let m = format_compact!("{}(-{}) points", player.points, troop_cfg.cost);
+                        self.ephemeral.panel_to_player(&self.persisted, &ucid, m);
+                        self.ephemeral.dirty()
+                    }
+                }
+            }
+        }
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
         if cargo_capacity.troop_slots as usize <= cargo.num_troops()
             || cargo_capacity.total_slots as usize <= cargo.num_total()

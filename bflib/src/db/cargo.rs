@@ -1166,6 +1166,18 @@ impl Db {
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
+        if self.ephemeral.cfg.points.is_some() {
+            if let Some(ucid) = self.ephemeral.player_in_slot(slot).cloned() {
+                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+                    player.points += troop_cfg.cost as i32;
+                    if troop_cfg.cost > 0 {
+                        let m = format_compact!("{}(+{}) points", player.points, troop_cfg.cost);
+                        self.ephemeral.panel_to_player(&self.persisted, &ucid, m);
+                        self.ephemeral.dirty()
+                    }
+                }
+            }
+        }
         Ok(troop_cfg)
     }
 

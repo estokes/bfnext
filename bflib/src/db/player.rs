@@ -638,7 +638,7 @@ impl Db {
         self.player_deslot(ucid, false);
     }
 
-    pub fn award_points(&mut self, cfg: PointsCfg, dead: Dead) {
+    pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
         let mut hit_by: SmallVec<[Ucid; 4]> = smallvec![];
         for shot in &dead.shots {
             if shot.hit {

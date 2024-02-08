@@ -834,6 +834,11 @@ impl Ephemeral {
                 };
             }
         }
+        for act in &cfg.actions {
+            if !points && (act.cost > 0 || act.penalty.unwrap_or(0) > 0) {
+                bail!("the points system is disabled but {act:?} costs points")
+            }
+        }
         self.cfg = Arc::new(cfg);
         Ok(())
     }

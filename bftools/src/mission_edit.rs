@@ -248,12 +248,18 @@ impl LoadedMiz {
 fn vehicle(
     country: &Table<'static>,
     name: &str,
-) -> Result<impl Iterator<Item = Result<Table<'static>>>> {
-    Ok(country
-        .raw_get::<_, Table>(name)?
-        .raw_get::<_, Table>("group")?
-        .pairs::<Value, Table>()
-        .map(|r| Ok(r?.1)))
+) -> Result<Box<dyn Iterator<Item = Result<Table<'static>>>>> {
+    if !country.contains_key(name)? {
+        Ok(Box::new([].into_iter()))
+    } else {
+        Ok(Box::new(
+            country
+                .raw_get::<_, Table>(name)?
+                .raw_get::<_, Table>("group")?
+                .pairs::<Value, Table>()
+                .map(|r| Ok(r?.1)),
+        ))
+    }
 }
 
 fn increment_key(map: &mut HashMap<String, isize>, key: &str) -> isize {
@@ -279,13 +285,24 @@ impl VehicleTemplates {
             .pairs::<Value, Table>()
         {
             let coa = coa?.1;
-            for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
+            for country in coa
+                .raw_get::<_, Table>("country")
+                .context("getting countries")?
+                .pairs::<Value, Table>()
+            {
                 let country = country?.1;
-                for group in vehicle(&country, "plane")?.chain(vehicle(&country, "helicopter")?) {
+                for group in vehicle(&country, "plane")
+                    .context("getting planes")?
+                    .chain(vehicle(&country, "helicopter").context("getting helicopters")?)
+                {
                     let group = group?;
-                    for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
+                    for unit in group
+                        .raw_get::<_, Table>("units")
+                        .context("getting units")?
+                        .pairs::<Value, Table>()
+                    {
                         let unit = unit?.1;
-                        let unit_type: String = unit.raw_get("type")?;
+                        let unit_type: String = unit.raw_get("type").context("getting units")?;
                         info!("adding payload template: {unit_type}");
                         if let Ok(w) = unit.raw_get("payload") {
                             payload.insert(unit_type.clone(), w);
@@ -319,13 +336,17 @@ impl VehicleTemplates {
             let coa = coa?.1;
             for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
                 let country = country?.1;
-                if !country.contains_key("plane")? {
-                    continue;
-                }
-                for group in vehicle(&country, "plane")?.chain(vehicle(&country, "helicopter")?) {
-                    let group = group?;
-                    for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
-                        let unit = unit?.1;
+                for group in vehicle(&country, "plane")
+                    .context("getting planes")?
+                    .chain(vehicle(&country, "helicopter").context("getting helicopters")?)
+                {
+                    let group = group.context("getting group")?;
+                    for unit in group
+                        .raw_get::<_, Table>("units")
+                        .context("getting units")?
+                        .pairs::<Value, Table>()
+                    {
+                        let unit = unit.context("getting unit")?.1;
                         let unit_type: String = unit.raw_get("type")?;
                         match self.payload.get(&unit_type) {
                             Some(w) => unit.set("payload", w.clone())?,

@@ -942,7 +942,7 @@ fn run_slow_timed_events(
         return_lives(lua, ctx, ts);
         if let Some(points) = ctx.db.ephemeral.cfg.points {
             for dead in ctx.shots_out.bring_out_your_dead(ts) {
-                ctx.db.award_points(points, dead)
+                ctx.db.award_kill_points(points, dead)
             }
         }
         let start_ts = Utc::now();

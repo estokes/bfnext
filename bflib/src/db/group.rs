@@ -203,7 +203,7 @@ impl Db {
         Ok(())
     }
 
-    pub(super) fn delete_group(&mut self, gid: &GroupId) -> Result<()> {
+    pub fn delete_group(&mut self, gid: &GroupId) -> Result<()> {
         let group = self
             .persisted
             .groups

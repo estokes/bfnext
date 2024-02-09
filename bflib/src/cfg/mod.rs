@@ -388,7 +388,6 @@ pub struct PointsCfg {
     pub logistics_repair: u32,
     pub logistics_transfer: u32,
     pub capture: u32,
-    pub ewr_deploy: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

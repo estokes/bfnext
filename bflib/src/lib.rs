@@ -27,7 +27,14 @@ pub mod shots;
 pub mod spawnctx;
 
 extern crate nalgebra as na;
-use crate::{cfg::Cfg, db::player::SlotAuth, perf::record_perf};
+use crate::{
+    cfg::Cfg,
+    db::{
+        group::{DeployKind, GroupId},
+        player::SlotAuth,
+    },
+    perf::record_perf,
+};
 use admin::{run_admin_commands, AdminCommand};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use cfg::LifeType;
@@ -384,6 +391,102 @@ fn time_command(id: PlayerId, now: DateTime<Utc>) {
     }
 }
 
+fn balance_command(id: PlayerId) {
+    let ctx = unsafe { Context::get_mut() };
+    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+        if let Some(player) = ctx.db.player(&ifo.ucid) {
+            let points = player.points;
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                format_compact!("You have {points} points"),
+            );
+        }
+    }
+}
+
+fn transfer_command(id: PlayerId, s: &str) {
+    let ctx = unsafe { Context::get_mut() };
+    macro_rules! reply {
+        ($msg:tt) => {
+            ctx.db
+                .ephemeral
+                .msgs()
+                .send(MsgTyp::Chat(Some(id)), format_compact!($msg))
+        };
+    }
+    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+        match s.split_once(" ") {
+            None => reply!("transfer expected amount and player"),
+            Some((amount, player)) => match amount.parse::<u32>() {
+                Err(e) => reply!("transfer expected a number {e:?}"),
+                Ok(amount) => match admin::get_player_ucid(ctx, player) {
+                    Err(e) => reply!("could not transfer to {player}, {e:?}"),
+                    Ok(ucid) => match ctx.db.transfer_points(&ifo.ucid, &ucid, amount) {
+                        Err(e) => reply!("transfer failed {e:?}"),
+                        Ok(()) => reply!("transfer complete"),
+                    },
+                },
+            },
+        }
+    }
+}
+
+fn delete_command(id: PlayerId, s: &str) {
+    let ctx = unsafe { Context::get_mut() };
+    macro_rules! reply {
+        ($msg:tt) => {
+            ctx.db
+                .ephemeral
+                .msgs()
+                .send(MsgTyp::Chat(Some(id)), format_compact!($msg))
+        };
+    }
+    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+        match s.parse::<GroupId>() {
+            Err(e) => reply!("delete expected a group id {e:?}"),
+            Ok(id) => match ctx.db.group(&id) {
+                Err(e) => reply!("could not get group {id} {e:?}"),
+                Ok(group) => match &group.origin {
+                    DeployKind::Crate { player, .. }
+                    | DeployKind::Deployed { player, .. }
+                    | DeployKind::Troop { player, .. }
+                        if player != &ifo.ucid =>
+                    {
+                        reply!("group {id} wasn't deployed by you")
+                    }
+                    DeployKind::Objective => reply!("can't delete an objective group"),
+                    DeployKind::Crate { .. } => match ctx.db.delete_group(&id) {
+                        Err(e) => reply!("could not delete group {id} {e:?}"),
+                        Ok(()) => reply!("delted {id}"),
+                    },
+                    DeployKind::Deployed { player, spec } => {
+                        let player = player.clone();
+                        let points = (spec.cost as f32 / 2.).ceil() as i32;
+                        match ctx.db.delete_group(&id) {
+                            Err(e) => reply!("could not delete group {id} {e:?}"),
+                            Ok(()) => {
+                                ctx.db.adjust_points(&player, points);
+                                reply!("deleted {id}")
+                            }
+                        }
+                    }
+                    DeployKind::Troop { player, spec } => {
+                        let player = player.clone();
+                        let points = (spec.cost as f32 / 2.).ceil() as i32;
+                        match ctx.db.delete_group(&id) {
+                            Err(e) => reply!("could not delete group {id} {e:?}"),
+                            Ok(()) => {
+                                ctx.db.adjust_points(&player, points);
+                                reply!("deleted {id}")
+                            }
+                        }
+                    }
+                },
+            },
+        }
+    }
+}
+
 fn help_command(id: PlayerId) {
     let ctx = unsafe { Context::get_mut() };
     let admin = match ctx.info_by_player_id.get(&id) {
@@ -396,6 +499,10 @@ fn help_command(id: PlayerId) {
         " -switch <color>: side switch to <color>",
         " -lives: display your current lives",
         " -time: how long until server restart",
+        " -balance: show your points balance",
+        " -transfer <amount> <player>: transfer points to another player",
+        " -delete <groupid>: delete a group you deployed for a partial refund",
+        " -help: show this help message",
     ] {
         ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
     }
@@ -427,6 +534,15 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         Ok("".into())
     } else if msg.starts_with("-admin ") {
         do_admin_command(id, msg);
+        Ok("".into())
+    } else if msg.starts_with("-balance") {
+        balance_command(id);
+        Ok("".into())
+    } else if let Some(s) = msg.strip_prefix("-transfer ") {
+        transfer_command(id, s);
+        Ok("".into())
+    } else if let Some(s) = msg.strip_prefix("-delete ") {
+        delete_command(id, s);
         Ok("".into())
     } else if msg.starts_with("-help") {
         help_command(id);

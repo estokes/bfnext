@@ -305,7 +305,7 @@ pub(super) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId)
         ));
         total += cr.weight
     }
-    for tr in &cargo.troops {
+    for (_, tr) in &cargo.troops {
         msg.push_str(&format_compact!(
             "{} troop weiging {} kg\n",
             tr.name,

@@ -36,7 +36,7 @@ use dcso3::{
     cvt_err,
     env::miz::{self, GroupKind, MizIndex},
     land::Land,
-    net::SlotId,
+    net::{SlotId, Ucid},
     object::DcsObject,
     warehouse::LiquidType,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
@@ -811,7 +811,11 @@ impl Db {
                 for uid in &group.units {
                     unit_mut!(self, uid)?.dead = false;
                 }
-                self.ephemeral.push_spawn(*gid);
+                self.ephemeral
+                    .delayspawnq
+                    .entry(now + Duration::minutes(3))
+                    .or_default()
+                    .push(*gid);
             }
         }
         self.update_objective_status(&oid, now)
@@ -894,14 +898,14 @@ impl Db {
         lua: MizLua,
         now: DateTime<Utc>,
     ) -> Result<SmallVec<[(Side, ObjectiveId); 1]>> {
-        let mut captured: FxHashMap<ObjectiveId, Vec<(Side, GroupId)>> = FxHashMap::default();
+        let mut captured: FxHashMap<ObjectiveId, Vec<(Side, Ucid, GroupId)>> = FxHashMap::default();
         for (oid, obj) in &self.persisted.objectives {
             if obj.captureable() {
                 let r2 = obj.radius.powi(2);
                 for gid in &self.persisted.troops {
                     let group = group!(self, gid)?;
                     match &group.origin {
-                        DeployKind::Troop { spec, .. } if spec.can_capture => {
+                        DeployKind::Troop { spec, player } if spec.can_capture => {
                             let in_range = group
                                 .units
                                 .into_iter()
@@ -910,7 +914,11 @@ impl Db {
                                     na::distance_squared(&u.pos.into(), &obj.pos.into()) <= r2
                                 });
                             if in_range {
-                                captured.entry(*oid).or_default().push((group.side, *gid));
+                                captured.entry(*oid).or_default().push((
+                                    group.side,
+                                    player.clone(),
+                                    *gid,
+                                ));
                             }
                         }
                         DeployKind::Crate { .. }
@@ -923,8 +931,8 @@ impl Db {
         }
         let mut actually_captured = smallvec![];
         for (oid, gids) in captured {
-            let (side, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
-            if gids.iter().all(|(s, _)| side == s) {
+            let (side, _, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
+            if gids.iter().all(|(s, _, _)| side == s) {
                 let obj = objective_mut!(self, oid)?;
                 obj.spawned = false;
                 obj.threatened = true;
@@ -942,7 +950,9 @@ impl Db {
                 for gid in obj.groups.get(&obj.owner.opposite()).unwrap_or(&Set::new()) {
                     for uid in &group!(self, gid)?.units {
                         if self.ephemeral.object_id_by_uid.contains_key(uid) {
-                            self.ephemeral.units_potentially_close_to_enemies.insert(*uid);
+                            self.ephemeral
+                                .units_potentially_close_to_enemies
+                                .insert(*uid);
                         }
                     }
                 }
@@ -967,9 +977,19 @@ impl Db {
                 self.deliver_production().context("delivering production")?;
                 self.sync_warehouses_from_objectives(lua)
                     .context("syncing warehouses from objectives")?;
-                for (_, gid) in gids {
+                let mut ucids: SmallVec<[Ucid; 4]> = smallvec![];
+                for (_, ucid, gid) in gids {
                     self.delete_group(&gid)
-                        .context("deleting capturing troops")?
+                        .context("deleting capturing troops")?;
+                    if !ucids.contains(&ucid) {
+                        ucids.push(ucid);
+                    }
+                }
+                if let Some(points) = self.ephemeral.cfg.points.as_ref() {
+                    let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
+                    for ucid in ucids {
+                        self.adjust_points(&ucid, ppp);
+                    }
                 }
                 let obj = objective!(self, oid)?;
                 self.ephemeral.create_objective_markup(obj, &self.persisted);

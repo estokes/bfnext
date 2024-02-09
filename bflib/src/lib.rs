@@ -1075,6 +1075,7 @@ fn run_slow_timed_events(
         return_lives(lua, ctx, ts);
         if let Some(points) = ctx.db.ephemeral.cfg.points {
             for dead in ctx.shots_out.bring_out_your_dead(ts) {
+                info!("kill {:?}", dead);
                 ctx.db.award_kill_points(points, dead)
             }
         }

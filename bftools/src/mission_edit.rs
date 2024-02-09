@@ -15,7 +15,7 @@
 use crate::Miz;
 use anyhow::{bail, Context, Result};
 use log::{info, warn};
-use mlua::{Lua, Table, Value};
+use mlua::{FromLua, IntoLua, Lua, Table, Value};
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -23,6 +23,40 @@ use std::{
     path::{Path, PathBuf},
 };
 use zip::{read::ZipArchive, write::FileOptions, ZipWriter};
+
+pub trait DeepClone<'lua>: IntoLua<'lua> + FromLua<'lua> + Clone {
+    fn deep_clone(&self, lua: &'lua Lua) -> Result<Self>;
+}
+
+impl<'lua, T> DeepClone<'lua> for T
+where
+    T: IntoLua<'lua> + FromLua<'lua> + Clone,
+{
+    fn deep_clone(&self, lua: &'lua Lua) -> Result<Self> {
+        let v = match self.clone().into_lua(lua)? {
+            Value::Boolean(b) => Value::Boolean(b),
+            Value::Error(e) => Value::Error(e),
+            Value::Function(f) => Value::Function(f),
+            Value::Integer(i) => Value::Integer(i),
+            Value::LightUserData(d) => Value::LightUserData(d),
+            Value::Nil => Value::Nil,
+            Value::Number(n) => Value::Number(n),
+            Value::String(s) => Value::String(lua.create_string(s)?),
+            Value::Table(t) => {
+                let new = lua.create_table()?;
+                new.set_metatable(t.get_metatable());
+                for r in t.pairs::<Value, Value>() {
+                    let (k, v) = r?;
+                    new.set(k.deep_clone(lua)?, v.deep_clone(lua)?)?
+                }
+                Value::Table(new)
+            }
+            Value::Thread(t) => Value::Thread(t),
+            Value::UserData(d) => Value::UserData(d),
+        };
+        Ok(T::from_lua(v, lua)?)
+    }
+}
 
 struct TriggerZone {
     x: f32,
@@ -324,7 +358,7 @@ impl VehicleTemplates {
         })
     }
 
-    fn apply(&self, objectives: &mut Vec<TriggerZone>, base: &mut LoadedMiz) -> Result<()> {
+    fn apply(&self, lua: &Lua, objectives: &mut Vec<TriggerZone>, base: &mut LoadedMiz) -> Result<()> {
         let mut replace_count: HashMap<String, isize> = HashMap::new();
         //apply weapon/APA templates to mission table in self
         info!("replacing slots with template payloads");
@@ -349,14 +383,14 @@ impl VehicleTemplates {
                         let unit = unit.context("getting unit")?.1;
                         let unit_type: String = unit.raw_get("type")?;
                         match self.payload.get(&unit_type) {
-                            Some(w) => unit.set("payload", w.clone())?,
+                            Some(w) => unit.set("payload", w.deep_clone(lua)?)?,
                             None => warn!("no payload table for {unit_type}"),
                         }
                         if let Some(w) = self.prop_aircraft.get(&unit_type) {
-                            unit.set("AddPropAircraft", w.clone())?
+                            unit.set("AddPropAircraft", w.deep_clone(lua)?)?
                         }
                         if let Some(w) = self.radio.get(&unit_type) {
-                            unit.set("Radio", w.clone())?
+                            unit.set("Radio", w.deep_clone(lua)?)?
                         }
                         increment_key(&mut replace_count, &unit_type);
                         let x = unit.get("x")?;
@@ -456,7 +490,7 @@ impl WarehouseTemplate {
         })
     }
 
-    fn apply(&self, cfg: &Miz, base: &mut LoadedMiz) -> Result<()> {
+    fn apply(&self, lua: &Lua, cfg: &Miz, base: &mut LoadedMiz) -> Result<()> {
         let mut blue_inventory = 0;
         let mut red_inventory = 0;
         let mut whids = vec![];
@@ -509,22 +543,22 @@ impl WarehouseTemplate {
         }
         for id in airport_ids {
             airports
-                .raw_set(id, self.default.clone())
+                .set(id, self.default.deep_clone(lua)?)
                 .with_context(|| format!("setting airport {id}"))?;
         }
         for id in whids {
             warehouses
-                .raw_set(id, self.default.clone())
+                .set(id, self.default.deep_clone(lua)?)
                 .with_context(|| format!("setting warehouse {id}"))?
         }
         warehouses
-            .raw_set(red_inventory, self.red_inventory.clone())
+            .set(red_inventory, self.red_inventory.deep_clone(lua)?)
             .context("setting red inventory")?;
         warehouses
-            .raw_set(blue_inventory, self.blue_inventory.clone())
+            .set(blue_inventory, self.blue_inventory.deep_clone(lua)?)
             .context("setting blue inventory")?;
-        base.warehouses.raw_set("airports", airports)?;
-        base.warehouses.raw_set("warehouses", warehouses)?;
+        base.warehouses.set("airports", airports)?;
+        base.warehouses.set("warehouses", warehouses)?;
         Ok(())
     }
 }
@@ -564,7 +598,7 @@ pub fn run(cfg: &Miz) -> Result<()> {
         }
     };
     vehicle_templates
-        .apply(&mut objectives, &mut base)
+        .apply(lua, &mut objectives, &mut base)
         .context("applying vehicle templates")?;
     let s = serialize_with_cycles(
         "mission".into(),
@@ -574,7 +608,7 @@ pub fn run(cfg: &Miz) -> Result<()> {
     fs::write(&base.miz.files["mission"], s).context("writing mission file")?;
     info!("wrote serialized mission to mission file.");
     if let Some(wht) = warehouse_template {
-        wht.apply(&cfg, &mut base)
+        wht.apply(lua, &cfg, &mut base)
             .context("applying warehouse template")?;
         let s = serialize_with_cycles(
             "warehouses".into(),

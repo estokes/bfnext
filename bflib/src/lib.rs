@@ -40,7 +40,7 @@ use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::{objective::ObjectiveId, player::RegErr, Db};
+use db::{objective::ObjectiveId, player::{RegErr, TakeoffRes}, Db};
 use dcso3::{
     coalition::Side,
     env::{
@@ -757,12 +757,17 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         .takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z))
                     {
                         Err(e) => error!("could not process takeoff, {:?}", e),
-                        Ok(None) => (),
-                        Ok(Some(typ)) => {
+                        Ok(TakeoffRes::NoLifeTaken) => (),
+                        Ok(TakeoffRes::TookLife(typ)) => {
                             if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
                                 error!("could not display life taken message {:?}", e)
                             }
                             let _ = menu::list_cargo_for_slot(lua, ctx, &slot);
+                        }
+                        Ok(TakeoffRes::OutOfLives) => {
+                            if let Err(e) = e.initiator.destroy() {
+                                error!("failed to destroy unit that took off without lives {e:?}")
+                            }
                         }
                     }
                 }
@@ -1021,6 +1026,31 @@ fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) {
     }
 }
 
+fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) {
+    for (_, ids) in ctx.db.ephemeral.players_to_force_to_spectators(ts) {
+        for ucid in ids {
+            match ctx.id_by_ucid.get(&ucid) {
+                None => warn!("no id for player ucid {:?}", ucid),
+                Some(id) => {
+                    info!("forcing player {} to spectators", ucid);
+                    if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator)
+                    {
+                        error!("error forcing player {:?} to spectators {:?}", id, e);
+                    }
+                    match net.get_slot(*id) {
+                        Err(_) => ctx.db.ephemeral.force_player_to_spectators(&ucid),
+                        Ok((side, slot)) => {
+                            if side != Side::Neutral || !slot.is_spectator() {
+                                ctx.db.ephemeral.force_player_to_spectators(&ucid)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
@@ -1033,20 +1063,7 @@ fn run_slow_timed_events(
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         check_auto_shutdown(ctx, lua, ts);
-        for (_, ids) in ctx.db.ephemeral.players_to_force_to_spectators(ts) {
-            for ucid in ids {
-                match ctx.id_by_ucid.get(&ucid) {
-                    None => warn!("no id for player ucid {:?}", ucid),
-                    Some(id) => {
-                        info!("forcing player {} to spectators", ucid);
-                        if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator)
-                        {
-                            error!("error forcing player {:?} to spectators {:?}", id, e);
-                        }
-                    }
-                }
-            }
-        }
+        force_players_to_spectators(ctx, net, ts);
         for (oid, vh) in ctx.db.ephemeral.warehouses_to_sync() {
             if let Err(e) = ctx.db.sync_vehicle_at_obj(lua, oid, vh.clone()) {
                 error!(
@@ -1058,6 +1075,7 @@ fn run_slow_timed_events(
         return_lives(lua, ctx, ts);
         if let Some(points) = ctx.db.ephemeral.cfg.points {
             for dead in ctx.shots_out.bring_out_your_dead(ts) {
+                info!("kill {:?}", dead);
                 ctx.db.award_kill_points(points, dead)
             }
         }

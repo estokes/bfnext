@@ -640,7 +640,7 @@ impl Db {
                 .destination
                 .into_iter()
                 .filter_map(|oid| Some((oid, self.persisted.objectives.get(oid)?)))
-                .filter(|(_, obj)| logi.owner == obj.owner && obj.supply < 100)
+                .filter(|(_, obj)| logi.owner == obj.owner && (obj.supply < 100 || obj.fuel < 100))
                 .map(|(oid, obj)| Needed {
                     oid,
                     obj,

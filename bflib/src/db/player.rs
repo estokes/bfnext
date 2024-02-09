@@ -55,6 +55,13 @@ pub enum RegErr {
     AlreadyOn(Side),
 }
 
+#[derive(Debug, Clone)]
+pub enum TakeoffRes {
+    TookLife(LifeType),
+    NoLifeTaken,
+    OutOfLives,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct InstancedPlayer {
     pub position: Position3,
@@ -169,7 +176,7 @@ impl Db {
         time: DateTime<Utc>,
         slot: SlotId,
         position: Vector2,
-    ) -> Result<Option<LifeType>> {
+    ) -> Result<TakeoffRes> {
         let oid = *self
             .persisted
             .objectives_by_slot
@@ -205,15 +212,17 @@ impl Db {
                 res || (obj.owner == player.side && obj.is_in_circle(position))
             });
         if is_on_owned_objective {
-            if *player_lives > 0 {
-                // paranoia
+            // paranoia
+            if *player_lives == 0 {
+               return Ok(TakeoffRes::OutOfLives) 
+            } else {
                 player.airborne = Some(life_type);
                 *player_lives -= 1;
             }
             self.ephemeral.dirty();
-            Ok(Some(life_type))
+            Ok(TakeoffRes::TookLife(life_type))
         } else {
-            Ok(None)
+            Ok(TakeoffRes::NoLifeTaken)
         }
     }
 

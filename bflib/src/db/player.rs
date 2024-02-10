@@ -333,9 +333,12 @@ impl Db {
             SlotId::ArtilleryCommander(_, _)
             | SlotId::ForwardObserver(_, _)
             | SlotId::Observer(_, _) => {
-                player.jtac_or_spectators = true;
-                // CR estokes: add permissions for game master
-                SlotAuth::Yes
+                if self.ephemeral.cfg.rules.ca.check(ucid) {
+                    player.jtac_or_spectators = true;
+                    SlotAuth::Yes
+                } else {
+                    SlotAuth::Denied
+                }
             }
             SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
                 let oid = match self.persisted.objectives_by_slot.get(&slot) {

@@ -29,7 +29,6 @@ use dcso3::{
     coalition::Side,
     controller::Task,
     cvt_err,
-    env::miz,
     group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
@@ -263,7 +262,7 @@ impl Jtac {
                     menu::update_jtac_menu(db, lua, self.gid, &arty).context("adding menu")?;
                 }
                 Ok(false)
-            },
+            }
             Some(_) | None => {
                 self.remove_target(db, lua)?;
                 let jtid = db
@@ -487,16 +486,15 @@ impl Jtacs {
             .ok_or_else(|| anyhow!("no such jtac"))
     }
 
-    pub fn add_menu(&self, lua: MizLua, mizgid: miz::GroupId, gid: &GroupId) -> Result<()> {
-        if let Ok(jt) = self.get(gid) {
-            let arty = jt
+    pub fn nearby_artillery(&self, gid: &GroupId) -> &[GroupId] {
+        match self.get(gid) {
+            Ok(jt) => jt
                 .target
                 .as_ref()
                 .map(|t| &*t.nearby_artillery)
-                .unwrap_or(&[]);
-            menu::add_menu_for_jtac(lua, mizgid, jt.gid, arty)?
+                .unwrap_or(&[]),
+            Err(_) => &[],
         }
-        Ok(())
     }
 
     pub fn artillery_mission(

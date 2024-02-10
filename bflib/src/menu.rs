@@ -1056,7 +1056,7 @@ fn add_artillery_menu_for_jtac(
     Ok(())
 }
 
-pub fn add_menu_for_jtac(lua: MizLua, mizgid: GroupId, group: DbGid, arty: &[DbGid]) -> Result<()> {
+fn add_menu_for_jtac(lua: MizLua, mizgid: GroupId, group: DbGid, arty: &[DbGid]) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root = GroupSubMenu::from(vec!["JTAC".into()]);
     mc.remove_submenu_for_group(
@@ -1180,10 +1180,12 @@ pub fn remove_menu_for_jtac(db: &Db, lua: MizLua, group: DbGid) -> Result<()> {
 }
 
 pub(super) fn update_jtac_menu(db: &Db, lua: MizLua, jtac: DbGid, arty: &[DbGid]) -> Result<()> {
-    for (_, player, _) in db.instanced_players() {
-        if let Some((sl, _)) = player.current_slot.as_ref() {
-            let si = db.info_for_slot(sl).context("getting slot")?;
-            add_menu_for_jtac(lua, si.miz_gid, jtac, arty).context("adding menu")?
+    for (ucid, player, _) in db.instanced_players() {
+        if db.ephemeral.cfg.rules.jtac.check(ucid) {
+            if let Some((sl, _)) = player.current_slot.as_ref() {
+                let si = db.info_for_slot(sl).context("getting slot")?;
+                add_menu_for_jtac(lua, si.miz_gid, jtac, arty).context("adding menu")?
+            }
         }
     }
     Ok(())
@@ -1197,7 +1199,7 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         let _ = mc.add_submenu_for_group(gid, "JTAC".into(), None)?;
         for (_, group, _) in ctx.db.jtacs() {
             if group.side == side {
-                ctx.jtac.add_menu(lua, gid, &group.id)?
+                add_menu_for_jtac(lua, gid, group.id, ctx.jtac.nearby_artillery(&group.id))?
             }
         }
         Ok(())
@@ -1209,20 +1211,33 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         | SlotId::Instructor(_, _)
         | SlotId::Observer(_, _) => Ok(()),
         SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
+            let ucid = match ctx.db.ephemeral.player_in_slot(slot) {
+                Some(ucid) => ucid,
+                None => return Ok(()),
+            };
             let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
             let cap = CarryCap::from_typ(cfg, si.typ.as_str());
-            mc.remove_submenu_for_group(si.miz_gid, vec!["Cargo".into()].into())?;
-            if cap.crates {
-                add_cargo_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
+            mc.remove_submenu_for_group(si.miz_gid, vec!["Cargo".into()].into())
+                .context("remove cargo menu")?;
+            if cap.crates && ctx.db.ephemeral.cfg.rules.cargo.check(ucid) {
+                add_cargo_menu_for_group(cfg, &mc, &si.side, si.miz_gid)
+                    .context("add cargo menu")?
             }
-            mc.remove_submenu_for_group(si.miz_gid, vec!["Troops".into()].into())?;
-            if cap.troops {
-                add_troops_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
+            mc.remove_submenu_for_group(si.miz_gid, vec!["Troops".into()].into())
+                .context("remove troops menu")?;
+            if cap.troops && ctx.db.ephemeral.cfg.rules.troops.check(ucid) {
+                add_troops_menu_for_group(cfg, &mc, &si.side, si.miz_gid)
+                    .context("add troops menu")?
             }
-            mc.remove_submenu_for_group(si.miz_gid, vec!["EWR".into()].into())?;
-            add_ewr_menu_for_group(&mc, si.miz_gid)?;
-            mc.remove_submenu_for_group(si.miz_gid, vec!["JTAC".into()].into())?;
-            add_jtac(si.side, si.miz_gid)
+            mc.remove_submenu_for_group(si.miz_gid, vec!["EWR".into()].into())
+                .context("remove ewr menu")?;
+            add_ewr_menu_for_group(&mc, si.miz_gid).context("add ewr menu")?;
+            mc.remove_submenu_for_group(si.miz_gid, vec!["JTAC".into()].into())
+                .context("remove jtac menu")?;
+            if ctx.db.ephemeral.cfg.rules.jtac.check(ucid) {
+                add_jtac(si.side, si.miz_gid).context("add jtac menu")?
+            }
+            Ok(())
         }
     }
 }

@@ -30,11 +30,13 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
+use compact_str::CompactString;
 use dcso3::{
     coalition::Side,
     env::miz::{Group, Miz, MizIndex, PointType, Skill, TriggerZone, TriggerZoneTyp},
     MizLua, String, Vector2,
 };
+use fxhash::FxHashSet;
 use log::info;
 
 impl Db {
@@ -242,10 +244,19 @@ impl Db {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
         t.ephemeral.set_cfg(miz, idx, cfg)?;
+        let mut objective_names = FxHashSet::default();
         for zone in miz.triggers()? {
             let zone = zone?;
             let name = zone.name()?;
-            if let Some(name) = name.strip_prefix("O") {
+            if name.starts_with('O') {
+                if name.len() > 4 {
+                    if !objective_names.insert(CompactString::from(&name[3..])) {
+                        bail!("duplicate objective name {name}")
+                    }
+                } else {
+                    bail!("malformed objective name {name}")
+                }
+                let name = name.strip_prefix("O").unwrap();
                 t.init_objective(zone, name)?
             }
         }

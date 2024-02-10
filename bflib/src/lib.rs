@@ -1315,6 +1315,7 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
+    info!("initializing mission");
     let timer = Timer::singleton(lua)?;
     let when = timer.get_time()? + 1.;
     timer.schedule_function(when, mlua::Value::Nil, move |lua, _, now| {
@@ -1335,6 +1336,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
             }
             Ok(None)
         } else {
+            info!("waiting for the mission to finish loading");
             Ok(Some(now + 1.))
         }
     })?;

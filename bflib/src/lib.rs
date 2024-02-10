@@ -943,7 +943,7 @@ fn run_logistics_events(
         match &mut ctx.logistics_stage {
             LogiStage::Complete { last_tick } if ts - *last_tick >= freq => {
                 let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
-                ctx.logistics_stage = LogiStage::SyncFromWarehouses { objectives }
+                ctx.logistics_stage = LogiStage::SyncFromWarehouses { objectives };
             }
             LogiStage::Complete { last_tick: _ } => (),
             LogiStage::SyncFromWarehouses { objectives } => match objectives.pop() {

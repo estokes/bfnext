@@ -21,7 +21,9 @@ use super::{
     persisted::Persisted,
 };
 use crate::{
-    cfg::{Cfg, Crate, Deployable, DeployableLogistics, Troop, Vehicle, WarehouseConfig},
+    cfg::{
+        ActionKind, Cfg, Crate, Deployable, DeployableLogistics, Troop, Vehicle, WarehouseConfig,
+    },
     maybe,
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx},
@@ -772,12 +774,7 @@ impl Ephemeral {
             .and_then(|slot| self.players_by_slot.get(slot))
     }
 
-    pub fn panel_to_player<S: Into<String>>(
-        &mut self,
-        persisted: &Persisted,
-        ucid: &Ucid,
-        msg: S,
-    ) {
+    pub fn panel_to_player<S: Into<String>>(&mut self, persisted: &Persisted, ucid: &Ucid, msg: S) {
         if let Some(player) = persisted.players.get(ucid) {
             let ifo = player.current_slot.as_ref().and_then(|(s, _)| {
                 persisted
@@ -860,9 +857,53 @@ impl Ephemeral {
                 };
             }
         }
-        for act in &cfg.actions {
-            if !points && (act.cost > 0 || act.penalty.unwrap_or(0) > 0) {
-                bail!("the points system is disabled but {act:?} costs points")
+        for (side, actions) in &cfg.actions {
+            for (_, act) in actions {
+                if !points && (act.cost > 0 || act.penalty.unwrap_or(0) > 0) {
+                    bail!("the points system is disabled but {act:?} costs points")
+                }
+                match &act.kind {
+                    ActionKind::Awacs {
+                        duration: _,
+                        template,
+                    }
+                    | ActionKind::Bomber {
+                        targets: _,
+                        power: _,
+                        accuracy: _,
+                        template,
+                    }
+                    | ActionKind::CruiseMissileStrike { template }
+                    | ActionKind::Tanker {
+                        duration: _,
+                        template,
+                    }
+                    | ActionKind::LogisticsRepair { template }
+                    | ActionKind::LogisticsTransfer { template } => {
+                        miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
+                            .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
+                    }
+                    ActionKind::Deployable {
+                        deployable,
+                        template,
+                    } => {
+                        miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
+                            .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
+                        self.deployable_idx
+                            .get(side)
+                            .and_then(|idx| idx.deployables_by_name.get(deployable))
+                            .ok_or_else(|| anyhow!("missing deployable for action {act:?}"))?;
+                    }
+                    ActionKind::Paratrooper { troop, template } => {
+                        miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
+                            .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
+                        self.deployable_idx
+                            .get(side)
+                            .and_then(|idx| idx.squads_by_name.get(troop))
+                            .ok_or_else(|| anyhow!("missing troop for action {act:?}"))?;
+                    }
+                    ActionKind::AwacsWaypoint | ActionKind::TankerWaypoint => (),
+                }
             }
         }
         self.cfg = Arc::new(cfg);

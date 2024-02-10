@@ -394,26 +394,37 @@ pub struct PointsCfg {
 pub enum ActionKind {
     Tanker {
         duration: u8,
+        template: String,
     },
     Awacs {
         duration: u8,
+        template: String,
     },
     Bomber {
         targets: u32,
         power: u32,
         // in meters radius around the target point
         accuracy: u32,
+        template: String,
     },
     CruiseMissileStrike {
-        missiles: u32,
+        template: String
     },
     TankerWaypoint,
     AwacsWaypoint,
     Paratrooper {
         troop: String,
+        template: String,
     },
-    PalletDrop {
+    Deployable {
         deployable: String,
+        template: String,
+    },
+    LogisticsRepair {
+        template: String
+    },
+    LogisticsTransfer {
+        template: String
     }
 }
 
@@ -504,9 +515,9 @@ pub struct Cfg {
     /// the life reset configuration for each life type. A pair
     /// of number of lives per reset, and reset time in seconds.
     pub default_lives: FxHashMap<LifeType, (u8, u32)>,
-    /// Available actions
+    /// Available actions per side
     #[serde(default)]
-    pub actions: Vec<Action>,
+    pub actions: FxHashMap<Side, FxHashMap<String, Action>>,
     /// vehicle cargo configuration
     #[serde(default)]
     pub cargo: FxHashMap<Vehicle, CargoConfig>,

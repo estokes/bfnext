@@ -1124,57 +1124,228 @@ fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
     ])
 }
 
-fn default_actions() -> Vec<Action> {
-    vec![
-        Action {
-            cost: 100,
-            penalty: Some(100),
-            limit: None,
-            kind: ActionKind::Awacs { duration: 5 },
-        },
-        Action {
-            cost: 10,
-            penalty: None,
-            limit: None,
-            kind: ActionKind::AwacsWaypoint,
-        },
-        Action {
-            cost: 50,
-            penalty: Some(50),
-            limit: None,
-            kind: ActionKind::Tanker { duration: 5 },
-        },
-        Action {
-            cost: 10,
-            penalty: None,
-            limit: None,
-            kind: ActionKind::TankerWaypoint,
-        },
-        Action {
-            cost: 100,
-            penalty: Some(100),
-            limit: None,
-            kind: ActionKind::Bomber {
-                targets: 15,
-                power: 1000,
-                accuracy: 15,
+fn default_red_actions() -> FxHashMap<String, Action> {
+    FxHashMap::from_iter([
+        (
+            "awacs".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Awacs {
+                    duration: 5,
+                    template: "RAWACS".into(),
+                },
             },
-        },
-        Action {
-            cost: 150,
-            penalty: None,
-            limit: None,
-            kind: ActionKind::CruiseMissileStrike { missiles: 10 },
-        },
-        Action {
-            cost: 50,
-            penalty: Some(100),
-            limit: None,
-            kind: ActionKind::Paratrooper {
-                troop: "Standard".into(),
+        ),
+        (
+            "awacs-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::AwacsWaypoint,
             },
-        },
-    ]
+        ),
+        (
+            "tanker".into(),
+            Action {
+                cost: 50,
+                penalty: Some(50),
+                limit: None,
+                kind: ActionKind::Tanker {
+                    duration: 5,
+                    template: "RTANKER".into(),
+                },
+            },
+        ),
+        (
+            "tanker-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::TankerWaypoint,
+            },
+        ),
+        (
+            "bomber".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Bomber {
+                    template: "RBOMBER".into(),
+                    targets: 15,
+                    power: 1000,
+                    accuracy: 15,
+                },
+            },
+        ),
+        (
+            "missile-strike".into(),
+            Action {
+                cost: 150,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::CruiseMissileStrike {
+                    template: "RMISSILES".into(),
+                },
+            },
+        ),
+        (
+            "paratroops".into(),
+            Action {
+                cost: 50,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Paratrooper {
+                    troop: "Standard".into(),
+                    template: "RTROOPCARRIER".into(),
+                },
+            },
+        ),
+        (
+            "repair".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::LogisticsRepair {
+                    template: "RCARGOCARRIER".into(),
+                },
+            },
+        ),
+        (
+            "transfer".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::LogisticsTransfer {
+                    template: "RCARGOCARRIER".into(),
+                },
+            },
+        ),
+    ])
+}
+
+fn default_blue_actions() -> FxHashMap<String, Action> {
+    FxHashMap::from_iter([
+        (
+            "awacs".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Awacs {
+                    duration: 5,
+                    template: "BAWACS".into(),
+                },
+            },
+        ),
+        (
+            "awacs-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::AwacsWaypoint,
+            },
+        ),
+        (
+            "basket-tanker".into(),
+            Action {
+                cost: 50,
+                penalty: Some(50),
+                limit: None,
+                kind: ActionKind::Tanker {
+                    duration: 5,
+                    template: "BBASKETTANKER".into(),
+                },
+            },
+        ),
+        (
+            "boom-tanker".into(),
+            Action {
+                cost: 50,
+                penalty: Some(50),
+                limit: None,
+                kind: ActionKind::Tanker {
+                    duration: 5,
+                    template: "BBOOMTANKER".into(),
+                },
+            },
+        ),
+        (
+            "tanker-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::TankerWaypoint,
+            },
+        ),
+        (
+            "bomber".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Bomber {
+                    template: "BBOMBER".into(),
+                    targets: 15,
+                    power: 1000,
+                    accuracy: 15,
+                },
+            },
+        ),
+        (
+            "missile-strike".into(),
+            Action {
+                cost: 150,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::CruiseMissileStrike {
+                    template: "BMISSILES".into(),
+                },
+            },
+        ),
+        (
+            "paratroops".into(),
+            Action {
+                cost: 50,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Paratrooper {
+                    troop: "Standard".into(),
+                    template: "BTROOPCARRIER".into(),
+                },
+            },
+        ),
+        (
+            "repair".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::LogisticsRepair {
+                    template: "BCARGOCARRIER".into(),
+                },
+            },
+        ),
+        (
+            "transfer".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::LogisticsTransfer {
+                    template: "BCARGOCARRIER".into(),
+                },
+            },
+        ),
+    ])
 }
 
 impl Default for Cfg {
@@ -1232,7 +1403,10 @@ impl Default for Cfg {
                 (LifeType::Recon, (6, 21600)),
             ]),
             life_types: default_life_types(),
-            actions: default_actions(),
+            actions: FxHashMap::from_iter([
+                (Side::Red, default_red_actions()),
+                (Side::Blue, default_blue_actions()),
+            ]),
             cargo: default_cargo(),
             crate_template: FxHashMap::from_iter([
                 (Side::Red, "RCRATE".into()),

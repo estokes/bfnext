@@ -83,13 +83,12 @@ enum LogiStage {
     SyncToWarehouses {
         objectives: SmallVec<[ObjectiveId; 128]>,
     },
+    Init
 }
 
 impl Default for LogiStage {
     fn default() -> Self {
-        Self::Complete {
-            last_tick: DateTime::<Utc>::MIN_UTC,
-        }
+        Self::Init
     }
 }
 
@@ -941,6 +940,10 @@ fn run_logistics_events(
         let ticks_per_delivery = wcfg.ticks_per_delivery;
         let start_ts = Utc::now();
         match &mut ctx.logistics_stage {
+            LogiStage::Init => {
+                let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
+                ctx.logistics_stage = LogiStage::SyncToWarehouses { objectives }
+            }
             LogiStage::Complete { last_tick } if ts - *last_tick >= freq => {
                 let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
                 ctx.logistics_stage = LogiStage::SyncFromWarehouses { objectives };

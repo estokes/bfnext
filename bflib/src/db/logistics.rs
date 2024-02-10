@@ -422,12 +422,6 @@ impl Db {
         if !missing.is_empty() {
             bail!("objectives missing a warehouse {:?}", missing)
         }
-        self.update_supply_status()
-            .context("updating supply status")?;
-        self.deliver_production().context("delivering production")?;
-        self.sync_warehouses_from_objectives(lua)
-            .context("syncing warehouses from objectives")?;
-        self.ephemeral.dirty();
         Ok(())
     }
 

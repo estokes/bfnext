@@ -1183,6 +1183,17 @@ fn default_red_actions() -> FxHashMap<String, Action> {
             },
         ),
         (
+            "fighters".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Fighters {
+                    template: "RFIGHTERS".into(),
+                },
+            },
+        ),
+        (
             "missile-strike".into(),
             Action {
                 cost: 150,
@@ -1297,6 +1308,17 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     targets: 15,
                     power: 1000,
                     accuracy: 15,
+                },
+            },
+        ),
+        (
+            "fighters".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Fighters {
+                    template: "BFIGHTERS".into(),
                 },
             },
         ),

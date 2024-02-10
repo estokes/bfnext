@@ -407,6 +407,9 @@ pub enum ActionKind {
         accuracy: u32,
         template: String,
     },
+    Fighters {
+        template: String,
+    },
     CruiseMissileStrike {
         template: String
     },

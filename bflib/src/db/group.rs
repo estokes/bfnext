@@ -19,7 +19,7 @@ use super::{
     Db, Set,
 };
 use crate::{
-    cfg::{Crate, Deployable, Troop, UnitTag, UnitTags},
+    cfg::{Crate, Deployable, Troop, UnitTag, UnitTags, Action},
     group, group_by_name,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
@@ -66,6 +66,11 @@ pub enum DeployKind {
         player: Ucid,
         spec: Crate,
     },
+    Action {
+        player: Ucid,
+        spec: Action,
+        time: DateTime<Utc>
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

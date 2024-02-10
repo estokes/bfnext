@@ -32,6 +32,7 @@ use dcso3::{
 };
 use std::{fs::File, path::Path};
 
+pub mod actions;
 pub mod cargo;
 pub mod ephemeral;
 pub mod group;

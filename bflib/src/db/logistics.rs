@@ -38,7 +38,11 @@ use log::warn;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
-    cmp::{max, min}, mem, ops::{AddAssign, SubAssign}, sync::Arc
+    cmp::{max, min},
+    collections::hash_map::Entry,
+    mem,
+    ops::{AddAssign, SubAssign},
+    sync::Arc,
 };
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -332,6 +336,10 @@ impl Db {
                     let w = airbase
                         .get_warehouse()
                         .context("getting airbase warehouse")?;
+                    map.for_each(|name, _| {
+                        w.set_item(name, 0).context("zeroing item")?;
+                        Ok(())
+                    })?;
                     let (oid, obj) = match oid {
                         Some((oid, obj)) => {
                             airbase
@@ -343,27 +351,17 @@ impl Db {
                             airbase
                                 .set_coalition(Side::Neutral)
                                 .context("setting airbase owner neutral")?;
-                            map.for_each(|name, _| {
-                                w.set_item(name, 0).context("zeroing item")?;
-                                Ok(())
-                            })?;
                             return Ok(());
                         }
                     };
-                    self.ephemeral.airbase_by_oid.insert(
-                        oid,
-                        airbase.object_id().context("getting airbase object_id")?,
-                    );
-                    let production = match self.ephemeral.production_by_side.get(&obj.owner) {
-                        Some(p) => p,
-                        None => return Ok(()),
-                    };
-                    map.for_each(|name, _| {
-                        if !production.equipment.contains_key(&name) {
-                            w.set_item(name, 0).context("zeroing item")?
+                    match self.ephemeral.airbase_by_oid.entry(oid) {
+                        Entry::Vacant(e) => {
+                            e.insert(airbase.object_id().context("getting airbase object_id")?);
                         }
-                        Ok(())
-                    })?;
+                        Entry::Occupied(_) => {
+                            bail!("multiple airbases inside the trigger zone of {}", obj.name)
+                        }
+                    }
                     Ok(())
                 })
         };
@@ -424,7 +422,8 @@ impl Db {
         if !missing.is_empty() {
             bail!("objectives missing a warehouse {:?}", missing)
         }
-        self.update_supply_status().context("updating supply status")?;
+        self.update_supply_status()
+            .context("updating supply status")?;
         self.deliver_production().context("delivering production")?;
         self.sync_warehouses_from_objectives(lua)
             .context("syncing warehouses from objectives")?;
@@ -631,7 +630,8 @@ impl Db {
     }
 
     pub fn deliver_supplies_from_logistics_hubs(&mut self) -> Result<()> {
-        self.update_supply_status().context("updating supply status")?;
+        self.update_supply_status()
+            .context("updating supply status")?;
         let mut transfers: Vec<Transfer> = vec![];
         for lid in &self.persisted.logistics_hubs {
             let logi = objective!(self, lid)?;
@@ -921,8 +921,13 @@ impl Db {
         Ok(())
     }
 
-    pub fn admin_reduce_inventory(&mut self, lua: MizLua, oid: ObjectiveId, amount: u8) -> Result<()> {
-       if amount > 100 {
+    pub fn admin_reduce_inventory(
+        &mut self,
+        lua: MizLua,
+        oid: ObjectiveId,
+        amount: u8,
+    ) -> Result<()> {
+        if amount > 100 {
             bail!("enter a percentage")
         }
         let percent = amount as f32 / 100.;
@@ -958,7 +963,7 @@ impl Db {
         &mut self,
         lua: MizLua,
         kind: WarehouseKind,
-        oid: ObjectiveId
+        oid: ObjectiveId,
     ) -> Result<()> {
         use std::fmt::Write;
         match kind {

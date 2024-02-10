@@ -83,13 +83,12 @@ enum LogiStage {
     SyncToWarehouses {
         objectives: SmallVec<[ObjectiveId; 128]>,
     },
+    Init
 }
 
 impl Default for LogiStage {
     fn default() -> Self {
-        Self::Complete {
-            last_tick: DateTime::<Utc>::MIN_UTC,
-        }
+        Self::Init
     }
 }
 
@@ -941,6 +940,10 @@ fn run_logistics_events(
         let ticks_per_delivery = wcfg.ticks_per_delivery;
         let start_ts = Utc::now();
         match &mut ctx.logistics_stage {
+            LogiStage::Init => {
+                let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
+                ctx.logistics_stage = LogiStage::SyncToWarehouses { objectives }
+            }
             LogiStage::Complete { last_tick } if ts - *last_tick >= freq => {
                 let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
                 ctx.logistics_stage = LogiStage::SyncFromWarehouses { objectives };
@@ -1282,7 +1285,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
 
 fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
     unsafe { Context::get_mut().loaded = true };
-    debug!("mission loaded");
+    info!("mission loaded");
     Ok(())
 }
 
@@ -1312,6 +1315,7 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
 }
 
 fn init_miz(lua: MizLua) -> Result<()> {
+    info!("initializing mission");
     let timer = Timer::singleton(lua)?;
     let when = timer.get_time()? + 1.;
     timer.schedule_function(when, mlua::Value::Nil, move |lua, _, now| {
@@ -1332,6 +1336,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
             }
             Ok(None)
         } else {
+            info!("waiting for the mission to finish loading");
             Ok(Some(now + 1.))
         }
     })?;

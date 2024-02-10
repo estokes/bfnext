@@ -336,10 +336,6 @@ impl Db {
                     let w = airbase
                         .get_warehouse()
                         .context("getting airbase warehouse")?;
-                    map.for_each(|name, _| {
-                        w.set_item(name, 0).context("zeroing item")?;
-                        Ok(())
-                    })?;
                     let (oid, obj) = match oid {
                         Some((oid, obj)) => {
                             airbase
@@ -351,6 +347,10 @@ impl Db {
                             airbase
                                 .set_coalition(Side::Neutral)
                                 .context("setting airbase owner neutral")?;
+                            map.for_each(|name, _| {
+                                w.set_item(name, 0).context("zeroing item")?;
+                                Ok(())
+                            })?;
                             return Ok(());
                         }
                     };
@@ -362,6 +362,16 @@ impl Db {
                             bail!("multiple airbases inside the trigger zone of {}", obj.name)
                         }
                     }
+                    let production = match self.ephemeral.production_by_side.get(&obj.owner) {
+                        Some(p) => p,
+                        None => return Ok(()),
+                    };
+                    map.for_each(|name, _| {
+                        if !production.equipment.contains_key(&name) {
+                            w.set_item(name, 0).context("zeroing item")?
+                        }
+                        Ok(())
+                    })?;
                     Ok(())
                 })
         };
@@ -424,10 +434,7 @@ impl Db {
         }
         self.update_supply_status()
             .context("updating supply status")?;
-        self.deliver_production().context("delivering production")?;
-        self.sync_warehouses_from_objectives(lua)
-            .context("syncing warehouses from objectives")?;
-        self.ephemeral.dirty();
+        self.setup_supply_lines().context("setting up supply lines")?;
         Ok(())
     }
 

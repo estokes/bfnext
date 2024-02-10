@@ -422,6 +422,7 @@ impl Db {
         if !missing.is_empty() {
             bail!("objectives missing a warehouse {:?}", missing)
         }
+        self.setup_supply_lines().context("setting up supply lines")?;
         Ok(())
     }
 

@@ -142,6 +142,14 @@ impl<'lua> Unit<'lua> {
         Ok(self.raw_set("heading", h)?)
     }
 
+    pub fn alt(&self) -> Result<Option<f64>> {
+        Ok(self.raw_get("alt")?)
+    }
+
+    pub fn set_alt(&self, a: f64) -> Result<()> {
+        Ok(self.raw_set("alt", a)?)
+    }
+
     pub fn typ(&self) -> Result<String> {
         Ok(self.raw_get("type")?)
     }

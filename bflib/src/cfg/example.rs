@@ -1135,6 +1135,8 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::Awacs {
                     duration: 5,
                     template: "RAWACS".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1156,6 +1158,8 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::Tanker {
                     duration: 5,
                     template: "RTANKER".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1179,6 +1183,8 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                     targets: 15,
                     power: 1000,
                     accuracy: 15,
+                    altitude: 12000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1190,6 +1196,8 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 limit: None,
                 kind: ActionKind::Fighters {
                     template: "RFIGHTERS".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1213,6 +1221,8 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::Paratrooper {
                     troop: "Standard".into(),
                     template: "RTROOPCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::AGL,
                 },
             },
         ),
@@ -1224,6 +1234,8 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 limit: None,
                 kind: ActionKind::LogisticsRepair {
                     template: "RCARGOCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::AGL,
                 },
             },
         ),
@@ -1235,6 +1247,20 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 limit: None,
                 kind: ActionKind::LogisticsTransfer {
                     template: "RCARGOCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::AGL,
+                },
+            },
+        ),
+        (
+            "nuke".into(),
+            Action {
+                cost: 5000,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::Nuke {
+                    cost_scale: 5,
+                    power: 1000,
                 },
             },
         ),
@@ -1252,6 +1278,8 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::Awacs {
                     duration: 5,
                     template: "BAWACS".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1273,6 +1301,8 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::Tanker {
                     duration: 5,
                     template: "BBASKETTANKER".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1285,6 +1315,8 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::Tanker {
                     duration: 5,
                     template: "BBOOMTANKER".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1308,6 +1340,8 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     targets: 15,
                     power: 1000,
                     accuracy: 15,
+                    altitude: 12000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1319,6 +1353,8 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 limit: None,
                 kind: ActionKind::Fighters {
                     template: "BFIGHTERS".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::MSL,
                 },
             },
         ),
@@ -1342,6 +1378,8 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::Paratrooper {
                     troop: "Standard".into(),
                     template: "BTROOPCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::AGL,
                 },
             },
         ),
@@ -1353,6 +1391,8 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 limit: None,
                 kind: ActionKind::LogisticsRepair {
                     template: "BCARGOCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::AGL,
                 },
             },
         ),
@@ -1364,6 +1404,20 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 limit: None,
                 kind: ActionKind::LogisticsTransfer {
                     template: "BCARGOCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::AGL,
+                },
+            },
+        ),
+        (
+            "nuke".into(),
+            Action {
+                cost: 5000,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::Nuke {
+                    cost_scale: 5,
+                    power: 1000,
                 },
             },
         ),

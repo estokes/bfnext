@@ -30,6 +30,12 @@ use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpawnLoc {
+    /// only for air units, obviously
+    InAir {
+        pos: Vector3,
+        heading: f64,
+        altitude: f64,
+    },
     AtPos {
         /// the position of the player. the group will be offset in the
         /// direction offset_direction from this point by the group radius + 10 meters

@@ -30,7 +30,7 @@ use compact_str::format_compact;
 use dcso3::{
     atomic_id, azumith3d, centroid2d,
     coalition::Side,
-    env::miz::{Group, GroupKind, MizIndex},
+    env::miz::{self, Group, GroupKind, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
     net::Ucid,
@@ -69,7 +69,9 @@ pub enum DeployKind {
     Action {
         player: Ucid,
         spec: Action,
-        time: DateTime<Utc>
+        time: DateTime<Utc>,
+        destination: Option<Vector2>,
+        rtb: Option<Vector2>,
     }
 }
 

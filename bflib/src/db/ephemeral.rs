@@ -393,6 +393,7 @@ pub struct Ephemeral {
     pub(super) units_able_to_move: IndexSet<UnitId, FxBuildHasher>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
     pub(super) production_by_side: FxHashMap<Side, Arc<Production>>,
+    pub(super) actions_taken: FxHashMap<Side, FxHashMap<String, u32>>,
     pub(super) delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<(GroupId, Despawn)>,
@@ -865,25 +866,42 @@ impl Ephemeral {
                 match &act.kind {
                     ActionKind::Awacs {
                         duration: _,
+                        altitude: _,
+                        altitude_typ: _,
                         template,
                     }
                     | ActionKind::Bomber {
                         targets: _,
                         power: _,
                         accuracy: _,
+                        altitude: _,
+                        altitude_typ: _,
                         template,
                     }
                     | ActionKind::CruiseMissileStrike { template }
                     | ActionKind::Tanker {
                         duration: _,
+                        altitude: _,
+                        altitude_typ: _,
                         template,
                     }
-                    | ActionKind::LogisticsRepair { template }
-                    | ActionKind::LogisticsTransfer { template } => {
+                    | ActionKind::Fighters { template, altitude: _, altitude_typ: _ }
+                    | ActionKind::LogisticsRepair {
+                        altitude: _,
+                        altitude_typ: _,
+                        template,
+                    }
+                    | ActionKind::LogisticsTransfer {
+                        altitude: _,
+                        altitude_typ: _,
+                        template,
+                    } => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
                     }
                     ActionKind::Deployable {
+                        altitude: _,
+                        altitude_typ: _,
                         deployable,
                         template,
                     } => {
@@ -894,7 +912,12 @@ impl Ephemeral {
                             .and_then(|idx| idx.deployables_by_name.get(deployable))
                             .ok_or_else(|| anyhow!("missing deployable for action {act:?}"))?;
                     }
-                    ActionKind::Paratrooper { troop, template } => {
+                    ActionKind::Paratrooper {
+                        altitude: _,
+                        altitude_typ: _,
+                        troop,
+                        template,
+                    } => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
                         self.deployable_idx
@@ -902,7 +925,12 @@ impl Ephemeral {
                             .and_then(|idx| idx.squads_by_name.get(troop))
                             .ok_or_else(|| anyhow!("missing troop for action {act:?}"))?;
                     }
-                    ActionKind::AwacsWaypoint | ActionKind::TankerWaypoint => (),
+                    ActionKind::AwacsWaypoint
+                    | ActionKind::TankerWaypoint
+                    | ActionKind::Nuke {
+                        cost_scale: _,
+                        power: _,
+                    } => (),
                 }
             }
         }

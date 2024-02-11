@@ -17,7 +17,7 @@ for more details.
 use anyhow::{anyhow, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
-use dcso3::{coalition::Side, net::Ucid, String};
+use dcso3::{coalition::Side, controller::AltType, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
 use fxhash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
@@ -395,10 +395,14 @@ pub enum ActionKind {
     Tanker {
         duration: u8,
         template: String,
+        altitude: f64,
+        altitude_typ: AltType,
     },
     Awacs {
         duration: u8,
         template: String,
+        altitude: f64,
+        altitude_typ: AltType,
     },
     Bomber {
         targets: u32,
@@ -406,29 +410,49 @@ pub enum ActionKind {
         // in meters radius around the target point
         accuracy: u32,
         template: String,
+        altitude: f64,
+        altitude_typ: AltType,
     },
     Fighters {
         template: String,
+        altitude: f64,
+        altitude_typ: AltType,
     },
     CruiseMissileStrike {
-        template: String
+        template: String,
+    },
+    Nuke {
+        /// using a nuke reduces the cost of nukes for everyone by this factor. e.g. cost_scale: 4, with initial cost 1000. 
+        /// The first nuke would cost 1000 points. The next nuke would cost 250 points. The next nuke would cost 62 points.
+        /// and so on until a nuke costs 1 point at which point it stops scaling.
+        cost_scale: u8,
+        /// in Kilotons of TNT
+        power: usize
     },
     TankerWaypoint,
     AwacsWaypoint,
     Paratrooper {
         troop: String,
         template: String,
+        altitude: f64,
+        altitude_typ: AltType,
     },
     Deployable {
         deployable: String,
         template: String,
+        altitude: f64,
+        altitude_typ: AltType,
     },
     LogisticsRepair {
-        template: String
+        template: String,
+        altitude: f64,
+        altitude_typ: AltType,
     },
     LogisticsTransfer {
-        template: String
-    }
+        template: String,
+        altitude: f64,
+        altitude_typ: AltType,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -45,6 +45,7 @@ pub struct Persisted {
     pub(super) troops: Set<GroupId>,
     pub(super) jtacs: Set<GroupId>,
     pub(super) ewrs: Set<GroupId>,
+    pub(super) actions: Set<GroupId>,
     pub(super) objectives: Map<ObjectiveId, Objective>,
     pub(super) objectives_by_slot: Map<SlotId, ObjectiveId>,
     pub(super) objectives_by_name: Map<String, ObjectiveId>,

@@ -361,7 +361,7 @@ impl Db {
                 let group = group!(self, unit.group)?;
                 match group.origin {
                     DeployKind::Crate { .. } => (),
-                    DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
+                    DeployKind::Deployed { .. } | DeployKind::Troop { .. } | DeployKind::Action { .. } => {
                         self.ephemeral
                             .units_potentially_close_to_enemies
                             .insert(*uid);

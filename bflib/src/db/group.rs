@@ -67,7 +67,7 @@ pub enum DeployKind {
         spec: Crate,
     },
     Action {
-        player: Ucid,
+        player: Option<Ucid>,
         spec: Action,
         time: DateTime<Utc>,
         destination: Option<Vector2>,

@@ -1,0 +1,61 @@
+#! /bin/bash
+
+trap quit SIGINT SIGTERM SIGQUIT
+
+if test -z "$1"; then
+    echo "usage: dcs <name>"
+    exit 1
+fi
+
+if echo "$1" | grep -Eq "[[:space:]]"; then
+    echo "name may not contain white space"
+    exit 2
+fi
+
+NAME="$1"
+DCS="$HOME/.wine/drive_c/Program Files/Eagle Dynamics/DCS World OpenBeta Server"
+DATA="$HOME/.wine/drive_c/users/dcs/Saved Games/$NAME"
+BFLOG="${DATA}/Logs/bfnext.txt"
+
+function kill_dcs() {
+    PID=$(ps auxwww \
+              | grep "DCS_server.exe -w $NAME" \
+              | grep -v grep \
+              | awk '{print $2}')
+    if ! test -z $PID; then
+        kill $PID
+    fi
+}
+
+function quit() {
+    kill_dcs
+    for job in $(jobs -p); do
+        kill $job
+    done
+}
+
+function watchdog() {
+    while true; do
+        TS=$(stat -c "%Y" "$BFLOG")
+        NOW=$(date +%s)
+        if test $((NOW - TS)) -gt 300; then
+            echo "$(date): watchdog kill DCS"
+            kill_dcs
+        fi
+        sleep 60
+    done 
+}
+
+function run_dcs() {
+    cd "$DCS"
+    while true; do
+        wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
+        sleep 10
+    done
+}
+
+# prevent watchdog kill before server start
+touch "$BFLOG"
+watchdog &
+run_dcs &
+wait

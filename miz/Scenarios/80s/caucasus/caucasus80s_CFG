@@ -15,7 +15,7 @@
   },
   "shutdown": 10,
   "points": {
-    "new_player_join": 0,
+    "new_player_join": 10,
     "air_kill": 25,
     "ground_kill": 2,
     "lr_sam_bonus": 5,
@@ -1094,9 +1094,7 @@
         "limit_enforce": "DeleteOldest",
         "weight": 500,
         "cost": 25,
-        "jtac": {
-          "range": 8000
-        }
+        "jtac": null
       }
     ]
   },

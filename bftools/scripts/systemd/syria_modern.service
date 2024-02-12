@@ -1,11 +1,12 @@
 [Unit]
-Description=Start up Caucasus 80s
+Description=Start up Syria modern
 
 [Service]
 After=tigervnc.service
 Type=simple
 User=dcs
-ExecStart=/home/dcs/bin/dcs caucasus_80s
+Environment="DISPLAY=:1"
+ExecStart=/home/dcs/bin/dcs syria_modern
 
 [Install]
 WantedBy=multi-user.target

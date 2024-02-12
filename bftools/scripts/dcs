@@ -22,8 +22,9 @@ function kill_dcs() {
               | grep "DCS_server.exe -w $NAME" \
               | grep -v grep \
               | awk '{print $2}')
+    echo "killing DCS with $PID"
     if ! test -z $PID; then
-        kill $PID
+        kill -9 $PID
     fi
 }
 

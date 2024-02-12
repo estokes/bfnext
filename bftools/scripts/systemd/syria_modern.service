@@ -1,0 +1,11 @@
+[Unit]
+Description=Start up Caucasus 80s
+
+[Service]
+After=tigervnc.service
+Type=simple
+User=dcs
+ExecStart=/home/dcs/bin/dcs caucasus_80s
+
+[Install]
+WantedBy=multi-user.target

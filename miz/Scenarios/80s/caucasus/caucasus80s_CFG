@@ -1094,9 +1094,7 @@
         "limit_enforce": "DeleteOldest",
         "weight": 500,
         "cost": 25,
-        "jtac": {
-          "range": 8000
-        }
+        "jtac": null
       }
     ]
   },

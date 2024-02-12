@@ -2,8 +2,8 @@
 
 trap quit SIGINT SIGTERM SIGQUIT
 
-if test -z "$1"; then
-    echo "usage: dcs <name>"
+if test -z "$1" -o -z "$2" -o -z "$3"; then
+    echo "usage: dcs <name> <git-path> <miz-name>"
     exit 1
 fi
 
@@ -12,10 +12,45 @@ if echo "$1" | grep -Eq "[[:space:]]"; then
     exit 2
 fi
 
+if test -d "${HOME}/bfnext/${2}"; then
+    echo "git path ${2} not found, or not a directory"
+fi
+
+if test -f "${HOME}/bfnext/${2}/$3"; then
+    echo "mission ${3} not found in ${2}"
+fi
+
 NAME="$1"
 DCS="$HOME/.wine/drive_c/Program Files/Eagle Dynamics/DCS World OpenBeta Server"
 DATA="$HOME/.wine/drive_c/users/dcs/Saved Games/$NAME"
 BFLOG="${DATA}/Logs/bfnext.txt"
+INSTALLED_MIZ="$(ls "${DATA}/Missions")"
+INSTALLED_CFG="$(ls "${DATA}/*_CFG")"
+GIT_PATH="$2"
+MIZ_NAME="$3"
+GIT_CFG="$(ls "${GIT_PATH}/*_CFG")"
+
+if test -z "$GIT_CFG" -o ! -f "$GIT_CFG"; then
+    echo "$GIT_CFG not found or not a file"
+fi
+
+function update_from_git {
+    cd ~/bfnext
+    git fetch
+    our_rev=$(git rev-parse --abbrev-ref HEAD)
+    changes=$(git log --oneline ${our_rev}..origin/main)
+    if test -n "$changes"; then
+	git checkout .
+	cp miz/bflib.dll "${DATA}/Scripts"
+	cp "${GIT_PATH}/${MIZ}" "$INSTALLED_MIZ"
+	# merge git config changes with the local admin, banned, and rules lists
+	jq --slurpfile ic "$INSTALLED_CFG" \
+	   '($ic[0] | { admins, rules, banned }) as $s | del(.[$s | keys[]]) + $s' \
+	   "$GIT_CFG" \
+	   >"${INSTALLED_CFG}.tmp"
+	mv "${INSTALLED_CFG}.tmp" "$INSTALLED_CFG"
+    fi
+}
 
 function kill_dcs() {
     PID=$(ps auxwww \
@@ -48,10 +83,11 @@ function watchdog() {
 }
 
 function run_dcs() {
-    cd "$DCS"
     while true; do
+	cd "$DCS"
         wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
         sleep 10
+	update_from_git
     done
 }
 

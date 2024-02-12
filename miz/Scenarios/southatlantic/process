@@ -1,0 +1,7 @@
+#!/bin/bash
+#
+# Postprocess the base mission file and templates to build the complete final .miz to run the actual scenario
+# 
+
+ ../bfnext/bftools/bftools.exe miz --output southatlantic_final.miz --base southatlantic_base.miz --weapon templates/weapons.southatlantic.miz --warehouse templates/warehouse.southatlantic.miz --options templates/options.southatlantic.miz
+

@@ -112,15 +112,15 @@
   "life_types": {
     "Mirage-F1EE": "Intercept",
     "C-101CC": "Recon",
-    "MiG-29A": "Standard",
-    "MiG-29S": "Standard",
+    "MiG-29A": "Intercept",
+    "MiG-29S": "Intercept",
     "F-14A-135-GR": "Standard",
     "L-39C": "Recon",
     "TF-51D": "Recon",
     "MiG-21Bis": "Intercept",
     "F-16C_50": "Standard",
     "MiG-19P": "Intercept",
-    "M-2000C": "Standard",
+    "M-2000C": "Intercept",
     "Mi-8MT": "Logistics",
     "Ka-50_3": "Attack",
     "F-15C": "Standard",
@@ -144,7 +144,7 @@
     "F-5E-3": "Intercept",
     "Yak-52": "Recon",
     "Mi-24P": "Attack",
-    "JF-17": "Attack",
+    "JF-17": "Standard",
     "F-15ESE": "Standard",
     "Su-25": "Attack",
     "AV8BNA": "Attack",
@@ -1438,6 +1438,7 @@
       "SAM",
       "MR",
       "RadarGuided",
+	  "EngagesWeapons",
       "SearchRadar"
     ],
 	"S-300PS 54K6 cp": [
@@ -1480,7 +1481,8 @@
       "SAM",
       "LR",
       "RadarGuided",
-      "TrackRadar"
+      "TrackRadar",
+	  "EngagesWeapons"
     ],
 	"S-300PS 40B6MD sr": [
       "SAM",
@@ -1499,31 +1501,36 @@
       "LR",
       "RadarGuided",
       "SearchRadar",
-	  "TrackRadar"
+	  "TrackRadar",
+	  "EngagesWeapons"
     ],
 	"NASAMS_LN_C": [
       "SAM",
       "MR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+	  "EngagesWeapons"
     ],
 	"Patriot ln": [
       "SAM",
       "LR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+	  "EngagesWeapons"
     ],
 	"S-300PS 5P85C ln": [
       "SAM",
       "LR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+	  "EngagesWeapons"
     ],
 	"S-300PS 5P85D ln": [
       "SAM",
       "LR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+	  "EngagesWeapons"
     ],
     "SA-18 Igla-S comm": [
       "SAM",
@@ -1574,9 +1581,10 @@
     ],
 	"HEMTT_C-RAM_Phalanx": [
       "AAA",
-      "LR",
+      "MR",
       "RadarGuided",
-      "Driveable"
+      "Driveable",
+	  "EngagesWeapons"
     ],
     "UH-1H": [
       "Helicopter"

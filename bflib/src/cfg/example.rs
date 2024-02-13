@@ -1132,12 +1132,12 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Awacs {
+                kind: ActionKind::Awacs(AiPlaneCfg {
                     duration: 5,
                     template: "RAWACS".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1155,12 +1155,12 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 50,
                 penalty: Some(50),
                 limit: None,
-                kind: ActionKind::Tanker {
+                kind: ActionKind::Tanker(AiPlaneCfg {
                     duration: 5,
                     template: "RTANKER".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1178,14 +1178,14 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Bomber {
+                kind: ActionKind::Bomber(BomberCfg {
                     template: "RBOMBER".into(),
                     targets: 15,
                     power: 1000,
                     accuracy: 15,
                     altitude: 12000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1194,11 +1194,12 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Fighters {
+                kind: ActionKind::Fighters(AiPlaneCfg {
+                    duration: 2,
                     template: "RFIGHTERS".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1207,9 +1208,9 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 150,
                 penalty: None,
                 limit: None,
-                kind: ActionKind::CruiseMissileStrike {
+                kind: ActionKind::CruiseMissileStrike(CruiseMissileCfg {
                     template: "RMISSILES".into(),
-                },
+                }),
             },
         ),
         (
@@ -1218,12 +1219,12 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 50,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Paratrooper {
-                    troop: "Standard".into(),
+                kind: ActionKind::Paratrooper(DeployableCfg {
+                    name: "Standard".into(),
                     template: "RTROOPCARRIER".into(),
                     altitude: 100.,
                     altitude_typ: AltType::AGL,
-                },
+                }),
             },
         ),
         (
@@ -1232,11 +1233,11 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::LogisticsRepair {
+                kind: ActionKind::LogisticsRepair(LogiCfg {
                     template: "RCARGOCARRIER".into(),
                     altitude: 100.,
                     altitude_typ: AltType::AGL,
-                },
+                }),
             },
         ),
         (
@@ -1245,11 +1246,11 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::LogisticsTransfer {
+                kind: ActionKind::LogisticsTransfer(LogiCfg {
                     template: "RCARGOCARRIER".into(),
                     altitude: 100.,
                     altitude_typ: AltType::AGL,
-                },
+                }),
             },
         ),
         (
@@ -1258,10 +1259,10 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 cost: 5000,
                 penalty: None,
                 limit: None,
-                kind: ActionKind::Nuke {
+                kind: ActionKind::Nuke(NukeCfg {
                     cost_scale: 5,
                     power: 1000,
-                },
+                }),
             },
         ),
     ])
@@ -1275,12 +1276,12 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Awacs {
+                kind: ActionKind::Awacs(AiPlaneCfg {
                     duration: 5,
                     template: "BAWACS".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1298,12 +1299,12 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 50,
                 penalty: Some(50),
                 limit: None,
-                kind: ActionKind::Tanker {
+                kind: ActionKind::Tanker(AiPlaneCfg {
                     duration: 5,
                     template: "BBASKETTANKER".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1312,12 +1313,12 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 50,
                 penalty: Some(50),
                 limit: None,
-                kind: ActionKind::Tanker {
+                kind: ActionKind::Tanker(AiPlaneCfg {
                     duration: 5,
                     template: "BBOOMTANKER".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1335,14 +1336,14 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Bomber {
+                kind: ActionKind::Bomber(BomberCfg {
                     template: "BBOMBER".into(),
                     targets: 15,
                     power: 1000,
                     accuracy: 15,
                     altitude: 12000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1351,11 +1352,12 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Fighters {
+                kind: ActionKind::Fighters(AiPlaneCfg {
+                    duration: 2,
                     template: "BFIGHTERS".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::MSL,
-                },
+                }),
             },
         ),
         (
@@ -1364,9 +1366,9 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 150,
                 penalty: None,
                 limit: None,
-                kind: ActionKind::CruiseMissileStrike {
+                kind: ActionKind::CruiseMissileStrike(CruiseMissileCfg {
                     template: "BMISSILES".into(),
-                },
+                }),
             },
         ),
         (
@@ -1375,12 +1377,12 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 50,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Paratrooper {
-                    troop: "Standard".into(),
+                kind: ActionKind::Paratrooper(DeployableCfg {
+                    name: "Standard".into(),
                     template: "BTROOPCARRIER".into(),
                     altitude: 100.,
                     altitude_typ: AltType::AGL,
-                },
+                }),
             },
         ),
         (
@@ -1389,11 +1391,11 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::LogisticsRepair {
+                kind: ActionKind::LogisticsRepair(LogiCfg {
                     template: "BCARGOCARRIER".into(),
                     altitude: 100.,
                     altitude_typ: AltType::AGL,
-                },
+                }),
             },
         ),
         (
@@ -1402,11 +1404,11 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::LogisticsTransfer {
+                kind: ActionKind::LogisticsTransfer(LogiCfg {
                     template: "BCARGOCARRIER".into(),
                     altitude: 100.,
                     altitude_typ: AltType::AGL,
-                },
+                }),
             },
         ),
         (
@@ -1415,10 +1417,10 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 5000,
                 penalty: None,
                 limit: None,
-                kind: ActionKind::Nuke {
+                kind: ActionKind::Nuke(NukeCfg {
                     cost_scale: 5,
                     power: 1000,
-                },
+                }),
             },
         ),
     ])

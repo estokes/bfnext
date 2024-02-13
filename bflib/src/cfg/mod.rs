@@ -391,68 +391,68 @@ pub struct PointsCfg {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiPlaneCfg {
+    pub duration: u8,
+    pub template: String,
+    pub altitude: f64,
+    pub altitude_typ: AltType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BomberCfg {
+    pub targets: u32,
+    pub power: u32,
+    // in meters radius around the target point
+    pub accuracy: u32,
+    pub template: String,
+    pub altitude: f64,
+    pub altitude_typ: AltType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeployableCfg {
+    pub name: String,
+    pub template: String,
+    pub altitude: f64,
+    pub altitude_typ: AltType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogiCfg {
+    pub template: String,
+    pub altitude: f64,
+    pub altitude_typ: AltType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CruiseMissileCfg {
+    pub template: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NukeCfg {
+    /// using a nuke reduces the cost of nukes for everyone by this factor. e.g. cost_scale: 4, with initial cost 1000.
+    /// The first nuke would cost 1000 points. The next nuke would cost 250 points. The next nuke would cost 62 points.
+    /// and so on until a nuke costs 1 point at which point it stops scaling.
+    pub cost_scale: u8,
+    /// in Kilotons of TNT
+    pub power: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActionKind {
-    Tanker {
-        duration: u8,
-        template: String,
-        altitude: f64,
-        altitude_typ: AltType,
-    },
-    Awacs {
-        duration: u8,
-        template: String,
-        altitude: f64,
-        altitude_typ: AltType,
-    },
-    Bomber {
-        targets: u32,
-        power: u32,
-        // in meters radius around the target point
-        accuracy: u32,
-        template: String,
-        altitude: f64,
-        altitude_typ: AltType,
-    },
-    Fighters {
-        template: String,
-        altitude: f64,
-        altitude_typ: AltType,
-    },
-    CruiseMissileStrike {
-        template: String,
-    },
-    Nuke {
-        /// using a nuke reduces the cost of nukes for everyone by this factor. e.g. cost_scale: 4, with initial cost 1000. 
-        /// The first nuke would cost 1000 points. The next nuke would cost 250 points. The next nuke would cost 62 points.
-        /// and so on until a nuke costs 1 point at which point it stops scaling.
-        cost_scale: u8,
-        /// in Kilotons of TNT
-        power: usize
-    },
+    Tanker(AiPlaneCfg),
+    Awacs(AiPlaneCfg),
+    Bomber(BomberCfg),
+    Fighters(AiPlaneCfg),
+    CruiseMissileStrike(CruiseMissileCfg),
+    Nuke(NukeCfg),
     TankerWaypoint,
     AwacsWaypoint,
-    Paratrooper {
-        troop: String,
-        template: String,
-        altitude: f64,
-        altitude_typ: AltType,
-    },
-    Deployable {
-        deployable: String,
-        template: String,
-        altitude: f64,
-        altitude_typ: AltType,
-    },
-    LogisticsRepair {
-        template: String,
-        altitude: f64,
-        altitude_typ: AltType,
-    },
-    LogisticsTransfer {
-        template: String,
-        altitude: f64,
-        altitude_typ: AltType,
-    },
+    Paratrooper(DeployableCfg),
+    Deployable(DeployableCfg),
+    LogisticsRepair(LogiCfg),
+    LogisticsTransfer(LogiCfg),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

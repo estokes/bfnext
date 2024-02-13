@@ -6,6 +6,14 @@
     "d613f7f534f4498e47652c29d00836e6": "admin",
     "d931948745285fc8e42adbe35a7dfd50": "admin" 
   },
+  "banned": {},
+  "rules": {
+    "actions": "AlwaysAllowed",
+    "cargo": "AlwaysAllowed",
+    "troops": "AlwaysAllowed",
+    "jtac": "AlwaysAllowed",
+    "ca": "AlwaysAllowed"
+  },
   "repair_time": 1800,
   "shutdown": 10,
   "repair_crate": {

@@ -22,7 +22,7 @@ use super::{
 };
 use crate::{
     cfg::{
-        ActionKind, Cfg, Crate, Deployable, DeployableLogistics, Troop, Vehicle, WarehouseConfig,
+        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, CruiseMissileCfg, Deployable, DeployableCfg, DeployableLogistics, LogiCfg, NukeCfg, Troop, Vehicle, WarehouseConfig
     },
     maybe,
     msgq::MsgQ,
@@ -864,73 +864,73 @@ impl Ephemeral {
                     bail!("the points system is disabled but {act:?} costs points")
                 }
                 match &act.kind {
-                    ActionKind::Awacs {
+                    ActionKind::Awacs(AiPlaneCfg {
                         duration: _,
                         altitude: _,
                         altitude_typ: _,
                         template,
-                    }
-                    | ActionKind::Bomber {
+                    })
+                    | ActionKind::Bomber(BomberCfg {
                         targets: _,
                         power: _,
                         accuracy: _,
                         altitude: _,
                         altitude_typ: _,
                         template,
-                    }
-                    | ActionKind::CruiseMissileStrike { template }
-                    | ActionKind::Tanker {
+                    })
+                    | ActionKind::CruiseMissileStrike(CruiseMissileCfg { template })
+                    | ActionKind::Tanker(AiPlaneCfg {
                         duration: _,
                         altitude: _,
                         altitude_typ: _,
                         template,
-                    }
-                    | ActionKind::Fighters { template, altitude: _, altitude_typ: _ }
-                    | ActionKind::LogisticsRepair {
+                    })
+                    | ActionKind::Fighters(AiPlaneCfg { duration: _ , template, altitude: _, altitude_typ: _ })
+                    | ActionKind::LogisticsRepair(LogiCfg {
                         altitude: _,
                         altitude_typ: _,
                         template,
-                    }
-                    | ActionKind::LogisticsTransfer {
+                    })
+                    | ActionKind::LogisticsTransfer(LogiCfg {
                         altitude: _,
                         altitude_typ: _,
                         template,
-                    } => {
+                    }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
                     }
-                    ActionKind::Deployable {
+                    ActionKind::Deployable(DeployableCfg {
                         altitude: _,
                         altitude_typ: _,
-                        deployable,
+                        name,
                         template,
-                    } => {
+                    }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
                         self.deployable_idx
                             .get(side)
-                            .and_then(|idx| idx.deployables_by_name.get(deployable))
+                            .and_then(|idx| idx.deployables_by_name.get(name))
                             .ok_or_else(|| anyhow!("missing deployable for action {act:?}"))?;
                     }
-                    ActionKind::Paratrooper {
+                    ActionKind::Paratrooper(DeployableCfg {
                         altitude: _,
                         altitude_typ: _,
-                        troop,
+                        name,
                         template,
-                    } => {
+                    }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
                         self.deployable_idx
                             .get(side)
-                            .and_then(|idx| idx.squads_by_name.get(troop))
+                            .and_then(|idx| idx.squads_by_name.get(name))
                             .ok_or_else(|| anyhow!("missing troop for action {act:?}"))?;
                     }
                     ActionKind::AwacsWaypoint
                     | ActionKind::TankerWaypoint
-                    | ActionKind::Nuke {
+                    | ActionKind::Nuke(NukeCfg {
                         cost_scale: _,
                         power: _,
-                    } => (),
+                    }) => (),
                 }
             }
         }

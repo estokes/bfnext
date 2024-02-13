@@ -1173,6 +1173,29 @@ fn default_red_actions() -> FxHashMap<String, Action> {
             },
         ),
         (
+            "drone".into(),
+            Action {
+                cost: 25,
+                penalty: Some(25),
+                limit: None,
+                kind: ActionKind::Drone(AiPlaneCfg {
+                    duration: 5,
+                    template: "RDRONE".into(),
+                    altitude: 6000.,
+                    altitude_typ: AltType::MSL,
+                }),
+            },
+        ),
+        (
+            "drone-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::DroneWaypoint,
+            },
+        ),
+        (
             "bomber".into(),
             Action {
                 cost: 100,
@@ -1200,6 +1223,15 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                     altitude: 10000.,
                     altitude_typ: AltType::MSL,
                 }),
+            },
+        ),
+        (
+            "fighters-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::FighersWaypoint,
             },
         ),
         (
@@ -1331,6 +1363,29 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
             },
         ),
         (
+            "drone".into(),
+            Action {
+                cost: 25,
+                penalty: Some(25),
+                limit: None,
+                kind: ActionKind::Drone(AiPlaneCfg {
+                    duration: 5,
+                    template: "BDRONE".into(),
+                    altitude: 6000.,
+                    altitude_typ: AltType::MSL,
+                }),
+            },
+        ),
+        (
+            "drone-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::DroneWaypoint,
+            },
+        ),
+        (
             "bomber".into(),
             Action {
                 cost: 100,
@@ -1359,6 +1414,15 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     altitude_typ: AltType::MSL,
                 }),
             },
+        ),
+        (
+            "fighters-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::FighersWaypoint
+            }
         ),
         (
             "missile-strike".into(),

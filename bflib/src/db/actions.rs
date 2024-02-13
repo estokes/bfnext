@@ -1,7 +1,10 @@
-use super::{group::GroupId, Db};
-use crate::cfg::{
-    Action, ActionKind, AiPlaneCfg, BomberCfg, Cfg, CruiseMissileCfg, DeployableCfg, LogiCfg,
-    NukeCfg,
+use super::{group::GroupId, objective::ObjectiveId, Db};
+use crate::{
+    admin,
+    cfg::{
+        Action, ActionKind, AiPlaneCfg, BomberCfg, CruiseMissileCfg, DeployableCfg, LogiCfg,
+        NukeCfg,
+    },
 };
 use anyhow::{anyhow, bail, Result};
 use dcso3::{
@@ -16,6 +19,12 @@ use smallvec::{smallvec, SmallVec};
 struct WithPos<T> {
     cfg: T,
     pos: Vector3,
+}
+
+#[derive(Debug, Clone)]
+struct WithObj<T> {
+    cfg: T,
+    oid: ObjectiveId,
 }
 
 #[derive(Debug, Clone)]
@@ -37,18 +46,21 @@ pub enum ActionArgs {
     Awacs(WithPos<AiPlaneCfg>),
     Bomber(WithJtac<BomberCfg>),
     Fighters(WithPos<AiPlaneCfg>),
-    CruiseMissileStrike(WithPos<CruiseMissileCfg>),
+    FightersWaypoint(WithPosAndGroup<()>),
+    Drone(WithPos<AiPlaneCfg>),
+    DroneWaypoint(WithPosAndGroup<()>),
+    CruiseMissileStrike(WithJtac<CruiseMissileCfg>),
     Nuke(WithPos<NukeCfg>),
     TankerWaypoint(WithPosAndGroup<()>),
     AwacsWaypoint(WithPosAndGroup<()>),
     Paratrooper(WithPos<DeployableCfg>),
     Deployable(WithPos<DeployableCfg>),
-    LogisticsRepair(WithPos<LogiCfg>),
-    LogisticsTransfer(WithPos<LogiCfg>),
+    LogisticsRepair(WithObj<LogiCfg>),
+    LogisticsTransfer(WithObj<LogiCfg>),
 }
 
 impl ActionArgs {
-    pub fn parse(action: &ActionKind, lua: MizLua, side: Side, s: &str) -> Result<Self> {
+    pub fn parse(db: &Db, action: &ActionKind, lua: MizLua, side: Side, s: &str) -> Result<Self> {
         fn get_key_pos(lua: MizLua, side: Side, key: &str) -> Result<Vector3> {
             let mut found: SmallVec<[MarkPanel; 4]> = smallvec![];
             for mk in World::singleton(lua)?.get_mark_panels()? {
@@ -82,24 +94,34 @@ impl ActionArgs {
             let pos = get_key_pos(lua, side, s)?;
             Ok(WithPos { cfg, pos })
         }
+        fn jtac<T>(cfg: T, s: &str) -> Result<WithJtac<T>> {
+            Ok(WithJtac {
+                cfg,
+                jtac: s.parse()?,
+            })
+        }
+        fn obj<T>(db: &Db, cfg: T, s: &str) -> Result<WithObj<T>> {
+            Ok(WithObj {
+                cfg,
+                oid: admin::get_airbase(db, s)?,
+            })
+        }
         match action.clone() {
             ActionKind::Tanker(c) => Ok(Self::Tanker(pos(lua, side, c, s)?)),
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(lua, side, c, s)?)),
             ActionKind::Fighters(c) => Ok(Self::Fighters(pos(lua, side, c, s)?)),
-            ActionKind::CruiseMissileStrike(c) => {
-                Ok(Self::CruiseMissileStrike(pos(lua, side, c, s)?))
-            }
+            ActionKind::FighersWaypoint => Ok(Self::FightersWaypoint(pos_group(lua, side, s)?)),
+            ActionKind::Drone(c) => Ok(Self::Drone(pos(lua, side, c, s)?)),
+            ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(lua, side, s)?)),
+            ActionKind::CruiseMissileStrike(c) => Ok(Self::CruiseMissileStrike(jtac(c, s)?)),
             ActionKind::Nuke(c) => Ok(Self::Nuke(pos(lua, side, c, s)?)),
             ActionKind::Paratrooper(c) => Ok(Self::Paratrooper(pos(lua, side, c, s)?)),
             ActionKind::Deployable(c) => Ok(Self::Deployable(pos(lua, side, c, s)?)),
-            ActionKind::LogisticsRepair(c) => Ok(Self::LogisticsRepair(pos(lua, side, c, s)?)),
-            ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(pos(lua, side, c, s)?)),
+            ActionKind::LogisticsRepair(c) => Ok(Self::LogisticsRepair(obj(db, c, s)?)),
+            ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(obj(db, c, s)?)),
             ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(lua, side, s)?)),
             ActionKind::TankerWaypoint => Ok(Self::TankerWaypoint(pos_group(lua, side, s)?)),
-            ActionKind::Bomber(cfg) => Ok(Self::Bomber(WithJtac {
-                cfg,
-                jtac: s.parse()?,
-            })),
+            ActionKind::Bomber(c) => Ok(Self::Bomber(jtac(c, s)?)),
         }
     }
 }
@@ -112,17 +134,19 @@ pub struct ActionCmd {
 }
 
 impl ActionCmd {
-    pub fn parse(cfg: &Cfg, lua: MizLua, side: Side, s: &str) -> Result<Self> {
+    pub fn parse(db: &Db, lua: MizLua, side: Side, s: &str) -> Result<Self> {
         match s.split_once(" ") {
             None => bail!("expected <action> <args>"),
             Some((name, args)) => {
-                let action = cfg
+                let action = db
+                    .ephemeral
+                    .cfg
                     .actions
                     .get(&side)
                     .and_then(|actions| actions.get(name))
                     .ok_or_else(|| anyhow!("no such action {name}"))?
                     .clone();
-                let args = ActionArgs::parse(&action.kind, lua, side, args)?;
+                let args = ActionArgs::parse(db, &action.kind, lua, side, args)?;
                 Ok(Self {
                     name: name.into(),
                     action,
@@ -165,48 +189,46 @@ impl Db {
             }
         }
         match cmd.args {
-            ActionArgs::Awacs(args) => {
-                self.awacs(ucid, cmd.action, args)?
-            }
-            ActionArgs::AwacsWaypoint(args) => {
-                self.move_awacs(ucid, cmd.action, args)?
-            }
-            ActionArgs::Bomber(args) => {
-                self.bomber_strike(ucid, cmd.action, args)?
-            }
+            ActionArgs::Awacs(args) => self.awacs(lua, ucid, cmd.action, args)?,
+            ActionArgs::AwacsWaypoint(args) => self.move_awacs(lua, ucid, cmd.action, args)?,
+            ActionArgs::Bomber(args) => self.bomber_strike(lua, ucid, cmd.action, args)?,
             ActionArgs::CruiseMissileStrike(args) => {
-                self.cruise_missile_strike(ucid, cmd.action, args)?
+                self.cruise_missile_strike(lua, ucid, cmd.action, args)?
             }
-            ActionArgs::Deployable(args) => {
-                self.ai_deploy(ucid, cmd.action, args)?
+            ActionArgs::Deployable(args) => self.ai_deploy(lua, ucid, cmd.action, args)?,
+            ActionArgs::Fighters(args) => self.ai_fighters(lua, ucid, cmd.action, args)?,
+            ActionArgs::FightersWaypoint(args) => {
+                self.move_ai_fighters(lua, ucid, cmd.action, args)?
             }
-            ActionArgs::Fighters(args) => {
-                self.ai_fighters(ucid, cmd.action, args)?
-            }
+            ActionArgs::Drone(args) => self.drone(lua, ucid, cmd.action, args)?,
+            ActionArgs::DroneWaypoint(args) => self.move_drone(lua, ucid, cmd.action, args)?,
             ActionArgs::LogisticsRepair(args) => {
-                self.ai_logistics_repair(ucid, cmd.action, args)?
+                self.ai_logistics_repair(lua, ucid, cmd.action, args)?
             }
             ActionArgs::LogisticsTransfer(args) => {
-                self.ai_logistics_transfer(ucid, cmd.action, args)?
+                self.ai_logistics_transfer(lua, ucid, cmd.action, args)?
             }
-            ActionArgs::Nuke(args) => {
-                self.nuke(ucid, cmd.action, args)?
-            }
-            ActionArgs::Paratrooper(args) => {
-                self.paratroops(ucid, cmd.action, args)?
-            }
-            ActionArgs::Tanker(args) => {
-                self.tanker(ucid, cmd.action, args)?
-            }
-            ActionArgs::TankerWaypoint(args) => {
-                self.move_tanker(ucid, cmd.action, args)?
-            }
+            ActionArgs::Nuke(args) => self.nuke(lua, ucid, cmd.action, args)?,
+            ActionArgs::Paratrooper(args) => self.paratroops(lua, ucid, cmd.action, args)?,
+            ActionArgs::Tanker(args) => self.tanker(lua, ucid, cmd.action, args)?,
+            ActionArgs::TankerWaypoint(args) => self.move_tanker(lua, ucid, cmd.action, args)?,
         }
+        Ok(())
+    }
+
+    fn move_drone(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
         unimplemented!()
     }
 
-    fn awacs(
+    fn drone(
         &mut self,
+        lua: MizLua,
         ucid: &Ucid,
         action: Action,
         args: WithPos<AiPlaneCfg>,
@@ -214,7 +236,133 @@ impl Db {
         unimplemented!()
     }
 
-    fn move_awacs(&mut self, ucid: &Ucid, action: Action, args: WithPosAndGroup<()>) -> Result<()> {
+    fn move_ai_fighters(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn move_tanker(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn tanker(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn paratroops(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPos<DeployableCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn nuke(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPos<NukeCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn ai_logistics_transfer(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithObj<LogiCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn ai_logistics_repair(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithObj<LogiCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn ai_fighters(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn ai_deploy(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPos<DeployableCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn cruise_missile_strike(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithJtac<CruiseMissileCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn bomber_strike(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithJtac<BomberCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn awacs(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn move_awacs(
+        &mut self,
+        lua: MizLua,
+        ucid: &Ucid,
+        action: Action,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
         unimplemented!()
     }
 }

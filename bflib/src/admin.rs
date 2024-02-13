@@ -17,7 +17,11 @@ for more details.
 use crate::{
     bg::Task,
     cfg::Cfg,
-    db::{group::{DeployKind, GroupId}, objective::ObjectiveId, Set},
+    db::{
+        group::{DeployKind, GroupId},
+        objective::ObjectiveId,
+        Db, Set,
+    },
     msgq::MsgTyp,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -491,8 +495,8 @@ pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
     bail!("no player found for alias, player id, or ucid \"{}\"", key)
 }
 
-fn get_airbase(ctx: &Context, name: &str) -> Result<ObjectiveId> {
-    for (oid, obj) in ctx.db.objectives() {
+pub fn get_airbase(db: &Db, name: &str) -> Result<ObjectiveId> {
+    for (oid, obj) in db.objectives() {
         if obj.name.as_str() == name {
             return Ok(*oid);
         }
@@ -502,7 +506,7 @@ fn get_airbase(ctx: &Context, name: &str) -> Result<ObjectiveId> {
         .build()
         .context("building regex")?;
     let mut candidates: SmallVec<[(ObjectiveId, String); 32]> = smallvec![];
-    for (oid, obj) in ctx.db.objectives() {
+    for (oid, obj) in db.objectives() {
         if re.is_match(obj.name.as_str()) {
             candidates.push((*oid, obj.name.clone()));
         }
@@ -688,13 +692,19 @@ fn remove_admin(ctx: &mut Context, player: &String) -> Result<()> {
 
 fn balance(ctx: &Context, player: &String) -> Result<i32> {
     let ucid = get_player_ucid(ctx, player)?;
-    let player = ctx.db.player(&ucid).ok_or_else(|| anyhow!("no such player {player}"))?;
+    let player = ctx
+        .db
+        .player(&ucid)
+        .ok_or_else(|| anyhow!("no such player {player}"))?;
     Ok(player.points)
 }
 
 fn set_points(ctx: &mut Context, player: &String, amount: i32) -> Result<()> {
     let ucid = get_player_ucid(ctx, player)?;
-    let player = ctx.db.player_mut(&ucid).ok_or_else(|| anyhow!("no such player {player}"))?;
+    let player = ctx
+        .db
+        .player_mut(&ucid)
+        .ok_or_else(|| anyhow!("no such player {player}"))?;
     player.points = amount;
     ctx.db.ephemeral.dirty();
     Ok(())
@@ -703,9 +713,10 @@ fn set_points(ctx: &mut Context, player: &String, amount: i32) -> Result<()> {
 fn delete(ctx: &mut Context, id: &GroupId) -> Result<()> {
     match &ctx.db.group(id)?.origin {
         DeployKind::Objective => bail!("you can't delete objective groups"),
-        DeployKind::Crate { .. } | DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
-            ctx.db.delete_group(id)
-        }
+        DeployKind::Crate { .. }
+        | DeployKind::Deployed { .. }
+        | DeployKind::Troop { .. }
+        | DeployKind::Action { .. } => ctx.db.delete_group(id),
     }
 }
 
@@ -720,7 +731,7 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
         }
         macro_rules! airbase {
             ($name:expr) => {
-                match get_airbase(ctx, $name) {
+                match get_airbase(&ctx.db, $name) {
                     Ok(oid) => oid,
                     Err(e) => {
                         reply!("{e:?}");
@@ -879,16 +890,16 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
             },
             AdminCommand::Balance { player } => match balance(ctx, &player) {
                 Ok(b) => reply!("{player}'s balance is {b}"),
-                Err(e) => reply!("could not get {player}'s balance {e:?}")
-            }
+                Err(e) => reply!("could not get {player}'s balance {e:?}"),
+            },
             AdminCommand::SetPoints { amount, player } => match set_points(ctx, &player, amount) {
                 Ok(()) => reply!("{player}'s points set to {amount}"),
-                Err(e) => reply!("could not set {player}'s points {e:?}")
-            }
+                Err(e) => reply!("could not set {player}'s points {e:?}"),
+            },
             AdminCommand::Delete { group } => match delete(ctx, &group) {
                 Ok(()) => reply!("{group} deleted"),
-                Err(e) => reply!("could not delete group {e:?}")
-            }
+                Err(e) => reply!("could not delete group {e:?}"),
+            },
         }
     }
     ctx.admin_commands = cmds;

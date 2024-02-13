@@ -19,7 +19,7 @@ use super::{
     Db, Set,
 };
 use crate::{
-    cfg::{Crate, Deployable, Troop, UnitTag, UnitTags, Action},
+    cfg::{Action, Crate, Deployable, Troop, UnitTag, UnitTags},
     group, group_by_name,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
@@ -36,6 +36,7 @@ use dcso3::{
     net::Ucid,
     object::{DcsObject, DcsOid},
     rotate2d,
+    trigger::MarkId,
     unit::{ClassUnit, Unit},
     LuaVec2, MizLua, Position3, String, Vector2,
 };
@@ -68,11 +69,12 @@ pub enum DeployKind {
     },
     Action {
         player: Option<Ucid>,
+        name: String,
         spec: Action,
         time: DateTime<Utc>,
         destination: Option<Vector2>,
         rtb: Option<Vector2>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -174,37 +176,61 @@ impl Db {
                 .into_iter()
                 .map(|uid| self.persisted.units[uid].pos),
         );
-        let id = match &group.origin {
-            DeployKind::Objective => None,
+        let ids: SmallVec<[MarkId; 2]> = match &group.origin {
+            DeployKind::Objective => smallvec![],
+            DeployKind::Action {
+                name,
+                spec,
+                destination,
+                player,
+                ..
+            } => {
+                let pname = player
+                    .as_ref()
+                    .map(|p| self.persisted.players[p].name.clone())
+                    .unwrap_or(String::from("Server"));
+                let pos_msg = format_compact!("{name} {gid} deployed by {pname}");
+                let dst_msg = format_compact!("{name} {gid} destination");
+                let pos_mark =
+                    self.ephemeral
+                        .msgs
+                        .mark_to_side(group.side, group_center, true, pos_msg);
+                match destination {
+                    None => smallvec![pos_mark],
+                    Some(dst) => smallvec![
+                        pos_mark,
+                        self.ephemeral
+                            .msgs
+                            .mark_to_side(group.side, *dst, true, dst_msg),
+                    ],
+                }
+            }
             DeployKind::Crate { player, spec, .. } => {
                 let name = self.persisted.players[player].name.clone();
                 let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                smallvec![self
+                    .ephemeral
+                    .msgs
+                    .mark_to_side(group.side, group_center, true, msg),]
             }
             DeployKind::Deployed { spec, player } => {
                 let name = self.persisted.players[player].name.clone();
                 let msg = format_compact!("{} {gid} deployed by {name}", spec.path.last().unwrap());
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                smallvec![self
+                    .ephemeral
+                    .msgs
+                    .mark_to_side(group.side, group_center, true, msg),]
             }
             DeployKind::Troop { player, spec } => {
                 let name = self.persisted.players[player].name.clone();
                 let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                smallvec![self
+                    .ephemeral
+                    .msgs
+                    .mark_to_side(group.side, group_center, true, msg),]
             }
         };
-        if let Some(id) = id {
+        for id in ids {
             self.ephemeral.group_marks.insert(*gid, id);
         }
         Ok(())
@@ -619,10 +645,10 @@ impl Db {
         }
         Ok((alive, group.units.len()))
     }
-    
+
     pub fn artillery_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
         let range2 = (self.ephemeral.cfg.artillery_mission_range as f64).powi(2);
-        let artillery = self 
+        let artillery = self
             .deployed()
             .filter_map(|group| {
                 if group.tags.contains(UnitTag::Artillery) && group.side == side {

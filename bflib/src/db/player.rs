@@ -104,15 +104,23 @@ impl Db {
     pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
         self.persisted.players.get(ucid)
     }
-    
+
     pub fn player_mut(&mut self, ucid: &Ucid) -> Option<&mut Player> {
         self.persisted.players.get_mut_cow(ucid)
     }
 
     pub fn transfer_points(&mut self, source: &Ucid, target: &Ucid, amount: u32) -> Result<()> {
-        let sp = self.persisted.players.get_mut_cow(source).ok_or_else(|| anyhow!("source player not found"))?;
+        let sp = self
+            .persisted
+            .players
+            .get_mut_cow(source)
+            .ok_or_else(|| anyhow!("source player not found"))?;
         if sp.points < amount as i32 {
-            bail!("insufficient balance, you have {}, you requested {}", sp.points, amount)
+            bail!(
+                "insufficient balance, you have {}, you requested {}",
+                sp.points,
+                amount
+            )
         }
         sp.points -= amount as i32;
         match self.persisted.players.get_mut_cow(target) {
@@ -136,12 +144,13 @@ impl Db {
 
     pub fn instanced_players(&self) -> impl Iterator<Item = (&Ucid, &Player, &InstancedPlayer)> {
         self.ephemeral.players_by_slot.values().filter_map(|ucid| {
-            let player = &self.persisted.players[ucid];
-            player
-                .current_slot
-                .as_ref()
-                .and_then(|(_, inst)| inst.as_ref())
-                .map(|inst| (ucid, player, inst))
+            self.persisted.players.get(ucid).and_then(|player| {
+                player
+                    .current_slot
+                    .as_ref()
+                    .and_then(|(_, inst)| inst.as_ref())
+                    .map(|inst| (ucid, player, inst))
+            })
         })
     }
 
@@ -214,7 +223,7 @@ impl Db {
         if is_on_owned_objective {
             // paranoia
             if *player_lives == 0 {
-               return Ok(TakeoffRes::OutOfLives) 
+                return Ok(TakeoffRes::OutOfLives);
             } else {
                 player.airborne = Some(life_type);
                 *player_lives -= 1;

@@ -32,6 +32,7 @@ use crate::{cfg::Cfg, db::player::SlotAuth, perf::record_perf};
 use admin::{run_admin_commands, AdminCommand};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use cfg::LifeType;
+use chatcmd::run_action_commands;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use db::{objective::ObjectiveId, player::TakeoffRes, Db};
@@ -119,6 +120,7 @@ struct Context {
     idx: env::miz::MizIndex,
     db: Db,
     admin_commands: Vec<(PlayerId, AdminCommand)>,
+    action_commands: Vec<(PlayerId, String)>,
     to_background: Option<UnboundedSender<bg::Task>>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
@@ -918,10 +920,13 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     ctx.db.ephemeral.msgs().process(&net, &act);
     record_perf(&mut perf.process_messages, now);
     if let Err(e) = run_logistics_events(lua, ctx, perf, ts) {
-        error!("error running logistics events {:?}", e)
+        error!("error running logistics events {e:?}")
     }
     if let Err(e) = run_admin_commands(ctx, lua) {
-        error!("failed to run admin commands {:?}", e)
+        error!("failed to run admin commands {e:?}")
+    }
+    if let Err(e) = run_action_commands(ctx, lua) {
+        error!("failed to run action commands {e:?}")
     }
     record_perf(&mut perf.timed_events, ts);
     ctx.log_perf(now);

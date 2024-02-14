@@ -1,21 +1,25 @@
+use std::sync::Arc;
+
 use crate::{
     admin::{self, AdminCommand},
     cfg::{Action, ActionKind},
     db::{
+        actions::ActionCmd,
         group::{DeployKind, GroupId},
         player::RegErr,
     },
     get_player_info, lives,
     msgq::MsgTyp,
+    spawnctx::SpawnCtx,
     Context,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
     net::{Net, PlayerId},
-    HooksLua, String,
+    HooksLua, MizLua, String,
 };
 use fxhash::FxHashMap;
 use log::{error, info};
@@ -250,38 +254,38 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
     }
 }
 
-fn action_help(ctx: &mut Context, actions: &FxHashMap<String, Action>) {
+fn action_help(ctx: &mut Context, actions: &FxHashMap<String, Action>, id: PlayerId) {
     for (name, action) in actions {
         let msg = match &action.kind {
             ActionKind::Awacs(_) => Some(format_compact!(
-                "{name}: <key> | Spawn an awacs. Key is the text in a mark point. cost {}",
+                "{name}: <key> | Spawn an awacs at key, a mark point. cost {}",
                 action.cost
             )),
             ActionKind::AwacsWaypoint => Some(format_compact!(
-                "{name}: <group> <key> | Move an awacs. Group is the awacs group. Key is the text in a mark point. cost {}",
+                "{name}: <group> <key> | Move an awacs to key, a mark point. Group is the awacs group. cost {}",
                 action.cost
             )),
             ActionKind::Bomber(_) => None,
             ActionKind::CruiseMissileStrike(_) => None,
             ActionKind::Deployable(d) => Some(format_compact!(
-                "{name}: <key> | Ai deploy a {}. Key is the text in a mark point. cost {}",
+                "{name}: <key> | Ai deploy a {} at key a mark point. cost {}",
                 d.name,
                 action.cost
             )),
             ActionKind::Drone(_) => Some(format_compact!(
-                "{name}: <key> | Spawn a drone. Key is the text in a mark point. cost {}",
+                "{name}: <key> | Spawn a drone at key a mark point. cost {}",
                 action.cost
             )),
             ActionKind::DroneWaypoint => Some(format_compact!(
-                "{name}: <group> <key> | Move a drone. Group is the drone group. Key is the text in a mark point. cost {}",
+                "{name}: <group> <key> | Move a drone to key, a mark point. Group is the drone group. cost {}",
                 action.cost
             )),
             ActionKind::FighersWaypoint => Some(format_compact!(
-                "{name}: <group> <key> | Move an a figher group. Group is the fighter group. Key is the text in a mark point. cost {}",
+                "{name}: <group> <key> | Move an a figher group to key, a mark point. Group is the fighter group. cost {}",
                 action.cost
             )),
             ActionKind::Fighters(_) => Some(format_compact!(
-                "{name}: <key> | Spawn ai fighters. Key is the text in a mark point. cost {}",
+                "{name}: <key> | Spawn ai fighters at key, a mark point. cost {}",
                 action.cost
             )),
             ActionKind::LogisticsRepair(_) => Some(format_compact!(
@@ -291,8 +295,24 @@ fn action_help(ctx: &mut Context, actions: &FxHashMap<String, Action>) {
             ActionKind::LogisticsTransfer(_) => Some(format_compact!(
                 "{name}: <from> <to> | Start a logistics transfer mission between from and to. cost {}",
                 action.cost
+            )),
+            ActionKind::Nuke(_) => Some(format_compact!(
+                "{name}: <key> | Nuke key, a mark point. cost {}", action.cost
+            )),
+            ActionKind::Paratrooper(d) => Some(format_compact!(
+                "{name}: <key> | Drop {} troops at key, a mark point. cost {}", d.name, action.cost
+            )),
+            ActionKind::Tanker(_) => Some(format_compact!(
+                "{name}: <key> | Spawn a tanker at key, a mark point. cost {}", action.cost
+            )),
+            ActionKind::TankerWaypoint => Some(format_compact!(
+                "{name}: <group> <key> | Move a tanker to key. Group is the tanker group. cost {}",
+                action.cost
             ))
         };
+        if let Some(msg) = msg {
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg)
+        }
     }
 }
 
@@ -300,11 +320,37 @@ fn action_command(ctx: &mut Context, id: PlayerId, cmd: &str) {
     if cmd.trim().eq_ignore_ascii_case("help") {
         if let Some(ifo) = ctx.info_by_player_id.get(&id) {
             if let Some(player) = ctx.db.player(&ifo.ucid) {
-                if let Some(actions) = ctx.db.ephemeral.cfg.actions.get(&player.side) {}
+                let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
+                if let Some(actions) = cfg.actions.get(&player.side) {
+                    action_help(ctx, actions, id)
+                }
+            }
+        }
+    } else {
+        ctx.action_commands.push((id, String::from(cmd)))
+    }
+}
+
+pub(super) fn run_action_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
+    let spctx = SpawnCtx::new(lua).context("creating spawn ctx")?;
+    for (id, s) in ctx.action_commands.drain(..) {
+        if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+            if let Some(player) = ctx.db.player(&ifo.ucid) {
+                let ucid = ifo.ucid.clone();
+                let side = player.side;
+                let r = match ActionCmd::parse(&ctx.db, lua, side, &s) {
+                    Err(e) => Err(e),
+                    Ok(cmd) => ctx.db.start_action(&spctx, &ctx.idx, side, Some(ucid), cmd),
+                };
+                let msg = match r {
+                    Err(e) => format_compact!("could not run action {s}: {e:?}"),
+                    Ok(()) => format_compact!("action {s} started"),
+                };
+                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg)
             }
         }
     }
-    unimplemented!()
+    Ok(())
 }
 
 fn help_command(ctx: &mut Context, id: PlayerId) {

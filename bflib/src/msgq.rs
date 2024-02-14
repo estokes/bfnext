@@ -22,7 +22,7 @@ use dcso3::{
     Color, LuaVec3, String, Vector2, Vector3,
 };
 use log::error;
-use std::{cmp::max, collections::VecDeque};
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone, Copy)]
 pub enum PanelDest {
@@ -100,19 +100,33 @@ pub enum Cmd {
     DeleteMark(MarkId),
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct MsgQ(VecDeque<Cmd>);
+#[derive(Debug, Clone)]
+pub struct MsgQ(Vec<VecDeque<Cmd>>);
+
+impl Default for MsgQ {
+    fn default() -> Self {
+        MsgQ(vec![
+            VecDeque::default(),
+            VecDeque::default(),
+            VecDeque::default(),
+        ])
+    }
+}
 
 impl MsgQ {
-    pub fn send<S: Into<String>>(&mut self, typ: MsgTyp, text: S) {
-        self.0.push_back(Cmd::Send(Msg::Message {
+    fn send_with_priority<S: Into<String>>(&mut self, p: usize, typ: MsgTyp, text: S) {
+        self.0[p].push_back(Cmd::Send(Msg::Message {
             typ,
             text: text.into(),
         }))
     }
 
+    pub fn send<S: Into<String>>(&mut self, typ: MsgTyp, text: S) {
+        self.send_with_priority(0, typ, text)
+    }
+
     pub fn delete_mark(&mut self, id: MarkId) {
-        self.0.push_back(Cmd::DeleteMark(id))
+        self.0[2].push_back(Cmd::DeleteMark(id))
     }
 
     pub fn mark_to_all<S: Into<String>>(
@@ -122,7 +136,8 @@ impl MsgQ {
         text: S,
     ) -> MarkId {
         let id = MarkId::new();
-        self.send(
+        self.send_with_priority(
+            1,
             MsgTyp::Mark {
                 id,
                 to: MarkDest::All,
@@ -142,7 +157,8 @@ impl MsgQ {
         text: S,
     ) -> MarkId {
         let id = MarkId::new();
-        self.send(
+        self.send_with_priority(
+            1,
             MsgTyp::Mark {
                 id,
                 to: MarkDest::Side(side),
@@ -162,7 +178,8 @@ impl MsgQ {
         text: S,
     ) -> MarkId {
         let id = MarkId::new();
-        self.send(
+        self.send_with_priority(
+            1,
             MsgTyp::Mark {
                 id,
                 to: MarkDest::Group(group),
@@ -176,7 +193,8 @@ impl MsgQ {
 
     #[allow(dead_code)]
     pub fn panel_to_all<S: Into<String>>(&mut self, display_time: i64, clear_view: bool, text: S) {
-        self.send(
+        self.send_with_priority(
+            0,
             MsgTyp::Panel {
                 to: PanelDest::All,
                 display_time,
@@ -193,7 +211,8 @@ impl MsgQ {
         side: Side,
         text: S,
     ) {
-        self.send(
+        self.send_with_priority(
+            0,
             MsgTyp::Panel {
                 to: PanelDest::Side(side),
                 display_time,
@@ -210,7 +229,8 @@ impl MsgQ {
         group: GroupId,
         text: S,
     ) {
-        self.send(
+        self.send_with_priority(
+            0,
             MsgTyp::Panel {
                 to: PanelDest::Group(group),
                 display_time,
@@ -227,7 +247,8 @@ impl MsgQ {
         unit: UnitId,
         text: S,
     ) {
-        self.send(
+        self.send_with_priority(
+            0,
             MsgTyp::Panel {
                 to: PanelDest::Unit(unit),
                 display_time,
@@ -244,7 +265,7 @@ impl MsgQ {
         spec: CircleSpec,
         message: Option<String>,
     ) {
-        self.0.push_back(Cmd::Send(Msg::Circle {
+        self.0[2].push_back(Cmd::Send(Msg::Circle {
             id,
             to,
             spec,
@@ -259,7 +280,7 @@ impl MsgQ {
         spec: RectSpec,
         message: Option<String>,
     ) {
-        self.0.push_back(Cmd::Send(Msg::Rect {
+        self.0[2].push_back(Cmd::Send(Msg::Rect {
             id,
             to,
             spec,
@@ -268,7 +289,7 @@ impl MsgQ {
     }
 
     pub fn text_to_all(&mut self, to: SideFilter, id: MarkId, spec: TextSpec) {
-        self.0.push_back(Cmd::Send(Msg::Text { id, to, spec }))
+        self.0[2].push_back(Cmd::Send(Msg::Text { id, to, spec }))
     }
 
     pub fn arrow_to_all(
@@ -278,7 +299,7 @@ impl MsgQ {
         spec: ArrowSpec,
         message: Option<String>,
     ) {
-        self.0.push_back(Cmd::Send(Msg::Arrow {
+        self.0[2].push_back(Cmd::Send(Msg::Arrow {
             id,
             to,
             spec,
@@ -287,20 +308,24 @@ impl MsgQ {
     }
 
     pub fn set_markup_color(&mut self, id: MarkId, color: Color) {
-        self.0
-            .push_back(Cmd::Send(Msg::SetMarkupColor { id, color }))
+        self.0[2].push_back(Cmd::Send(Msg::SetMarkupColor { id, color }))
     }
 
     pub fn set_markup_fill_color(&mut self, id: MarkId, color: Color) {
-        self.0
-            .push_back(Cmd::Send(Msg::SetMarkupFillColor { id, color }))
+        self.0[2].push_back(Cmd::Send(Msg::SetMarkupFillColor { id, color }))
     }
 
     pub fn process(&mut self, net: &Net, act: &Action) {
-        for _ in 0..max(2, self.0.len() >> 4) {
-            let cmd = match self.0.pop_front() {
+        for _ in 0..5 {
+            let cmd = match self.0[0].pop_front() {
                 Some(cmd) => cmd,
-                None => return,
+                None => match self.0[1].pop_front() {
+                    Some(cmd) => cmd,
+                    None => match self.0[2].pop_front() {
+                        Some(cmd) => cmd,
+                        None => return,
+                    },
+                },
             };
             let res = match cmd {
                 Cmd::DeleteMark(id) => act.remove_mark(id),

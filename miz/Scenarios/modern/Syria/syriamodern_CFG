@@ -6,6 +6,23 @@
     "d613f7f534f4498e47652c29d00836e6": "admin",
     "d931948745285fc8e42adbe35a7dfd50": "admin" 
   },
+  "banned": {},
+  "rules": {
+    "actions": "AlwaysAllowed",
+    "cargo": "AlwaysAllowed",
+    "troops": "AlwaysAllowed",
+    "jtac": "AlwaysAllowed",
+    "ca": "AlwaysAllowed"
+  },
+  "points": {
+    "new_player_join": 10,
+    "air_kill": 25,
+    "ground_kill": 2,
+    "lr_sam_bonus": 5,
+    "logistics_repair": 25,
+    "logistics_transfer": 25,
+    "capture": 15
+  },
   "repair_time": 1800,
   "shutdown": 10,
   "repair_crate": {
@@ -112,15 +129,15 @@
   "life_types": {
     "Mirage-F1EE": "Intercept",
     "C-101CC": "Recon",
-    "MiG-29A": "Standard",
-    "MiG-29S": "Standard",
+    "MiG-29A": "Intercept",
+    "MiG-29S": "Intercept",
     "F-14A-135-GR": "Standard",
     "L-39C": "Recon",
     "TF-51D": "Recon",
     "MiG-21Bis": "Intercept",
     "F-16C_50": "Standard",
     "MiG-19P": "Intercept",
-    "M-2000C": "Standard",
+    "M-2000C": "Intercept",
     "Mi-8MT": "Logistics",
     "Ka-50_3": "Attack",
     "F-15C": "Standard",
@@ -144,7 +161,7 @@
     "F-5E-3": "Intercept",
     "Yak-52": "Recon",
     "Mi-24P": "Attack",
-    "JF-17": "Attack",
+    "JF-17": "Standard",
     "F-15ESE": "Standard",
     "Su-25": "Attack",
     "AV8BNA": "Attack",
@@ -253,6 +270,7 @@
           "max_drop_height_agl": 10,
           "max_drop_speed": 50
         },
+        "cost": 50,
         "logistics": null,
         "ewr": {
           "range": 30000
@@ -303,6 +321,7 @@
           "max_drop_speed": 50
         },
         "logistics": null,
+        "cost": 100,
         "ewr": {
           "range": 60000
         },
@@ -329,6 +348,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 100,
         "ewr": {
           "range": 20000
         },
@@ -355,6 +375,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -379,6 +400,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 5,
         "ewr": null,
         "jtac": null
       },
@@ -403,6 +425,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 15,
         "ewr": null,
         "jtac": null
       },
@@ -427,6 +450,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -451,6 +475,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -475,6 +500,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -499,6 +525,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 100,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -525,6 +552,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 50,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -551,6 +579,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 5,
         "ewr": null,
         "jtac": null
       },
@@ -575,6 +604,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 10,
         "ewr": {
           "range": 500000
         },
@@ -611,6 +641,7 @@
           "barracks_template": "DEPRFARPTENT"
         },
         "ewr": null,
+        "cost": 100,
         "jtac": null
       }
     ],
@@ -636,6 +667,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 50,
         "ewr": {
           "range": 20000
         },
@@ -693,6 +725,7 @@
           "max_drop_speed": 50
         },
         "logistics": null,
+        "cost": 75,
         "ewr": {
           "range": 60000
         },
@@ -719,6 +752,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -742,6 +776,7 @@
           }
         ],
         "repair_crate": null,
+        "cost": 25,
         "logistics": null,
         "ewr": null,
         "jtac": null
@@ -767,6 +802,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -791,6 +827,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 15,
         "ewr": null,
         "jtac": null
       },
@@ -815,6 +852,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },
@@ -840,6 +878,7 @@
         "repair_crate": null,
         "logistics": null,
         "ewr": null,
+        "cost": 50,
         "jtac": {
           "range": 8000
         }
@@ -866,6 +905,7 @@
         "repair_crate": null,
         "logistics": null,
         "ewr": null,
+        "cost": 100,
         "jtac": {
           "range": 8000
         }
@@ -891,6 +931,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 5,
         "ewr": null,
         "jtac": null
       },
@@ -915,6 +956,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
+        "cost": 10,
         "ewr": {
           "range": 500000
         },
@@ -951,6 +993,7 @@
           "barracks_template": "DEPBFARPTENT"
         },
         "ewr": null,
+        "cost": 100,
         "jtac": null
       }
     ]
@@ -965,6 +1008,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 800,
+        "cost": 0,
         "jtac": {
           "range": 8000
         }
@@ -977,6 +1021,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 1000,
+        "cost": 2,
         "jtac": {
           "range": 8000
         }
@@ -989,6 +1034,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 1200,
+        "cost": 5,
         "jtac": {
           "range": 8000
         }
@@ -1001,6 +1047,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
+        "cost": 25,
         "jtac": null
       }
     ],
@@ -1013,6 +1060,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
+        "cost": 0,
         "jtac": {
           "range": 8000
         }
@@ -1025,6 +1073,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
+        "cost": 2,
         "jtac": {
           "range": 8000
         }
@@ -1037,6 +1086,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
+        "cost": 5,
         "jtac": {
           "range": 8000
         }
@@ -1049,6 +1099,7 @@
         "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
+        "cost": 25,
         "jtac": {
           "range": 8000
         }
@@ -1438,6 +1489,7 @@
       "SAM",
       "MR",
       "RadarGuided",
+	  "EngagesWeapons",
       "SearchRadar"
     ],
 	"S-300PS 54K6 cp": [
@@ -1480,7 +1532,8 @@
       "SAM",
       "LR",
       "RadarGuided",
-      "TrackRadar"
+      "TrackRadar",
+	  "EngagesWeapons"
     ],
 	"S-300PS 40B6MD sr": [
       "SAM",
@@ -1499,31 +1552,36 @@
       "LR",
       "RadarGuided",
       "SearchRadar",
-	  "TrackRadar"
+	  "TrackRadar",
+	  "EngagesWeapons"
     ],
 	"NASAMS_LN_C": [
       "SAM",
       "MR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+	  "EngagesWeapons"
     ],
 	"Patriot ln": [
       "SAM",
       "LR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+	  "EngagesWeapons"
     ],
 	"S-300PS 5P85C ln": [
       "SAM",
       "LR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+	  "EngagesWeapons"
     ],
 	"S-300PS 5P85D ln": [
       "SAM",
       "LR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+	  "EngagesWeapons"
     ],
     "SA-18 Igla-S comm": [
       "SAM",
@@ -1574,9 +1632,10 @@
     ],
 	"HEMTT_C-RAM_Phalanx": [
       "AAA",
-      "LR",
+      "MR",
       "RadarGuided",
-      "Driveable"
+      "Driveable",
+	  "EngagesWeapons"
     ],
     "UH-1H": [
       "Helicopter"
@@ -1722,6 +1781,10 @@
       "MR",
       "RadarGuided",
       "TrackRadar"
+    ],
+    [
+      "SAM", 
+      "RadarGuided"
     ],
     [
       "SAM",

@@ -171,9 +171,6 @@ impl FromStr for AdminCommand {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let s = s
-            .strip_prefix("-admin ")
-            .ok_or_else(|| anyhow!("not an admin command {s}"))?;
         if s.trim() == "help" {
             Ok(Self::Help)
         } else if let Some(s) = s.strip_prefix("reduce ") {

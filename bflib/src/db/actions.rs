@@ -17,7 +17,7 @@ use dcso3::{
     coalition::{Side, Static},
     controller::{OrbitPattern, Task},
     env::miz::MizIndex,
-    group,
+    group::{self, Group},
     net::Ucid,
     pointing_towards2,
     world::World,
@@ -35,6 +35,13 @@ pub struct WithPos<T> {
 pub struct WithObj<T> {
     pub cfg: T,
     pub oid: ObjectiveId,
+}
+
+#[derive(Debug, Clone)]
+pub struct WithFromTo<T> {
+    pub cfg: T,
+    pub from: ObjectiveId,
+    pub to: ObjectiveId,
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +73,7 @@ pub enum ActionArgs {
     Paratrooper(WithPos<DeployableCfg>),
     Deployable(WithPos<DeployableCfg>),
     LogisticsRepair(WithObj<LogiCfg>),
-    LogisticsTransfer(WithObj<LogiCfg>),
+    LogisticsTransfer(WithFromTo<LogiCfg>),
 }
 
 impl ActionArgs {
@@ -116,6 +123,15 @@ impl ActionArgs {
                 oid: admin::get_airbase(db, s)?,
             })
         }
+        fn from_to<T>(db: &Db, cfg: T, s: &str) -> Result<WithFromTo<T>> {
+            match s.split_once(" ") {
+                None => Err(anyhow!("expected two objectives <from> <to>")),
+                Some((from, to)) => Ok(WithFromTo { cfg, 
+                    from: admin::get_airbase(db, from).context("getting from airbase")?,
+                    to: admin::get_airbase(db, to).context("getting to airbase")? 
+                })
+            }
+        }
         match action.clone() {
             ActionKind::Tanker(c) => Ok(Self::Tanker(pos(lua, side, c, s)?)),
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(lua, side, c, s)?)),
@@ -128,7 +144,7 @@ impl ActionArgs {
             ActionKind::Paratrooper(c) => Ok(Self::Paratrooper(pos(lua, side, c, s)?)),
             ActionKind::Deployable(c) => Ok(Self::Deployable(pos(lua, side, c, s)?)),
             ActionKind::LogisticsRepair(c) => Ok(Self::LogisticsRepair(obj(db, c, s)?)),
-            ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(obj(db, c, s)?)),
+            ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(from_to(db, c, s)?)),
             ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(lua, side, s)?)),
             ActionKind::TankerWaypoint => Ok(Self::TankerWaypoint(pos_group(lua, side, s)?)),
             ActionKind::Bomber(c) => Ok(Self::Bomber(jtac(c, s)?)),
@@ -251,9 +267,9 @@ impl Db {
             ActionArgs::Awacs(args) => self
                 .awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling awacs")?,
-            ActionArgs::AwacsWaypoint(args) => self
-                .move_awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
-                .context("moving awacs")?,
+            ActionArgs::AwacsWaypoint(args) => {
+                self.move_awacs(spctx, side, args).context("moving awacs")?
+            }
             ActionArgs::Bomber(args) => self
                 .bomber_strike(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling bomber strike")?,
@@ -406,7 +422,7 @@ impl Db {
         ucid: Option<Ucid>,
         name: String,
         action: Action,
-        args: WithObj<LogiCfg>,
+        args: WithFromTo<LogiCfg>,
     ) -> Result<()> {
         unimplemented!()
     }
@@ -528,13 +544,14 @@ impl Db {
     fn move_awacs(
         &mut self,
         spctx: &SpawnCtx,
-        idx: &MizIndex,
         side: Side,
-        ucid: Option<Ucid>,
-        name: String,
-        action: Action,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        unimplemented!()
+        let pos = Vector2::new(args.pos.x, args.pos.z);
+        let enemy = side.opposite();
+        let heading = awacs_heading(self, pos, enemy);
+        let group = group!(self, args.group)?;
+        let dgrp = Group::get_by_name(spctx.lua(), &group.name).context("getting awacs")?;
+        awacs_orbit(dgrp, heading, pos).context("moving awacs")
     }
 }

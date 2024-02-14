@@ -40,7 +40,11 @@ use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use cfg::LifeType;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::{objective::ObjectiveId, player::{RegErr, TakeoffRes}, Db};
+use db::{
+    objective::ObjectiveId,
+    player::{RegErr, TakeoffRes},
+    Db,
+};
 use dcso3::{
     coalition::Side,
     env::{
@@ -83,7 +87,7 @@ enum LogiStage {
     SyncToWarehouses {
         objectives: SmallVec<[ObjectiveId; 128]>,
     },
-    Init
+    Init,
 }
 
 impl Default for LogiStage {
@@ -453,6 +457,7 @@ fn delete_command(id: PlayerId, s: &str) {
                     {
                         reply!("group {id} wasn't deployed by you")
                     }
+                    DeployKind::Action { .. } => reply!("can't delete an action group"),
                     DeployKind::Objective => reply!("can't delete an objective group"),
                     DeployKind::Crate { .. } => match ctx.db.delete_group(&id) {
                         Err(e) => reply!("could not delete group {id} {e:?}"),
@@ -1036,8 +1041,7 @@ fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) 
                 None => warn!("no id for player ucid {:?}", ucid),
                 Some(id) => {
                     info!("forcing player {} to spectators", ucid);
-                    if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator)
-                    {
+                    if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator) {
                         error!("error forcing player {:?} to spectators {:?}", id, e);
                     }
                     match net.get_slot(*id) {

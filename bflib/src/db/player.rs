@@ -173,6 +173,7 @@ impl Db {
                         .and_then(|group| match &group.origin {
                             DeployKind::Deployed { player, spec: _ } => Some(player.clone()),
                             DeployKind::Troop { player, spec: _ } => Some(player.clone()),
+                            DeployKind::Action { player, .. } => player.clone(),
                             DeployKind::Crate { .. } | DeployKind::Objective => None,
                         })
                 }

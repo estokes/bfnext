@@ -22,7 +22,8 @@ use super::{
 };
 use crate::{
     cfg::{
-        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, CruiseMissileCfg, Deployable, DeployableCfg, DeployableLogistics, LogiCfg, NukeCfg, Troop, Vehicle, WarehouseConfig
+        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, CruiseMissileCfg, Deployable, DeployableCfg,
+        DeployableLogistics, LogiCfg, NukeCfg, Troop, Vehicle, WarehouseConfig,
     },
     maybe,
     msgq::MsgQ,
@@ -885,7 +886,18 @@ impl Ephemeral {
                         altitude_typ: _,
                         template,
                     })
-                    | ActionKind::Fighters(AiPlaneCfg { duration: _ , template, altitude: _, altitude_typ: _ })
+                    | ActionKind::Drone(AiPlaneCfg {
+                        duration: _,
+                        template,
+                        altitude: _,
+                        altitude_typ: _,
+                    })
+                    | ActionKind::Fighters(AiPlaneCfg {
+                        duration: _,
+                        template,
+                        altitude: _,
+                        altitude_typ: _,
+                    })
                     | ActionKind::LogisticsRepair(LogiCfg {
                         altitude: _,
                         altitude_typ: _,
@@ -927,6 +939,8 @@ impl Ephemeral {
                     }
                     ActionKind::AwacsWaypoint
                     | ActionKind::TankerWaypoint
+                    | ActionKind::DroneWaypoint
+                    | ActionKind::FighersWaypoint
                     | ActionKind::Nuke(NukeCfg {
                         cost_scale: _,
                         power: _,

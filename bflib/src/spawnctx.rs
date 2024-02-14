@@ -32,7 +32,7 @@ use serde_derive::{Deserialize, Serialize};
 pub enum SpawnLoc {
     /// only for air units, obviously
     InAir {
-        pos: Vector3,
+        pos: Vector2,
         heading: f64,
         altitude: f64,
     },

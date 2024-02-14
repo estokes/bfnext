@@ -30,7 +30,7 @@ use compact_str::format_compact;
 use dcso3::{
     atomic_id, azumith3d, centroid2d,
     coalition::Side,
-    env::miz::{self, Group, GroupKind, MizIndex},
+    env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
     net::Ucid,
@@ -180,7 +180,7 @@ impl Db {
             DeployKind::Objective => smallvec![],
             DeployKind::Action {
                 name,
-                spec,
+                spec: _,
                 destination,
                 player,
                 ..
@@ -248,7 +248,7 @@ impl Db {
             .get_mut_cow(&group.side)
             .map(|m| m.remove_cow(gid));
         match &group.origin {
-            DeployKind::Objective => (),
+            DeployKind::Objective | DeployKind::Action { .. } => (),
             DeployKind::Crate { player, .. } => {
                 self.persisted.crates.remove_cow(gid);
                 self.persisted.players[player].crates.remove_cow(gid);
@@ -332,23 +332,51 @@ impl Db {
                 .map(|d| d.sqrt())
                 .unwrap_or(0.)
         }
+        struct GroupPosition {
+            positions: VecDeque<Vector2>,
+            by_type: FxHashMap<String, VecDeque<Vector2>>,
+            heading: f64,
+            altitude: Option<f64>,
+        }
         fn compute_unit_positions(
             spctx: &SpawnCtx,
             idx: &MizIndex,
             location: SpawnLoc,
             template: &Group,
-        ) -> Result<(VecDeque<Vector2>, FxHashMap<String, VecDeque<Vector2>>, f64)> {
+        ) -> Result<GroupPosition> {
             let mut positions = template
                 .units()?
                 .into_iter()
                 .map(|u| Ok(u?.pos()?))
                 .collect::<Result<VecDeque<_>>>()?;
             match location {
+                SpawnLoc::InAir {
+                    pos,
+                    heading,
+                    altitude,
+                } => {
+                    let group_center = centroid2d(positions.iter().map(|p| *p));
+                    for p in positions.iter_mut() {
+                        *p = *p - group_center + pos;
+                    }
+                    rotate2d(heading, positions.make_contiguous());
+                    Ok(GroupPosition {
+                        positions,
+                        by_type: FxHashMap::default(),
+                        heading,
+                        altitude: Some(altitude),
+                    })
+                }
                 SpawnLoc::AtPosWithCenter { pos, center } => {
                     for p in positions.iter_mut() {
                         *p = *p - center + pos;
                     }
-                    Ok((positions, FxHashMap::default(), 0.))
+                    Ok(GroupPosition {
+                        positions,
+                        by_type: FxHashMap::default(),
+                        heading: 0.,
+                        altitude: None,
+                    })
                 }
                 SpawnLoc::AtTrigger {
                     name,
@@ -360,7 +388,12 @@ impl Db {
                         *p = *p - group_center + pos;
                     }
                     rotate2d(group_heading, positions.make_contiguous());
-                    Ok((positions, FxHashMap::default(), group_heading))
+                    Ok(GroupPosition {
+                        positions,
+                        by_type: FxHashMap::default(),
+                        heading: group_heading,
+                        altitude: None,
+                    })
                 }
                 SpawnLoc::AtPos {
                     pos,
@@ -377,7 +410,12 @@ impl Db {
                     for p in positions.iter_mut() {
                         *p = *p + offset_magnitude * offset_direction
                     }
-                    Ok((positions, FxHashMap::default(), group_heading))
+                    Ok(GroupPosition {
+                        positions,
+                        by_type: FxHashMap::default(),
+                        heading: group_heading,
+                        altitude: None,
+                    })
                 }
                 SpawnLoc::AtPosWithComponents {
                     pos,
@@ -425,7 +463,12 @@ impl Db {
                     for positions in final_position_by_type.values_mut() {
                         rotate2d(group_heading, positions.make_contiguous());
                     }
-                    Ok((positions, final_position_by_type, group_heading))
+                    Ok(GroupPosition {
+                        positions,
+                        by_type: final_position_by_type,
+                        heading: group_heading,
+                        altitude: None,
+                    })
                 }
             }
         }
@@ -450,9 +493,8 @@ impl Db {
         let land = Land::singleton(spctx.lua())?;
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
-        let (mut positions, mut positions_by_typ, heading) =
-            compute_unit_positions(&spctx, idx, location, &template.group)?;
-        check_water(&land, &positions, &positions_by_typ)?;
+        let mut gpos = compute_unit_positions(&spctx, idx, location, &template.group)?;
+        check_water(&land, &gpos.positions, &gpos.by_type)?;
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}-{}", template_name, gid));
@@ -480,14 +522,17 @@ impl Db {
                 .get(typ.as_str())
                 .ok_or_else(|| anyhow!("unit type not classified {typ}"))?;
             spawned.tags.0.insert(tags.0);
-            let pos = match positions_by_typ.get_mut(&typ) {
-                None => positions.pop_front().unwrap(),
+            let pos = match gpos.by_type.get_mut(&typ) {
+                None => gpos.positions.pop_front().unwrap(),
                 Some(positions) => positions.pop_front().unwrap(),
             };
             let position = {
                 let mut p = Position3::default();
                 p.p.x = pos.x;
-                p.p.y = land.get_height(LuaVec2(pos))?;
+                p.p.y = match gpos.altitude {
+                    None => land.get_height(LuaVec2(pos))?,
+                    Some(alt) => alt,
+                };
                 p.p.z = pos.y;
                 p
             };
@@ -501,10 +546,10 @@ impl Db {
                 template_name,
                 spawn_position: position,
                 spawn_pos: pos,
-                spawn_heading: heading,
+                spawn_heading: gpos.heading,
                 position,
                 pos,
-                heading,
+                heading: gpos.heading,
                 dead: false,
                 moved: None,
             };
@@ -514,6 +559,9 @@ impl Db {
         }
         match &mut spawned.origin {
             DeployKind::Objective => (),
+            DeployKind::Action { .. } => {
+                self.persisted.actions.insert_cow(gid);
+            }
             DeployKind::Crate { player, .. } => {
                 self.persisted.crates.insert_cow(gid);
                 self.persisted.players[player].crates.insert_cow(gid);

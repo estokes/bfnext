@@ -924,6 +924,7 @@ impl Db {
                         DeployKind::Crate { .. }
                         | DeployKind::Deployed { .. }
                         | DeployKind::Objective
+                        | DeployKind::Action { .. }
                         | DeployKind::Troop { .. } => (),
                     }
                 }

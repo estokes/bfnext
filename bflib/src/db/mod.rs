@@ -176,7 +176,10 @@ impl Db {
         self.persisted.ewrs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
             match &group.origin {
-                DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
+                DeployKind::Crate { .. }
+                | DeployKind::Objective
+                | DeployKind::Troop { .. }
+                | DeployKind::Action { .. } => None,
                 DeployKind::Deployed { spec, .. } => {
                     let ewr = spec.ewr.as_ref()?;
                     let pos = centroid3d(
@@ -218,6 +221,7 @@ impl Db {
                 }
                 DeployKind::Crate { .. }
                 | DeployKind::Objective
+                | DeployKind::Action { .. }
                 | DeployKind::Troop { .. }
                 | DeployKind::Deployed { .. } => None,
             }

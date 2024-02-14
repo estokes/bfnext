@@ -4,40 +4,35 @@ use crate::{
     cfg::{
         Action, ActionKind, AiPlaneCfg, BomberCfg, CruiseMissileCfg, DeployableCfg, LogiCfg,
         NukeCfg,
-    },
+    }, spawnctx::SpawnCtx,
 };
 use anyhow::{anyhow, bail, Result};
-use dcso3::{
-    coalition::Side,
-    net::Ucid,
-    world::{MarkPanel, World},
-    MizLua, String, Vector3,
-};
+use dcso3::{coalition::Side, env::miz::MizIndex, net::Ucid, world::World, MizLua, String, Vector3};
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone)]
-struct WithPos<T> {
-    cfg: T,
-    pos: Vector3,
+pub struct WithPos<T> {
+    pub cfg: T,
+    pub pos: Vector3,
 }
 
 #[derive(Debug, Clone)]
-struct WithObj<T> {
-    cfg: T,
-    oid: ObjectiveId,
+pub struct WithObj<T> {
+    pub cfg: T,
+    pub oid: ObjectiveId,
 }
 
 #[derive(Debug, Clone)]
-struct WithPosAndGroup<T> {
-    cfg: T,
-    pos: Vector3,
-    group: GroupId,
+pub struct WithPosAndGroup<T> {
+    pub cfg: T,
+    pub pos: Vector3,
+    pub group: GroupId,
 }
 
 #[derive(Debug, Clone)]
-struct WithJtac<T> {
-    cfg: T,
-    jtac: GroupId,
+pub struct WithJtac<T> {
+    pub cfg: T,
+    pub jtac: GroupId,
 }
 
 #[derive(Debug, Clone)]
@@ -62,22 +57,22 @@ pub enum ActionArgs {
 impl ActionArgs {
     pub fn parse(db: &Db, action: &ActionKind, lua: MizLua, side: Side, s: &str) -> Result<Self> {
         fn get_key_pos(lua: MizLua, side: Side, key: &str) -> Result<Vector3> {
-            let mut found: SmallVec<[MarkPanel; 4]> = smallvec![];
+            let mut found: SmallVec<[Vector3; 4]> = smallvec![];
             for mk in World::singleton(lua)?.get_mark_panels()? {
                 let mk = mk?;
-                if mk.text.as_str() == key {
-                    found.push(mk);
+                if mk.side.is_match(&side) && mk.text.as_str() == key {
+                    found.push(mk.pos.0);
                 }
             }
             if found.len() == 0 {
-                bail!("key {key} was not found")
+                Err(anyhow!("key {key} was not found"))
             } else if found.len() > 1 {
-                bail!(
+                Err(anyhow!(
                     "key {key} was found {} times, make sure to choose a unique key",
                     found.len()
-                )
+                ))
             } else {
-                Ok(found[0].pos.0)
+                Ok(found[0])
             }
         }
         fn pos_group(lua: MizLua, side: Side, s: &str) -> Result<WithPosAndGroup<()>> {
@@ -136,7 +131,7 @@ pub struct ActionCmd {
 impl ActionCmd {
     pub fn parse(db: &Db, lua: MizLua, side: Side, s: &str) -> Result<Self> {
         match s.split_once(" ") {
-            None => bail!("expected <action> <args>"),
+            None => Err(anyhow!("expected <action> <args>")),
             Some((name, args)) => {
                 let action = db
                     .ephemeral
@@ -158,7 +153,7 @@ impl ActionCmd {
 }
 
 impl Db {
-    pub fn start_action(&mut self, lua: MizLua, ucid: &Ucid, cmd: ActionCmd) -> Result<()> {
+    pub fn start_action(&mut self, spctx: &SpawnCtx, idx: MizIndex, ucid: &Ucid, cmd: ActionCmd) -> Result<()> {
         if !self.ephemeral.cfg.rules.actions.check(ucid) {
             bail!("you are not authorized for actions")
         }
@@ -189,37 +184,52 @@ impl Db {
             }
         }
         match cmd.args {
-            ActionArgs::Awacs(args) => self.awacs(lua, ucid, cmd.action, args)?,
-            ActionArgs::AwacsWaypoint(args) => self.move_awacs(lua, ucid, cmd.action, args)?,
-            ActionArgs::Bomber(args) => self.bomber_strike(lua, ucid, cmd.action, args)?,
+            ActionArgs::Awacs(args) => self.awacs(lua, ucid, cmd.name, cmd.action, args)?,
+            ActionArgs::AwacsWaypoint(args) => {
+                self.move_awacs(lua, ucid, cmd.name, cmd.action, args)?
+            }
+            ActionArgs::Bomber(args) => {
+                self.bomber_strike(lua, ucid, cmd.name, cmd.action, args)?
+            }
             ActionArgs::CruiseMissileStrike(args) => {
-                self.cruise_missile_strike(lua, ucid, cmd.action, args)?
+                self.cruise_missile_strike(lua, ucid, cmd.name, cmd.action, args)?
             }
-            ActionArgs::Deployable(args) => self.ai_deploy(lua, ucid, cmd.action, args)?,
-            ActionArgs::Fighters(args) => self.ai_fighters(lua, ucid, cmd.action, args)?,
+            ActionArgs::Deployable(args) => {
+                self.ai_deploy(lua, ucid, cmd.name, cmd.action, args)?
+            }
+            ActionArgs::Fighters(args) => {
+                self.ai_fighters(lua, ucid, cmd.name, cmd.action, args)?
+            }
             ActionArgs::FightersWaypoint(args) => {
-                self.move_ai_fighters(lua, ucid, cmd.action, args)?
+                self.move_ai_fighters(lua, ucid, cmd.name, cmd.action, args)?
             }
-            ActionArgs::Drone(args) => self.drone(lua, ucid, cmd.action, args)?,
-            ActionArgs::DroneWaypoint(args) => self.move_drone(lua, ucid, cmd.action, args)?,
+            ActionArgs::Drone(args) => self.drone(lua, ucid, cmd.name, cmd.action, args)?,
+            ActionArgs::DroneWaypoint(args) => {
+                self.move_drone(lua, ucid, cmd.name, cmd.action, args)?
+            }
             ActionArgs::LogisticsRepair(args) => {
-                self.ai_logistics_repair(lua, ucid, cmd.action, args)?
+                self.ai_logistics_repair(lua, ucid, cmd.name, cmd.action, args)?
             }
             ActionArgs::LogisticsTransfer(args) => {
-                self.ai_logistics_transfer(lua, ucid, cmd.action, args)?
+                self.ai_logistics_transfer(lua, ucid, cmd.name, cmd.action, args)?
             }
-            ActionArgs::Nuke(args) => self.nuke(lua, ucid, cmd.action, args)?,
-            ActionArgs::Paratrooper(args) => self.paratroops(lua, ucid, cmd.action, args)?,
-            ActionArgs::Tanker(args) => self.tanker(lua, ucid, cmd.action, args)?,
-            ActionArgs::TankerWaypoint(args) => self.move_tanker(lua, ucid, cmd.action, args)?,
+            ActionArgs::Nuke(args) => self.nuke(lua, ucid, cmd.name, cmd.action, args)?,
+            ActionArgs::Paratrooper(args) => {
+                self.paratroops(lua, ucid, cmd.name, cmd.action, args)?
+            }
+            ActionArgs::Tanker(args) => self.tanker(lua, ucid, cmd.name, cmd.action, args)?,
+            ActionArgs::TankerWaypoint(args) => {
+                self.move_tanker(lua, ucid, cmd.name, cmd.action, args)?
+            }
         }
         Ok(())
     }
 
     fn move_drone(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
@@ -228,8 +238,9 @@ impl Db {
 
     fn drone(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
@@ -238,8 +249,9 @@ impl Db {
 
     fn move_ai_fighters(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
@@ -248,8 +260,9 @@ impl Db {
 
     fn move_tanker(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
@@ -258,8 +271,9 @@ impl Db {
 
     fn tanker(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
@@ -268,8 +282,9 @@ impl Db {
 
     fn paratroops(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPos<DeployableCfg>,
     ) -> Result<()> {
@@ -278,8 +293,9 @@ impl Db {
 
     fn nuke(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPos<NukeCfg>,
     ) -> Result<()> {
@@ -288,8 +304,9 @@ impl Db {
 
     fn ai_logistics_transfer(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithObj<LogiCfg>,
     ) -> Result<()> {
@@ -298,8 +315,9 @@ impl Db {
 
     fn ai_logistics_repair(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithObj<LogiCfg>,
     ) -> Result<()> {
@@ -308,8 +326,9 @@ impl Db {
 
     fn ai_fighters(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
@@ -318,8 +337,9 @@ impl Db {
 
     fn ai_deploy(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPos<DeployableCfg>,
     ) -> Result<()> {
@@ -328,8 +348,9 @@ impl Db {
 
     fn cruise_missile_strike(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithJtac<CruiseMissileCfg>,
     ) -> Result<()> {
@@ -338,8 +359,9 @@ impl Db {
 
     fn bomber_strike(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithJtac<BomberCfg>,
     ) -> Result<()> {
@@ -348,18 +370,21 @@ impl Db {
 
     fn awacs(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
+        
         unimplemented!()
     }
 
     fn move_awacs(
         &mut self,
-        lua: MizLua,
+        spctx: &SpawnCtx,
         ucid: &Ucid,
+        name: String,
         action: Action,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {

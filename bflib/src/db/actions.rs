@@ -153,7 +153,7 @@ impl ActionCmd {
 }
 
 impl Db {
-    pub fn start_action(&mut self, spctx: &SpawnCtx, idx: MizIndex, ucid: &Ucid, cmd: ActionCmd) -> Result<()> {
+    pub fn start_action(&mut self, spctx: &SpawnCtx, idx: &MizIndex, ucid: &Ucid, cmd: ActionCmd) -> Result<()> {
         if !self.ephemeral.cfg.rules.actions.check(ucid) {
             bail!("you are not authorized for actions")
         }
@@ -184,42 +184,42 @@ impl Db {
             }
         }
         match cmd.args {
-            ActionArgs::Awacs(args) => self.awacs(lua, ucid, cmd.name, cmd.action, args)?,
+            ActionArgs::Awacs(args) => self.awacs(spctx, idx, ucid, cmd.name, cmd.action, args)?,
             ActionArgs::AwacsWaypoint(args) => {
-                self.move_awacs(lua, ucid, cmd.name, cmd.action, args)?
+                self.move_awacs(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
             ActionArgs::Bomber(args) => {
-                self.bomber_strike(lua, ucid, cmd.name, cmd.action, args)?
+                self.bomber_strike(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
             ActionArgs::CruiseMissileStrike(args) => {
-                self.cruise_missile_strike(lua, ucid, cmd.name, cmd.action, args)?
+                self.cruise_missile_strike(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
             ActionArgs::Deployable(args) => {
-                self.ai_deploy(lua, ucid, cmd.name, cmd.action, args)?
+                self.ai_deploy(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
             ActionArgs::Fighters(args) => {
-                self.ai_fighters(lua, ucid, cmd.name, cmd.action, args)?
+                self.ai_fighters(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
             ActionArgs::FightersWaypoint(args) => {
-                self.move_ai_fighters(lua, ucid, cmd.name, cmd.action, args)?
+                self.move_ai_fighters(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
-            ActionArgs::Drone(args) => self.drone(lua, ucid, cmd.name, cmd.action, args)?,
+            ActionArgs::Drone(args) => self.drone(spctx, idx, ucid, cmd.name, cmd.action, args)?,
             ActionArgs::DroneWaypoint(args) => {
-                self.move_drone(lua, ucid, cmd.name, cmd.action, args)?
+                self.move_drone(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
             ActionArgs::LogisticsRepair(args) => {
-                self.ai_logistics_repair(lua, ucid, cmd.name, cmd.action, args)?
+                self.ai_logistics_repair(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
             ActionArgs::LogisticsTransfer(args) => {
-                self.ai_logistics_transfer(lua, ucid, cmd.name, cmd.action, args)?
+                self.ai_logistics_transfer(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
-            ActionArgs::Nuke(args) => self.nuke(lua, ucid, cmd.name, cmd.action, args)?,
+            ActionArgs::Nuke(args) => self.nuke(spctx, idx, ucid, cmd.name, cmd.action, args)?,
             ActionArgs::Paratrooper(args) => {
-                self.paratroops(lua, ucid, cmd.name, cmd.action, args)?
+                self.paratroops(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
-            ActionArgs::Tanker(args) => self.tanker(lua, ucid, cmd.name, cmd.action, args)?,
+            ActionArgs::Tanker(args) => self.tanker(spctx, idx, ucid, cmd.name, cmd.action, args)?,
             ActionArgs::TankerWaypoint(args) => {
-                self.move_tanker(lua, ucid, cmd.name, cmd.action, args)?
+                self.move_tanker(spctx, idx, ucid, cmd.name, cmd.action, args)?
             }
         }
         Ok(())
@@ -228,6 +228,7 @@ impl Db {
     fn move_drone(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -239,6 +240,7 @@ impl Db {
     fn drone(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -250,6 +252,7 @@ impl Db {
     fn move_ai_fighters(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -261,6 +264,7 @@ impl Db {
     fn move_tanker(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -272,6 +276,7 @@ impl Db {
     fn tanker(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -283,6 +288,7 @@ impl Db {
     fn paratroops(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -294,6 +300,7 @@ impl Db {
     fn nuke(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -305,6 +312,7 @@ impl Db {
     fn ai_logistics_transfer(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -316,6 +324,7 @@ impl Db {
     fn ai_logistics_repair(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -327,6 +336,7 @@ impl Db {
     fn ai_fighters(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -338,6 +348,7 @@ impl Db {
     fn ai_deploy(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -349,6 +360,7 @@ impl Db {
     fn cruise_missile_strike(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -360,6 +372,7 @@ impl Db {
     fn bomber_strike(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -371,6 +384,7 @@ impl Db {
     fn awacs(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,
@@ -383,6 +397,7 @@ impl Db {
     fn move_awacs(
         &mut self,
         spctx: &SpawnCtx,
+        idx: &MizIndex,
         ucid: &Ucid,
         name: String,
         action: Action,

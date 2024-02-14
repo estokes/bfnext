@@ -492,8 +492,7 @@ impl Db {
                     match instance {
                         Err(e) => {
                             warn!(
-                                "updating player positions, skipping invalid unit {:?}, {:?}, player {:?}",
-                                player, id, e
+                                "updating player positions, skipping invalid unit {ucid:?}, {id:?}, player {e:?}",
                             );
                             dead.push(id.clone())
                         }

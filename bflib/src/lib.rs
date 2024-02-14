@@ -1290,9 +1290,11 @@ fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
 }
 
 fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
+    info!("onPlayerDisconnect({id})");
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
+        info!("deslotting disconnected player {}", ifo.ucid);
         ctx.db.player_disconnected(&ifo.ucid)
     }
     record_perf(

@@ -1279,6 +1279,10 @@ pub fn pointing_towards2(angle: f64, origin: Vector2) -> Vector2 {
     point
 }
 
+pub fn normal2(v: Vector2) -> Vector2 {
+    Vector2::new(v.y, -v.x)
+}
+
 /// Same as rotate2d, but construct and return a vec containing the rotated points
 /// in the same order as the they appear in the input slice.
 pub fn rotate2d_vec(angle: f64, points: &[Vector2]) -> Vec<Vector2> {

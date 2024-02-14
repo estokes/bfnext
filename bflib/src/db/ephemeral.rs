@@ -27,7 +27,7 @@ use crate::{
     },
     maybe,
     msgq::MsgQ,
-    spawnctx::{Despawn, SpawnCtx},
+    spawnctx::{Despawn, SpawnCtx, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -501,7 +501,7 @@ impl Ephemeral {
             for _ in 0..max(1, slen >> 3) {
                 if let Some(gid) = self.spawnq.pop_front() {
                     let group = maybe!(persisted.groups, gid, "group")?;
-                    spawn_group(persisted, idx, spctx, group)?
+                    spawn_group(persisted, idx, spctx, group)?;
                 }
             }
         }
@@ -956,9 +956,9 @@ impl Ephemeral {
 pub(super) fn spawn_group<'lua>(
     persisted: &Persisted,
     idx: &MizIndex,
-    spctx: &SpawnCtx,
+    spctx: &SpawnCtx<'lua>,
     group: &SpawnedGroup,
-) -> Result<()> {
+) -> Result<Option<Spawned<'lua>>> {
     let template = spctx
         .get_template(
             idx,
@@ -1015,10 +1015,10 @@ pub(super) fn spawn_group<'lua>(
             .with_context(|| {
                 format_compact!("removing junk before spawn of {}", group.template_name)
             })?;
-        spctx
-            .spawn(template)
-            .with_context(|| format_compact!("spawning template {}", group.template_name))
+        Ok(Some(spctx.spawn(template).with_context(|| {
+            format_compact!("spawning template {}", group.template_name)
+        })?))
     } else {
-        Ok(())
+        Ok(None)
     }
 }

@@ -308,21 +308,25 @@ impl Db {
         maybe!(obj.slots, slot, "objective slot")
     }
 
+    /// returns the closest objective that matches the critera to the specified point
     /// (distance, heading from objective to point, objective)
-    pub fn objective_near_point(&self, pos: Vector2) -> (f64, f64, &Objective) {
+    pub fn objective_near_point<P: Fn(&Objective) -> bool>(&self, pos: Vector2, p: P) -> Option<(f64, f64, &Objective)> {
         let (dist, obj) = self.persisted.objectives.into_iter().fold(
             (f64::MAX, None),
             |(cur_dist, cur_obj), (_, obj)| {
-                let dist = na::distance_squared(&pos.into(), &obj.pos.into());
-                if dist < cur_dist {
-                    (dist, Some(obj))
-                } else {
+                if !p(obj) {
                     (cur_dist, cur_obj)
+                } else {
+                    let dist = na::distance_squared(&pos.into(), &obj.pos.into());
+                    if dist < cur_dist {
+                        (dist, Some(obj))
+                    } else {
+                        (cur_dist, cur_obj)
+                    }
                 }
             },
         );
-        let obj = obj.unwrap();
-        (dist.sqrt(), azumith2d_to(obj.pos, pos), obj)
+        obj.map(|obj| (dist.sqrt(), azumith2d_to(obj.pos, pos), obj))
     }
 
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {

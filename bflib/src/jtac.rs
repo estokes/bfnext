@@ -31,6 +31,7 @@ use dcso3::{
     cvt_err,
     group::Group,
     land::Land,
+    normal2,
     object::{DcsObject, DcsOid},
     radians_to_degrees, simple_enum,
     spot::{ClassSpot, Spot},
@@ -75,7 +76,7 @@ pub struct ArtilleryAdjustment {
 impl ArtilleryAdjustment {
     fn compute_final_solution(&self, ip: Vector2, tp: Vector2) -> Vector2 {
         let v = (tp - ip).normalize();
-        let normal = Vector2::new(v.y, -v.x) * self.left_right.signum() as f64;
+        let normal = normal2(v) * self.left_right.signum() as f64;
         tp + (v * self.short_long as f64) + (normal * self.left_right as f64)
     }
 }
@@ -153,7 +154,9 @@ impl Jtac {
     fn status(&self, db: &Db) -> Result<CompactString> {
         use std::fmt::Write;
         let jtac_pos = db.group_center(&self.gid)?;
-        let (dist, heading, obj) = db.objective_near_point(jtac_pos);
+        let (dist, heading, obj) = db
+            .objective_near_point(jtac_pos, |_| true)
+            .ok_or_else(|| anyhow!("no objective near jtac"))?;
         let dist = dist / 1000.;
         let mut msg = CompactString::new("");
         write!(msg, "JTAC {} status\n", self.gid)?;

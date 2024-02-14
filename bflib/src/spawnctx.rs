@@ -18,8 +18,8 @@ use anyhow::{anyhow, Context, Result};
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side, Static},
-    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
-    group::GroupCategory,
+    env::miz::{self, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
+    group::{Group, GroupCategory},
     land::Land,
     world::{SearchVolume, World},
     DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
@@ -81,6 +81,12 @@ pub enum Despawn {
     Static(String),
 }
 
+#[derive(Debug, Clone)]
+pub enum Spawned<'lua> {
+    Group(Group<'lua>),
+    Static(Static<'lua>),
+}
+
 impl<'lua> SpawnCtx<'lua> {
     pub fn new(lua: MizLua<'lua>) -> Result<Self> {
         Ok(Self {
@@ -100,7 +106,7 @@ impl<'lua> SpawnCtx<'lua> {
         kind: GroupKind,
         side: Side,
         template_name: &str,
-    ) -> Result<GroupInfo> {
+    ) -> Result<GroupInfo<'lua>> {
         let mut template = self
             .miz
             .get_group_by_name(idx, kind, side, template_name)?
@@ -135,7 +141,7 @@ impl<'lua> SpawnCtx<'lua> {
         side: Side,
         pad_template: &str,
         pos: Vector2,
-    ) -> Result<()> {
+    ) -> Result<Spawned<'lua>> {
         let pad = {
             let pad = self
                 .get_template(idx, GroupKind::Any, side, &pad_template)
@@ -154,31 +160,33 @@ impl<'lua> SpawnCtx<'lua> {
         self.spawn(pad).context("moving the pad")
     }
 
-    pub fn spawn(&self, template: GroupInfo) -> Result<()> {
+    pub fn spawn(&self, template: GroupInfo<'lua>) -> Result<Spawned<'lua>> {
         match GroupCategory::from_kind(template.category) {
-            Some(category) => {
+            Some(category) => Ok(Spawned::Group(
                 self.coalition
                     .add_group(template.country, category, template.group.clone())
                     .with_context(|| {
                         format_compact!("spawning group from template {:?}", template)
-                    })?;
-            }
+                    })?,
+            )),
             None => {
                 // static objects are not fed to addStaticObject as groups
-                let unit = template
+                let unit: miz::Unit<'lua> = template
                     .group
                     .units()
                     .context("getting static group units")?
                     .first()
-                    .context("getting first unit in static group")?;
-                self.coalition
-                    .add_static_object(template.country, unit)
-                    .with_context(|| {
-                        format_compact!("spawning static object from template {:?}", template)
-                    })?;
+                    .context("getting first unit in static group")?
+                    .clone();
+                Ok(Spawned::Static(
+                    self.coalition
+                        .add_static_object(template.country, unit)
+                        .with_context(|| {
+                            format_compact!("spawning static object from template {:?}", template)
+                        })?,
+                ))
             }
         }
-        Ok(())
     }
 
     pub fn despawn(&self, name: Despawn) -> Result<()> {

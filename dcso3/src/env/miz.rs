@@ -97,7 +97,7 @@ impl<'lua> Point<'lua> {
 wrapped_table!(Route, None);
 
 impl<'lua> Route<'lua> {
-    pub fn points(&self) -> Result<Sequence<Point>> {
+    pub fn points(&self) -> Result<Sequence<'lua, Point>> {
         Ok(self.raw_get("points")?)
     }
 }
@@ -199,7 +199,7 @@ impl<'lua> Group<'lua> {
         Ok(self.raw_get("groupId")?)
     }
 
-    pub fn tasks(&self) -> Result<Sequence<Task>> {
+    pub fn tasks(&self) -> Result<Sequence<'lua, Task>> {
         Ok(self.raw_get("tasks")?)
     }
 
@@ -211,7 +211,7 @@ impl<'lua> Group<'lua> {
         self.raw_get("hidden").unwrap_or(false)
     }
 
-    pub fn units(&self) -> Result<Sequence<Unit>> {
+    pub fn units(&self) -> Result<Sequence<'lua, Unit<'lua>>> {
         Ok(self.raw_get("units")?)
     }
 
@@ -231,31 +231,31 @@ impl<'lua> Country<'lua> {
         Ok(self.raw_get("name")?)
     }
 
-    pub fn planes(&self) -> Result<Sequence<Group>> {
+    pub fn planes(&self) -> Result<Sequence<'lua, Group<'lua>>> {
         let g: Option<mlua::Table> = self.raw_get("plane")?;
         g.map(|g| Ok(g.raw_get("group")?))
             .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
-    pub fn helicopters(&self) -> Result<Sequence<Group>> {
+    pub fn helicopters(&self) -> Result<Sequence<'lua, Group<'lua>>> {
         let g: Option<mlua::Table> = self.raw_get("helicopter")?;
         g.map(|g| Ok(g.raw_get("group")?))
             .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
-    pub fn ships(&self) -> Result<Sequence<Group>> {
+    pub fn ships(&self) -> Result<Sequence<'lua, Group<'lua>>> {
         let g: Option<mlua::Table> = self.raw_get("ship")?;
         g.map(|g| Ok(g.raw_get("group")?))
             .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
-    pub fn vehicles(&self) -> Result<Sequence<Group>> {
+    pub fn vehicles(&self) -> Result<Sequence<'lua, Group<'lua>>> {
         let g: Option<mlua::Table> = self.raw_get("vehicle")?;
         g.map(|g| Ok(g.raw_get("group")?))
             .unwrap_or_else(|| Sequence::empty(self.lua))
     }
 
-    pub fn statics(&self) -> Result<Sequence<Group>> {
+    pub fn statics(&self) -> Result<Sequence<'lua, Group<'lua>>> {
         let g: Option<mlua::Table> = self.raw_get("static")?;
         g.map(|g| Ok(g.raw_get("group")?))
             .unwrap_or_else(|| Sequence::empty(self.lua))
@@ -269,7 +269,7 @@ impl<'lua> Coalition<'lua> {
         Ok(self.t.raw_get("bullseye")?)
     }
 
-    pub fn nav_points(&self) -> Result<Sequence<NavPoint>> {
+    pub fn nav_points(&self) -> Result<Sequence<'lua, NavPoint<'lua>>> {
         Ok(self.t.raw_get("nav_points")?)
     }
 
@@ -277,7 +277,7 @@ impl<'lua> Coalition<'lua> {
         Ok(self.t.raw_get("name")?)
     }
 
-    pub fn countries(&self) -> Result<Sequence<Country>> {
+    pub fn countries(&self) -> Result<Sequence<'lua, Country<'lua>>> {
         Ok(self.t.raw_get("country")?)
     }
 
@@ -477,7 +477,7 @@ impl<'lua> Miz<'lua> {
         Ok(coa.raw_get(side.to_str())?)
     }
 
-    pub fn triggers(&self) -> Result<Sequence<TriggerZone<'lua>>> {
+    pub fn triggers(&self) -> Result<Sequence<'lua, TriggerZone<'lua>>> {
         let triggers: mlua::Table = self.t.raw_get("triggers")?;
         Ok(triggers.raw_get("zones")?)
     }

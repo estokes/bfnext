@@ -1,13 +1,28 @@
+use std::f64;
+
 use super::{group::GroupId, objective::ObjectiveId, Db};
 use crate::{
     admin,
     cfg::{
         Action, ActionKind, AiPlaneCfg, BomberCfg, CruiseMissileCfg, DeployableCfg, LogiCfg,
         NukeCfg,
-    }, spawnctx::SpawnCtx,
+    },
+    db::{ephemeral, group::DeployKind},
+    group,
+    spawnctx::{SpawnCtx, SpawnLoc, Spawned},
 };
-use anyhow::{anyhow, bail, Result};
-use dcso3::{coalition::Side, env::miz::MizIndex, net::Ucid, world::World, MizLua, String, Vector3};
+use anyhow::{anyhow, bail, Context, Ok, Result};
+use chrono::prelude::*;
+use dcso3::{
+    coalition::{Side, Static},
+    controller::{OrbitPattern, Task},
+    env::miz::MizIndex,
+    group,
+    net::Ucid,
+    pointing_towards2,
+    world::World,
+    LuaVec2, MizLua, String, Vector2, Vector3,
+};
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone)]
@@ -152,76 +167,143 @@ impl ActionCmd {
     }
 }
 
-impl Db {
-    pub fn start_action(&mut self, spctx: &SpawnCtx, idx: &MizIndex, ucid: &Ucid, cmd: ActionCmd) -> Result<()> {
-        if !self.ephemeral.cfg.rules.actions.check(ucid) {
-            bail!("you are not authorized for actions")
+// setup the awacs race track 90 degrees offset from the heading
+// to the nearest enemy objective
+fn awacs_heading(db: &Db, pos: Vector2, enemy: Side) -> f64 {
+    match db.objective_near_point(pos, |o| o.owner == enemy) {
+        None => 0.,
+        Some((_, hd, _)) => {
+            let pi_2 = f64::consts::FRAC_PI_2;
+            if hd < pi_2 {
+                hd + pi_2
+            } else {
+                hd - pi_2
+            }
         }
-        match self.persisted.players.get(ucid) {
-            None => bail!("unknown player {ucid}"),
-            Some(player) => {
-                if cmd.action.cost > 0 && player.points < cmd.action.cost as i32 {
-                    bail!(
-                        "{ucid}({}) this action costs {} points and you have {} points",
-                        player.name,
-                        cmd.action.cost,
-                        player.points
-                    )
-                }
-                let n = self
-                    .ephemeral
-                    .actions_taken
-                    .entry(player.side)
-                    .or_default()
-                    .entry(cmd.name.clone())
-                    .or_default();
-                if let Some(limit) = cmd.action.limit {
-                    if *n >= limit {
-                        bail!("{} is out of {} actions", player.side, cmd.name)
+    }
+}
+
+fn awacs_orbit(group: group::Group, heading: f64, pos: Vector2) -> Result<()> {
+    let con = group.get_controller().context("getting controller")?;
+    let point2 = pointing_towards2(heading, pos) * 60_000.; // 60 km race track
+    con.set_task(Task::ComboTask(vec![
+        Task::AWACS,
+        Task::Orbit {
+            pattern: OrbitPattern::RraceTrack,
+            point: Some(LuaVec2(pos)),
+            point2: Some(LuaVec2(point2)),
+            speed: None,
+            altitude: None,
+        },
+    ]))
+    .context("setup orbit")?;
+    Ok(())
+}
+
+impl Db {
+    pub fn start_action(
+        &mut self,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        side: Side,
+        ucid: Option<Ucid>,
+        cmd: ActionCmd,
+    ) -> Result<()> {
+        if let Some(ucid) = ucid.as_ref() {
+            if !self.ephemeral.cfg.rules.actions.check(ucid) {
+                bail!("you are not authorized for actions")
+            }
+            match self.persisted.players.get(ucid) {
+                None => bail!("unknown player {ucid}"),
+                Some(player) => {
+                    if cmd.action.cost > 0 && player.points < cmd.action.cost as i32 {
+                        bail!(
+                            "{ucid}({}) this action costs {} points and you have {} points",
+                            player.name,
+                            cmd.action.cost,
+                            player.points
+                        )
+                    }
+                    if side != player.side {
+                        bail!(
+                            "mismatched action side {side} vs player side {}",
+                            player.side
+                        )
                     }
                 }
-                *n += 1;
             }
         }
+        let n = self
+            .ephemeral
+            .actions_taken
+            .entry(side)
+            .or_default()
+            .entry(cmd.name.clone())
+            .or_default();
+        if let Some(limit) = cmd.action.limit {
+            if *n >= limit {
+                bail!("{side} is out of {} actions", cmd.name)
+            }
+        }
+        let name = cmd.name.clone();
+        let cost = cmd.action.cost;
         match cmd.args {
-            ActionArgs::Awacs(args) => self.awacs(spctx, idx, ucid, cmd.name, cmd.action, args)?,
-            ActionArgs::AwacsWaypoint(args) => {
-                self.move_awacs(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::Bomber(args) => {
-                self.bomber_strike(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::CruiseMissileStrike(args) => {
-                self.cruise_missile_strike(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::Deployable(args) => {
-                self.ai_deploy(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::Fighters(args) => {
-                self.ai_fighters(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::FightersWaypoint(args) => {
-                self.move_ai_fighters(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::Drone(args) => self.drone(spctx, idx, ucid, cmd.name, cmd.action, args)?,
-            ActionArgs::DroneWaypoint(args) => {
-                self.move_drone(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::LogisticsRepair(args) => {
-                self.ai_logistics_repair(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::LogisticsTransfer(args) => {
-                self.ai_logistics_transfer(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::Nuke(args) => self.nuke(spctx, idx, ucid, cmd.name, cmd.action, args)?,
-            ActionArgs::Paratrooper(args) => {
-                self.paratroops(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
-            ActionArgs::Tanker(args) => self.tanker(spctx, idx, ucid, cmd.name, cmd.action, args)?,
-            ActionArgs::TankerWaypoint(args) => {
-                self.move_tanker(spctx, idx, ucid, cmd.name, cmd.action, args)?
-            }
+            ActionArgs::Awacs(args) => self
+                .awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling awacs")?,
+            ActionArgs::AwacsWaypoint(args) => self
+                .move_awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("moving awacs")?,
+            ActionArgs::Bomber(args) => self
+                .bomber_strike(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling bomber strike")?,
+            ActionArgs::CruiseMissileStrike(args) => self
+                .cruise_missile_strike(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling cruise missile strike")?,
+            ActionArgs::Deployable(args) => self
+                .ai_deploy(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling ai deployment")?,
+            ActionArgs::Fighters(args) => self
+                .ai_fighters(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling ai fighters")?,
+            ActionArgs::FightersWaypoint(args) => self
+                .move_ai_fighters(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("moving ai fighters")?,
+            ActionArgs::Drone(args) => self
+                .drone(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling drone")?,
+            ActionArgs::DroneWaypoint(args) => self
+                .move_drone(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("moving drone")?,
+            ActionArgs::LogisticsRepair(args) => self
+                .ai_logistics_repair(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling ai logi repair")?,
+            ActionArgs::LogisticsTransfer(args) => self
+                .ai_logistics_transfer(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling ai log transfer")?,
+            ActionArgs::Nuke(args) => self
+                .nuke(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling nuke")?,
+            ActionArgs::Paratrooper(args) => self
+                .paratroops(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling paratroops")?,
+            ActionArgs::Tanker(args) => self
+                .tanker(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling tanker")?,
+            ActionArgs::TankerWaypoint(args) => self
+                .move_tanker(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("moving tanker")?,
         }
+        if let Some(ucid) = ucid.as_ref() {
+            self.persisted.players[ucid].points -= cost as i32;
+        }
+        *self
+            .ephemeral
+            .actions_taken
+            .entry(side)
+            .or_default()
+            .entry(cmd.name.clone())
+            .or_default() += 1;
         Ok(())
     }
 
@@ -229,7 +311,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPosAndGroup<()>,
@@ -241,7 +324,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
@@ -253,7 +337,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPosAndGroup<()>,
@@ -265,7 +350,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPosAndGroup<()>,
@@ -277,7 +363,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
@@ -289,7 +376,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPos<DeployableCfg>,
@@ -301,7 +389,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPos<NukeCfg>,
@@ -313,7 +402,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithObj<LogiCfg>,
@@ -325,7 +415,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithObj<LogiCfg>,
@@ -337,7 +428,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
@@ -349,7 +441,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPos<DeployableCfg>,
@@ -361,7 +454,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithJtac<CruiseMissileCfg>,
@@ -373,7 +467,8 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithJtac<BomberCfg>,
@@ -385,20 +480,57 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        
-        unimplemented!()
+        let pos = Vector2::new(args.pos.x, args.pos.z);
+        let enemy = side.opposite();
+        let heading = awacs_heading(self, pos, enemy);
+        let sloc = SpawnLoc::InAir {
+            pos,
+            heading,
+            altitude: args.cfg.altitude,
+        };
+        let origin = DeployKind::Action {
+            player: ucid,
+            name,
+            spec: action,
+            time: Utc::now(),
+            destination: None,
+            rtb: None,
+        };
+        let gid = self
+            .add_group(spctx, idx, side, sloc, &args.cfg.template, origin)
+            .context("creating group")?;
+        match ephemeral::spawn_group(&self.persisted, idx, spctx, group!(self, gid)?)
+            .context("spawning group")?
+        {
+            None => bail!("awacs group all dead -- bug"),
+            Some(Spawned::Static(Static::Airbase(_))) => {
+                let _ = self.delete_group(&gid);
+                bail!("awacs is an airbase?")
+            }
+            Some(Spawned::Static(Static::Static(s))) => {
+                let _ = s.destroy();
+                let _ = self.delete_group(&gid);
+                bail!("awacs is a a static?")
+            }
+            Some(Spawned::Group(group)) => {
+                awacs_orbit(group, heading, pos).context("setup orbit")?
+            }
+        }
+        Ok(())
     }
 
     fn move_awacs(
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
-        ucid: &Ucid,
+        side: Side,
+        ucid: Option<Ucid>,
         name: String,
         action: Action,
         args: WithPosAndGroup<()>,

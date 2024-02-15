@@ -47,6 +47,7 @@ use dcso3::{
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexSet;
 use log::info;
+use mlua::Table;
 use smallvec::{smallvec, SmallVec};
 use std::{
     cmp::max,
@@ -995,6 +996,7 @@ pub(super) fn spawn_group<'lua>(
                 Some(su) => {
                     unit.raw_remove("unitId")?;
                     unit.set_pos(su.pos)?;
+                    unit.set_alt(su.position.p.y)?;
                     unit.set_heading(su.heading)?;
                     unit.set_name(su.name.clone())?;
                     i += 1;

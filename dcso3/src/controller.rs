@@ -47,8 +47,8 @@ string_enum!(WeaponExpend, u8, [
 ]);
 
 string_enum!(OrbitPattern, u8, [
-    RraceTrack => "RACE_TRACK",
-    Circle => "CIRCLE"
+    RaceTrack => "Race-Track",
+    Circle => "Circle"
 ]);
 
 string_enum!(TurnMethod, u8, [

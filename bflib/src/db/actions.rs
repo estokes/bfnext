@@ -15,14 +15,17 @@ use anyhow::{anyhow, bail, Context, Ok, Result};
 use chrono::prelude::*;
 use dcso3::{
     coalition::{Side, Static},
-    controller::{OrbitPattern, Task},
+    controller::{AltType, Command, MissionPoint, OrbitPattern, Task, WaypointType},
     env::miz::MizIndex,
     group::{self, Group},
     net::Ucid,
     pointing_towards2,
+    timer::Timer,
     world::World,
     LuaVec2, MizLua, String, Vector2, Vector3,
 };
+use log::debug;
+use mlua::Value;
 use smallvec::{smallvec, SmallVec};
 
 #[derive(Debug, Clone)]
@@ -126,10 +129,11 @@ impl ActionArgs {
         fn from_to<T>(db: &Db, cfg: T, s: &str) -> Result<WithFromTo<T>> {
             match s.split_once(" ") {
                 None => Err(anyhow!("expected two objectives <from> <to>")),
-                Some((from, to)) => Ok(WithFromTo { cfg, 
+                Some((from, to)) => Ok(WithFromTo {
+                    cfg,
                     from: admin::get_airbase(db, from).context("getting from airbase")?,
-                    to: admin::get_airbase(db, to).context("getting to airbase")? 
-                })
+                    to: admin::get_airbase(db, to).context("getting to airbase")?,
+                }),
             }
         }
         match action.clone() {
@@ -199,20 +203,61 @@ fn awacs_heading(db: &Db, pos: Vector2, enemy: Side) -> f64 {
     }
 }
 
-fn awacs_orbit(group: group::Group, heading: f64, pos: Vector2) -> Result<()> {
-    let con = group.get_controller().context("getting controller")?;
-    let point2 = pointing_towards2(heading, pos) * 60_000.; // 60 km race track
-    con.set_task(Task::ComboTask(vec![
-        Task::AWACS,
-        Task::Orbit {
-            pattern: OrbitPattern::RraceTrack,
-            point: Some(LuaVec2(pos)),
-            point2: Some(LuaVec2(point2)),
-            speed: None,
-            altitude: None,
-        },
-    ]))
-    .context("setup orbit")?;
+fn awacs_orbit(
+    lua: MizLua,
+    group: String,
+    heading: f64,
+    altitude: f64,
+    alt_typ: AltType,
+    pos: Vector2,
+) -> Result<()> {
+    let tm = Timer::singleton(lua)?;
+    tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
+        let group = Group::get_by_name(lua, &group)?;
+        let con = group.get_controller().context("getting controller")?;
+        let dir = pointing_towards2(heading, pos);
+        let point2 = pos + dir * 60_000.;
+        macro_rules! wpt {
+            ($name:expr, $pos:expr, $task:expr) => {
+                MissionPoint {
+                    action: None,
+                    typ: WaypointType::TurningPoint,
+                    airdrome_id: None,
+                    helipad: None,
+                    time_re_fu_ar: None,
+                    link_unit: None,
+                    pos: LuaVec2($pos),
+                    alt: altitude,
+                    alt_typ: Some(alt_typ),
+                    speed: 200.,
+                    eta: None,
+                    speed_locked: None,
+                    eta_locked: None,
+                    name: $name.into(),
+                    task: Box::new($task),
+                }
+            };
+        }
+        con.set_task(Task::Mission {
+            airborne: None,
+            route: vec![
+                wpt!("ip", pos, Task::AWACS),
+                wpt!(
+                    "orbit",
+                    point2,
+                    Task::Orbit {
+                        pattern: OrbitPattern::RaceTrack,
+                        point: Some(LuaVec2(point2)),
+                        point2: Some(LuaVec2(pos)),
+                        speed: None,
+                        altitude: None,
+                    }
+                ),
+            ],
+        })
+        .context("setup orbit")?;
+        Ok(None)
+    })?;
     Ok(())
 }
 
@@ -505,8 +550,11 @@ impl Db {
         let pos = Vector2::new(args.pos.x, args.pos.z);
         let enemy = side.opposite();
         let heading = awacs_heading(self, pos, enemy);
+        let rev_heading = heading - 2. * f64::consts::PI;
+        let dir = pointing_towards2(rev_heading, pos);
+        let spawn_pos = pos + dir * 15_000.;
         let sloc = SpawnLoc::InAir {
-            pos,
+            pos: spawn_pos,
             heading,
             altitude: args.cfg.altitude,
         };
@@ -521,23 +569,18 @@ impl Db {
         let gid = self
             .add_group(spctx, idx, side, sloc, &args.cfg.template, origin)
             .context("creating group")?;
-        match ephemeral::spawn_group(&self.persisted, idx, spctx, group!(self, gid)?)
-            .context("spawning group")?
-        {
-            None => bail!("awacs group all dead -- bug"),
-            Some(Spawned::Static(Static::Airbase(_))) => {
-                let _ = self.delete_group(&gid);
-                bail!("awacs is an airbase?")
-            }
-            Some(Spawned::Static(Static::Static(s))) => {
-                let _ = s.destroy();
-                let _ = self.delete_group(&gid);
-                bail!("awacs is a a static?")
-            }
-            Some(Spawned::Group(group)) => {
-                awacs_orbit(group, heading, pos).context("setup orbit")?
-            }
-        }
+        let group = group!(self, gid)?;
+        let name = group.name.clone();
+        ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
+        awacs_orbit(
+            spctx.lua(),
+            name,
+            heading,
+            args.cfg.altitude,
+            args.cfg.altitude_typ,
+            pos,
+        )
+        .context("setup orbit")?;
         Ok(())
     }
 
@@ -547,11 +590,14 @@ impl Db {
         side: Side,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
+        /*
         let pos = Vector2::new(args.pos.x, args.pos.z);
         let enemy = side.opposite();
         let heading = awacs_heading(self, pos, enemy);
         let group = group!(self, args.group)?;
         let dgrp = Group::get_by_name(spctx.lua(), &group.name).context("getting awacs")?;
         awacs_orbit(dgrp, heading, pos).context("moving awacs")
+        */
+        unimplemented!()
     }
 }

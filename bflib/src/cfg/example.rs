@@ -1419,8 +1419,8 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 cost: 5,
                 penalty: None,
                 limit: None,
-                kind: ActionKind::FighersWaypoint
-            }
+                kind: ActionKind::FighersWaypoint,
+            },
         ),
         (
             "paratroops".into(),
@@ -1480,7 +1480,10 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
 impl Default for Cfg {
     fn default() -> Self {
         Self {
-            admins: FxHashMap::default(),
+            admins: FxHashMap::from_iter([(
+                "f279deb7a6b62c96a78eca3ddb2bd8d0".into(),
+                "REAPER 32 | EvilKipper".into(),
+            )]),
             banned: FxHashMap::default(),
             repair_time: 1800,
             repair_crate: default_repair_crate(),

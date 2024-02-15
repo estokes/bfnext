@@ -1047,6 +1047,8 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("A-50".into(), Aircraft.into()),
             ("MQ-9 Reaper".into(), Aircraft.into()),
             ("KC-135".into(), Aircraft.into()),
+            ("KC-130".into(), Aircraft.into()),
+            ("F15C".into(), Aircraft.into()),
             ("B-1B".into(), Aircraft.into()),
             ("IL-78M".into(), Aircraft.into()),
             ("Tu-22M3".into(), Aircraft.into()),

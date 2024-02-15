@@ -623,23 +623,93 @@ impl<'lua> FromLua<'lua> for Task<'lua> {
                 pos: LuaVec2(Vector2::new(params.raw_get("x")?, params.raw_get("y")?)),
                 radius: params.raw_get("zoneRadius")?,
             }),
-            "CargoTransportation" => unimplemented!(),
-            "goToWaypoint" => unimplemented!(),
-            "GroundEscort" => unimplemented!(),
-            "RecoveryTanker" => unimplemented!(),
-            "EngageTargets" => unimplemented!(),
-            "EngageTargetsInZone" => unimplemented!(),
-            "EngageGroup" => unimplemented!(),
-            "EngageUnit" => unimplemented!(),
-            "AWACS" => unimplemented!(),
-            "Tanker" => unimplemented!(),
-            "EWR" => unimplemented!(),
-            "FAC_EngageGroup" => unimplemented!(),
-            "FAC" => unimplemented!(),
-            "Mission" => unimplemented!(),
-            "ComboTask" => unimplemented!(),
-            "ControlledTask" => unimplemented!(),
-            "WrappedAction" => unimplemented!(),
+            "CargoTransportation" => Ok(Self::CargoTransportation {
+                group: params.raw_get("groupId")?,
+                zone: params.raw_get("zoneId")?,
+            }),
+            // "goToGulag" => Ok(Self::GoToGulag),
+            "goToWaypoint" => Ok(Self::GoToWaypoint {
+                from_waypoint: params.raw_get("fromWaypointIndex")?,
+                to_waypoint: params.raw_get("goToWaypointIndex")?,
+            }),
+            "GroundEscort" => Ok(Self::GroundEscort {
+                group: params.raw_get("groupId")?,
+                engagement_max_distance: params.raw_get("engagementDistMax")?,
+                target_types: params.raw_get("targetTypes")?,
+                last_wpt_index: if params.raw_get("lastWptIndexFlag")? {
+                    params.raw_get("lastWptIndex")?
+                } else {
+                    None
+                },
+            }),
+            "RecoveryTanker" => Ok(Self::RecoveryTanker {
+                group: params.raw_get("groupId")?,
+                speed: params.raw_get("speed")?,
+                altitude: params.raw_get("altitude")?,
+                last_wpt_idx: if params.raw_get("lastWptIndexFlag")? {
+                    params.raw_get("lastWptIndex")?
+                } else {
+                    None
+                },
+            }),
+            "EngageTargets" => Ok(Self::EngageTargets {
+                target_types: params.raw_get("targetTypes")?,
+                max_dist: params.raw_get("maxDist")?,
+                priority: params.raw_get("priority")?,
+            }),
+            "EngageTargetsInZone" => Ok(Self::EngageTargetsInZone {
+                point: params.raw_get("point")?,
+                zone_radius: params.raw_get("zoneRadius")?,
+                target_types: params.raw_get("targetTypes")?,
+                priority: params.raw_get("priority")?,
+            }),
+            "EngageGroup" => Ok(Self::EngageGroup {
+                group: params.raw_get("groupId")?,
+                priority: params.raw_get("priority")?,
+                params: FromLua::from_lua(Value::Table(params), lua)?,
+            }),
+            "EngageUnit" => Ok(Self::EngageUnit {
+                unit: params.raw_get("unitId")?,
+                priority: params.raw_get("priority")?,
+                params: FromLua::from_lua(Value::Table(params), lua)?,
+            }),
+            "AWACS" => Ok(Self::AWACS),
+            "Tanker" => Ok(Self::Tanker),
+            "EWR" => Ok(Self::EWR),
+            "FAC_EngageGroup" => Ok(Self::FACEngageGroup {
+                group: params.raw_get("groupId")?,
+                priority: params.raw_get("priority")?,
+                params: FromLua::from_lua(Value::Table(params), lua)?,
+            }),
+            "FAC" => Ok(Self::FAC {
+                priority: params.raw_get("priority")?,
+                params: FromLua::from_lua(Value::Table(params), lua)?,
+            }),
+            "Mission" => Ok(Self::Mission {
+                airborne: params.raw_get("airborne")?,
+                route: FromLua::from_lua(Value::Table(params), lua)?,
+            }),
+            "ComboTask" => Ok(Self::ComboTask(FromLua::from_lua(
+                Value::Table(params),
+                lua,
+            )?)),
+            "ControlledTask" => Ok(Self::ControlledTask {
+                task: Box::new(params.raw_get("task")?),
+                condition: params.raw_get("condition")?,
+                stop_condition: params.raw_get("stopCondition")?,
+            }),
+            "WrappedAction" => {
+                let action: LuaTable = params.raw_get("action")?;
+                match action.raw_get::<_, String>("id")?.as_str() {
+                    "Option" => {
+                        let params: LuaTable = action.raw_get("params")?;
+                        let tag: u8 = params.raw_get("name")?;
+                        let val: Value = params.raw_get("value")?;
+                        Ok(Self::WrappedOption(AiOption::from_tag_val(lua, tag, val)?))
+                    }
+                    _cmd => Ok(Self::WrappedCommand(params.raw_get("action")?)),
+                }
+            }
             s => Err(err(&format_compact!("invalid action {s}"))),
         }
     }
@@ -1236,6 +1306,73 @@ impl<'lua> IntoLua<'lua> for Command {
     }
 }
 
+impl<'lua> FromLua<'lua> for Command {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let root: LuaTable = FromLua::from_lua(value, lua)?;
+        let params: LuaTable = root.raw_get("params")?;
+        match root.raw_get::<_, String>("id")?.as_str() {
+            "Script" => Ok(Self::Script(params.raw_get("command")?)),
+            "SetCallsign" => Ok(Self::SetCallsign {
+                callname: params.raw_get("callname")?,
+                number: params.raw_get("number")?,
+            }),
+            "SetFrequency" => Ok(Self::SetFrequency {
+                frequency: params.raw_get("frequency")?,
+                modulation: params.raw_get("modulation")?,
+                power: params.raw_get("power")?,
+            }),
+            "SetFrequencyForUnit" => Ok(Self::SetFrequencyForUnit {
+                frequency: params.raw_get("frequency")?,
+                modulation: params.raw_get("modulation")?,
+                power: params.raw_get("power")?,
+                unit: params.raw_get("unitId")?,
+            }),
+            "SwitchWaypoint" => Ok(Self::SwitchWaypoint {
+                from_waypoint: params.raw_get("fromWaypointIndex")?,
+                to_waypoint: params.raw_get("goToWaypointIndex")?,
+            }),
+            "StopRoute" => Ok(Self::StopRoute(params.raw_get("value")?)),
+            "SwitchAction" => Ok(Self::SwitchAction(params.raw_get("actionIndex")?)),
+            "SetInvisible" => Ok(Self::SetInvisible(params.raw_get("value")?)),
+            "SetImmortal" => Ok(Self::SetImmortal(params.raw_get("value")?)),
+            "SetUnlimitedFuel" => Ok(Self::SetUnlimitedFuel(params.raw_get("value")?)),
+            "ActivateBeacon" => Ok(Self::ActivateBeacon {
+                typ: params.raw_get("type")?,
+                system: params.raw_get("system")?,
+                name: params.raw_get("name")?,
+                callsign: params.raw_get("callsign")?,
+                frequency: params.raw_get("frequency")?,
+            }),
+            "DeactivateBeacon" => Ok(Self::DeactivateBeacon),
+            "DeactivateICLS" => Ok(Self::DeactivateACLS),
+            "Start" => Ok(Self::Start),
+            "TransmitMessage" => Ok(Self::TransmitMessage {
+                duration: params.raw_get("duration")?,
+                subtitle: params.raw_get("subtitle")?,
+                looping: params.raw_get("loop")?,
+                file: params.raw_get("file")?,
+            }),
+            "stopTransmission" => Ok(Self::StopTransmission),
+            "ActivateLink4" => Ok(Self::ActivateLink4 {
+                unit: params.raw_get("unitId")?,
+                frequency: params.raw_get("frequency")?,
+                name: params.raw_get("name")?,
+            }),
+            "DeactivateLink4" => Ok(Self::DeactivateLink4),
+            "DeactivateACLS" => Ok(Self::DeactivateACLS),
+            "ActivateACLS" => Ok(Self::ActivateACLS {
+                unit: params.raw_get("unitId")?,
+                name: params.raw_get("name")?,
+            }),
+            "LoadingShip" => Ok(Self::LoadingShip {
+                cargo: params.raw_get("cargo")?,
+                unit: params.raw_get("unitId")?,
+            }),
+            x => Err(err(&format_compact!("unknown {x}"))),
+        }
+    }
+}
+
 simple_enum!(AirRoe, u8, [
     OpenFire => 2,
     OpenFireWeaponFree => 1,
@@ -1375,6 +1512,32 @@ impl<'lua> AirOption<'lua> {
             Self::Silence(_) => 7,
         }
     }
+
+    fn from_tag_val(lua: &'lua Lua, tag: u8, val: Value<'lua>) -> LuaResult<Self> {
+        match tag {
+            13 => Ok(Self::EcmUsing(FromLua::from_lua(val, lua)?)),
+            4 => Ok(Self::FlareUsing(FromLua::from_lua(val, lua)?)),
+            26 => Ok(Self::ForcedAttack(FromLua::from_lua(val, lua)?)),
+            5 => Ok(Self::Formation(FromLua::from_lua(val, lua)?)),
+            25 => Ok(Self::JettTanksIfEmpty(FromLua::from_lua(val, lua)?)),
+            18 => Ok(Self::MissileAttack(FromLua::from_lua(val, lua)?)),
+            21 => Ok(Self::OptionRadioUsageContact(FromLua::from_lua(val, lua)?)),
+            22 => Ok(Self::OptionRadioUsageEngage(FromLua::from_lua(val, lua)?)),
+            23 => Ok(Self::OptionRadioUsageKill(FromLua::from_lua(val, lua)?)),
+            14 => Ok(Self::ProhibitAA(FromLua::from_lua(val, lua)?)),
+            16 => Ok(Self::ProhibitAB(FromLua::from_lua(val, lua)?)),
+            17 => Ok(Self::ProhibitAG(FromLua::from_lua(val, lua)?)),
+            15 => Ok(Self::ProhibitJett(FromLua::from_lua(val, lua)?)),
+            19 => Ok(Self::ProhibitWPPassReport(FromLua::from_lua(val, lua)?)),
+            3 => Ok(Self::RadarUsing(FromLua::from_lua(val, lua)?)),
+            1 => Ok(Self::ReactionOnThreat(FromLua::from_lua(val, lua)?)),
+            0 => Ok(Self::Roe(FromLua::from_lua(val, lua)?)),
+            6 => Ok(Self::RtbOnBingo(FromLua::from_lua(val, lua)?)),
+            10 => Ok(Self::RtbOnOutOfAmmo(FromLua::from_lua(val, lua)?)),
+            7 => Ok(Self::Silence(FromLua::from_lua(val, lua)?)),
+            e => Err(err(&format_compact!("invalid AirOption {e}"))),
+        }
+    }
 }
 
 simple_enum!(AlarmState, u8, [
@@ -1423,6 +1586,20 @@ impl GroundOption {
             Self::Roe(_) => 0,
         }
     }
+
+    fn from_tag_val(lua: &Lua, tag: u8, val: Value) -> LuaResult<Self> {
+        match tag {
+            0 => Ok(Self::Roe(FromLua::from_lua(val, lua)?)),
+            5 => Ok(Self::Formation(FromLua::from_lua(val, lua)?)),
+            8 => Ok(Self::DisperseOnAttack(FromLua::from_lua(val, lua)?)),
+            9 => Ok(Self::AlarmState(FromLua::from_lua(val, lua)?)),
+            20 => Ok(Self::EngageAirWeapons(FromLua::from_lua(val, lua)?)),
+            24 => Ok(Self::AcEngagementRangeRestriction(FromLua::from_lua(
+                val, lua,
+            )?)),
+            e => Err(err(&format_compact!("unknown GroundOption {e}"))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1442,6 +1619,13 @@ impl NavalOption {
     fn tag(&self) -> u8 {
         match self {
             Self::Roe(_) => 0,
+        }
+    }
+
+    fn from_tag_val(lua: &Lua, tag: u8, val: Value) -> LuaResult<Self> {
+        match tag {
+            0 => Ok(Self::Roe(FromLua::from_lua(val, lua)?)),
+            e => Err(err(&format_compact!("unkown NavalOption {e}"))),
         }
     }
 }
@@ -1469,6 +1653,19 @@ impl<'lua> AiOption<'lua> {
             Self::Air(v) => v.tag(),
             Self::Ground(v) => v.tag(),
             Self::Naval(v) => v.tag(),
+        }
+    }
+
+    fn from_tag_val(lua: &'lua Lua, tag: u8, val: Value<'lua>) -> LuaResult<Self> {
+        match AirOption::from_tag_val(lua, tag, val.clone()) {
+            Ok(v) => Ok(Self::Air(v)),
+            Err(_) => match GroundOption::from_tag_val(lua, tag, val.clone()) {
+                Ok(v) => Ok(Self::Ground(v)),
+                Err(_) => match NavalOption::from_tag_val(lua, tag, val) {
+                    Ok(v) => Ok(Self::Naval(v)),
+                    Err(e) => Err(e),
+                },
+            },
         }
     }
 }

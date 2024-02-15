@@ -12,8 +12,7 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use crate::{
-    as_tbl, coalition::Side, country, is_hooks_env, wrapped_prim, wrapped_table, Color,
-    DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String, net::SlotId, string_enum,
+    as_tbl, coalition::Side, controller::MissionPoint, country, is_hooks_env, net::SlotId, string_enum, wrapped_prim, wrapped_table, Color, DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String
 };
 use anyhow::{bail, Result};
 use fxhash::FxHashMap;
@@ -25,16 +24,6 @@ wrapped_table!(Weather, None);
 
 wrapped_prim!(UnitId, i64, Hash, Copy);
 wrapped_prim!(GroupId, i64, Hash, Copy);
-
-string_enum!(PointType, u8, [
-    TakeOffGround => "TakeOffGround",
-    TakeOffGroundHot => "TakeOffGroundHot",
-    TurningPoint => "Turning Point",
-    TakeOffParking => "TakeOffParking",
-    TakeOff => "TakeOff",
-    Land => "Land",
-    Nil => ""
-]);
 
 string_enum!(Skill, u8, [
     Client => "Client",
@@ -86,19 +75,15 @@ wrapped_table!(NavPoint, None);
 
 wrapped_table!(Task, None);
 
-wrapped_table!(Point, None);
-
-impl<'lua> Point<'lua> {
-    pub fn typ(&self) -> Result<PointType> {
-        Ok(self.t.raw_get("type")?)
-    }
-}
-
 wrapped_table!(Route, None);
 
 impl<'lua> Route<'lua> {
-    pub fn points(&self) -> Result<Sequence<'lua, Point>> {
-        Ok(self.raw_get("points")?)
+    pub fn points(&self) -> Result<Sequence<'lua, MissionPoint>> {
+        Ok(self.t.raw_get("points")?)
+    }
+
+    pub fn set_points(&self, points: Vec<MissionPoint>) -> Result<()> {
+        Ok(self.t.raw_set("points", points)?)
     }
 }
 

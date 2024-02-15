@@ -26,15 +26,18 @@ use crate::{
 use anyhow::Result;
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
+use na::Vector2;
 use serde_derive::{Deserialize, Serialize};
 use std::{ops::Deref, mem};
 
-string_enum!(WaypointType, u8, [
-    Takeoff => "TAKEOFF",
-    TakeoffParking => "TAKEOFF_PARKING",
-    TakeoffParkingHot => "TAKEOFF_PARKING_HOT",
-    TurningPoint => "TURNING_POINT",
-    Land => "LAND"
+string_enum!(PointType, u8, [
+    TakeOffGround => "TakeOffGround",
+    TakeOffGroundHot => "TakeOffGroundHot",
+    TurningPoint => "Turning Point",
+    TakeOffParking => "TakeOffParking",
+    TakeOff => "TakeOff",
+    Land => "Land",
+    Nil => ""
 ]);
 
 string_enum!(WeaponExpend, u8, [
@@ -101,6 +104,32 @@ pub struct AttackParams {
     pub group_attack: Option<bool>,
 }
 
+impl<'lua> FromLua<'lua> for AttackParams {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl: LuaTable = FromLua::from_lua(value, lua)?;
+        Ok(Self {
+            weapon_type: tbl.raw_get("weaponType")?,
+            expend: tbl.raw_get("expend")?,
+            direction: if tbl.raw_get("directionEnabled")? {
+                tbl.raw_get("direction")?
+            } else {
+                None
+            },
+            altitude: if tbl.raw_get("altitudeEnabled")? {
+                tbl.raw_get("altitude")?
+            } else {
+                None
+            },
+            attack_qty: if tbl.raw_get("attackQtyLimit")? {
+                tbl.raw_get("attackQty")?
+            } else {
+                None
+            },
+            group_attack: tbl.raw_get("groupAttack")?
+        })
+    }
+}
+
 impl AttackParams {
     fn push_tbl(&self, tbl: &LuaTable) -> LuaResult<()> {
         if let Some(wt) = self.weapon_type {
@@ -135,6 +164,21 @@ pub struct FollowParams {
     pub last_waypoint_index: Option<i64>,
 }
 
+impl<'lua> FromLua<'lua> for FollowParams {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl: LuaTable = FromLua::from_lua(value, lua)?;
+        Ok(Self {
+            group: tbl.raw_get("groupId")?,
+            pos: tbl.raw_get("pos")?,
+            last_waypoint_index: if tbl.raw_get("lastWptIndexFlag")? {
+                tbl.raw_get("lastWptIndex")?
+            } else {
+                None
+            }
+        })
+    }
+}
+
 impl FollowParams {
     fn push_tbl(&self, tbl: &LuaTable) -> LuaResult<()> {
         tbl.raw_set("groupId", self.group)?;
@@ -156,6 +200,21 @@ pub struct FACParams {
     pub modulation: Option<Modulation>,
     pub callname: Option<FACCallsign>,
     pub number: Option<u8>,
+}
+
+impl<'lua> FromLua<'lua> for FACParams {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl: LuaTable = FromLua::from_lua(value, lua)?;
+        Ok(Self {
+            weapon_type: tbl.raw_get("weaponType")?,
+            designation: tbl.raw_get("designation")?,
+            datalink: tbl.raw_get("datalink")?,
+            frequency: tbl.raw_get("frequency")?,
+            modulation: tbl.raw_get("modulation")?,
+            callname: tbl.raw_get("callname")?,
+            number: tbl.raw_get("number")?
+        })
+    }
 }
 
 impl FACParams {
@@ -187,7 +246,7 @@ impl FACParams {
 
 #[derive(Debug, Clone)]
 pub struct MissionPoint<'lua> {
-    pub typ: WaypointType,
+    pub typ: PointType,
     pub airdrome_id: Option<AirbaseId>,
     pub time_re_fu_ar: Option<i64>,
     pub helipad: Option<AirbaseId>,
@@ -200,8 +259,31 @@ pub struct MissionPoint<'lua> {
     pub speed_locked: Option<bool>,
     pub eta: Option<Time>,
     pub eta_locked: Option<bool>,
-    pub name: String,
+    pub name: Option<String>,
     pub task: Box<Task<'lua>>,
+}
+
+impl<'lua> FromLua<'lua> for MissionPoint<'lua> {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl: LuaTable = FromLua::from_lua(value, lua)?;
+        Ok(Self {
+            typ: tbl.raw_get("type")?,
+            airdrome_id: tbl.raw_get("airdromId")?,
+            time_re_fu_ar: tbl.raw_get("timeReFuAr")?,
+            helipad: tbl.raw_get("helipadId")?,
+            link_unit: tbl.raw_get("linkUnit")?,
+            action: tbl.raw_get("action")?,
+            pos: LuaVec2(Vector2::new(tbl.raw_get("x")?, tbl.raw_get("y")?)),
+            alt: tbl.raw_get("alt")?,
+            alt_typ: tbl.raw_get("alt_type")?,
+            speed: tbl.raw_get("speed")?,
+            speed_locked: tbl.raw_get("speed_locked")?,
+            eta: tbl.raw_get("ETA")?,
+            eta_locked: tbl.raw_get("ETA_locked")?,
+            name: tbl.raw_get("name")?,
+            task: Box::new(tbl.raw_get("task")?)
+        })
+    }
 }
 
 impl<'lua> IntoLua<'lua> for MissionPoint<'lua> {
@@ -237,6 +319,13 @@ pub struct TaskStartCond<'lua> {
     pub user_flag_value: Option<Value<'lua>>,
     pub probability: Option<u8>,
     pub condition: Option<String>, // lua code
+}
+
+impl<'lua> FromLua<'lua> for TaskStartCond<'lua> {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl: LuaTable = FromLua::from_lua(value, lua)?;
+        unimplemented!()
+    }
 }
 
 impl<'lua> IntoLua<'lua> for TaskStartCond<'lua> {

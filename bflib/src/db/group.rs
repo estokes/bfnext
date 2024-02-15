@@ -103,6 +103,7 @@ pub struct SpawnedGroup {
     pub name: String,
     pub template_name: String,
     pub side: Side,
+    pub loc: SpawnLoc,
     pub kind: Option<GroupCategory>,
     pub class: ObjGroupClass,
     pub origin: DeployKind,
@@ -493,7 +494,7 @@ impl Db {
         let land = Land::singleton(spctx.lua())?;
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
-        let mut gpos = compute_unit_positions(&spctx, idx, location, &template.group)?;
+        let mut gpos = compute_unit_positions(&spctx, idx, location.clone(), &template.group)?;
         check_water(&land, &gpos.positions, &gpos.by_type)?;
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
@@ -504,6 +505,7 @@ impl Db {
             template_name: template_name.clone(),
             side,
             kind,
+            loc: location,
             origin,
             class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),

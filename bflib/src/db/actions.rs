@@ -193,11 +193,11 @@ fn awacs_heading(db: &Db, pos: Vector2, enemy: Side) -> f64 {
     match db.objective_near_point(pos, |o| o.owner == enemy) {
         None => 0.,
         Some((_, hd, _)) => {
-            let pi_2 = f64::consts::FRAC_PI_2;
-            if hd < pi_2 {
-                hd + pi_2
+            let pi = f64::consts::PI;
+            if hd < pi {
+                hd + pi
             } else {
-                hd - pi_2
+                hd - pi
             }
         }
     }

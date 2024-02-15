@@ -1043,6 +1043,13 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("Mi-24P".into(), Helicopter.into()),
             ("F-15ESE".into(), Aircraft.into()),
             ("Mirage-F1EE".into(), Aircraft.into()),
+            ("E-3A".into(), Aircraft.into()),
+            ("A-50".into(), Aircraft.into()),
+            ("MQ-9 Reaper".into(), Aircraft.into()),
+            ("KC-135".into(), Aircraft.into()),
+            ("B-1B".into(), Aircraft.into()),
+            ("IL-78M".into(), Aircraft.into()),
+            ("Tu-22M3".into(), Aircraft.into()),
             (".Ammunition depot".into(), Logistics | Unarmed),
         ]
         .into_iter()
@@ -1235,17 +1242,6 @@ fn default_red_actions() -> FxHashMap<String, Action> {
             },
         ),
         (
-            "missile-strike".into(),
-            Action {
-                cost: 150,
-                penalty: None,
-                limit: None,
-                kind: ActionKind::CruiseMissileStrike(CruiseMissileCfg {
-                    template: "RMISSILES".into(),
-                }),
-            },
-        ),
-        (
             "paratroops".into(),
             Action {
                 cost: 50,
@@ -1423,17 +1419,6 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 limit: None,
                 kind: ActionKind::FighersWaypoint
             }
-        ),
-        (
-            "missile-strike".into(),
-            Action {
-                cost: 150,
-                penalty: None,
-                limit: None,
-                kind: ActionKind::CruiseMissileStrike(CruiseMissileCfg {
-                    template: "BMISSILES".into(),
-                }),
-            },
         ),
         (
             "paratroops".into(),

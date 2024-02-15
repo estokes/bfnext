@@ -2,6 +2,7 @@
 
 - weapon dcsoid implementation
 - some common object methods on weapon
+- fix a bunch of sequence lifetimes to 'lua
 
 ## 0.1.2
 

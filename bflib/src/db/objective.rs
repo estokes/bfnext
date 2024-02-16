@@ -653,8 +653,14 @@ impl Db {
             for uid in &self.ephemeral.units_potentially_close_to_enemies {
                 let unit = unit!(self, uid)?;
                 if obj.owner != unit.side {
+                    let air = unit.tags.0.contains(UnitTag::Aircraft);
+                    let cull_dist = if air {
+                        cull_distance
+                    } else {
+                        ground_cull_distance
+                    };
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
-                    if dist <= ground_cull_distance {
+                    if dist <= cull_dist {
                         *spawn = true;
                         *threat = true;
                         is_close_to_enemies.insert(*uid);

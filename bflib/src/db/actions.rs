@@ -503,11 +503,11 @@ impl Db {
     ) -> Result<()> {
         let enemy = side.opposite();
         let (_, heading) = awacs_dist_and_heading(&self.persisted.objectives, args.pos, enemy);
-        let sloc = dbg!(SpawnLoc::InAir {
+        let sloc = SpawnLoc::InAir {
             pos: args.pos,
             heading,
             altitude: args.cfg.altitude,
-        });
+        };
         let origin = DeployKind::Action {
             marks: FxHashSet::default(),
             loc: sloc.clone(),

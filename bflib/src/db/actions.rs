@@ -1,5 +1,3 @@
-use std::f64;
-
 use super::{group::GroupId, objective::ObjectiveId, Db};
 use crate::{
     admin,
@@ -26,6 +24,7 @@ use dcso3::{
 };
 use mlua::Value;
 use smallvec::{smallvec, SmallVec};
+use std::f64;
 
 #[derive(Debug, Clone)]
 pub struct WithPos<T> {
@@ -227,7 +226,7 @@ fn awacs_orbit(
                     link_unit: None,
                     pos: LuaVec2($pos),
                     alt: altitude,
-                    alt_typ: Some(alt_typ),
+                    alt_typ: Some(alt_typ.clone()),
                     speed: 200.,
                     eta: None,
                     speed_locked: None,

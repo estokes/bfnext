@@ -507,7 +507,7 @@ macro_rules! string_enum {
      $repr:ident,
      [$($case:ident => $str:literal),+],
      [$($altcase:ident => $altstr:literal),*]) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
         #[allow(non_camel_case_types)]
         #[repr($repr)]
         pub enum $name {

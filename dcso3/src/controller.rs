@@ -68,9 +68,9 @@ string_enum!(Designation, u8, [
     Auto => "AUTO"
 ]);
 
-simple_enum!(AltType, u8, [
-    MSL => 0,
-    AGL => 1
+string_enum!(AltType, u8, [
+    BARO => "BARO",
+    RADIO => "RADIO"
 ]);
 
 simple_enum!(FACCallsign, u8, [

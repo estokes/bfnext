@@ -250,7 +250,13 @@ impl Db {
             .get_mut_cow(&group.side)
             .map(|m| m.remove_cow(gid));
         match &group.origin {
-            DeployKind::Objective | DeployKind::Action { .. } => (),
+            DeployKind::Objective => (),
+            DeployKind::Action { marks, .. } => {
+                for id in marks {
+                    self.ephemeral.msgs().delete_mark(*id);
+                }
+                self.persisted.actions.remove_cow(gid);
+            }
             DeployKind::Crate { player, .. } => {
                 self.persisted.crates.remove_cow(gid);
                 self.persisted.players[player].crates.remove_cow(gid);
@@ -315,7 +321,7 @@ impl Db {
         location: SpawnLoc,
         template_name: &str,
         origin: DeployKind,
-        extra_tags: BitFlags<UnitTag>
+        extra_tags: BitFlags<UnitTag>,
     ) -> Result<GroupId> {
         fn distance<'a, F: Fn(f64, f64) -> f64>(
             pos: Vector2,
@@ -614,7 +620,15 @@ impl Db {
         extra_tags: BitFlags<UnitTag>,
         delay: Option<DateTime<Utc>>,
     ) -> Result<GroupId> {
-        let gid = self.add_group(&spctx, idx, side, location, template_name, origin, extra_tags)?;
+        let gid = self.add_group(
+            &spctx,
+            idx,
+            side,
+            location,
+            template_name,
+            origin,
+            extra_tags,
+        )?;
         match delay {
             None => self.ephemeral.push_spawn(gid),
             Some(at) => self.ephemeral.delayspawnq.entry(at).or_default().push(gid),
@@ -686,6 +700,20 @@ impl Db {
                     || self.persisted.crates.contains(&gid)
                 {
                     if self.group_health(&gid)?.0 == 0 {
+                        self.delete_group(&gid)?
+                    }
+                }
+                if self.persisted.actions.contains(&gid) {
+                    if let DeployKind::Action { player, spec, .. } = &group!(self, gid)?.origin {
+                        if self.group_health(&gid)?.0 == 0 {
+                            if let Some((player, penalty)) = spec.penalty.and_then(|n| {
+                                player.as_ref().and_then(|u| {
+                                    self.persisted.players.get_mut_cow(u).map(|p| (p, n))
+                                })
+                            }) {
+                                player.points -= penalty as i32;
+                            }
+                        }
                         self.delete_group(&gid)?
                     }
                 }

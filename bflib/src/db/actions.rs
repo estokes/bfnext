@@ -10,17 +10,22 @@ use crate::{
         NukeCfg, UnitTag,
     },
     chatcmd::format_duration,
-    db::{ephemeral, group::DeployKind},
+    db::{
+        ephemeral,
+        group::{DeployKind, SpawnedGroup},
+    },
     group, group_mut,
+    jtac::Jtacs,
     spawnctx::{SpawnCtx, SpawnLoc},
+    unit,
 };
 use anyhow::{anyhow, bail, Context, Ok, Result};
-use chrono::prelude::*;
+use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
     change_heading,
     coalition::Side,
-    controller::{MissionPoint, OrbitPattern, PointType, Task},
+    controller::{Command, MissionPoint, OrbitPattern, PointType, Task},
     env::miz::MizIndex,
     group::Group,
     net::Ucid,
@@ -651,6 +656,7 @@ impl Db {
                     }
                 };
             }
+            con.set_command(Command::SetUnlimitedFuel(true))?;
             con.set_task(Task::Mission {
                 airborne: None,
                 route: vec![
@@ -672,5 +678,148 @@ impl Db {
             Ok(None)
         })?;
         Ok(())
+    }
+
+    fn bomb_targets(&self, jtacs: &Jtacs, cfg: &BomberCfg, target: Vector2) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn repair_target(&mut self, target: Vector2) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn transfer_to_target(&mut self, src: Vector2, target: Vector2) -> Result<()> {
+        unimplemented!()
+    }
+
+//    fn paratroops_to_point(&mut self, )
+
+    pub fn advance_actions(&mut self, jtacs: &Jtacs, now: DateTime<Utc>) -> Result<()> {
+        let mut to_delete: SmallVec<[GroupId; 4]> = smallvec![];
+        let mut to_bomb: SmallVec<[(BomberCfg, Vector2); 2]> = smallvec![];
+        let mut to_repair: SmallVec<[Vector2; 2]> = smallvec![];
+        let mut to_transfer: SmallVec<[(Vector2, Vector2); 2]> = smallvec![];
+        let mut to_deploy: SmallVec<[(Vector2, String); 2]> = smallvec![];
+        let mut to_paratroop: SmallVec<[(Vector2, String); 2]> = smallvec![];
+        macro_rules! at_dest {
+            ($group:expr, $dest:expr, $radius:expr) => {{
+                let r2 = f64::powi($radius, 2);
+                let mut iter = $group.units.into_iter();
+                loop {
+                    match iter.next() {
+                        None => break false,
+                        Some(uid) => {
+                            let unit = unit!(self, uid)?;
+                            if na::distance_squared(&unit.pos.into(), &$dest.into()) <= r2 {
+                                break true;
+                            }
+                        }
+                    }
+                }
+            }};
+        }
+        for gid in &self.persisted.actions {
+            let group = group_mut!(self, gid)?;
+            if let DeployKind::Action {
+                spec,
+                time,
+                destination,
+                rtb,
+                ..
+            } = &mut group.origin
+            {
+                match &spec.kind {
+                    ActionKind::Awacs(ai)
+                    | ActionKind::Fighters(ai)
+                    | ActionKind::Drone(ai)
+                    | ActionKind::Tanker(ai) => {
+                        if now - *time > Duration::hours(ai.duration as i64) {
+                            to_delete.push(*gid);
+                        }
+                    }
+                    ActionKind::Bomber(b) => {
+                        if let Some(target) = *destination {
+                            if at_dest!(group, target, 10_000.) {
+                                destination.take();
+                                to_bomb.push((b.clone(), target));
+                            }
+                        }
+                        if let Some(target) = *rtb {
+                            if at_dest!(group, target, 10_000.) {
+                                to_delete.push(*gid);
+                            }
+                        }
+                    }
+                    ActionKind::LogisticsRepair(_) => {
+                        if let Some(target) = *destination {
+                            if at_dest!(group, target, 500.) {
+                                destination.take();
+                                to_repair.push(target);
+                            }
+                        }
+                    }
+                    ActionKind::LogisticsTransfer(_) => {
+                        if let Some(target) = *destination {
+                            if at_dest!(group, target, 500.) {
+                                destination.take();
+                                if let Some(rtb) = *rtb {
+                                    to_transfer.push((rtb, target));
+                                }
+                            }
+                        }
+                    }
+                    ActionKind::Paratrooper(t) => {
+                        if let Some(target) = *destination {
+                            if at_dest!(group, target, 500.) {
+                                destination.take();
+                                to_paratroop.push((target, t.name.clone()));
+                            }
+                        }
+                        if let Some(target) = *rtb {
+                            if at_dest!(group, target, 500.) {
+                                to_delete.push(*gid);
+                            }
+                        }
+                    }
+                    ActionKind::Deployable(d) => {
+                        if let Some(target) = *destination {
+                            if at_dest!(group, target, 500.) {
+                                destination.take();
+                                to_deploy.push((target, d.name.clone()));
+                            }
+                        }
+                        if let Some(target) = *rtb {
+                            if at_dest!(group, target, 500.) {
+                                to_delete.push(*gid);
+                            }
+                        }
+                    }
+                    ActionKind::AwacsWaypoint
+                    | ActionKind::CruiseMissileStrike(_)
+                    | ActionKind::FighersWaypoint
+                    | ActionKind::TankerWaypoint
+                    | ActionKind::DroneWaypoint
+                    | ActionKind::Nuke(_) => {
+                        bail!("should not be a group")
+                    }
+                }
+            }
+        }
+        for gid in to_delete {
+            self.delete_group(&gid)?
+        }
+        for (cfg, target) in to_bomb {
+            self.bomb_targets(jtacs, &cfg, target)?;
+        }
+        for target in to_repair {
+            self.repair_target(target)?
+        }
+        for (src, target) in to_transfer {
+            self.transfer_to_target(src, target)?
+        }
+        for (tgt, troop) in to_paratroop {
+            self.
+        }
+        unimplemented!()
     }
 }

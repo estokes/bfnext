@@ -662,7 +662,14 @@ impl Db {
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
                     if dist <= cull_dist {
                         *spawn = true;
-                        *threat = true;
+                        if air {
+                            let threat_dist = (cfg.threatened_distance[unit.typ.as_str()] as f64).powi(2);
+                            if dist <= threat_dist {
+                                *threat = true
+                            }
+                        } else {
+                            *threat = true;
+                        }
                         is_close_to_enemies.insert(*uid);
                     }
                 }

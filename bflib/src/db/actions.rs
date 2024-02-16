@@ -19,6 +19,7 @@ use dcso3::{
     net::Ucid,
     pointing_towards2,
     timer::Timer,
+    trigger::MarkId,
     world::World,
     LuaVec2, MizLua, String, Vector2, Vector3,
 };
@@ -78,13 +79,19 @@ pub enum ActionArgs {
 }
 
 impl ActionArgs {
-    pub fn parse(db: &Db, action: &ActionKind, lua: MizLua, side: Side, s: &str) -> Result<Self> {
-        fn get_key_pos(lua: MizLua, side: Side, key: &str) -> Result<Vector3> {
-            let mut found: SmallVec<[Vector3; 4]> = smallvec![];
+    pub fn parse(
+        db: &mut Db,
+        action: &ActionKind,
+        lua: MizLua,
+        side: Side,
+        s: &str,
+    ) -> Result<Self> {
+        fn get_key_pos(db: &mut Db, lua: MizLua, side: Side, key: &str) -> Result<Vector3> {
+            let mut found: SmallVec<[(MarkId, Vector3); 4]> = smallvec![];
             for mk in World::singleton(lua)?.get_mark_panels()? {
                 let mk = mk?;
                 if mk.side.is_match(&side) && mk.text.as_str() == key {
-                    found.push(mk.pos.0);
+                    found.push((mk.id, mk.pos.0));
                 }
             }
             if found.len() == 0 {
@@ -95,21 +102,22 @@ impl ActionArgs {
                     found.len()
                 ))
             } else {
-                Ok(found[0])
+                db.ephemeral.msgs().delete_mark(found[0].0);
+                Ok(found[0].1)
             }
         }
-        fn pos_group(lua: MizLua, side: Side, s: &str) -> Result<WithPosAndGroup<()>> {
+        fn pos_group(db: &mut Db, lua: MizLua, side: Side, s: &str) -> Result<WithPosAndGroup<()>> {
             match s.split_once(" ") {
                 None => bail!("expected <gid> <key>"),
                 Some((gid, key)) => Ok(WithPosAndGroup {
                     cfg: (),
-                    pos: get_key_pos(lua, side, key)?,
+                    pos: get_key_pos(db, lua, side, key)?,
                     group: gid.parse()?,
                 }),
             }
         }
-        fn pos<T>(lua: MizLua, side: Side, cfg: T, s: &str) -> Result<WithPos<T>> {
-            let pos = get_key_pos(lua, side, s)?;
+        fn pos<T>(db: &mut Db, lua: MizLua, side: Side, cfg: T, s: &str) -> Result<WithPos<T>> {
+            let pos = get_key_pos(db, lua, side, s)?;
             Ok(WithPos { cfg, pos })
         }
         fn jtac<T>(cfg: T, s: &str) -> Result<WithJtac<T>> {
@@ -135,20 +143,20 @@ impl ActionArgs {
             }
         }
         match action.clone() {
-            ActionKind::Tanker(c) => Ok(Self::Tanker(pos(lua, side, c, s)?)),
-            ActionKind::Awacs(c) => Ok(Self::Awacs(pos(lua, side, c, s)?)),
-            ActionKind::Fighters(c) => Ok(Self::Fighters(pos(lua, side, c, s)?)),
-            ActionKind::FighersWaypoint => Ok(Self::FightersWaypoint(pos_group(lua, side, s)?)),
-            ActionKind::Drone(c) => Ok(Self::Drone(pos(lua, side, c, s)?)),
-            ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(lua, side, s)?)),
+            ActionKind::Tanker(c) => Ok(Self::Tanker(pos(db, lua, side, c, s)?)),
+            ActionKind::Awacs(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
+            ActionKind::Fighters(c) => Ok(Self::Fighters(pos(db, lua, side, c, s)?)),
+            ActionKind::FighersWaypoint => Ok(Self::FightersWaypoint(pos_group(db, lua, side, s)?)),
+            ActionKind::Drone(c) => Ok(Self::Drone(pos(db, lua, side, c, s)?)),
+            ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(db, lua, side, s)?)),
             ActionKind::CruiseMissileStrike(c) => Ok(Self::CruiseMissileStrike(jtac(c, s)?)),
-            ActionKind::Nuke(c) => Ok(Self::Nuke(pos(lua, side, c, s)?)),
-            ActionKind::Paratrooper(c) => Ok(Self::Paratrooper(pos(lua, side, c, s)?)),
-            ActionKind::Deployable(c) => Ok(Self::Deployable(pos(lua, side, c, s)?)),
+            ActionKind::Nuke(c) => Ok(Self::Nuke(pos(db, lua, side, c, s)?)),
+            ActionKind::Paratrooper(c) => Ok(Self::Paratrooper(pos(db, lua, side, c, s)?)),
+            ActionKind::Deployable(c) => Ok(Self::Deployable(pos(db, lua, side, c, s)?)),
             ActionKind::LogisticsRepair(c) => Ok(Self::LogisticsRepair(obj(db, c, s)?)),
             ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(from_to(db, c, s)?)),
-            ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(lua, side, s)?)),
-            ActionKind::TankerWaypoint => Ok(Self::TankerWaypoint(pos_group(lua, side, s)?)),
+            ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(db, lua, side, s)?)),
+            ActionKind::TankerWaypoint => Ok(Self::TankerWaypoint(pos_group(db, lua, side, s)?)),
             ActionKind::Bomber(c) => Ok(Self::Bomber(jtac(c, s)?)),
         }
     }
@@ -162,7 +170,7 @@ pub struct ActionCmd {
 }
 
 impl ActionCmd {
-    pub fn parse(db: &Db, lua: MizLua, side: Side, s: &str) -> Result<Self> {
+    pub fn parse(db: &mut Db, lua: MizLua, side: Side, s: &str) -> Result<Self> {
         match s.split_once(" ") {
             None => Err(anyhow!("expected <action> <args>")),
             Some((name, args)) => {
@@ -188,21 +196,23 @@ impl ActionCmd {
 // setup the awacs race track 90 degrees offset from the heading
 // to the nearest enemy objective
 fn awacs_heading(db: &Db, pos: Vector2, enemy: Side) -> f64 {
-    match db.objective_near_point(pos, |o| o.owner == enemy) {
+    match dbg!(db.objective_near_point(pos, |o| o.owner == enemy)) {
         None => 0.,
         Some((_, hd, _)) => {
-            let pi = f64::consts::PI;
-            if hd < pi {
-                hd + pi
+            let pi_2 = f64::consts::FRAC_PI_2;
+            if hd < pi_2 {
+                dbg!(hd + pi_2)
             } else {
-                hd - pi
+                dbg!(hd - pi_2)
             }
         }
     }
 }
 
 fn awacs_orbit(
+    db: &mut Db,
     lua: MizLua,
+    side: Side,
     group: String,
     heading: f64,
     altitude: f64,
@@ -210,11 +220,13 @@ fn awacs_orbit(
     pos: Vector2,
 ) -> Result<()> {
     let tm = Timer::singleton(lua)?;
+    let dir = pointing_towards2(heading, pos);
+    let point2 = pos + dir * 60_000.;
+    db.ephemeral.msgs().mark_to_side(side, pos, true, "awacs point 1");
+    db.ephemeral.msgs().mark_to_side(side, point2, true, "awacs point 2");
     tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
         let group = Group::get_by_name(lua, &group)?;
         let con = group.get_controller().context("getting controller")?;
-        let dir = pointing_towards2(heading, pos);
-        let point2 = pos + dir * 60_000.;
         macro_rules! wpt {
             ($name:expr, $pos:expr, $task:expr) => {
                 MissionPoint {
@@ -568,7 +580,9 @@ impl Db {
         let name = group.name.clone();
         ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
         awacs_orbit(
+            self,
             spctx.lua(),
+            side,
             name,
             heading,
             args.cfg.altitude,

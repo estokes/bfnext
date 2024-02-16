@@ -982,25 +982,34 @@ pub(super) fn spawn_group<'lua>(
             heading,
             altitude,
         } => {
-            let dst = pointing_towards2(heading, pos) * 10_000.;
+            let dst = pos + pointing_towards2(heading, pos) * 10_000.;
             let route = template.group.route()?;
-            route.set_points(vec![MissionPoint {
-                action: None,
-                typ: PointType::TurningPoint,
-                airdrome_id: None,
-                time_re_fu_ar: None,
-                helipad: None,
-                link_unit: None,
-                pos: LuaVec2(dst),
-                alt: altitude,
-                alt_typ: None,
-                speed: 200.,
-                speed_locked: None,
-                eta: None,
-                eta_locked: None,
-                name: None,
-                task: Box::new(Task::Hold),
-            }])?
+            macro_rules! pt {
+                ($pos:expr) => {
+                    MissionPoint {
+                        action: None,
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        time_re_fu_ar: None,
+                        helipad: None,
+                        link_unit: None,
+                        pos: LuaVec2($pos),
+                        alt: altitude,
+                        alt_typ: None,
+                        speed: 200.,
+                        speed_locked: None,
+                        eta: None,
+                        eta_locked: None,
+                        name: None,
+                        task: Box::new(Task::Hold),
+                    }
+                }
+            }
+            route.set_points(vec![
+                pt!(pos),
+                pt!(dst)
+            ])?;
+            template.group.set_route(route)?;
         }
     }
     let mut points: SmallVec<[Vector2; 16]> = smallvec![];

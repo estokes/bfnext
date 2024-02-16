@@ -495,7 +495,13 @@ impl Db {
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let mut gpos = compute_unit_positions(&spctx, idx, location.clone(), &template.group)?;
-        check_water(&land, &gpos.positions, &gpos.by_type)?;
+        match &location {
+            SpawnLoc::AtPos { .. }
+            | SpawnLoc::AtPosWithCenter { .. }
+            | SpawnLoc::AtPosWithComponents { .. }
+            | SpawnLoc::AtTrigger { .. } => check_water(&land, &gpos.positions, &gpos.by_type)?,
+            SpawnLoc::InAir { .. } => (),
+        }
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}-{}", template_name, gid));

@@ -192,6 +192,10 @@ impl<'lua> Group<'lua> {
         Ok(self.raw_get("route")?)
     }
 
+    pub fn set_route(&self, r: Route) -> Result<()> {
+        Ok(self.raw_set("route", r)?)
+    }
+
     pub fn hidden(&self) -> bool {
         self.raw_get("hidden").unwrap_or(false)
     }

@@ -338,7 +338,7 @@ pub(super) fn run_action_commands(ctx: &mut Context, lua: MizLua) -> Result<()> 
             if let Some(player) = ctx.db.player(&ifo.ucid) {
                 let ucid = ifo.ucid.clone();
                 let side = player.side;
-                let r = match ActionCmd::parse(&ctx.db, lua, side, &s) {
+                let r = match ActionCmd::parse(&mut ctx.db, lua, side, &s) {
                     Err(e) => Err(e),
                     Ok(cmd) => ctx.db.start_action(&spctx, &ctx.idx, side, Some(ucid), cmd),
                 };

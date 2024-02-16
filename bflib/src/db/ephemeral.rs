@@ -16,7 +16,7 @@ for more details.
 
 use super::{
     cargo::Cargo,
-    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+    group::{DeployKind, GroupId, SpawnedGroup, SpawnedUnit, UnitId},
     objective::{Objective, ObjectiveId, ObjectiveKind},
     persisted::Persisted,
 };
@@ -972,44 +972,47 @@ pub(super) fn spawn_group<'lua>(
     template.group.set("lateActivation", false)?;
     template.group.set("hidden", false)?;
     template.group.set_name(group.name.clone())?;
-    match group.loc {
-        SpawnLoc::AtPos { .. }
-        | SpawnLoc::AtPosWithCenter { .. }
-        | SpawnLoc::AtPosWithComponents { .. }
-        | SpawnLoc::AtTrigger { .. } => (),
-        SpawnLoc::InAir {
-            pos,
-            heading,
-            altitude,
-        } => {
-            let dst = pos + pointing_towards2(heading) * 10_000.;
-            let route = template.group.route()?;
-            macro_rules! pt {
-                ($pos:expr) => {
-                    MissionPoint {
-                        action: None,
-                        typ: PointType::TurningPoint,
-                        airdrome_id: None,
-                        time_re_fu_ar: None,
-                        helipad: None,
-                        link_unit: None,
-                        pos: LuaVec2($pos),
-                        alt: altitude,
-                        alt_typ: None,
-                        speed: 200.,
-                        speed_locked: None,
-                        eta: None,
-                        eta_locked: None,
-                        name: None,
-                        task: Box::new(Task::Hold),
+    if let DeployKind::Action { loc, .. } = &group.origin {
+        match loc {
+            SpawnLoc::AtPos { .. }
+            | SpawnLoc::AtPosWithCenter { .. }
+            | SpawnLoc::AtPosWithComponents { .. }
+            | SpawnLoc::AtTrigger { .. } => (),
+            SpawnLoc::InAir {
+                pos,
+                heading,
+                altitude,
+            } => {
+                let dst = pos + pointing_towards2(*heading) * 10_000.;
+                let route = template.group.route()?;
+                macro_rules! pt {
+                    ($pos:expr) => {
+                        MissionPoint {
+                            action: None,
+                            typ: PointType::TurningPoint,
+                            airdrome_id: None,
+                            time_re_fu_ar: None,
+                            helipad: None,
+                            link_unit: None,
+                            pos: LuaVec2($pos),
+                            alt: *altitude,
+                            alt_typ: None,
+                            speed: 200.,
+                            speed_locked: None,
+                            eta: None,
+                            eta_locked: None,
+                            name: None,
+                            task: Box::new(Task::Hold),
+                        }
                     }
                 }
+                route.set_points(vec![
+                    pt!(*pos),
+                    pt!(dst)
+                ])?;
+                template.group.set_route(route)?;
+                template.group.set("heading", *heading)?;
             }
-            route.set_points(vec![
-                pt!(pos),
-                pt!(dst)
-            ])?;
-            template.group.set_route(route)?;
         }
     }
     let mut points: SmallVec<[Vector2; 16]> = smallvec![];

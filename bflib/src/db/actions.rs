@@ -1,19 +1,26 @@
-use super::{group::GroupId, objective::ObjectiveId, Db};
+use super::{
+    group::GroupId,
+    objective::{Objective, ObjectiveId},
+    Db, Map,
+};
 use crate::{
     admin,
     cfg::{
         Action, ActionKind, AiPlaneCfg, BomberCfg, CruiseMissileCfg, DeployableCfg, LogiCfg,
-        NukeCfg,
+        NukeCfg, UnitTag,
     },
+    chatcmd::format_duration,
     db::{ephemeral, group::DeployKind},
-    group,
+    group, group_mut,
     spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Context, Ok, Result};
 use chrono::prelude::*;
+use compact_str::format_compact;
 use dcso3::{
+    change_heading,
     coalition::Side,
-    controller::{AltType, MissionPoint, OrbitPattern, PointType, Task},
+    controller::{MissionPoint, OrbitPattern, PointType, Task},
     env::miz::MizIndex,
     group::Group,
     net::Ucid,
@@ -21,8 +28,9 @@ use dcso3::{
     timer::Timer,
     trigger::MarkId,
     world::World,
-    LuaVec2, MizLua, String, Vector2, Vector3,
+    LuaVec2, MizLua, String, Vector2,
 };
+use fxhash::FxHashSet;
 use mlua::Value;
 use smallvec::{smallvec, SmallVec};
 use std::f64;
@@ -30,7 +38,7 @@ use std::f64;
 #[derive(Debug, Clone)]
 pub struct WithPos<T> {
     pub cfg: T,
-    pub pos: Vector3,
+    pub pos: Vector2,
 }
 
 #[derive(Debug, Clone)]
@@ -49,7 +57,7 @@ pub struct WithFromTo<T> {
 #[derive(Debug, Clone)]
 pub struct WithPosAndGroup<T> {
     pub cfg: T,
-    pub pos: Vector3,
+    pub pos: Vector2,
     pub group: GroupId,
 }
 
@@ -86,12 +94,13 @@ impl ActionArgs {
         side: Side,
         s: &str,
     ) -> Result<Self> {
-        fn get_key_pos(db: &mut Db, lua: MizLua, side: Side, key: &str) -> Result<Vector3> {
-            let mut found: SmallVec<[(MarkId, Vector3); 4]> = smallvec![];
+        fn get_key_pos(db: &mut Db, lua: MizLua, side: Side, key: &str) -> Result<Vector2> {
+            let mut found: SmallVec<[(MarkId, Vector2); 4]> = smallvec![];
             for mk in World::singleton(lua)?.get_mark_panels()? {
                 let mk = mk?;
                 if mk.side.is_match(&side) && mk.text.as_str() == key {
-                    found.push((mk.id, mk.pos.0));
+                    let pos = Vector2::new(mk.pos.0.x, mk.pos.0.z);
+                    found.push((mk.id, pos));
                 }
             }
             if found.len() == 0 {
@@ -195,79 +204,15 @@ impl ActionCmd {
 
 // setup the awacs race track 90 degrees offset from the heading
 // to the nearest enemy objective
-fn awacs_heading(db: &Db, pos: Vector2, enemy: Side) -> f64 {
-    match dbg!(db.objective_near_point(pos, |o| o.owner == enemy)) {
-        None => 0.,
-        Some((_, hd, _)) => {
-            let pi_2 = f64::consts::FRAC_PI_2;
-            if hd < pi_2 {
-                dbg!(hd + pi_2)
-            } else {
-                dbg!(hd - pi_2)
-            }
-        }
-    }
-}
-
-fn awacs_orbit(
-    db: &mut Db,
-    lua: MizLua,
-    side: Side,
-    group: String,
-    heading: f64,
-    altitude: f64,
-    alt_typ: AltType,
+fn awacs_dist_and_heading(
+    obj: &Map<ObjectiveId, Objective>,
     pos: Vector2,
-) -> Result<()> {
-    let tm = Timer::singleton(lua)?;
-    let point2 = dbg!(dbg!(pos) + dbg!(pointing_towards2(dbg!(heading))) * 60_000.);
-    db.ephemeral.msgs().mark_to_side(side, pos, true, "awacs point 1");
-    db.ephemeral.msgs().mark_to_side(side, point2, true, "awacs point 2");
-    tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
-        let group = Group::get_by_name(lua, &group)?;
-        let con = group.get_controller().context("getting controller")?;
-        macro_rules! wpt {
-            ($name:expr, $pos:expr, $task:expr) => {
-                MissionPoint {
-                    action: None,
-                    typ: PointType::TurningPoint,
-                    airdrome_id: None,
-                    helipad: None,
-                    time_re_fu_ar: None,
-                    link_unit: None,
-                    pos: LuaVec2($pos),
-                    alt: altitude,
-                    alt_typ: Some(alt_typ.clone()),
-                    speed: 200.,
-                    eta: None,
-                    speed_locked: None,
-                    eta_locked: None,
-                    name: Some($name.into()),
-                    task: Box::new($task),
-                }
-            };
-        }
-        con.set_task(Task::Mission {
-            airborne: None,
-            route: vec![
-                wpt!("ip", pos, Task::AWACS),
-                wpt!(
-                    "orbit",
-                    point2,
-                    Task::Orbit {
-                        pattern: OrbitPattern::RaceTrack,
-                        point: Some(LuaVec2(point2)),
-                        point2: Some(LuaVec2(pos)),
-                        speed: None,
-                        altitude: None,
-                    }
-                ),
-            ],
-        })
-        .context("setup orbit")?;
-        Ok(None)
-    })?;
-    Ok(())
+    enemy: Side,
+) -> (f64, f64) {
+    match Db::objective_near_point(obj, pos, |o| o.owner == enemy) {
+        None => (9999999., 0.),
+        Some((dist, hd, _)) => (dist, change_heading(hd, f64::consts::FRAC_PI_2)),
+    }
 }
 
 impl Db {
@@ -321,9 +266,9 @@ impl Db {
             ActionArgs::Awacs(args) => self
                 .awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling awacs")?,
-            ActionArgs::AwacsWaypoint(args) => {
-                self.move_awacs(spctx, side, args).context("moving awacs")?
-            }
+            ActionArgs::AwacsWaypoint(args) => self
+                .move_awacs(spctx, side, ucid.clone(), args)
+                .context("moving awacs")?,
             ActionArgs::Bomber(args) => self
                 .bomber_strike(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling bomber strike")?,
@@ -556,16 +501,17 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        let pos = Vector2::new(args.pos.x, args.pos.z);
         let enemy = side.opposite();
-        let heading = dbg!(awacs_heading(self, pos, enemy));
+        let (_, heading) = awacs_dist_and_heading(&self.persisted.objectives, args.pos, enemy);
         let sloc = dbg!(SpawnLoc::InAir {
-            pos,
+            pos: args.pos,
             heading,
             altitude: args.cfg.altitude,
         });
         let origin = DeployKind::Action {
-            player: ucid,
+            marks: FxHashSet::default(),
+            loc: sloc.clone(),
+            player: ucid.clone(),
             name,
             spec: action,
             time: Utc::now(),
@@ -573,20 +519,28 @@ impl Db {
             rtb: None,
         };
         let gid = self
-            .add_group(spctx, idx, side, sloc, &args.cfg.template, origin)
+            .add_group(
+                spctx,
+                idx,
+                side,
+                sloc,
+                &args.cfg.template,
+                origin,
+                UnitTag::Driveable.into(),
+            )
             .context("creating group")?;
         let group = group!(self, gid)?;
         let name = group.name.clone();
         ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
-        awacs_orbit(
-            self,
-            spctx.lua(),
+        self.move_awacs(
+            spctx,
             side,
-            name,
-            heading,
-            args.cfg.altitude,
-            args.cfg.altitude_typ,
-            pos,
+            ucid,
+            WithPosAndGroup {
+                cfg: (),
+                pos: args.pos,
+                group: gid,
+            },
         )
         .context("setup orbit")?;
         Ok(())
@@ -596,16 +550,127 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         side: Side,
+        ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        /*
-        let pos = Vector2::new(args.pos.x, args.pos.z);
+        let pos = args.pos;
         let enemy = side.opposite();
-        let heading = awacs_heading(self, pos, enemy);
-        let group = group!(self, args.group)?;
-        let dgrp = Group::get_by_name(spctx.lua(), &group.name).context("getting awacs")?;
-        awacs_orbit(dgrp, heading, pos).context("moving awacs")
-        */
-        unimplemented!()
+        let (_, heading) = awacs_dist_and_heading(&self.persisted.objectives, pos, enemy);
+        let group = group_mut!(self, args.group)?;
+        if group.side != side {
+            bail!("can't move the other team's awacs")
+        }
+        let name = group.name.clone();
+        let (altitude, alt_typ, marks, player) = match &mut group.origin {
+            DeployKind::Action {
+                marks,
+                spec,
+                loc,
+                player,
+                ..
+            } => match &mut spec.kind {
+                ActionKind::Awacs(a) => {
+                    match loc {
+                        SpawnLoc::InAir { pos: oldpos, .. } => {
+                            let dir = *oldpos - pos;
+                            let step = dir.magnitude() / 4.;
+                            let dir = dir.normalize();
+                            let (old_dist, _) =
+                                awacs_dist_and_heading(&self.persisted.objectives, *oldpos, enemy);
+                            for i in 1..4 {
+                                let pos = *oldpos + dir * (step * i as f64);
+                                let (dist, _) =
+                                    awacs_dist_and_heading(&self.persisted.objectives, pos, enemy);
+                                if old_dist < dist && dist - old_dist >= 500. {
+                                    *player = ucid.clone();
+                                }
+                            }
+                            *oldpos = pos;
+                            for id in marks.drain() {
+                                self.ephemeral.msgs().delete_mark(id)
+                            }
+                        }
+                        _ => bail!("awacs not spawning in air"),
+                    }
+                    (a.altitude, a.altitude_typ.clone(), marks, player)
+                }
+                _ => bail!("not an awacs"),
+            },
+            _ => bail!("not an awacs"),
+        };
+        let point1 = pos + pointing_towards2(change_heading(heading, -f64::consts::PI)) * 30_000.;
+        let point2 = pos + pointing_towards2(heading) * 30_000.;
+        let responsible = player
+            .as_ref()
+            .and_then(|u| self.persisted.players.get(u))
+            .map(|p| p.name.clone())
+            .unwrap_or(String::from(""));
+        marks.insert(self.ephemeral.msgs().mark_to_side(
+            side,
+            point1,
+            true,
+            format_compact!(
+                "awacs {} race point 1\nresponsible party: {}",
+                args.group,
+                responsible
+            ),
+        ));
+        marks.insert(self.ephemeral.msgs().mark_to_side(
+            side,
+            point2,
+            true,
+            format_compact!(
+                "awacs {} race point 2\nresponsible party: {}",
+                args.group,
+                responsible
+            ),
+        ));
+        self.ephemeral.dirty();
+        let tm = Timer::singleton(spctx.lua())?;
+        tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
+            let group = Group::get_by_name(lua, &name)?;
+            let con = group.get_controller().context("getting controller")?;
+            macro_rules! wpt {
+                ($name:expr, $pos:expr, $task:expr) => {
+                    MissionPoint {
+                        action: None,
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2($pos),
+                        alt: altitude,
+                        alt_typ: Some(alt_typ.clone()),
+                        speed: 200.,
+                        eta: None,
+                        speed_locked: None,
+                        eta_locked: None,
+                        name: Some($name.into()),
+                        task: Box::new($task),
+                    }
+                };
+            }
+            con.set_task(Task::Mission {
+                airborne: None,
+                route: vec![
+                    wpt!("ip", pos, Task::AWACS),
+                    wpt!(
+                        "race",
+                        point1,
+                        Task::Orbit {
+                            pattern: OrbitPattern::RaceTrack,
+                            point: Some(LuaVec2(point1)),
+                            point2: Some(LuaVec2(point2)),
+                            speed: None,
+                            altitude: None,
+                        }
+                    ),
+                ],
+            })
+            .context("setup orbit")?;
+            Ok(None)
+        })?;
+        Ok(())
     }
 }

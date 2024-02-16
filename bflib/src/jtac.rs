@@ -154,8 +154,7 @@ impl Jtac {
     fn status(&self, db: &Db) -> Result<CompactString> {
         use std::fmt::Write;
         let jtac_pos = db.group_center(&self.gid)?;
-        let (dist, heading, obj) = db
-            .objective_near_point(jtac_pos, |_| true)
+        let (dist, heading, obj) = Db::objective_near_point(&db.persisted.objectives, jtac_pos, |_| true)
             .ok_or_else(|| anyhow!("no objective near jtac"))?;
         let dist = dist / 1000.;
         let mut msg = CompactString::new("");

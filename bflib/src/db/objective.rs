@@ -41,6 +41,7 @@ use dcso3::{
     warehouse::LiquidType,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
+use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error};
 use mlua::{prelude::*, Value};
@@ -310,22 +311,25 @@ impl Db {
 
     /// returns the closest objective that matches the critera to the specified point
     /// (distance, heading from objective to point, objective)
-    pub fn objective_near_point<P: Fn(&Objective) -> bool>(&self, pos: Vector2, p: P) -> Option<(f64, f64, &Objective)> {
-        let (dist, obj) = self.persisted.objectives.into_iter().fold(
-            (f64::MAX, None),
-            |(cur_dist, cur_obj), (_, obj)| {
-                if !p(obj) {
-                    (cur_dist, cur_obj)
-                } else {
-                    let dist = na::distance_squared(&pos.into(), &obj.pos.into());
-                    if dist < cur_dist {
-                        (dist, Some(obj))
-                    } else {
+    pub fn objective_near_point<P: Fn(&Objective) -> bool>(
+        obj: &Map<ObjectiveId, Objective>,
+        pos: Vector2,
+        p: P,
+    ) -> Option<(f64, f64, &Objective)> {
+        let (dist, obj) =
+            obj.into_iter()
+                .fold((f64::MAX, None), |(cur_dist, cur_obj), (_, obj)| {
+                    if !p(obj) {
                         (cur_dist, cur_obj)
+                    } else {
+                        let dist = na::distance_squared(&pos.into(), &obj.pos.into());
+                        if dist < cur_dist {
+                            (dist, Some(obj))
+                        } else {
+                            (cur_dist, cur_obj)
+                        }
                     }
-                }
-            },
-        );
+                });
         obj.map(|obj| (dist.sqrt(), azumith2d_to(obj.pos, pos), obj))
     }
 
@@ -458,6 +462,7 @@ impl Db {
                 location.clone(),
                 &name,
                 DeployKind::Objective,
+                BitFlags::empty(),
                 Some(now + Duration::seconds(60)),
             )?);
         }

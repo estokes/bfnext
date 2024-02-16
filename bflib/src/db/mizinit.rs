@@ -34,6 +34,7 @@ use compact_str::CompactString;
 use dcso3::{
     coalition::Side, controller::PointType, env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp}, MizLua, String, Vector2
 };
+use enumflags2::BitFlags;
 use fxhash::FxHashSet;
 use log::info;
 
@@ -155,6 +156,7 @@ impl Db {
             },
             name,
             DeployKind::Objective,
+            BitFlags::empty()
         )?;
         objective_mut!(self, obj)?
             .groups

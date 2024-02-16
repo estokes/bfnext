@@ -40,6 +40,7 @@ use dcso3::{
     trigger::Trigger,
     LuaVec2, MizLua, Position3, String, Vector2,
 };
+use enumflags2::BitFlags;
 use fxhash::FxHashMap;
 use log::{debug, error};
 use serde_derive::{Deserialize, Serialize};
@@ -273,6 +274,7 @@ impl Db {
             spawnpos,
             &template,
             dk,
+            BitFlags::empty(),
             None,
         )?;
         Ok(st)
@@ -292,7 +294,10 @@ impl Db {
                     spec: crt,
                     ..
                 } => (oid, crt),
-                DeployKind::Deployed { .. } | DeployKind::Troop { .. } | DeployKind::Objective | DeployKind::Action { .. } => {
+                DeployKind::Deployed { .. }
+                | DeployKind::Troop { .. }
+                | DeployKind::Objective
+                | DeployKind::Action { .. } => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
             };
@@ -578,7 +583,7 @@ impl Db {
                             DeployKind::Deployed { .. }
                             | DeployKind::Crate { .. }
                             | DeployKind::Objective
-                            | DeployKind::Troop { .. } 
+                            | DeployKind::Troop { .. }
                             | DeployKind::Action { .. } => (),
                         }
                     }
@@ -829,7 +834,7 @@ impl Db {
                                 }
                                 let oid =
                                     self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
-                                self.adjust_points(&st.ucid, - (spec.cost as i32));
+                                self.adjust_points(&st.ucid, -(spec.cost as i32));
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name, oid));
                             }
@@ -848,12 +853,13 @@ impl Db {
                                     spawnloc,
                                     &*spec.template,
                                     origin,
+                                    BitFlags::empty(),
                                     None,
                                 )?;
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                self.adjust_points(&st.ucid, - (spec.cost as i32));
+                                self.adjust_points(&st.ucid, -(spec.cost as i32));
                                 return Ok(Unpakistan::Unpacked(dep, gid));
                             }
                         },
@@ -945,9 +951,16 @@ impl Db {
             spec: crate_cfg.clone(),
         };
         let spctx = SpawnCtx::new(lua)?;
-        if let Err(e) =
-            self.add_and_queue_group(&spctx, idx, st.side, spawnpos, &template, dk, None)
-        {
+        if let Err(e) = self.add_and_queue_group(
+            &spctx,
+            idx,
+            st.side,
+            spawnpos,
+            &template,
+            dk,
+            BitFlags::empty(),
+            None,
+        ) {
             self.ephemeral
                 .cargo
                 .get_mut(slot)
@@ -1043,7 +1056,7 @@ impl Db {
                         troop_cfg.cost
                     )
                 }
-                self.adjust_points(&ucid, - (troop_cfg.cost as i32));
+                self.adjust_points(&ucid, -(troop_cfg.cost as i32));
             }
         }
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
@@ -1113,9 +1126,16 @@ impl Db {
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
         }
-        if let Err(e) =
-            self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk, None)
-        {
+        if let Err(e) = self.add_and_queue_group(
+            &spctx,
+            idx,
+            side,
+            spawnpos,
+            &*troop_cfg.template,
+            dk,
+            BitFlags::empty(),
+            None,
+        ) {
             self.ephemeral
                 .cargo
                 .get_mut(slot)

@@ -69,6 +69,16 @@ pub enum SpawnLoc {
     },
 }
 
+impl Default for SpawnLoc {
+    fn default() -> Self {
+        Self::AtPos {
+            pos: Vector2::new(0., 0.),
+            offset_direction: Vector2::new(0., 0.),
+            group_heading: 0.,
+        }
+    }
+}
+
 pub struct SpawnCtx<'lua> {
     coalition: Coalition<'lua>,
     miz: Miz<'lua>,

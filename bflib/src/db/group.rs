@@ -41,7 +41,7 @@ use dcso3::{
     LuaVec2, MizLua, Position3, String, Vector2,
 };
 use enumflags2::BitFlags;
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use log::{error, warn};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
@@ -68,6 +68,8 @@ pub enum DeployKind {
         spec: Crate,
     },
     Action {
+        marks: FxHashSet<MarkId>,
+        loc: SpawnLoc,
         player: Option<Ucid>,
         name: String,
         spec: Action,
@@ -103,7 +105,6 @@ pub struct SpawnedGroup {
     pub name: String,
     pub template_name: String,
     pub side: Side,
-    pub loc: SpawnLoc,
     pub kind: Option<GroupCategory>,
     pub class: ObjGroupClass,
     pub origin: DeployKind,
@@ -314,6 +315,7 @@ impl Db {
         location: SpawnLoc,
         template_name: &str,
         origin: DeployKind,
+        extra_tags: BitFlags<UnitTag>
     ) -> Result<GroupId> {
         fn distance<'a, F: Fn(f64, f64) -> f64>(
             pos: Vector2,
@@ -511,7 +513,6 @@ impl Db {
             template_name: template_name.clone(),
             side,
             kind,
-            loc: location,
             origin,
             class: ObjGroupClass::from(template_name.as_str()),
             units: Set::new(),
@@ -529,6 +530,7 @@ impl Db {
                 .unit_classification
                 .get(typ.as_str())
                 .ok_or_else(|| anyhow!("unit type not classified {typ}"))?;
+            let tags = UnitTags(tags.0 | extra_tags);
             spawned.tags.0.insert(tags.0);
             let pos = match gpos.by_type.get_mut(&typ) {
                 None => gpos.positions.pop_front().unwrap(),
@@ -609,9 +611,10 @@ impl Db {
         location: SpawnLoc,
         template_name: &str,
         origin: DeployKind,
+        extra_tags: BitFlags<UnitTag>,
         delay: Option<DateTime<Utc>>,
     ) -> Result<GroupId> {
-        let gid = self.add_group(&spctx, idx, side, location, template_name, origin)?;
+        let gid = self.add_group(&spctx, idx, side, location, template_name, origin, extra_tags)?;
         match delay {
             None => self.ephemeral.push_spawn(gid),
             Some(at) => self.ephemeral.delayspawnq.entry(at).or_default().push(gid),

@@ -42,6 +42,7 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
+use enumflags2::BitFlags;
 use fxhash::FxHashMap;
 use log::{error, warn};
 use mlua::Value;
@@ -378,6 +379,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                             loc,
                             &spec.template,
                             origin,
+                            BitFlags::empty(),
                             None,
                         )
                         .context("adding group")?;
@@ -414,6 +416,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                                     loc,
                                     &spec.template,
                                     origin,
+                                    BitFlags::empty(),
                                     None,
                                 )
                                 .context("adding group")?;

@@ -349,7 +349,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
             let pos = Vector2::new(mk.pos.x, mk.pos.z);
             let loc = SpawnLoc::AtPos {
                 pos,
-                offset_direction: pointing_towards2(heading, pos),
+                offset_direction: pos + pointing_towards2(heading),
                 group_heading: heading,
             };
             match kind {

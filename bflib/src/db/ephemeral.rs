@@ -982,7 +982,7 @@ pub(super) fn spawn_group<'lua>(
             heading,
             altitude,
         } => {
-            let dst = pos + pointing_towards2(heading, pos) * 10_000.;
+            let dst = pos + pointing_towards2(heading) * 10_000.;
             let route = template.group.route()?;
             macro_rules! pt {
                 ($pos:expr) => {

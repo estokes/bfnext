@@ -1263,20 +1263,12 @@ pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
     }
 }
 
-/// return a unit vector starting at the specified origin pointing in the
-/// specified direction heading is in radians
-pub fn pointing_towards2(angle: f64, origin: Vector2) -> Vector2 {
-    let mut point = Vector2::new(origin.x, origin.y + 1.);
+/// return a unit vector pointing in the specified direction. angle is in radians
+pub fn pointing_towards2(angle: f64) -> Vector2 {
     let sin = angle.sin();
     let cos = angle.cos();
-    point -= origin;
-    let x = point.x;
-    let y = point.y;
-    point.x = x * cos - y * sin;
-    point.y = x * sin + y * cos;
-    point += origin;
-    point.normalize_mut();
-    point
+    // dcs coords are reversed x is north/south y is east/west
+    Vector2::new(cos, sin).normalize()
 }
 
 pub fn normal2(v: Vector2) -> Vector2 {

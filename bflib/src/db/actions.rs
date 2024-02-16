@@ -108,7 +108,7 @@ impl ActionArgs {
         }
         fn pos_group(db: &mut Db, lua: MizLua, side: Side, s: &str) -> Result<WithPosAndGroup<()>> {
             match s.split_once(" ") {
-                None => bail!("expected <gid> <key>"),
+                None => Err(anyhow!("expected <gid> <key>")),
                 Some((gid, key)) => Ok(WithPosAndGroup {
                     cfg: (),
                     pos: get_key_pos(db, lua, side, key)?,
@@ -220,8 +220,7 @@ fn awacs_orbit(
     pos: Vector2,
 ) -> Result<()> {
     let tm = Timer::singleton(lua)?;
-    let dir = pointing_towards2(heading, pos);
-    let point2 = pos + dir * 60_000.;
+    let point2 = dbg!(dbg!(pos) + dbg!(pointing_towards2(dbg!(heading))) * 60_000.);
     db.ephemeral.msgs().mark_to_side(side, pos, true, "awacs point 1");
     db.ephemeral.msgs().mark_to_side(side, point2, true, "awacs point 2");
     tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
@@ -559,12 +558,12 @@ impl Db {
     ) -> Result<()> {
         let pos = Vector2::new(args.pos.x, args.pos.z);
         let enemy = side.opposite();
-        let heading = awacs_heading(self, pos, enemy);
-        let sloc = SpawnLoc::InAir {
+        let heading = dbg!(awacs_heading(self, pos, enemy));
+        let sloc = dbg!(SpawnLoc::InAir {
             pos,
             heading,
             altitude: args.cfg.altitude,
-        };
+        });
         let origin = DeployKind::Action {
             player: ucid,
             name,

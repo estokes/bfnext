@@ -32,9 +32,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
-    coalition::Side,
-    env::miz::{Group, Miz, MizIndex, PointType, Skill, TriggerZone, TriggerZoneTyp},
-    MizLua, String, Vector2,
+    coalition::Side, controller::PointType, env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp}, MizLua, String, Vector2
 };
 use fxhash::FxHashSet;
 use log::info;
@@ -170,7 +168,7 @@ impl Db {
         let mut ground_start = false;
         for point in slot.route()?.points()? {
             let point = point?;
-            match point.typ()? {
+            match point.typ {
                 PointType::TakeOffGround | PointType::TakeOffGroundHot => ground_start = true,
                 PointType::Land
                 | PointType::TakeOff

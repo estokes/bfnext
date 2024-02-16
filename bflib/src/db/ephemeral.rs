@@ -27,7 +27,7 @@ use crate::{
     },
     maybe,
     msgq::MsgQ,
-    spawnctx::{Despawn, SpawnCtx, Spawned},
+    spawnctx::{Despawn, SpawnCtx, SpawnLoc, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -36,18 +36,19 @@ use dcso3::{
     airbase::ClassAirbase,
     centroid2d,
     coalition::Side,
+    controller::{MissionPoint, PointType, Task},
     env::miz::{GroupKind, Miz, MizIndex},
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
+    pointing_towards2,
     trigger::{ArrowSpec, CircleSpec, LineType, MarkId, RectSpec, SideFilter, TextSpec},
     unit::{ClassUnit, Unit},
     warehouse::{LiquidType, WSCategory},
-    Color, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
+    Color, LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexSet;
 use log::info;
-use mlua::Table;
 use smallvec::{smallvec, SmallVec};
 use std::{
     cmp::max,
@@ -971,6 +972,37 @@ pub(super) fn spawn_group<'lua>(
     template.group.set("lateActivation", false)?;
     template.group.set("hidden", false)?;
     template.group.set_name(group.name.clone())?;
+    match group.loc {
+        SpawnLoc::AtPos { .. }
+        | SpawnLoc::AtPosWithCenter { .. }
+        | SpawnLoc::AtPosWithComponents { .. }
+        | SpawnLoc::AtTrigger { .. } => (),
+        SpawnLoc::InAir {
+            pos,
+            heading,
+            altitude,
+        } => {
+            let dst = pointing_towards2(heading, pos) * 10_000.;
+            let route = template.group.route()?;
+            route.set_points(vec![MissionPoint {
+                action: None,
+                typ: PointType::TurningPoint,
+                airdrome_id: None,
+                time_re_fu_ar: None,
+                helipad: None,
+                link_unit: None,
+                pos: LuaVec2(dst),
+                alt: altitude,
+                alt_typ: None,
+                speed: 200.,
+                speed_locked: None,
+                eta: None,
+                eta_locked: None,
+                name: None,
+                task: Box::new(Task::Hold),
+            }])?
+        }
+    }
     let mut points: SmallVec<[Vector2; 16]> = smallvec![];
     let by_tname: FxHashMap<&str, &SpawnedUnit> = group
         .units

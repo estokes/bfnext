@@ -9,22 +9,21 @@ use crate::{
     },
     db::{ephemeral, group::DeployKind},
     group,
-    spawnctx::{SpawnCtx, SpawnLoc, Spawned},
+    spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Context, Ok, Result};
 use chrono::prelude::*;
 use dcso3::{
-    coalition::{Side, Static},
-    controller::{AltType, Command, MissionPoint, OrbitPattern, Task, WaypointType},
+    coalition::Side,
+    controller::{AltType, MissionPoint, OrbitPattern, PointType, Task},
     env::miz::MizIndex,
-    group::{self, Group},
+    group::Group,
     net::Ucid,
     pointing_towards2,
     timer::Timer,
     world::World,
     LuaVec2, MizLua, String, Vector2, Vector3,
 };
-use log::debug;
 use mlua::Value;
 use smallvec::{smallvec, SmallVec};
 
@@ -221,7 +220,7 @@ fn awacs_orbit(
             ($name:expr, $pos:expr, $task:expr) => {
                 MissionPoint {
                     action: None,
-                    typ: WaypointType::TurningPoint,
+                    typ: PointType::TurningPoint,
                     airdrome_id: None,
                     helipad: None,
                     time_re_fu_ar: None,
@@ -233,7 +232,7 @@ fn awacs_orbit(
                     eta: None,
                     speed_locked: None,
                     eta_locked: None,
-                    name: $name.into(),
+                    name: Some($name.into()),
                     task: Box::new($task),
                 }
             };
@@ -550,11 +549,8 @@ impl Db {
         let pos = Vector2::new(args.pos.x, args.pos.z);
         let enemy = side.opposite();
         let heading = awacs_heading(self, pos, enemy);
-        let rev_heading = heading - 2. * f64::consts::PI;
-        let dir = pointing_towards2(rev_heading, pos);
-        let spawn_pos = pos + dir * 15_000.;
         let sloc = SpawnLoc::InAir {
-            pos: spawn_pos,
+            pos,
             heading,
             altitude: args.cfg.altitude,
         };

@@ -265,7 +265,10 @@ impl Jtac {
         match &self.target {
             Some(target) if target.uid == uid => {
                 let arty = db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
-                self.menu_dirty |= prev_arty != arty;
+                if  prev_arty != arty {
+                    self.menu_dirty = true;
+                    self.nearby_artillery = arty;
+                }
                 Ok(false)
             }
             Some(_) | None => {

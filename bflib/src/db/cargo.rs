@@ -239,11 +239,17 @@ impl Db {
             .and_then(|d| self.persisted.players.get(&st.ucid).map(|p| (d, p)))
         {
             if player.points < dep.cost as i32 {
-                bail!(
-                    "you have {} points, and this deployable costs {} points",
-                    player.points,
-                    dep.cost
-                )
+                if let Some(oid) = self.persisted.objectives_by_slot.get(slot) {
+                    let obj = objective!(self, oid)?;
+                    if let Some(si) = obj.slots.get(slot) {
+                        let msg = format_compact!(
+                            "WARNING: you have {} points, and this deployable costs {} points",
+                            player.points,
+                            dep.cost
+                        );
+                        self.ephemeral.msgs().panel_to_group(10, false, si.miz_gid);
+                    }
+                }
             }
         }
         let template = self
@@ -828,7 +834,7 @@ impl Db {
                                 }
                                 let oid =
                                     self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
-                                self.adjust_points(&st.ucid, - (spec.cost as i32));
+                                self.adjust_points(&st.ucid, -(spec.cost as i32));
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name, oid));
                             }
@@ -852,7 +858,7 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                self.adjust_points(&st.ucid, - (spec.cost as i32));
+                                self.adjust_points(&st.ucid, -(spec.cost as i32));
                                 return Ok(Unpakistan::Unpacked(dep, gid));
                             }
                         },
@@ -1042,7 +1048,7 @@ impl Db {
                         troop_cfg.cost
                     )
                 }
-                self.adjust_points(&ucid, - (troop_cfg.cost as i32));
+                self.adjust_points(&ucid, -(troop_cfg.cost as i32));
             }
         }
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();

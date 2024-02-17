@@ -247,7 +247,7 @@ impl Db {
                             player.points,
                             dep.cost
                         );
-                        self.ephemeral.msgs().panel_to_group(10, false, si.miz_gid);
+                        self.ephemeral.msgs().panel_to_group(10, false, si.miz_gid, msg);
                     }
                 }
             }

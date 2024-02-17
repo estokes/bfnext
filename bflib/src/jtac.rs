@@ -20,7 +20,6 @@ use crate::{
         group::{GroupId, SpawnedUnit, UnitId},
         Db,
     },
-    menu,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -29,7 +28,6 @@ use dcso3::{
     coalition::Side,
     controller::Task,
     cvt_err,
-    env::miz,
     group::Group,
     land::Land,
     object::{DcsObject, DcsOid},
@@ -42,22 +40,19 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::{error, info, warn};
+use log::{info, warn};
 use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
-fn ui_jtac_dead(db: &mut Db, lua: MizLua, side: Side, gid: GroupId) {
+fn ui_jtac_dead(db: &mut Db, side: Side, gid: GroupId) {
     db.ephemeral.msgs().panel_to_side(
         10,
         false,
         side,
         format_compact!("JTAC {gid} is no longer available"),
-    );
-    if let Err(e) = menu::remove_menu_for_jtac(db, lua, gid) {
-        warn!("could not remove menu for jtac {gid} {e}")
-    }
+    )
 }
 
 simple_enum!(AdjustmentDir, u8, [
@@ -96,7 +91,6 @@ struct JtacTarget {
     spot: DcsOid<ClassSpot>,
     ir_pointer: Option<DcsOid<ClassSpot>>,
     mark: Option<MarkId>,
-    nearby_artillery: SmallVec<[GroupId; 8]>,
 }
 
 impl JtacTarget {
@@ -133,6 +127,8 @@ struct Jtac {
     ir_pointer: bool,
     code: u16,
     last_smoke: DateTime<Utc>,
+    nearby_artillery: SmallVec<[GroupId; 8]>,
+    menu_dirty: bool,
 }
 
 impl Jtac {
@@ -148,6 +144,8 @@ impl Jtac {
             ir_pointer: false,
             code: 1688,
             last_smoke: DateTime::<Utc>::default(),
+            nearby_artillery: smallvec![],
+            menu_dirty: false,
         }
     }
 
@@ -159,16 +157,18 @@ impl Jtac {
         let mut msg = CompactString::new("");
         write!(msg, "JTAC {} status\n", self.gid)?;
         match &self.target {
-            None => write!(msg, "no target\n")?,
+            None => {
+                write!(msg, "no target\n")?;
+            }
             Some(target) => {
                 let unit_typ = db.unit(&target.uid)?.typ.clone();
                 let mid = match target.mark {
                     None => format_compact!("none"),
                     Some(mid) => format_compact!("{mid}"),
                 };
-                write!(msg, "lasing {unit_typ} code {} marker {mid}\n", self.code)?
+                write!(msg, "lasing {unit_typ} code {} marker {mid}\n", self.code)?;
             }
-        }
+        };
         write!(
             msg,
             "position bearing {} for {:.1}km from {}\n\n",
@@ -200,6 +200,16 @@ impl Jtac {
                 write!(msg, "{:?}, ", tag)?;
             } else {
                 write!(msg, "{:?}", tag)?;
+            }
+        }
+        write!(msg, "]\n")?;
+        write!(msg, "available artillery: [")?;
+        let len = self.nearby_artillery.len();
+        for (i, gid) in self.nearby_artillery.iter().enumerate() {
+            if i < len - 1 {
+                write!(msg, "{gid},")?;
+            } else {
+                write!(msg, "{gid}")?;
             }
         }
         write!(msg, "]")?;
@@ -251,19 +261,13 @@ impl Jtac {
             .ok_or_else(|| anyhow!("no such target"))?;
         let uid = *uid;
         let pos = ct.pos;
-        let prev_arty = self
-            .target
-            .as_ref()
-            .map(|t| t.nearby_artillery.clone())
-            .unwrap_or_default();
+        let prev_arty = self.nearby_artillery.clone();
         match &self.target {
             Some(target) if target.uid == uid => {
                 let arty = db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
-                if prev_arty != arty {
-                    menu::update_jtac_menu(db, lua, self.gid, &arty).context("adding menu")?;
-                }
+                self.menu_dirty |= prev_arty != arty;
                 Ok(false)
-            },
+            }
             Some(_) | None => {
                 self.remove_target(db, lua)?;
                 let jtid = db
@@ -306,13 +310,10 @@ impl Jtac {
                     ir_pointer,
                     mark: None,
                     uid,
-                    nearby_artillery: db
-                        .artillery_near_point(self.side, Vector2::new(pos.x, pos.z)),
                 });
-                let arty = &self.target.as_ref().unwrap().nearby_artillery;
-                if &prev_arty != arty {
-                    menu::update_jtac_menu(db, lua, self.gid, arty).context("adding menu")?;
-                }
+                self.nearby_artillery =
+                    db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.menu_dirty |= prev_arty == self.nearby_artillery;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }
@@ -470,6 +471,7 @@ impl Jtac {
 pub struct Jtacs {
     jtacs: FxHashMap<Side, FxHashMap<GroupId, Jtac>>,
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
+    menu_dirty: FxHashMap<Side, bool>,
 }
 
 impl Jtacs {
@@ -487,16 +489,8 @@ impl Jtacs {
             .ok_or_else(|| anyhow!("no such jtac"))
     }
 
-    pub fn add_menu(&self, lua: MizLua, mizgid: miz::GroupId, gid: &GroupId) -> Result<()> {
-        if let Ok(jt) = self.get(gid) {
-            let arty = jt
-                .target
-                .as_ref()
-                .map(|t| &*t.nearby_artillery)
-                .unwrap_or(&[]);
-            menu::add_menu_for_jtac(lua, mizgid, jt.gid, arty)?
-        }
-        Ok(())
+    pub fn nearby_artillery(&self, gid: &GroupId) -> &[GroupId] {
+        self.get(gid).map(|jt| &*jt.nearby_artillery).unwrap_or(&[])
     }
 
     pub fn artillery_mission(
@@ -609,9 +603,11 @@ impl Jtacs {
                                 if let Err(e) = jt.remove_target(db, lua) {
                                     warn!("0 could not remove jtac target {:?}", e)
                                 }
-                                ui_jtac_dead(db, lua, *side, *gid);
+                                ui_jtac_dead(db, *side, *gid);
+                                *self.menu_dirty.entry(jt.side).or_default() = true;
                                 return false;
-                            } else if let Some(target) = &jt.target {
+                            } 
+                            if let Some(target) = &jt.target {
                                 if &target.source == id {
                                     if let Err(e) = jt.reset_target(db, lua) {
                                         warn!("could not reset jtac target {:?}", e)
@@ -628,6 +624,12 @@ impl Jtacs {
                         if let Err(e) = jt.remove_target(db, lua) {
                             warn!("1 could not remove jtac target {:?}", e)
                         }
+                        db.ephemeral.msgs().panel_to_side(
+                            10,
+                            false,
+                            jt.side,
+                            format_compact!("{} target destroyed", jt.gid),
+                        );
                     }
                     true
                 })
@@ -669,7 +671,7 @@ impl Jtacs {
         Ok(dead)
     }
 
-    pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<()> {
+    pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<SmallVec<[Side; 2]>> {
         let land = Land::singleton(lua)?;
         let mut saw_jtacs: SmallVec<[GroupId; 32]> = smallvec![];
         let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
@@ -686,9 +688,7 @@ impl Jtacs {
                 .or_default()
                 .entry(group.id)
                 .or_insert_with(|| {
-                    if let Err(e) = menu::update_jtac_menu(db, lua, group.id, &[]) {
-                        error!("could not add menu for jtac {} {e}", group.id)
-                    }
+                    *self.menu_dirty.entry(group.side).or_default() = true;
                     Jtac::new(group.id, group.side, db.ephemeral.cfg.jtac_priority.clone())
                 });
             for (unit, _) in db.instanced_units() {
@@ -714,7 +714,7 @@ impl Jtacs {
                     match jtac.remove_contact(lua, db, &unit.id) {
                         Err(e) => warn!("could not remove jtac contact {} {:?}", unit.name, e),
                         Ok(false) => (),
-                        Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
+                        Ok(true) => lost_targets.push((jtac.side, jtac.gid, None))
                     }
                 }
             }
@@ -725,7 +725,8 @@ impl Jtacs {
                     if let Err(e) = jt.remove_target(db, lua) {
                         warn!("2 could not remove jtac target {:?}", e)
                     }
-                    ui_jtac_dead(db, lua, *side, *gid);
+                    ui_jtac_dead(db, *side, *gid);
+                    *self.menu_dirty.entry(*side).or_default() = true;
                     false
                 }
             })
@@ -741,11 +742,10 @@ impl Jtacs {
         }
         for (side, gid, uid) in lost_targets {
             match uid {
-                Some(uid) => {
-                    if let Err(e) = self.get_mut(&gid)?.remove_contact(lua, db, &uid) {
-                        warn!("3 could not remove jtac target {uid} {:?}", e)
-                    }
-                }
+                Some(uid) => match self.get_mut(&gid)?.remove_contact(lua, db, &uid) {
+                    Ok(_) => (),
+                    Err(e) => warn!("3 could not remove jtac target {uid} {:?}", e),
+                },
                 None => {
                     db.ephemeral.msgs().panel_to_side(
                         10,
@@ -776,6 +776,23 @@ impl Jtacs {
         for (side, msg) in msgs {
             db.ephemeral.msgs().panel_to_side(10, false, side, msg);
         }
-        Ok(())
+        let mut side_menus = smallvec![];
+        for (side, dirty) in self.menu_dirty.iter_mut() {
+            if *dirty {
+                side_menus.push(*side);
+                *dirty = false;
+            }
+        }
+        for (side, jtx) in self.jtacs.iter_mut() {
+            for jt in jtx.values_mut() {
+                if jt.menu_dirty {
+                    if !side_menus.contains(side) {
+                        side_menus.push(*side)
+                    }
+                    jt.menu_dirty = false;
+                }
+            }
+        }
+        Ok(side_menus)
     }
 }

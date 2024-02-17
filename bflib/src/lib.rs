@@ -1146,8 +1146,15 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.remark_objectives, ts);
         let ts = Utc::now();
-        if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
-            error!("could not update jtac contacts {e}")
+        match ctx.jtac.update_contacts(lua, &mut ctx.db) {
+            Err(e) => error!("could not update jtac contacts {e}"),
+            Ok(dirty_menus) => {
+                for side in dirty_menus {
+                    if let Err(e) = menu::update_menus_for_side(ctx, lua, side) {
+                        error!("could not update menus for {side} {e:?}")
+                    }
+                }
+            }
         }
         record_perf(&mut perf.update_jtac_contacts, ts);
         let now = Utc::now();

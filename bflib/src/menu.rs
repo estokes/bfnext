@@ -1165,25 +1165,12 @@ impl CarryCap {
     }
 }
 
-pub fn remove_menu_for_jtac(db: &Db, lua: MizLua, group: DbGid) -> Result<()> {
-    let mc = MissionCommands::singleton(lua)?;
-    for (_, player, _) in db.instanced_players() {
-        if let Some((sl, _)) = player.current_slot.as_ref() {
-            let ifo = db.info_for_slot(sl)?;
-            mc.remove_submenu_for_group(
-                ifo.miz_gid,
-                GroupSubMenu::from(vec!["JTAC".into(), format_compact!("{group}").into()]),
-            )?
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn update_jtac_menu(db: &Db, lua: MizLua, jtac: DbGid, arty: &[DbGid]) -> Result<()> {
-    for (_, player, _) in db.instanced_players() {
-        if let Some((sl, _)) = player.current_slot.as_ref() {
-            let si = db.info_for_slot(sl).context("getting slot")?;
-            add_menu_for_jtac(lua, si.miz_gid, jtac, arty).context("adding menu")?
+pub(super) fn update_menus_for_side(ctx: &Context, lua: MizLua, side: Side) -> Result<()> {
+    for (_, player, _) in ctx.db.instanced_players() {
+        if player.side == side {
+            if let Some((slot, _)) = player.current_slot.as_ref() {
+                init_for_slot(ctx, lua, slot)?
+            }
         }
     }
     Ok(())
@@ -1197,11 +1184,13 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         let _ = mc.add_submenu_for_group(gid, "JTAC".into(), None)?;
         for (_, group, _) in ctx.db.jtacs() {
             if group.side == side {
-                ctx.jtac.add_menu(lua, gid, &group.id)?
+                let arty = ctx.jtac.nearby_artillery(&group.id);
+                add_menu_for_jtac(lua, gid, group.id, arty).context("adding jtac menu")?
             }
         }
         Ok(())
     };
+    mc.clear_all_menus().context("clearing menus")?;
     match slot {
         SlotId::Spectator => Ok(()),
         SlotId::ArtilleryCommander(_, _)
@@ -1211,17 +1200,13 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
             let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
             let cap = CarryCap::from_typ(cfg, si.typ.as_str());
-            mc.remove_submenu_for_group(si.miz_gid, vec!["Cargo".into()].into())?;
             if cap.crates {
                 add_cargo_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
             }
-            mc.remove_submenu_for_group(si.miz_gid, vec!["Troops".into()].into())?;
             if cap.troops {
                 add_troops_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
             }
-            mc.remove_submenu_for_group(si.miz_gid, vec!["EWR".into()].into())?;
             add_ewr_menu_for_group(&mc, si.miz_gid)?;
-            mc.remove_submenu_for_group(si.miz_gid, vec!["JTAC".into()].into())?;
             add_jtac(si.side, si.miz_gid)
         }
     }

@@ -1199,9 +1199,9 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
             let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["EWR".into()]))?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Cargo".into()]))?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Troops".into()]))?;
-            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;
             add_ewr_menu_for_group(&mc, si.miz_gid)?;
             add_jtac(si.side, si.miz_gid)?;
             let cap = CarryCap::from_typ(cfg, si.typ.as_str());

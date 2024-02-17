@@ -1177,7 +1177,7 @@ pub(super) fn update_menus_for_side(ctx: &Context, lua: MizLua, side: Side) -> R
 }
 
 pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result<()> {
-    debug!("initializing menus");
+    debug!("initializing menus for {slot:?}");
     let cfg = &ctx.db.ephemeral.cfg;
     let mc = MissionCommands::singleton(lua)?;
     let add_jtac = |side, gid| -> Result<()> {
@@ -1190,7 +1190,6 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         }
         Ok(())
     };
-    mc.clear_all_menus().context("clearing menus")?;
     match slot {
         SlotId::Spectator => Ok(()),
         SlotId::ArtilleryCommander(_, _)
@@ -1199,6 +1198,10 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         | SlotId::Observer(_, _) => Ok(()),
         SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
             let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Cargo".into()]))?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Troops".into()]))?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["EWR".into()]))?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;
             let cap = CarryCap::from_typ(cfg, si.typ.as_str());
             if cap.crates {
                 add_cargo_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?

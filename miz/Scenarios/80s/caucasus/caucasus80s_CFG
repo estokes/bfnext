@@ -1658,7 +1658,8 @@
       "TrackRadar"
     ],
     [
-      "SAM", 
+      "SAM",
+      "SR",
       "RadarGuided"
     ],
     [

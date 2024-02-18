@@ -1,7 +1,12 @@
+## 0.1.4
+
+- implement DcsObject for StaticObject
+
 ## 0.1.3
 
 - weapon dcsoid implementation
 - some common object methods on weapon
+- route
 
 ## 0.1.2
 

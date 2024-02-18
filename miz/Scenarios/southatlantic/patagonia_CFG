@@ -2,10 +2,7 @@
   "admins": {
     "e53316fe86d249582f3ae237c15052a1": "Gordy",
     "f279deb7a6b62c96a78eca3ddb2bd8d0": "REAPER 32 | EvilKipper", 
-    "69d60e1a0fe1c86bc3e81792458dba61": "<64>Cookie",
-    "317b35352512a554457dd1e6b07311d9": "admin",
-    "d613f7f534f4498e47652c29d00836e6": "admin",
-    "d931948745285fc8e42adbe35a7dfd50": "admin" 
+    "69d60e1a0fe1c86bc3e81792458dba61": "<64>Cookie"
   },
   "repair_time": 1800,
   "shutdown": 9,
@@ -57,55 +54,54 @@
     }
   },
   "logistics_exclusion": 10000,
-  "unit_cull_distance": 55560,
-  "ground_vehicle_cull_distance": 10000,
+  "unit_cull_distance": 83000,
+  "ground_vehicle_cull_distance": 12000,
   "artillery_mission_range": 32000,
   "slow_timed_events_freq": 10,
   "threatened_distance": {
     "Mirage-F1EE": 36000,
-    "C-101CC": 36000,
-    "MiG-29A": 50000,
-    "MiG-29S": 50000,
-    "F-14A-135-GR": 50000,
-    "L-39C": 21000,
+    "C-101CC": 10000,
+    "MiG-29A": 22000,
+    "MiG-29S": 22000,
+    "F-14A-135-GR": 21000,
+    "L-39C": 10000,
     "TF-51D": 0,
     "MiG-21Bis": 21000,
-    "F-16C_50": 90000,
+    "F-16C_50": 36000,
     "MiG-19P": 9000,
     "M-2000C": 50000,
-    "Mi-8MT": 15000,
+    "Mi-8MT": 10000,
     "Ka-50_3": 14400,
     "F-15C": 36000,
     "F-15E": 36000,
     "Ka-50": 14400,
-    "FA-18C_hornet": 90000,
-    "A-10C": 36000,
-    "SA342M": 16000,
+    "FA-18C_hornet": 36000,
+    "A-10C": 21600,
+    "SA342M": 9000,
     "A-10A": 21600,
     "AJS37": 36000,
-    "Mirage-F1CE": 21000, 
+    "Mirage-F1CE": 21600, 
     "Su-27": 21600,
     "F-14B": 21600,
-    "Su-25T": 36000,
-    "Su-25": 36000,
+    "Su-25T": 21000,
+    "Su-25": 21000,
     "F-5E-3": 36000,
-    "A-10C_2": 36000,
-    "SA342L": 36000,
-    "AH-64D_BLK_II": 36000,
-    "UH-1H": 36000,
-    "L-39ZA": 16000,
-    "F-5E-3": 21000,
+    "A-10C_2": 21600,
+    "SA342L": 9000,
+    "AH-64D_BLK_II": 14000,
+    "UH-1H": 9000,
+    "L-39ZA": 9000,
+    "F-5E-3": 14000,
     "Yak-52": 0,
-    "Mi-24P": 36000,
+    "Mi-24P": 14000,
     "JF-17": 36000,
-    "F-15ESE": 90000,
+    "F-15ESE": 36000,
     "AV8BNA": 36000,
-    "MB-339A": 20000,
-    "C-101CC": 20000,
+    "MB-339A": 9000,
     "J-11A": 36000,
     "Su-33": 36000
   },
-  "threatened_cooldown": 600,
+  "threatened_cooldown": 300,
   "crate_load_distance": 50,
   "crate_spread": 250,
   "side_switches": 1,
@@ -583,7 +579,7 @@
       {
         "path": [
           "EWRs",
-          "1L13"
+          "EWR"
         ],
         "template": "DEP1L13",
         "persist": "Forever",
@@ -591,7 +587,7 @@
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
-            "name": "1L13 Crate",
+            "name": "EWR Crate",
             "weight": 2000,
             "required": 1,
             "pos_unit": null,
@@ -775,7 +771,7 @@
       {
         "path": [
           "AAA",
-          "Flakpanzergepard"
+          "Gepard"
         ],
         "template": "DEPGEPARD",
         "persist": "Forever",
@@ -783,7 +779,7 @@
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
-            "name": "Flakpanzergepard Crate",
+            "name": "Gepard Crate",
             "weight": 1000,
             "required": 4,
             "pos_unit": null,
@@ -807,7 +803,7 @@
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
-            "name": "Vulkan Crate",
+            "name": "Vulcan Crate",
             "weight": 1000,
             "required": 2,
             "pos_unit": null,
@@ -871,7 +867,7 @@
       {
         "path": [
           "Ground Units",
-          "M2A2 Bradley"
+          "Bradley"
         ],
         "template": "DEPBRADLEY",
         "persist": "Forever",
@@ -897,7 +893,7 @@
       {
         "path": [
           "Ground Units",
-          "2A6M Leopard"
+          "Leopard MBT"
         ],
         "template": "DEPLEOPARD",
         "persist": "Forever",
@@ -947,7 +943,7 @@
       {
         "path": [
           "EWRs",
-          "AN/FPS-117"
+          "EWR"
         ],
         "template": "DEPFPS117",
         "persist": "Forever",
@@ -955,7 +951,7 @@
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
-            "name": "FPS-117 Crate",
+            "name": "EWR Crate",
             "weight": 1000,
             "required": 1,
             "pos_unit": null,
@@ -1122,7 +1118,7 @@
     ],
     "ZSU_57_2": [
       "AAA",
-      "LR",
+      "MR",
       "Driveable"
     ],
     "Hawk ln": [
@@ -1387,9 +1383,14 @@
     ],
     "ZSU-23-4 Shilka": [
       "AAA",
-      "MR",
+      "SR",
       "RadarGuided",
       "Driveable"
+    ],
+    "HEMTT_C-RAM_Phalanx": [
+      "AAA",
+      "EngagesWeapons",
+      "MR"
     ],
     "Stinger comm": [
       "SAM",

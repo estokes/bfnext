@@ -654,7 +654,7 @@ impl Jtacs {
             for jt in jtx.values_mut() {
                 if let Some(target) = &jt.target {
                     let unit = db.unit(&target.uid)?;
-                    if jt.contacts[&target.uid].pos != unit.position.p.0 {
+                    if (jt.contacts[&target.uid].pos - unit.position.p.0).magnitude() > 1. {
                         let v = db
                             .ephemeral
                             .get_object_id_by_uid(&target.uid)

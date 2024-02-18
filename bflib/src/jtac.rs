@@ -661,10 +661,11 @@ impl Jtacs {
                             .and_then(|oid| Unit::get_instance(lua, oid).ok())
                             .and_then(|unit| unit.get_velocity().ok())
                             .unwrap_or(LuaVec3(Vector3::default()));
-                        jt.contacts[&target.uid].pos = unit.position.p.0 + v.0;
+                        let pos = &mut jt.contacts[&target.uid].pos; 
+                        *pos = unit.position.p.0 + v.0;
                         let spot = Spot::get_instance(lua, &target.spot)
                             .context("getting the spot instance")?;
-                        spot.set_point(unit.position.p)
+                        spot.set_point(LuaVec3(*pos))
                             .context("setting the spot position")?;
                         jt.mark_target(lua).context("marking moved target")?
                     }

@@ -350,8 +350,11 @@ impl Db {
             for gid in groups {
                 self.mark_group(&gid)?
             }
-            for (_, obj) in &self.persisted.objectives {
-                self.ephemeral.create_objective_markup(obj, &self.persisted)
+            for (oid, obj) in &self.persisted.objectives {
+                // hubs get marked during the first logistics cycle
+                if !self.persisted.logistics_hubs.contains(oid) {
+                    self.ephemeral.create_objective_markup(obj, &self.persisted)
+                }
             }
             Ok(())
         };

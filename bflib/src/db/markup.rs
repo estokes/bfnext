@@ -304,8 +304,8 @@ impl ObjectiveMarkup {
                     let spos = pos + dir * obj.radius * 1.1;
                     let rdir = (pos - dobj.pos).normalize();
                     let dpos = dobj.pos + rdir * dobj.radius * 1.1;
-                    msgq.arrow_to_all(
-                        all_spec,
+                    msgq.arrow_to(
+                        if dobj.is_farp() { dobj.owner.into() } else { all_spec },
                         id,
                         ArrowSpec {
                             start: LuaVec3(Vector3::new(dpos.x, 0., dpos.y)),

@@ -292,7 +292,7 @@ impl MsgQ {
         self.0[2].push_back(Cmd::Send(Msg::Text { id, to, spec }))
     }
 
-    pub fn arrow_to_all(
+    pub fn arrow_to(
         &mut self,
         to: SideFilter,
         id: MarkId,

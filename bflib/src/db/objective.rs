@@ -276,6 +276,13 @@ impl Objective {
         self.owner
     }
 
+    pub fn is_farp(&self) -> bool {
+        match &self.kind {
+            ObjectiveKind::Farp { .. } => true,
+            ObjectiveKind::Airbase | ObjectiveKind::Fob | ObjectiveKind::Logistics => false,
+        }
+    }
+
     pub fn get_equipment(&self, name: &str) -> Inventory {
         self.warehouse
             .equipment

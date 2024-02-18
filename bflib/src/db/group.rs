@@ -36,6 +36,7 @@ use dcso3::{
     net::Ucid,
     object::{DcsObject, DcsOid},
     rotate2d,
+    static_object::{ClassStatic, StaticObject},
     unit::{ClassUnit, Unit},
     LuaVec2, MizLua, Position3, String, Vector2,
 };
@@ -552,6 +553,15 @@ impl Db {
         Ok(())
     }
 
+    pub fn static_born(&mut self, st: &StaticObject) -> Result<()> {
+        let id = st.object_id()?;
+        let name = st.get_name()?;
+        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
+            self.ephemeral.uid_by_static.insert(id, *uid);
+        }
+        Ok(())
+    }
+
     pub fn unit_dead(
         &mut self,
         lua: MizLua,
@@ -602,6 +612,35 @@ impl Db {
         Ok(())
     }
 
+    pub fn static_dead(
+        &mut self,
+        id: &DcsOid<ClassStatic>,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        if let Some(uid) = self.ephemeral.uid_by_static.remove(id) {
+            match self.persisted.units.get_mut_cow(&uid) {
+                None => error!("static_dead: missing unit {:?}", uid),
+                Some(unit) => {
+                    unit.dead = true;
+                    let gid = unit.group;
+                    self.ephemeral.dirty();
+                    if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
+                        self.update_objective_status(&oid, now)?;
+                    }
+                    if self.persisted.deployed.contains(&gid)
+                        || self.persisted.troops.contains(&gid)
+                        || self.persisted.crates.contains(&gid)
+                    {
+                        if self.group_health(&gid)?.0 == 0 {
+                            self.delete_group(&gid)?
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn group_health(&self, gid: &GroupId) -> Result<(usize, usize)> {
         let group = group!(self, gid)?;
         let mut alive = 0;
@@ -612,10 +651,10 @@ impl Db {
         }
         Ok((alive, group.units.len()))
     }
-    
+
     pub fn artillery_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
         let range2 = (self.ephemeral.cfg.artillery_mission_range as f64).powi(2);
-        let artillery = self 
+        let artillery = self
             .deployed()
             .filter_map(|group| {
                 if group.tags.contains(UnitTag::Artillery) && group.side == side {

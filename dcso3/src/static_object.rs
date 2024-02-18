@@ -51,12 +51,20 @@ impl<'lua> StaticObject<'lua> {
         Ok(self.t.call_method("getID", ())?)
     }
 
+    pub fn get_name(&self) -> Result<String> {
+        Ok(self.t.call_method("getName", ())?)
+    }
+
     pub fn get_coalition(&self) -> Result<Side> {
         Ok(self.t.call_method("getCoalition", ())?)
     }
 
     pub fn get_country(&self) -> Result<Country> {
         Ok(self.t.call_method("getCountry", ())?)
+    }
+ 
+    pub fn get_life(&self) -> Result<i64> {
+        Ok(self.t.call_method("getLife", ())?)
     }
 
     pub fn is_exist(&self) -> Result<bool> {

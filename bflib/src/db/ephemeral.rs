@@ -31,16 +31,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    airbase::ClassAirbase,
-    centroid2d,
-    coalition::Side,
-    env::miz::{GroupKind, Miz, MizIndex},
-    net::{SlotId, Ucid},
-    object::{DcsObject, DcsOid},
-    trigger::MarkId,
-    unit::{ClassUnit, Unit},
-    warehouse::{LiquidType, WSCategory},
-    MizLua, Position3, String, Vector2,
+    airbase::ClassAirbase, centroid2d, coalition::Side, env::miz::{GroupKind, Miz, MizIndex}, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, static_object::ClassStatic, trigger::MarkId, unit::{ClassUnit, Unit}, warehouse::{LiquidType, WSCategory}, MizLua, Position3, String, Vector2
 };
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexSet;
@@ -88,6 +79,7 @@ pub struct Ephemeral {
     pub(super) uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     pub(super) object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
     pub(super) slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
+    pub(super) uid_by_static: FxHashMap<DcsOid<ClassStatic>, UnitId>,
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
     used_pad_templates: FxHashSet<String>,
     force_to_spectators: BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>>,

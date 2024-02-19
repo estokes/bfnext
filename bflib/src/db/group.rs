@@ -28,7 +28,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    atomic_id, azumith3d, centroid2d,
+    atomic_id, azumith3d, centroid2d, centroid3d,
     coalition::Side,
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
@@ -38,7 +38,7 @@ use dcso3::{
     rotate2d,
     static_object::{ClassStatic, StaticObject},
     unit::{ClassUnit, Unit},
-    LuaVec2, MizLua, Position3, String, Vector2,
+    LuaVec2, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
@@ -119,6 +119,23 @@ impl Db {
                 .into_iter()
                 .filter_map(|uid| self.persisted.units.get(uid))
                 .filter_map(|unit| if unit.dead { None } else { Some(unit.pos) }),
+        ))
+    }
+
+    pub fn group_center3(&self, id: &GroupId) -> Result<Vector3> {
+        let group = group!(self, id)?;
+        Ok(centroid3d(
+            group
+                .units
+                .into_iter()
+                .filter_map(|uid| self.persisted.units.get(uid))
+                .filter_map(|unit| {
+                    if unit.dead {
+                        None
+                    } else {
+                        Some(unit.position.p.0)
+                    }
+                }),
         ))
     }
 
@@ -612,11 +629,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn static_dead(
-        &mut self,
-        id: &DcsOid<ClassStatic>,
-        now: DateTime<Utc>,
-    ) -> Result<()> {
+    pub fn static_dead(&mut self, id: &DcsOid<ClassStatic>, now: DateTime<Utc>) -> Result<()> {
         if let Some(uid) = self.ephemeral.uid_by_static.remove(id) {
             match self.persisted.units.get_mut_cow(&uid) {
                 None => error!("static_dead: missing unit {:?}", uid),

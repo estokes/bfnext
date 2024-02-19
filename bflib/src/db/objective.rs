@@ -226,7 +226,7 @@ atomic_id!(ObjectiveId);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
-    pub(super) id: ObjectiveId,
+    pub id: ObjectiveId,
     pub name: String,
     pub(super) pos: Vector2,
     pub(super) radius: f64,

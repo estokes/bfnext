@@ -14,10 +14,13 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
+use std::collections::hash_map::Entry;
+
 use crate::{
     cfg::{UnitTag, UnitTags},
     db::{
         group::{GroupId, SpawnedUnit, UnitId},
+        objective::ObjectiveId,
         Db,
     },
 };
@@ -76,6 +79,8 @@ impl ArtilleryAdjustment {
     }
 }
 
+type LocByCode = FxHashMap<ObjectiveId, FxHashMap<u16, FxHashSet<GroupId>>>;
+
 #[derive(Debug, Clone, Default)]
 struct Contact {
     pos: Vector3,
@@ -115,32 +120,52 @@ impl JtacTarget {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct JtacLocation {
+    pub oid: ObjectiveId,
+    pub bearing: f64,
+    pub distance: f64,
+}
+
+impl JtacLocation {
+    fn new(db: &Db, pos: Vector3) -> Self {
+        let (distance, bearing, obj) = db.objective_near_point(Vector2::new(pos.x, pos.z));
+        Self {
+            oid: obj.id,
+            bearing,
+            distance,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
-struct Jtac {
-    gid: GroupId,
-    side: Side,
+pub struct Jtac {
+    pub gid: GroupId,
+    pub side: Side,
     contacts: IndexMap<UnitId, Contact>,
     filter: BitFlags<UnitTag>,
+    pub location: JtacLocation,
     priority: Vec<UnitTags>,
     target: Option<JtacTarget>,
-    autolase: bool,
+    autoshift: bool,
     ir_pointer: bool,
     code: u16,
     last_smoke: DateTime<Utc>,
-    nearby_artillery: SmallVec<[GroupId; 8]>,
+    pub nearby_artillery: SmallVec<[GroupId; 8]>,
     menu_dirty: bool,
 }
 
 impl Jtac {
-    fn new(gid: GroupId, side: Side, priority: Vec<UnitTags>) -> Self {
+    fn new(db: &Db, gid: GroupId, side: Side, priority: Vec<UnitTags>, pos: Vector3) -> Self {
         Self {
             gid,
             side,
             contacts: IndexMap::default(),
             filter: BitFlags::default(),
             priority,
+            location: JtacLocation::new(db, pos),
             target: None,
-            autolase: true,
+            autoshift: true,
             ir_pointer: false,
             code: 1688,
             last_smoke: DateTime::<Utc>::default(),
@@ -149,11 +174,8 @@ impl Jtac {
         }
     }
 
-    fn status(&self, db: &Db) -> Result<CompactString> {
+    fn status(&self, db: &Db, loc_by_code: &LocByCode) -> Result<CompactString> {
         use std::fmt::Write;
-        let jtac_pos = db.group_center(&self.gid)?;
-        let (dist, heading, obj) = db.objective_near_point(jtac_pos);
-        let dist = dist / 1000.;
         let mut msg = CompactString::new("");
         write!(msg, "JTAC {} status\n", self.gid)?;
         match &self.target {
@@ -166,15 +188,41 @@ impl Jtac {
                     None => format_compact!("none"),
                     Some(mid) => format_compact!("{mid}"),
                 };
-                write!(msg, "lasing {unit_typ} code {} marker {mid}\n", self.code)?;
+                let conflicts = loc_by_code
+                    .get(&self.location.oid)
+                    .and_then(|by_code| by_code.get(&self.code))
+                    .and_then(|gids| {
+                        let len = gids.len();
+                        if len <= 1 {
+                            None
+                        } else {
+                            let mut msg = CompactString::new("(code conflicts with [");
+                            for (i, gid) in gids.iter().enumerate() {
+                                if *gid != self.gid {
+                                    if i < len - 1 {
+                                        write!(msg, "{gid}, ").unwrap()
+                                    } else {
+                                        write!(msg, "{gid}])").unwrap()
+                                    }
+                                }
+                            }
+                            Some(String::from(msg))
+                        }
+                    })
+                    .unwrap_or(String::from(""));
+                write!(
+                    msg,
+                    "lasing {unit_typ} code {}{} marker {mid}\n",
+                    self.code, conflicts
+                )?;
             }
         };
         write!(
             msg,
             "position bearing {} for {:.1}km from {}\n\n",
-            radians_to_degrees(heading) as u32,
-            dist,
-            obj.name()
+            radians_to_degrees(self.location.bearing) as u32,
+            self.location.distance / 1000.,
+            db.objective(&self.location.oid)?.name
         )?;
         if self.contacts.is_empty() {
             write!(msg, "No enemies in sight")?;
@@ -190,8 +238,8 @@ impl Jtac {
         }
         write!(
             msg,
-            "\n\nautolase: {}, ir_pointer: {}",
-            self.autolase, self.ir_pointer
+            "\n\nautoshift: {}, ir_pointer: {}",
+            self.autoshift, self.ir_pointer
         )?;
         write!(msg, "\nfilter: [")?;
         let len = self.filter.len();
@@ -265,7 +313,7 @@ impl Jtac {
         match &self.target {
             Some(target) if target.uid == uid => {
                 let arty = db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
-                if  prev_arty != arty {
+                if prev_arty != arty {
                     self.menu_dirty = true;
                     self.nearby_artillery = arty;
                 }
@@ -393,7 +441,7 @@ impl Jtac {
         };
         self.contacts
             .sort_by(|_, ct0, _, ct1| priority(ct0.tags).cmp(&priority(ct1.tags)));
-        if self.autolase && !self.contacts.is_empty() {
+        if self.autoshift && !self.contacts.is_empty() {
             return self.set_target(db, lua, 0).context("setting target");
         }
         Ok(false)
@@ -474,6 +522,7 @@ impl Jtac {
 pub struct Jtacs {
     jtacs: FxHashMap<Side, FxHashMap<GroupId, Jtac>>,
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
+    code_by_location: LocByCode,
     menu_dirty: FxHashMap<Side, bool>,
 }
 
@@ -492,8 +541,8 @@ impl Jtacs {
             .ok_or_else(|| anyhow!("no such jtac"))
     }
 
-    pub fn nearby_artillery(&self, gid: &GroupId) -> &[GroupId] {
-        self.get(gid).map(|jt| &*jt.nearby_artillery).unwrap_or(&[])
+    pub fn jtacs(&self) -> impl Iterator<Item = &Jtac> {
+        self.jtacs.values().flat_map(|jtx| jtx.values())
     }
 
     pub fn artillery_mission(
@@ -531,13 +580,13 @@ impl Jtacs {
     }
 
     pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {
-        self.get(gid)?.status(db)
+        self.get(gid)?.status(db, &self.code_by_location)
     }
 
-    pub fn toggle_auto_laser(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
+    pub fn toggle_auto_shift(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
         let jtac = self.get_mut(gid)?;
-        jtac.autolase = !jtac.autolase;
-        if jtac.autolase {
+        jtac.autoshift = !jtac.autoshift;
+        if jtac.autoshift {
             jtac.shift(db, lua)?;
         } else {
             jtac.remove_target(db, lua)?
@@ -558,7 +607,7 @@ impl Jtacs {
 
     pub fn shift(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<bool> {
         let jtac = self.get_mut(gid)?;
-        jtac.autolase = false;
+        jtac.autoshift = false;
         jtac.shift(db, lua)
     }
 
@@ -584,7 +633,14 @@ impl Jtacs {
     /// passing 600 sets the hundreds part of the code to 6. passing 8 sets the ones part of the code to 8.
     /// other parts of the existing code are left alone.
     pub fn set_code_part(&mut self, lua: MizLua, gid: &GroupId, code_part: u16) -> Result<()> {
-        self.get_mut(gid)?.set_code(lua, code_part)
+        let jt = self.get_mut(gid)?;
+        let prev_code = jt.code;
+        let oid = jt.location.oid;
+        jt.set_code(lua, code_part)?;
+        let code = jt.code;
+        Self::remove_code_by_location(&mut self.code_by_location, oid, prev_code, *gid);
+        Self::add_code_by_location(&mut self.code_by_location, oid, code, *gid);
+        Ok(())
     }
 
     pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = UnitId> + 'a {
@@ -592,6 +648,27 @@ impl Jtacs {
             j.values()
                 .filter_map(|jt| jt.target.as_ref().map(|target| target.uid))
         })
+    }
+
+    pub fn add_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: GroupId) {
+        t.entry(oid)
+            .or_default()
+            .entry(code)
+            .or_default()
+            .insert(gid);
+    }
+
+    pub fn remove_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: GroupId) {
+        match t.entry(oid).or_default().entry(code) {
+            Entry::Vacant(_) => (),
+            Entry::Occupied(mut e) => {
+                let set = e.get_mut();
+                set.remove(&gid);
+                if set.is_empty() {
+                    e.remove();
+                }
+            }
+        }
     }
 
     pub fn unit_dead(&mut self, lua: MizLua, db: &mut Db, id: &DcsOid<ClassUnit>) -> Result<()> {
@@ -607,9 +684,15 @@ impl Jtacs {
                                     warn!("0 could not remove jtac target {:?}", e)
                                 }
                                 ui_jtac_dead(db, *side, *gid);
+                                Self::remove_code_by_location(
+                                    &mut self.code_by_location,
+                                    jt.location.oid,
+                                    jt.code,
+                                    jt.gid,
+                                );
                                 *self.menu_dirty.entry(jt.side).or_default() = true;
                                 return false;
-                            } 
+                            }
                             if let Some(target) = &jt.target {
                                 if &target.source == id {
                                     if let Err(e) = jt.reset_target(db, lua) {
@@ -661,7 +744,7 @@ impl Jtacs {
                             .and_then(|oid| Unit::get_instance(lua, oid).ok())
                             .and_then(|unit| unit.get_velocity().ok())
                             .unwrap_or(LuaVec3(Vector3::default()));
-                        let pos = &mut jt.contacts[&target.uid].pos; 
+                        let pos = &mut jt.contacts[&target.uid].pos;
                         *pos = unit.position.p.0 + v.0;
                         let spot = Spot::get_instance(lua, &target.spot)
                             .context("getting the spot instance")?;
@@ -685,7 +768,6 @@ impl Jtacs {
                 saw_jtacs.push(group.id)
             }
             let range = (ifo.range as f64).powi(2);
-            pos.y += 10.;
             let jtac = self
                 .jtacs
                 .entry(group.side)
@@ -693,8 +775,39 @@ impl Jtacs {
                 .entry(group.id)
                 .or_insert_with(|| {
                     *self.menu_dirty.entry(group.side).or_default() = true;
-                    Jtac::new(group.id, group.side, db.ephemeral.cfg.jtac_priority.clone())
+                    let jt = Jtac::new(
+                        db,
+                        group.id,
+                        group.side,
+                        db.ephemeral.cfg.jtac_priority.clone(),
+                        pos,
+                    );
+                    Self::add_code_by_location(
+                        &mut self.code_by_location,
+                        jt.location.oid,
+                        jt.code,
+                        jt.gid,
+                    );
+                    jt
                 });
+            let prev_loc = jtac.location;
+            jtac.location = JtacLocation::new(db, pos);
+            if prev_loc.oid != jtac.location.oid {
+                Self::add_code_by_location(
+                    &mut self.code_by_location,
+                    prev_loc.oid,
+                    jtac.code,
+                    jtac.gid,
+                );
+                Self::add_code_by_location(
+                    &mut self.code_by_location,
+                    jtac.location.oid,
+                    jtac.code,
+                    jtac.gid,
+                );
+                *self.menu_dirty.entry(jtac.side).or_default() = true;
+            }
+            pos.y += 10.;
             for (unit, _) in db.instanced_units() {
                 saw_units.insert(unit.id);
                 if unit.side == jtac.side {
@@ -718,7 +831,7 @@ impl Jtacs {
                     match jtac.remove_contact(lua, db, &unit.id) {
                         Err(e) => warn!("could not remove jtac contact {} {:?}", unit.name, e),
                         Ok(false) => (),
-                        Ok(true) => lost_targets.push((jtac.side, jtac.gid, None))
+                        Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
                     }
                 }
             }
@@ -773,7 +886,7 @@ impl Jtacs {
         let mut msgs: SmallVec<[(Side, CompactString); 32]> = smallvec![];
         for jtac in new_contacts {
             let msg = jtac
-                .status(db)
+                .status(db, &self.code_by_location)
                 .with_context(|| format_compact!("generating jtac status for {}", jtac.gid))?;
             msgs.push((jtac.side, msg))
         }

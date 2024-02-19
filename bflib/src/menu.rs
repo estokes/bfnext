@@ -23,7 +23,7 @@ use crate::{
         Db,
     },
     ewr::{self, EwrUnits},
-    jtac::{AdjustmentDir, Jtac},
+    jtac::{AdjustmentDir, JtId, Jtac},
     Context,
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
@@ -797,9 +797,9 @@ fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
     Ok(())
 }
 
-fn jtac_status(_: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_status(_: MizLua, gid: JtId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let side = ctx.db.group(&gid)?.side;
+    let side = ctx.jtac.get(&gid)?.side;
     let msg = ctx
         .jtac
         .jtac_status(&ctx.db, &gid)
@@ -808,7 +808,7 @@ fn jtac_status(_: MizLua, gid: DbGid) -> Result<()> {
     Ok(())
 }
 
-fn jtac_toggle_auto_shift(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_toggle_auto_shift(lua: MizLua, gid: JtId) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -818,7 +818,7 @@ fn jtac_toggle_auto_shift(lua: MizLua, gid: DbGid) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_toggle_ir_pointer(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_toggle_ir_pointer(lua: MizLua, gid: JtId) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -828,7 +828,7 @@ fn jtac_toggle_ir_pointer(lua: MizLua, gid: DbGid) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_smoke_target(lua: MizLua, gid: JtId) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -838,7 +838,7 @@ fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_shift(lua: MizLua, gid: JtId) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -848,9 +848,9 @@ fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_artillery_mission(lua: MizLua, arg: ArgTriple<DbGid, DbGid, u8>) -> Result<()> {
+fn jtac_artillery_mission(lua: MizLua, arg: ArgTriple<JtId, DbGid, u8>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let side = ctx.db.group(&arg.fst)?.side;
+    let side = ctx.jtac.get(&arg.fst)?.side;
     match ctx
         .jtac
         .artillery_mission(lua, &ctx.db, &arg.fst, &arg.snd, arg.trd)
@@ -902,7 +902,7 @@ fn jtac_show_adjustment(_lua: MizLua, arg: DbGid) -> Result<()> {
     Ok(())
 }
 
-fn jtac_clear_filter(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_clear_filter(lua: MizLua, gid: JtId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     ctx.jtac
         .clear_filter(&ctx.db, lua, &gid)
@@ -910,7 +910,7 @@ fn jtac_clear_filter(lua: MizLua, gid: DbGid) -> Result<()> {
     Ok(())
 }
 
-fn jtac_filter(lua: MizLua, arg: ArgTuple<DbGid, u64>) -> Result<()> {
+fn jtac_filter(lua: MizLua, arg: ArgTuple<JtId, u64>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let filter =
         BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
@@ -922,7 +922,7 @@ fn jtac_filter(lua: MizLua, arg: ArgTuple<DbGid, u64>) -> Result<()> {
     Ok(())
 }
 
-fn jtac_set_code(lua: MizLua, arg: ArgTuple<DbGid, u16>) -> Result<()> {
+fn jtac_set_code(lua: MizLua, arg: ArgTuple<JtId, u16>) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -936,7 +936,7 @@ fn add_artillery_menu_for_jtac(
     lua: MizLua,
     mizgid: GroupId,
     root: GroupSubMenu,
-    jtac: DbGid,
+    jtac: JtId,
     arty: &[DbGid],
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;

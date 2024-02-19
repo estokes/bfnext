@@ -14,8 +14,6 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use std::collections::hash_map::Entry;
-
 use crate::{
     cfg::{UnitTag, UnitTags},
     db::{
@@ -30,9 +28,10 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
     controller::Task,
-    cvt_err,
+    cvt_err, err,
     group::Group,
     land::Land,
+    net::SlotId,
     object::{DcsObject, DcsOid},
     radians_to_degrees, simple_enum,
     spot::{ClassSpot, Spot},
@@ -44,12 +43,56 @@ use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{info, warn};
-use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Value};
+use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
+use std::{collections::hash_map::Entry, fmt};
 
-fn ui_jtac_dead(db: &mut Db, side: Side, gid: GroupId) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum JtId {
+    Group(GroupId),
+    Slot(SlotId),
+}
+
+impl<'lua> FromLua<'lua> for JtId {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl: Table = FromLua::from_lua(value, lua)?;
+        match tbl.raw_get::<_, i64>("kind")? {
+            0 => Ok(Self::Group(tbl.raw_get("id")?)),
+            1 => Ok(Self::Slot(tbl.raw_get("id")?)),
+            n => Err(err(&format_compact!("invalid jtid {n}"))),
+        }
+    }
+}
+
+impl<'lua> IntoLua<'lua> for JtId {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let tbl = lua.create_table()?;
+        match self {
+            Self::Group(id) => {
+                tbl.raw_set("kind", 0)?;
+                tbl.raw_set("id", id)?
+            }
+            Self::Slot(id) => {
+                tbl.raw_set("kind", 1)?;
+                tbl.raw_set("id", id)?;
+            }
+        }
+        Ok(Value::Table(tbl))
+    }
+}
+
+impl fmt::Display for JtId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Group(id) => write!(f, "{id}"),
+            Self::Slot(id) => write!(f, "sl{id}"),
+        }
+    }
+}
+
+fn ui_jtac_dead(db: &mut Db, side: Side, gid: JtId) {
     db.ephemeral.msgs().panel_to_side(
         10,
         false,
@@ -79,7 +122,7 @@ impl ArtilleryAdjustment {
     }
 }
 
-type LocByCode = FxHashMap<ObjectiveId, FxHashMap<u16, FxHashSet<GroupId>>>;
+type LocByCode = FxHashMap<ObjectiveId, FxHashMap<u16, FxHashSet<JtId>>>;
 
 #[derive(Debug, Clone, Default)]
 struct Contact {
@@ -140,7 +183,7 @@ impl JtacLocation {
 
 #[derive(Debug, Clone)]
 pub struct Jtac {
-    pub gid: GroupId,
+    pub gid: JtId,
     pub side: Side,
     contacts: IndexMap<UnitId, Contact>,
     filter: BitFlags<UnitTag>,
@@ -156,7 +199,7 @@ pub struct Jtac {
 }
 
 impl Jtac {
-    fn new(db: &Db, gid: GroupId, side: Side, priority: Vec<UnitTags>, pos: Vector3) -> Self {
+    fn new(db: &Db, gid: JtId, side: Side, priority: Vec<UnitTags>, pos: Vector3) -> Self {
         Self {
             gid,
             side,
@@ -321,10 +364,17 @@ impl Jtac {
             }
             Some(_) | None => {
                 self.remove_target(db, lua)?;
-                let jtid = db
-                    .first_living_unit(&self.gid)
-                    .context("getting jtac beam source")?
-                    .clone();
+                let jtid = match &self.gid {
+                    JtId::Group(gid) => db
+                        .first_living_unit(gid)
+                        .context("getting jtac beam source")?
+                        .clone(),
+                    JtId::Slot(sl) => db
+                        .ephemeral
+                        .get_object_id_by_slot(sl)
+                        .ok_or_else(|| anyhow!("no unit for slot {sl}"))?
+                        .clone(),
+                };
                 let jt = match Unit::get_instance(lua, &jtid) {
                     Ok(jt) => jt,
                     Err(_) => {
@@ -520,21 +570,21 @@ impl Jtac {
 
 #[derive(Debug, Clone, Default)]
 pub struct Jtacs {
-    jtacs: FxHashMap<Side, FxHashMap<GroupId, Jtac>>,
+    jtacs: FxHashMap<Side, FxHashMap<JtId, Jtac>>,
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
     code_by_location: LocByCode,
     menu_dirty: FxHashMap<Side, bool>,
 }
 
 impl Jtacs {
-    fn get(&self, gid: &GroupId) -> Result<&Jtac> {
+    pub fn get(&self, gid: &JtId) -> Result<&Jtac> {
         self.jtacs
             .iter()
             .find_map(|(_, jtx)| jtx.get(gid))
             .ok_or_else(|| anyhow!("no such jtac {gid}"))
     }
 
-    fn get_mut(&mut self, gid: &GroupId) -> Result<&mut Jtac> {
+    fn get_mut(&mut self, gid: &JtId) -> Result<&mut Jtac> {
         self.jtacs
             .iter_mut()
             .find_map(|(_, jtx)| jtx.get_mut(gid))
@@ -549,7 +599,7 @@ impl Jtacs {
         &mut self,
         lua: MizLua,
         db: &Db,
-        jtac: &GroupId,
+        jtac: &JtId,
         arty: &GroupId,
         n: u8,
     ) -> Result<()> {
@@ -579,11 +629,11 @@ impl Jtacs {
             .unwrap_or_default()
     }
 
-    pub fn jtac_status(&self, db: &Db, gid: &GroupId) -> Result<CompactString> {
+    pub fn jtac_status(&self, db: &Db, gid: &JtId) -> Result<CompactString> {
         self.get(gid)?.status(db, &self.code_by_location)
     }
 
-    pub fn toggle_auto_shift(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
+    pub fn toggle_auto_shift(&mut self, db: &Db, lua: MizLua, gid: &JtId) -> Result<()> {
         let jtac = self.get_mut(gid)?;
         jtac.autoshift = !jtac.autoshift;
         if jtac.autoshift {
@@ -594,36 +644,30 @@ impl Jtacs {
         Ok(())
     }
 
-    pub fn toggle_ir_pointer(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
+    pub fn toggle_ir_pointer(&mut self, db: &Db, lua: MizLua, gid: &JtId) -> Result<()> {
         let jtac = self.get_mut(gid)?;
         jtac.ir_pointer = !jtac.ir_pointer;
         jtac.reset_target(db, lua).context("resetting target")?;
         Ok(())
     }
 
-    pub fn smoke_target(&mut self, lua: MizLua, gid: &GroupId) -> Result<()> {
+    pub fn smoke_target(&mut self, lua: MizLua, gid: &JtId) -> Result<()> {
         self.get_mut(gid)?.smoke_target(lua)
     }
 
-    pub fn shift(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<bool> {
+    pub fn shift(&mut self, db: &Db, lua: MizLua, gid: &JtId) -> Result<bool> {
         let jtac = self.get_mut(gid)?;
         jtac.autoshift = false;
         jtac.shift(db, lua)
     }
 
-    pub fn clear_filter(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<bool> {
+    pub fn clear_filter(&mut self, db: &Db, lua: MizLua, gid: &JtId) -> Result<bool> {
         let jtac = self.get_mut(gid)?;
         jtac.filter = BitFlags::empty();
         jtac.sort_contacts(db, lua)
     }
 
-    pub fn add_filter(
-        &mut self,
-        db: &Db,
-        lua: MizLua,
-        gid: &GroupId,
-        tag: UnitTag,
-    ) -> Result<bool> {
+    pub fn add_filter(&mut self, db: &Db, lua: MizLua, gid: &JtId, tag: UnitTag) -> Result<bool> {
         let jtac = self.get_mut(gid)?;
         jtac.filter |= tag;
         jtac.sort_contacts(db, lua)
@@ -632,7 +676,7 @@ impl Jtacs {
     /// set part of the laser code, defined by the scale of the passed in number. For example,
     /// passing 600 sets the hundreds part of the code to 6. passing 8 sets the ones part of the code to 8.
     /// other parts of the existing code are left alone.
-    pub fn set_code_part(&mut self, lua: MizLua, gid: &GroupId, code_part: u16) -> Result<()> {
+    pub fn set_code_part(&mut self, lua: MizLua, gid: &JtId, code_part: u16) -> Result<()> {
         let jt = self.get_mut(gid)?;
         let prev_code = jt.code;
         let oid = jt.location.oid;
@@ -650,7 +694,7 @@ impl Jtacs {
         })
     }
 
-    pub fn add_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: GroupId) {
+    pub fn add_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {
         t.entry(oid)
             .or_default()
             .entry(code)
@@ -658,7 +702,7 @@ impl Jtacs {
             .insert(gid);
     }
 
-    pub fn remove_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: GroupId) {
+    pub fn remove_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {
         match t.entry(oid).or_default().entry(code) {
             Entry::Vacant(_) => (),
             Entry::Occupied(mut e) => {
@@ -672,18 +716,24 @@ impl Jtacs {
     }
 
     pub fn unit_dead(&mut self, lua: MizLua, db: &mut Db, id: &DcsOid<ClassUnit>) -> Result<()> {
-        if let Some(uid) = db.ephemeral.get_uid_by_object_id(id) {
-            let uid = *uid;
+        let uid = db.ephemeral.get_uid_by_object_id(id).map(|uid| *uid);
+        let jtid = {
+            let sl = db.ephemeral.get_slot_by_object_id(id).map(|sl| *sl);
+            match uid {
+                Some(uid) => db.unit(&uid).ok().map(|spu| JtId::Group(spu.group)),
+                None => sl.map(|sl| JtId::Slot(sl)),
+            }
+        };
+        if let Some(jtid) = jtid {
             for (side, jtx) in self.jtacs.iter_mut() {
                 jtx.retain(|gid, jt| {
-                    if let Ok(spu) = db.unit(&uid) {
-                        let group = spu.group;
-                        if &group == gid {
-                            if db.group_health(gid).unwrap_or((0, 0)).0 <= 1 {
+                    if &jtid == gid {
+                        macro_rules! dead {
+                            () => {{
                                 if let Err(e) = jt.remove_target(db, lua) {
                                     warn!("0 could not remove jtac target {:?}", e)
                                 }
-                                ui_jtac_dead(db, *side, *gid);
+                                ui_jtac_dead(db, *side, jtid);
                                 Self::remove_code_by_location(
                                     &mut self.code_by_location,
                                     jt.location.oid,
@@ -692,19 +742,30 @@ impl Jtacs {
                                 );
                                 *self.menu_dirty.entry(jt.side).or_default() = true;
                                 return false;
+                            }};
+                        }
+                        match jtid {
+                            JtId::Slot(_) => dead!(),
+                            JtId::Group(gid) => {
+                                if db.group_health(&gid).unwrap_or((0, 0)).0 <= 1 {
+                                    dead!()
+                                }
                             }
-                            if let Some(target) = &jt.target {
-                                if &target.source == id {
-                                    if let Err(e) = jt.reset_target(db, lua) {
-                                        warn!("could not reset jtac target {:?}", e)
-                                    }
+                        }
+                        if let Some(target) = &jt.target {
+                            if &target.source == id {
+                                if let Err(e) = jt.reset_target(db, lua) {
+                                    warn!("could not reset jtac target {:?}", e)
                                 }
                             }
                         }
                     }
                     let dead = match &jt.target {
                         None => false,
-                        Some(target) => target.uid == uid,
+                        Some(target) => match uid {
+                            None => false,
+                            Some(uid) => target.uid == uid,
+                        },
                     };
                     if dead {
                         if let Err(e) = jt.remove_target(db, lua) {
@@ -760,28 +821,23 @@ impl Jtacs {
 
     pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<SmallVec<[Side; 2]>> {
         let land = Land::singleton(lua)?;
-        let mut saw_jtacs: SmallVec<[GroupId; 32]> = smallvec![];
+        let mut saw_jtacs: SmallVec<[JtId; 32]> = smallvec![];
         let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
-        let mut lost_targets: SmallVec<[(Side, GroupId, Option<UnitId>); 64]> = smallvec![];
-        for (mut pos, group, ifo) in db.jtacs() {
-            if !saw_jtacs.contains(&group.id) {
-                saw_jtacs.push(group.id)
+        let mut lost_targets: SmallVec<[(Side, JtId, Option<UnitId>); 64]> = smallvec![];
+        for (mut pos, group, side, ifo) in db.jtacs() {
+            if !saw_jtacs.contains(&group) {
+                saw_jtacs.push(group)
             }
             let range = (ifo.range as f64).powi(2);
             let jtac = self
                 .jtacs
-                .entry(group.side)
+                .entry(side)
                 .or_default()
-                .entry(group.id)
+                .entry(group)
                 .or_insert_with(|| {
-                    *self.menu_dirty.entry(group.side).or_default() = true;
-                    let jt = Jtac::new(
-                        db,
-                        group.id,
-                        group.side,
-                        db.ephemeral.cfg.jtac_priority.clone(),
-                        pos,
-                    );
+                    *self.menu_dirty.entry(side).or_default() = true;
+                    let jt =
+                        Jtac::new(db, group, side, db.ephemeral.cfg.jtac_priority.clone(), pos);
                     Self::add_code_by_location(
                         &mut self.code_by_location,
                         jt.location.oid,

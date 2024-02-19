@@ -1247,6 +1247,10 @@ impl Default for Cfg {
                 (Side::Blue, default_blue_troops()),
             ]),
             unit_classification: default_unit_classification(),
+            airborne_jtacs: FxHashMap::from_iter([
+                ("L-39ZA".into(), DeployableJtac { range: 16 }),
+                ("MB-339A".into(), DeployableJtac { range: 16 }),
+            ]),
             jtac_priority: default_jtac_priority(),
         }
     }

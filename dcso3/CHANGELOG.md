@@ -1,9 +1,17 @@
+## 0.1.4
+
+- implement DcsObject for StaticObject
+
 ## 0.1.3
 
 - weapon dcsoid implementation
 - some common object methods on weapon
+<<<<<<< HEAD
 - fix a bunch of sequence lifetimes to 'lua
 - map route points to MissionPoint
+=======
+- route
+>>>>>>> main
 
 ## 0.1.2
 

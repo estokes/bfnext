@@ -28,7 +28,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    atomic_id, azumith3d, centroid2d,
+    atomic_id, azumith3d, centroid2d, centroid3d,
     coalition::Side,
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
@@ -37,8 +37,9 @@ use dcso3::{
     object::{DcsObject, DcsOid},
     rotate2d,
     trigger::MarkId,
+    static_object::{ClassStatic, StaticObject},
     unit::{ClassUnit, Unit},
-    LuaVec2, MizLua, Position3, String, Vector2,
+    LuaVec2, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -129,6 +130,23 @@ impl Db {
                 .into_iter()
                 .filter_map(|uid| self.persisted.units.get(uid))
                 .filter_map(|unit| if unit.dead { None } else { Some(unit.pos) }),
+        ))
+    }
+
+    pub fn group_center3(&self, id: &GroupId) -> Result<Vector3> {
+        let group = group!(self, id)?;
+        Ok(centroid3d(
+            group
+                .units
+                .into_iter()
+                .filter_map(|uid| self.persisted.units.get(uid))
+                .filter_map(|unit| {
+                    if unit.dead {
+                        None
+                    } else {
+                        Some(unit.position.p.0)
+                    }
+                }),
         ))
     }
 
@@ -658,6 +676,15 @@ impl Db {
         Ok(())
     }
 
+    pub fn static_born(&mut self, st: &StaticObject) -> Result<()> {
+        let id = st.object_id()?;
+        let name = st.get_name()?;
+        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
+            self.ephemeral.uid_by_static.insert(id, *uid);
+        }
+        Ok(())
+    }
+
     pub fn unit_dead(
         &mut self,
         lua: MizLua,
@@ -715,6 +742,31 @@ impl Db {
                             }
                         }
                         self.delete_group(&gid)?
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn static_dead(&mut self, id: &DcsOid<ClassStatic>, now: DateTime<Utc>) -> Result<()> {
+        if let Some(uid) = self.ephemeral.uid_by_static.remove(id) {
+            match self.persisted.units.get_mut_cow(&uid) {
+                None => error!("static_dead: missing unit {:?}", uid),
+                Some(unit) => {
+                    unit.dead = true;
+                    let gid = unit.group;
+                    self.ephemeral.dirty();
+                    if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
+                        self.update_objective_status(&oid, now)?;
+                    }
+                    if self.persisted.deployed.contains(&gid)
+                        || self.persisted.troops.contains(&gid)
+                        || self.persisted.crates.contains(&gid)
+                    {
+                        if self.group_health(&gid)?.0 == 0 {
+                            self.delete_group(&gid)?
+                        }
                     }
                 }
             }

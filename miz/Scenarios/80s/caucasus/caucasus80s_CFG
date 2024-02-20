@@ -1644,6 +1644,14 @@
       "Aircraft"
     ]
   },
+  "airborne_jtacs": {
+    "L-39ZA": {
+      "range": 16000
+    },
+    "MB-339A": {
+      "range": 16000
+    }
+  },
   "jtac_priority": [
     [
       "SAM",
@@ -1658,8 +1666,10 @@
       "TrackRadar"
     ],
     [
-      "SAM", 
-      "RadarGuided"
+      "SAM",
+      "SR",
+      "RadarGuided",
+      "TrackRadar"
     ],
     [
       "SAM",

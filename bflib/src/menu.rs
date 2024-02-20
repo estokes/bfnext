@@ -23,7 +23,7 @@ use crate::{
         Db,
     },
     ewr::{self, EwrUnits},
-    jtac::AdjustmentDir,
+    jtac::{AdjustmentDir, JtId, Jtac},
     Context,
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
@@ -797,9 +797,9 @@ fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Result<()> {
     Ok(())
 }
 
-fn jtac_status(_: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_status(_: MizLua, gid: JtId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let side = ctx.db.group(&gid)?.side;
+    let side = ctx.jtac.get(&gid)?.side;
     let msg = ctx
         .jtac
         .jtac_status(&ctx.db, &gid)
@@ -808,17 +808,17 @@ fn jtac_status(_: MizLua, gid: DbGid) -> Result<()> {
     Ok(())
 }
 
-fn jtac_toggle_auto_laser(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_toggle_auto_shift(lua: MizLua, gid: JtId) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
-            .toggle_auto_laser(&ctx.db, lua, &gid)
+            .toggle_auto_shift(&ctx.db, lua, &gid)
             .context("toggling jtac auto laser")?;
     }
     jtac_status(lua, gid)
 }
 
-fn jtac_toggle_ir_pointer(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_toggle_ir_pointer(lua: MizLua, gid: JtId) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -828,7 +828,7 @@ fn jtac_toggle_ir_pointer(lua: MizLua, gid: DbGid) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_smoke_target(lua: MizLua, gid: JtId) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -838,7 +838,7 @@ fn jtac_smoke_target(lua: MizLua, gid: DbGid) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_shift(lua: MizLua, gid: JtId) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -848,9 +848,9 @@ fn jtac_shift(lua: MizLua, gid: DbGid) -> Result<()> {
     jtac_status(lua, gid)
 }
 
-fn jtac_artillery_mission(lua: MizLua, arg: ArgTriple<DbGid, DbGid, u8>) -> Result<()> {
+fn jtac_artillery_mission(lua: MizLua, arg: ArgTriple<JtId, DbGid, u8>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let side = ctx.db.group(&arg.fst)?.side;
+    let side = ctx.jtac.get(&arg.fst)?.side;
     match ctx
         .jtac
         .artillery_mission(lua, &ctx.db, &arg.fst, &arg.snd, arg.trd)
@@ -902,7 +902,7 @@ fn jtac_show_adjustment(_lua: MizLua, arg: DbGid) -> Result<()> {
     Ok(())
 }
 
-fn jtac_clear_filter(lua: MizLua, gid: DbGid) -> Result<()> {
+fn jtac_clear_filter(lua: MizLua, gid: JtId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     ctx.jtac
         .clear_filter(&ctx.db, lua, &gid)
@@ -910,7 +910,7 @@ fn jtac_clear_filter(lua: MizLua, gid: DbGid) -> Result<()> {
     Ok(())
 }
 
-fn jtac_filter(lua: MizLua, arg: ArgTuple<DbGid, u64>) -> Result<()> {
+fn jtac_filter(lua: MizLua, arg: ArgTuple<JtId, u64>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let filter =
         BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
@@ -922,7 +922,7 @@ fn jtac_filter(lua: MizLua, arg: ArgTuple<DbGid, u64>) -> Result<()> {
     Ok(())
 }
 
-fn jtac_set_code(lua: MizLua, arg: ArgTuple<DbGid, u16>) -> Result<()> {
+fn jtac_set_code(lua: MizLua, arg: ArgTuple<JtId, u16>) -> Result<()> {
     {
         let ctx = unsafe { Context::get_mut() };
         ctx.jtac
@@ -936,7 +936,7 @@ fn add_artillery_menu_for_jtac(
     lua: MizLua,
     mizgid: GroupId,
     root: GroupSubMenu,
-    jtac: DbGid,
+    jtac: JtId,
     arty: &[DbGid],
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
@@ -1056,48 +1056,47 @@ fn add_artillery_menu_for_jtac(
     Ok(())
 }
 
-fn add_menu_for_jtac(lua: MizLua, mizgid: GroupId, group: DbGid, arty: &[DbGid]) -> Result<()> {
+fn add_menu_for_jtac(root: GroupSubMenu, lua: MizLua, mizgid: GroupId, jtac: &Jtac) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-    let root = GroupSubMenu::from(vec!["JTAC".into()]);
-    mc.remove_submenu_for_group(
+    let root = mc.add_submenu_for_group(
         mizgid,
-        GroupSubMenu::from(vec!["JTAC".into(), format_compact!("{group}").into()]),
+        format_compact!("{}", jtac.gid).into(),
+        Some(root),
     )?;
-    let root = mc.add_submenu_for_group(mizgid, format_compact!("{group}").into(), Some(root))?;
     mc.add_command_for_group(
         mizgid,
         "Status".into(),
         Some(root.clone()),
         jtac_status,
-        group,
+        jtac.gid,
     )?;
     mc.add_command_for_group(
         mizgid,
-        "Toggle Auto Laser".into(),
+        "Toggle Auto Shift".into(),
         Some(root.clone()),
-        jtac_toggle_auto_laser,
-        group,
+        jtac_toggle_auto_shift,
+        jtac.gid,
     )?;
     mc.add_command_for_group(
         mizgid,
         "Toggle IR Pointer".into(),
         Some(root.clone()),
         jtac_toggle_ir_pointer,
-        group,
+        jtac.gid,
     )?;
     mc.add_command_for_group(
         mizgid,
         "Smoke Current Target".into(),
         Some(root.clone()),
         jtac_smoke_target,
-        group,
+        jtac.gid,
     )?;
     mc.add_command_for_group(
         mizgid,
         "Shift".into(),
         Some(root.clone()),
         jtac_shift,
-        group,
+        jtac.gid,
     )?;
     let mut filter_root = mc.add_submenu_for_group(mizgid, "Filter".into(), Some(root.clone()))?;
     mc.add_command_for_group(
@@ -1105,7 +1104,7 @@ fn add_menu_for_jtac(lua: MizLua, mizgid: GroupId, group: DbGid, arty: &[DbGid])
         "Clear".into(),
         Some(filter_root.clone()),
         jtac_clear_filter,
-        group,
+        jtac.gid,
     )?;
     for (i, tag) in UnitTag::all().iter().enumerate() {
         if (i + 1) % 9 == 0 {
@@ -1118,7 +1117,7 @@ fn add_menu_for_jtac(lua: MizLua, mizgid: GroupId, group: DbGid, arty: &[DbGid])
             Some(filter_root.clone()),
             jtac_filter,
             ArgTuple {
-                fst: group,
+                fst: jtac.gid,
                 snd: BitFlags::from(tag).bits(),
             },
         )?;
@@ -1137,13 +1136,13 @@ fn add_menu_for_jtac(lua: MizLua, mizgid: GroupId, group: DbGid, arty: &[DbGid])
                 Some(root.clone()),
                 jtac_set_code,
                 ArgTuple {
-                    fst: group,
+                    fst: jtac.gid,
                     snd: n * scale,
                 },
             )?;
         }
     }
-    add_artillery_menu_for_jtac(lua, mizgid, root, group, arty)?;
+    add_artillery_menu_for_jtac(lua, mizgid, root, jtac.gid, &jtac.nearby_artillery)?;
     Ok(())
 }
 
@@ -1165,26 +1164,11 @@ impl CarryCap {
     }
 }
 
-pub fn remove_menu_for_jtac(db: &Db, lua: MizLua, group: DbGid) -> Result<()> {
-    let mc = MissionCommands::singleton(lua)?;
-    for (_, player, _) in db.instanced_players() {
-        if let Some((sl, _)) = player.current_slot.as_ref() {
-            let ifo = db.info_for_slot(sl)?;
-            mc.remove_submenu_for_group(
-                ifo.miz_gid,
-                GroupSubMenu::from(vec!["JTAC".into(), format_compact!("{group}").into()]),
-            )?
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn update_jtac_menu(db: &Db, lua: MizLua, jtac: DbGid, arty: &[DbGid]) -> Result<()> {
-    for (ucid, player, _) in db.instanced_players() {
-        if db.ephemeral.cfg.rules.jtac.check(ucid) {
-            if let Some((sl, _)) = player.current_slot.as_ref() {
-                let si = db.info_for_slot(sl).context("getting slot")?;
-                add_menu_for_jtac(lua, si.miz_gid, jtac, arty).context("adding menu")?
+pub(super) fn update_menus_for_side(ctx: &Context, lua: MizLua, side: Side) -> Result<()> {
+    for (_, player, _) in ctx.db.instanced_players() {
+        if player.side == side {
+            if let Some((slot, _)) = player.current_slot.as_ref() {
+                init_for_slot(ctx, lua, slot)?
             }
         }
     }
@@ -1192,14 +1176,33 @@ pub(super) fn update_jtac_menu(db: &Db, lua: MizLua, jtac: DbGid, arty: &[DbGid]
 }
 
 pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result<()> {
-    debug!("initializing menus");
+    debug!("initializing menus for {slot:?}");
     let cfg = &ctx.db.ephemeral.cfg;
     let mc = MissionCommands::singleton(lua)?;
     let add_jtac = |side, gid| -> Result<()> {
-        let _ = mc.add_submenu_for_group(gid, "JTAC".into(), None)?;
-        for (_, group, _) in ctx.db.jtacs() {
-            if group.side == side {
-                add_menu_for_jtac(lua, gid, group.id, ctx.jtac.nearby_artillery(&group.id))?
+        let mut roots: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
+        let root = mc.add_submenu_for_group(gid, "JTAC".into(), None)?;
+        for jtac in ctx.jtac.jtacs() {
+            if jtac.side == side {
+                let near = ctx
+                    .db
+                    .objective(&jtac.location.oid)
+                    .map(|o| {
+                        let name = o.name.clone();
+                        match name.rsplit_once(" ") {
+                            Some((s, _)) => String::from(s),
+                            None => name,
+                        }
+                    })
+                    .unwrap_or_else(|_| String::from("unknown"));
+                let root = match roots.entry(near.clone()) {
+                    Entry::Occupied(e) => e.get().clone(),
+                    Entry::Vacant(e) => {
+                        let root = mc.add_submenu_for_group(gid, near, Some(root.clone()))?;
+                        e.insert(root).clone()
+                    }
+                };
+                add_menu_for_jtac(root, lua, gid, jtac).context("adding jtac menu")?
             }
         }
         Ok(())
@@ -1216,26 +1219,20 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
                 None => return Ok(()),
             };
             let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
-            let cap = CarryCap::from_typ(cfg, si.typ.as_str());
-            mc.remove_submenu_for_group(si.miz_gid, vec!["Cargo".into()].into())
-                .context("remove cargo menu")?;
-            if cap.crates && ctx.db.ephemeral.cfg.rules.cargo.check(ucid) {
-                add_cargo_menu_for_group(cfg, &mc, &si.side, si.miz_gid)
-                    .context("add cargo menu")?
-            }
-            mc.remove_submenu_for_group(si.miz_gid, vec!["Troops".into()].into())
-                .context("remove troops menu")?;
-            if cap.troops && ctx.db.ephemeral.cfg.rules.troops.check(ucid) {
-                add_troops_menu_for_group(cfg, &mc, &si.side, si.miz_gid)
-                    .context("add troops menu")?
-            }
-            mc.remove_submenu_for_group(si.miz_gid, vec!["EWR".into()].into())
-                .context("remove ewr menu")?;
-            add_ewr_menu_for_group(&mc, si.miz_gid).context("add ewr menu")?;
-            mc.remove_submenu_for_group(si.miz_gid, vec!["JTAC".into()].into())
-                .context("remove jtac menu")?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["EWR".into()]))?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Cargo".into()]))?;
+            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Troops".into()]))?;
+            add_ewr_menu_for_group(&mc, si.miz_gid)?;
             if ctx.db.ephemeral.cfg.rules.jtac.check(ucid) {
-                add_jtac(si.side, si.miz_gid).context("add jtac menu")?
+                add_jtac(si.side, si.miz_gid)?;
+            }
+            let cap = CarryCap::from_typ(cfg, si.typ.as_str());
+            if cap.crates && ctx.db.ephemeral.cfg.rules.cargo.check(ucid) {
+                add_cargo_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
+            }
+            if cap.troops && ctx.db.ephemeral.cfg.rules.troops.check(ucid) {
+                add_troops_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
             }
             Ok(())
         }

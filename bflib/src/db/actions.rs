@@ -817,9 +817,6 @@ impl Db {
         for (src, target) in to_transfer {
             self.transfer_to_target(src, target)?
         }
-        for (tgt, troop) in to_paratroop {
-            self.
-        }
         unimplemented!()
     }
 }

@@ -99,6 +99,12 @@ impl<'lua> FromLua<'lua> for SlotId {
     }
 }
 
+impl fmt::Display for SlotId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", Into::<String>::into(*self))
+    }
+}
+
 impl<'lua> IntoLua<'lua> for SlotId {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
         match self {

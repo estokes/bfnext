@@ -397,6 +397,10 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 if let Err(e) = ctx.db.unit_born(lua, &unit) {
                     error!("unit born failed {:?} {:?}", unit, e);
                 }
+            } else if let Ok(st) = b.initiator.as_static() {
+                if let Err(e) = ctx.db.static_born(&st) {
+                    error!("static born failed {:?} {:?}", st, e);
+                }
             }
         }
         Event::PlayerLeaveUnit(e) => {
@@ -407,7 +411,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::Hit(e) | Event::Kill(e) => {
-            if let Some(target) = e.target.and_then(|t| t.as_unit().ok()) {
+            if let Some(target) = e.target.as_ref().and_then(|t| t.as_unit().ok()) {
                 let dead = target.get_life()? < 1;
                 if ctx.db.ephemeral.cfg.points.is_some() {
                     if let Some(shooter) = e.initiator.and_then(|u| u.as_unit().ok()) {
@@ -428,6 +432,12 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         error!("0 unit killed failed {:?}", e)
                     }
                 }
+            } else if let Some(target) = e.target.as_ref().and_then(|t| t.as_static().ok()) {
+                if target.get_life()? < 1 {
+                    if let Err(e) = ctx.db.static_dead(&target.object_id()?, start_ts) {
+                        error!("static dead failed {e:?}")
+                    }
+                }
             }
         }
         Event::Shot(e) => {
@@ -438,13 +448,17 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
-            if let Some(unit) = e.initiator.and_then(|u| u.as_unit().ok()) {
+            if let Some(unit) = e.initiator.as_ref().and_then(|u| u.as_unit().ok()) {
                 let id = unit.object_id()?;
                 if ctx.db.ephemeral.cfg.points.is_some() {
                     ctx.shots_out.dead(id.clone(), start_ts);
                 }
                 if let Err(e) = unit_killed(lua, ctx, id) {
                     error!("1 unit killed failed {:?}", e)
+                }
+            } else if let Some(st) = e.initiator.as_ref().and_then(|s| s.as_static().ok()) {
+                if let Err(e) = ctx.db.static_dead(&st.object_id()?, start_ts) {
+                    error!("static killed failed {e:?}")
                 }
             }
         }
@@ -854,8 +868,15 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.remark_objectives, ts);
         let ts = Utc::now();
-        if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
-            error!("could not update jtac contacts {e}")
+        match ctx.jtac.update_contacts(lua, &mut ctx.db) {
+            Err(e) => error!("could not update jtac contacts {e}"),
+            Ok(dirty_menus) => {
+                for side in dirty_menus {
+                    if let Err(e) = menu::update_menus_for_side(ctx, lua, side) {
+                        error!("could not update menus for {side} {e:?}")
+                    }
+                }
+            }
         }
         record_perf(&mut perf.update_jtac_contacts, ts);
         let now = Utc::now();

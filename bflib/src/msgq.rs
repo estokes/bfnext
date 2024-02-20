@@ -125,8 +125,36 @@ impl MsgQ {
         self.send_with_priority(0, typ, text)
     }
 
-    pub fn delete_mark(&mut self, id: MarkId) {
-        self.0[2].push_back(Cmd::DeleteMark(id))
+    pub fn delete_mark(&mut self, did: MarkId) {
+        let mut push = true;
+        let mut remove = |pri: usize| {
+            self.0[pri].retain(|cmd| match cmd {
+                Cmd::DeleteMark(_) => true,
+                Cmd::Send(msg) => match msg {
+                    Msg::Message { .. } => true,
+                    Msg::Circle { id, .. }
+                    | Msg::Rect { id, .. }
+                    | Msg::Text { id, .. }
+                    | Msg::Arrow { id, .. } => {
+                        if *id == did {
+                            push = false;
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                    Msg::SetMarkupColor { id, .. } | Msg::SetMarkupFillColor { id, .. } => {
+                        *id != did
+                    }
+                },
+            })
+        };
+        remove(0);
+        remove(1);
+        remove(2);
+        if push {
+            self.0[2].push_back(Cmd::DeleteMark(did))
+        }
     }
 
     pub fn mark_to_all<S: Into<String>>(
@@ -289,10 +317,10 @@ impl MsgQ {
     }
 
     pub fn text_to_all(&mut self, to: SideFilter, id: MarkId, spec: TextSpec) {
-        self.0[2].push_back(Cmd::Send(Msg::Text { id, to, spec }))
+        self.0[1].push_back(Cmd::Send(Msg::Text { id, to, spec }))
     }
 
-    pub fn arrow_to_all(
+    pub fn arrow_to(
         &mut self,
         to: SideFilter,
         id: MarkId,

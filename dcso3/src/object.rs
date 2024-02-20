@@ -12,7 +12,7 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use super::{as_tbl, cvt_err, unit::Unit, weapon::Weapon, LuaVec3, Position3, String};
-use crate::{check_implements, simple_enum, wrapped_table, LuaEnv, MizLua};
+use crate::{check_implements, simple_enum, static_object::StaticObject, wrapped_table, LuaEnv, MizLua};
 use anyhow::{anyhow, bail, Result};
 use core::fmt;
 use mlua::{prelude::*, Value};
@@ -164,6 +164,10 @@ impl<'lua> Object<'lua> {
 
     pub fn as_weapon(&self) -> Result<Weapon<'lua>> {
         Ok(Weapon::from_lua(Value::Table(self.t.clone()), self.lua)?)
+    }
+
+    pub fn as_static(&self) -> Result<StaticObject<'lua>> {
+        Ok(StaticObject::from_lua(Value::Table(self.t.clone()), self.lua)?)
     }
 }
 

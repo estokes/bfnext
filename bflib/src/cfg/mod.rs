@@ -561,6 +561,9 @@ pub struct Cfg {
     pub troops: FxHashMap<Side, Vec<Troop>>,
     /// classification of ground units in the mission
     pub unit_classification: FxHashMap<Vehicle, UnitTags>,
+    /// airborne jtacs
+    #[serde(default)]
+    pub airborne_jtacs: FxHashMap<Vehicle, DeployableJtac>,
     /// The jtac target priority list
     pub jtac_priority: Vec<UnitTags>,
 }

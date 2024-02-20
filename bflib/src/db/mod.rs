@@ -15,13 +15,11 @@ for more details.
 */
 
 extern crate nalgebra as na;
-use self::{
-    group::{DeployKind, SpawnedGroup},
-    persisted::Persisted,
-};
+use self::{group::DeployKind, persisted::Persisted};
 use crate::{
     cfg::{Cfg, Deployable, DeployableEwr, DeployableJtac, Troop},
     db::ephemeral::Ephemeral,
+    jtac::JtId,
 };
 use anyhow::{anyhow, Result};
 use dcso3::{
@@ -37,6 +35,7 @@ pub mod cargo;
 pub mod ephemeral;
 pub mod group;
 pub mod logistics;
+pub mod markup;
 pub mod mizinit;
 pub mod objective;
 pub mod persisted;
@@ -194,37 +193,60 @@ impl Db {
         })
     }
 
-    pub fn jtacs(&self) -> impl Iterator<Item = (Vector3, &SpawnedGroup, &DeployableJtac)> {
-        self.persisted.jtacs.into_iter().filter_map(|gid| {
-            let group = self.persisted.groups.get(gid)?;
-            match &group.origin {
-                DeployKind::Troop {
-                    spec: Troop {
-                        jtac: Some(jtac), ..
+    pub fn jtacs(&self) -> impl Iterator<Item = (Vector3, JtId, Side, &DeployableJtac)> {
+        self.persisted
+            .jtacs
+            .into_iter()
+            .filter_map(|gid| {
+                let group = self.persisted.groups.get(gid)?;
+                match &group.origin {
+                    DeployKind::Troop {
+                        spec:
+                            Troop {
+                                jtac: Some(jtac), ..
+                            },
+                        ..
+                    }
+                    | DeployKind::Deployed {
+                        spec:
+                            Deployable {
+                                jtac: Some(jtac), ..
+                            },
+                        ..
+                    } => {
+                        let pos = centroid3d(
+                            group
+                                .units
+                                .into_iter()
+                                .map(|u| self.persisted.units[u].position.p.0),
+                        );
+                        Some((pos, JtId::Group(*gid), group.side, jtac))
+                    }
+                    DeployKind::Crate { .. }
+                    | DeployKind::Action { .. }
+                    | DeployKind::Objective
+                    | DeployKind::Troop { .. }
+                    | DeployKind::Deployed { .. } => None,
+                }
+            })
+            .chain(self.instanced_players().filter_map(|(_, p, inst)| {
+                let slot = p.current_slot.as_ref().unwrap().0;
+                let pos = inst.position.p.0;
+                let id = JtId::Slot(slot);
+                match self.ephemeral.cfg.airborne_jtacs.get(&inst.typ) {
+                    Some(jt) => Some((pos, id, p.side, jt)),
+                    None => match self.ephemeral.cargo.get(&slot) {
+                        None => None,
+                        Some(cargo) => {
+                            for (_, tr) in &cargo.troops {
+                                if let Some(jt) = &tr.jtac {
+                                    return Some((pos, id, p.side, jt));
+                                }
+                            }
+                            None
+                        }
                     },
-                    ..
                 }
-                | DeployKind::Deployed {
-                    spec:
-                        Deployable {
-                            jtac: Some(jtac), ..
-                        },
-                    ..
-                } => {
-                    let pos = centroid3d(
-                        group
-                            .units
-                            .into_iter()
-                            .map(|u| self.persisted.units[u].position.p.0),
-                    );
-                    Some((pos, group, jtac))
-                }
-                DeployKind::Crate { .. }
-                | DeployKind::Objective
-                | DeployKind::Action { .. }
-                | DeployKind::Troop { .. }
-                | DeployKind::Deployed { .. } => None,
-            }
-        })
+            }))
     }
 }

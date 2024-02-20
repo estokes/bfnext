@@ -227,7 +227,7 @@ atomic_id!(ObjectiveId);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
-    pub(super) id: ObjectiveId,
+    pub id: ObjectiveId,
     pub name: String,
     pub(super) pos: Vector2,
     pub(super) radius: f64,
@@ -275,6 +275,13 @@ impl Objective {
 
     pub fn owner(&self) -> Side {
         self.owner
+    }
+
+    pub fn is_farp(&self) -> bool {
+        match &self.kind {
+            ObjectiveKind::Farp { .. } => true,
+            ObjectiveKind::Airbase | ObjectiveKind::Fob | ObjectiveKind::Logistics => false,
+        }
     }
 
     pub fn get_equipment(&self, name: &str) -> Inventory {

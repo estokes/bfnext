@@ -240,13 +240,12 @@ impl Jtac {
                             None
                         } else {
                             let mut msg = CompactString::new("(code conflicts with [");
-                            for (i, gid) in gids.iter().enumerate() {
-                                if *gid != self.gid {
-                                    if i < len - 1 {
-                                        write!(msg, "{gid}, ").unwrap()
-                                    } else {
-                                        write!(msg, "{gid}").unwrap()
-                                    }
+                            for (i, gid) in gids.iter().filter(|gid| **gid != self.gid).enumerate()
+                            {
+                                if i < len - 2 {
+                                    write!(msg, "{gid}, ").unwrap()
+                                } else {
+                                    write!(msg, "{gid}").unwrap()
                                 }
                             }
                             write!(msg, "])").unwrap();
@@ -900,6 +899,12 @@ impl Jtacs {
                         warn!("2 could not remove jtac target {:?}", e)
                     }
                     ui_jtac_dead(db, *side, *gid);
+                    Self::remove_code_by_location(
+                        &mut self.code_by_location,
+                        jt.location.oid,
+                        jt.code,
+                        jt.gid,
+                    );
                     *self.menu_dirty.entry(*side).or_default() = true;
                     false
                 }

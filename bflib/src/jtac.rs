@@ -245,10 +245,11 @@ impl Jtac {
                                     if i < len - 1 {
                                         write!(msg, "{gid}, ").unwrap()
                                     } else {
-                                        write!(msg, "{gid}])").unwrap()
+                                        write!(msg, "{gid}").unwrap()
                                     }
                                 }
                             }
+                            write!(msg, "])").unwrap();
                             Some(String::from(msg))
                         }
                     })

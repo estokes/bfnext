@@ -225,14 +225,23 @@ impl Db {
                 }
             })
             .chain(self.instanced_players().filter_map(|(_, p, inst)| {
-                self.ephemeral.cfg.airborne_jtacs.get(&inst.typ).map(|jt| {
-                    (
-                        inst.position.p.0,
-                        JtId::Slot(p.current_slot.as_ref().unwrap().0),
-                        p.side,
-                        jt,
-                    )
-                })
+                let slot = p.current_slot.as_ref().unwrap().0;
+                let pos = inst.position.p.0;
+                let id = JtId::Slot(slot);
+                match self.ephemeral.cfg.airborne_jtacs.get(&inst.typ) {
+                    Some(jt) => Some((pos, id, p.side, jt)),
+                    None => match self.ephemeral.cargo.get(&slot) {
+                        None => None,
+                        Some(cargo) => {
+                            for (_, tr) in &cargo.troops {
+                                if let Some(jt) = &tr.jtac {
+                                    return Some((pos, id, p.side, jt));
+                                }
+                            }
+                            None
+                        }
+                    },
+                }
             }))
     }
 }

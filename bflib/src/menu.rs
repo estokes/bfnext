@@ -1058,6 +1058,11 @@ fn add_artillery_menu_for_jtac(
 
 fn add_menu_for_jtac(root: GroupSubMenu, lua: MizLua, mizgid: GroupId, jtac: &Jtac) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
+    let root = mc.add_submenu_for_group(
+        mizgid,
+        format_compact!("{}", jtac.gid).into(),
+        Some(root),
+    )?;
     mc.add_command_for_group(
         mizgid,
         "Status".into(),
@@ -1188,11 +1193,6 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
                     Entry::Occupied(e) => e.get().clone(),
                     Entry::Vacant(e) => {
                         let root = mc.add_submenu_for_group(gid, near, Some(root.clone()))?;
-                        let root = mc.add_submenu_for_group(
-                            gid,
-                            format_compact!("{}", jtac.gid).into(),
-                            Some(root),
-                        )?;
                         e.insert(root).clone()
                     }
                 };

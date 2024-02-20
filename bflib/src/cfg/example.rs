@@ -867,6 +867,15 @@ fn default_threatened_distance() -> FxHashMap<Vehicle, u32> {
         ("MiG-19P".into(), 9000),
         ("Mirage-F1EE".into(), 14400),
         ("Mirage-F1CE".into(), 14400),
+        ("A-50".into(), 0),
+        ("IL-78".into(), 0),
+        ("IL-78M".into(), 0),
+        ("MQ-9 Reaper".into(), 0),
+        ("Tu-22M3".into(), 36000),
+        ("KC-135".into(), 0),
+        ("KC130".into(), 0),
+        ("B-1B".into(), 36000),
+        ("E-3A".into(), 0)
     ])
 }
 

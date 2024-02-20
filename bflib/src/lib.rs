@@ -490,7 +490,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                             if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
                                 error!("could not display life taken message {:?}", e)
                             }
-                            let _ = menu::list_cargo_for_slot(lua, ctx, &slot);
+                            let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
                         }
                         Ok(TakeoffRes::OutOfLives) => {
                             if let Err(e) = e.initiator.destroy() {

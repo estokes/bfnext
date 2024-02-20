@@ -556,8 +556,9 @@ impl Db {
                 format_compact!("bomber mission {gid} target point"),
             ));
         }
-        ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
+        let group = group!(self, gid)?;
         let name = group.name.clone();
+        ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
         let tm = Timer::singleton(spctx.lua())?;
         tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
             let group = Group::get_by_name(lua, &name)?;

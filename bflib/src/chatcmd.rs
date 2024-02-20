@@ -340,7 +340,7 @@ pub(super) fn run_action_commands(ctx: &mut Context, lua: MizLua) -> Result<()> 
                 let side = player.side;
                 let r = match ActionCmd::parse(&mut ctx.db, lua, side, &s) {
                     Err(e) => Err(e),
-                    Ok(cmd) => ctx.db.start_action(&spctx, &ctx.idx, side, Some(ucid), cmd),
+                    Ok(cmd) => ctx.db.start_action(&spctx, &ctx.idx, &ctx.jtac, side, Some(ucid), cmd),
                 };
                 let msg = match r {
                     Err(e) => format_compact!("could not run action {s}: {e:?}"),

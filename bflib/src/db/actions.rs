@@ -16,7 +16,7 @@ use crate::{
         group::{DeployKind, SpawnedGroup},
     },
     group, group_mut,
-    jtac::Jtacs,
+    jtac::{JtId, Jtacs},
     spawnctx::{SpawnCtx, SpawnLoc},
     unit,
 };
@@ -74,7 +74,7 @@ pub struct WithPosAndGroup<T> {
 #[derive(Debug, Clone)]
 pub struct WithJtac<T> {
     pub cfg: T,
-    pub jtac: GroupId,
+    pub jtac: JtId,
 }
 
 #[derive(Debug, Clone)]
@@ -230,6 +230,7 @@ impl Db {
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
+        jtacs: &Jtacs,
         side: Side,
         ucid: Option<Ucid>,
         cmd: ActionCmd,
@@ -280,7 +281,16 @@ impl Db {
                 .move_awacs(spctx, side, ucid.clone(), args)
                 .context("moving awacs")?,
             ActionArgs::Bomber(args) => self
-                .bomber_strike(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .bomber_strike(
+                    jtacs,
+                    spctx,
+                    idx,
+                    side,
+                    ucid.clone(),
+                    name,
+                    cmd.action,
+                    args,
+                )
                 .context("calling bomber strike")?,
             ActionArgs::CruiseMissileStrike(args) => self
                 .cruise_missile_strike(spctx, idx, side, ucid.clone(), name, cmd.action, args)
@@ -490,6 +500,7 @@ impl Db {
 
     fn bomber_strike(
         &mut self,
+        jtacs: &Jtacs,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -498,7 +509,87 @@ impl Db {
         action: Action,
         args: WithJtac<BomberCfg>,
     ) -> Result<()> {
-        unimplemented!()
+        let tgt = jtacs.get(&args.jtac)?.location.pos;
+        let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, tgt, |o| {
+            o.owner == side && o.is_airbase()
+        })
+        .ok_or_else(|| anyhow!("no origin objective"))?;
+        let src = obj.pos;
+        let sloc = SpawnLoc::InAir {
+            pos: src,
+            heading: 0.,
+            altitude: args.cfg.altitude,
+        };
+        let origin = DeployKind::Action {
+            marks: FxHashSet::default(),
+            loc: sloc.clone(),
+            player: ucid,
+            name,
+            spec: action,
+            time: Utc::now(),
+            destination: Some(tgt),
+            rtb: Some(src),
+        };
+        let gid = self
+            .add_group(
+                spctx,
+                idx,
+                side,
+                sloc,
+                &args.cfg.template,
+                origin,
+                UnitTag::Driveable.into(),
+            )
+            .context("creating group")?;
+        let group = group_mut!(self, gid)?;
+        if let DeployKind::Action { marks, .. } = &mut group.origin {
+            marks.insert(self.ephemeral.msgs().mark_to_side(
+                side,
+                src,
+                true,
+                format_compact!("bomber mission {gid} rtb point"),
+            ));
+            marks.insert(self.ephemeral.msgs().mark_to_side(
+                side,
+                tgt,
+                true,
+                format_compact!("bomber mission {gid} target point"),
+            ));
+        }
+        ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
+        let name = group.name.clone();
+        let tm = Timer::singleton(spctx.lua())?;
+        tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
+            let group = Group::get_by_name(lua, &name)?;
+            let con = group.get_controller()?;
+            macro_rules! wpt {
+                ($name:expr, $pos:expr) => {
+                    MissionPoint {
+                        action: None,
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2($pos),
+                        alt: args.cfg.altitude,
+                        alt_typ: Some(args.cfg.altitude_typ.clone()),
+                        speed: 260.,
+                        eta: None,
+                        speed_locked: None,
+                        eta_locked: None,
+                        name: Some($name.into()),
+                        task: Box::new(Task::Hold),
+                    }
+                };
+            }
+            con.set_task(Task::Mission {
+                airborne: None,
+                route: vec![wpt!("ip", src), wpt!("tgt", tgt), wpt!("rtb", src)],
+            })?;
+            Ok(None)
+        })?;
+        Ok(())
     }
 
     fn awacs(

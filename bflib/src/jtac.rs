@@ -48,12 +48,24 @@ use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{collections::hash_map::Entry, fmt};
+use std::{collections::hash_map::Entry, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
     Group(GroupId),
     Slot(SlotId),
+}
+
+impl FromStr for JtId {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        if let Some(s) = s.strip_prefix("sl") {
+            Ok(JtId::Slot(SlotId::Unit(s.parse()?)))
+        } else {
+            Ok(JtId::Group(s.parse()?))
+        }
+    }
 }
 
 impl<'lua> FromLua<'lua> for JtId {

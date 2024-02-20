@@ -284,6 +284,13 @@ impl Objective {
         }
     }
 
+    pub fn is_airbase(&self) -> bool {
+        match &self.kind {
+            ObjectiveKind::Airbase => true,
+            ObjectiveKind::Farp { .. } | ObjectiveKind::Fob | ObjectiveKind::Logistics => false
+        }
+    }
+
     pub fn get_equipment(&self, name: &str) -> Inventory {
         self.warehouse
             .equipment

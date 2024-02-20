@@ -1056,16 +1056,8 @@ fn add_artillery_menu_for_jtac(
     Ok(())
 }
 
-pub fn add_menu_for_jtac(db: &Db, lua: MizLua, mizgid: GroupId, jtac: &Jtac) -> Result<()> {
+fn add_menu_for_jtac(root: GroupSubMenu, lua: MizLua, mizgid: GroupId, jtac: &Jtac) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-    let near = db
-        .objective(&jtac.location.oid)
-        .map(|o| o.name.clone())
-        .unwrap_or_else(|_| String::from("unknown"));
-    let root = GroupSubMenu::from(vec!["JTAC".into()]);
-    let root = mc.add_submenu_for_group(mizgid, near, Some(root))?;
-    let root =
-        mc.add_submenu_for_group(mizgid, format_compact!("{}", jtac.gid).into(), Some(root))?;
     mc.add_command_for_group(
         mizgid,
         "Status".into(),
@@ -1183,10 +1175,28 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
     let cfg = &ctx.db.ephemeral.cfg;
     let mc = MissionCommands::singleton(lua)?;
     let add_jtac = |side, gid| -> Result<()> {
-        let _ = mc.add_submenu_for_group(gid, "JTAC".into(), None)?;
+        let mut roots: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
+        let root = mc.add_submenu_for_group(gid, "JTAC".into(), None)?;
         for jtac in ctx.jtac.jtacs() {
             if jtac.side == side {
-                add_menu_for_jtac(&ctx.db, lua, gid, jtac).context("adding jtac menu")?
+                let near = ctx
+                    .db
+                    .objective(&jtac.location.oid)
+                    .map(|o| o.name.clone())
+                    .unwrap_or_else(|_| String::from("unknown"));
+                let root = match roots.entry(near.clone()) {
+                    Entry::Occupied(e) => e.get().clone(),
+                    Entry::Vacant(e) => {
+                        let root = mc.add_submenu_for_group(gid, near, Some(root.clone()))?;
+                        let root = mc.add_submenu_for_group(
+                            gid,
+                            format_compact!("{}", jtac.gid).into(),
+                            Some(root),
+                        )?;
+                        e.insert(root).clone()
+                    }
+                };
+                add_menu_for_jtac(root, lua, gid, jtac).context("adding jtac menu")?
             }
         }
         Ok(())

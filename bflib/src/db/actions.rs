@@ -6,11 +6,12 @@ use super::{
 use crate::{
     admin,
     cfg::{
-        Action, ActionKind, AiPlaneCfg, BomberCfg, CruiseMissileCfg, DeployableCfg, LogiCfg,
-        NukeCfg, UnitTag,
+        Action, ActionKind, AiPlaneCfg, BomberCfg, CruiseMissileCfg, DeployableCfg,
+        LimitEnforceTyp, LogiCfg, NukeCfg, UnitTag,
     },
     chatcmd::format_duration,
     db::{
+        cargo::Oldest,
         ephemeral,
         group::{DeployKind, SpawnedGroup},
     },
@@ -38,6 +39,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
+use log::error;
 use mlua::Value;
 use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
@@ -742,6 +744,60 @@ impl Db {
         self.transfer_supplies(lua, src, tgt)
     }
 
+    fn deployable_to_point(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        pos: Vector2,
+        dep: String,
+        side: Side,
+        ucid: Ucid,
+    ) -> Result<()> {
+        let spec = self
+            .ephemeral
+            .deployable_idx
+            .get(&side)
+            .ok_or_else(|| anyhow!("no such deployable {dep} for {side}"))?
+            .deployables_by_name
+            .get(dep.as_str())
+            .ok_or_else(|| anyhow!("no such deployable {dep} for {side}"))?
+            .clone();
+        let (n, oldest) = self.number_deployed(side, &**dep)?;
+        if n >= spec.limit as usize {
+            match spec.limit_enforce {
+                LimitEnforceTyp::DenyCrate => {
+                    bail!("the max number of {:?} are already deployed", dep)
+                }
+                LimitEnforceTyp::DeleteOldest => match oldest {
+                    Some(Oldest::Group(gid)) => self.delete_group(&gid)?,
+                    Some(Oldest::Objective(oid)) => self.delete_objective(&oid)?,
+                    None => (),
+                },
+            }
+        }
+        let spctx = SpawnCtx::new(lua)?;
+        let spawnloc = SpawnLoc::AtPos {
+            pos,
+            offset_direction: Vector2::new(1., 0.),
+            group_heading: 0.,
+        };
+        let origin = DeployKind::Deployed {
+            player: ucid,
+            spec: spec.clone(),
+        };
+        self.add_and_queue_group(
+            &spctx,
+            idx,
+            side,
+            spawnloc,
+            &*spec.template,
+            origin,
+            BitFlags::empty(),
+            None,
+        )?;
+        Ok(())
+    }
+
     fn paratroops_to_point(
         &mut self,
         lua: MizLua,
@@ -770,6 +826,23 @@ impl Db {
             spec: troop_cfg.clone(),
         };
         let spctx = SpawnCtx::new(lua)?;
+        let (n, oldest) = self.number_troops_deployed(side, troop_cfg.name.as_str())?;
+        let to_delete = if n < troop_cfg.limit as usize {
+            None
+        } else {
+            match troop_cfg.limit_enforce {
+                LimitEnforceTyp::DeleteOldest => oldest,
+                LimitEnforceTyp::DenyCrate => {
+                    bail!(
+                        "the maximum number of {} troops are already deployed",
+                        troop_cfg.name
+                    )
+                }
+            }
+        };
+        if let Some(gid) = to_delete {
+            self.delete_group(&gid)?
+        }
         self.add_and_queue_group(
             &spctx,
             idx,
@@ -794,7 +867,7 @@ impl Db {
         let mut to_bomb: SmallVec<[(BomberCfg, Vector2, Side); 2]> = smallvec![];
         let mut to_repair: SmallVec<[(Vector2, Side); 2]> = smallvec![];
         let mut to_transfer: SmallVec<[(Vector2, Vector2, Side); 2]> = smallvec![];
-        let mut to_deploy: SmallVec<[(Vector2, String); 2]> = smallvec![];
+        let mut to_deploy: SmallVec<[(Vector2, String, Side, Ucid); 2]> = smallvec![];
         let mut to_paratroop: SmallVec<[(Vector2, String, Side, Ucid); 2]> = smallvec![];
         macro_rules! at_dest {
             ($group:expr, $dest:expr, $radius:expr) => {{
@@ -885,7 +958,10 @@ impl Db {
                         if let Some(target) = *destination {
                             if at_dest!(group, target, 500.) {
                                 destination.take();
-                                to_deploy.push((target, d.name.clone()));
+                                let ucid = player.as_ref().map(|u| u.clone()).ok_or_else(|| {
+                                    anyhow!("deployables missions require a ucid")
+                                })?;
+                                to_deploy.push((target, d.name.clone(), group.side, ucid));
                             }
                         }
                         if let Some(target) = *rtb {
@@ -906,19 +982,52 @@ impl Db {
             }
         }
         for gid in to_delete {
-            self.delete_group(&gid)?
+            if let Err(e) = self.delete_group(&gid) {
+                error!("delete action group failed {e:?}")
+            }
         }
         for (cfg, target, side) in to_bomb {
-            self.bomb_targets(lua, side, jtacs, &cfg, target)?;
+            if let Err(e) = self.bomb_targets(lua, side, jtacs, &cfg, target) {
+                error!("bomb targets failed {e:?}")
+            }
         }
         for (target, side) in to_repair {
-            self.repair_target(target, side)?
+            if let Err(e) = self.repair_target(target, side) {
+                self.ephemeral.msgs().panel_to_side(
+                    10,
+                    false,
+                    side,
+                    format_compact!("repair mission failed {e:?}"),
+                );
+            }
         }
         for (src, target, side) in to_transfer {
-            self.transfer_to_target(lua, src, target, side)?
+            if let Err(e) = self.transfer_to_target(lua, src, target, side) {
+                self.ephemeral.msgs().panel_to_side(
+                    10,
+                    false,
+                    side,
+                    format_compact!("transfer mission failed {e:?}"),
+                );
+            }
         }
         for (dst, troop, side, ucid) in to_paratroop {
-            self.paratroops_to_point(lua, idx, dst, troop, side, ucid)?;
+            if let Err(e) = self.paratroops_to_point(lua, idx, dst, troop, side, ucid.clone()) {
+                self.ephemeral.panel_to_player(
+                    &self.persisted,
+                    &ucid,
+                    format_compact!("paratroop mission failed {e:?}"),
+                )
+            }
+        }
+        for (dst, dep, side, ucid) in to_deploy {
+            if let Err(e) = self.deployable_to_point(lua, idx, dst, dep, side, ucid.clone()) {
+                self.ephemeral.panel_to_player(
+                    &self.persisted,
+                    &ucid,
+                    format_compact!("deploy mission failed {e:?}"),
+                )
+            }
         }
         Ok(())
     }

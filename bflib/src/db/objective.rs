@@ -47,7 +47,7 @@ use log::{debug, error};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{cmp::max, str::FromStr};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectiveKind {
@@ -670,7 +670,8 @@ impl Db {
                     if dist <= cull_dist {
                         *spawn = true;
                         if air {
-                            let threat_dist = (cfg.threatened_distance[unit.typ.as_str()] as f64).powi(2);
+                            let threat_dist =
+                                (cfg.threatened_distance[unit.typ.as_str()] as f64).powi(2);
                             if dist <= threat_dist {
                                 *threat = true
                             }
@@ -857,29 +858,27 @@ impl Db {
         oid: ObjectiveId,
     ) -> Result<()> {
         let obj = objective_mut!(self, oid)?;
-        let mut to_repair = None;
-        let current_logi = obj.logi as f64 / 100.;
+        let mut total_logi = 0;
         for gid in maybe!(&obj.groups, &side, "side group")? {
             let group = group_mut!(self, gid)?;
             if group.class.is_logi() {
-                if to_repair.is_none() {
-                    let len = group.units.len();
-                    let cur = (current_logi * len as f64).ceil() as usize;
-                    to_repair = Some(cur + max(1, len >> 1));
+                total_logi = group.units.len();
+                break;
+            }
+        }
+        let mut to_repair = 1 + (total_logi >> 1);
+        for gid in maybe!(&obj.groups, &side, "side group")? {
+            let group = group_mut!(self, gid)?;
+            if group.class.is_logi() {
+                for uid in &group.units {
+                    let unit = unit_mut!(self, uid)?;
+                    if to_repair > 0 {
+                        to_repair -= 1;
+                        unit.dead = false;
+                    }
                 }
-                if let Some(to_repair) = to_repair.as_mut() {
-                    for uid in &group.units {
-                        let unit = unit_mut!(self, uid)?;
-                        if *to_repair > 0 {
-                            *to_repair -= 1;
-                            unit.dead = false;
-                        } else {
-                            unit.dead = true;
-                        }
-                    }
-                    if obj.spawned {
-                        self.ephemeral.push_spawn(*gid);
-                    }
+                if obj.spawned {
+                    self.ephemeral.push_spawn(*gid);
                 }
             }
         }

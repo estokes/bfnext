@@ -126,11 +126,11 @@ impl ArtilleryAdjustment {
 type LocByCode = FxHashMap<ObjectiveId, FxHashMap<u16, FxHashSet<JtId>>>;
 
 #[derive(Debug, Clone, Default)]
-struct Contact {
-    pos: Vector3,
-    typ: String,
-    tags: UnitTags,
-    last_move: Option<DateTime<Utc>>,
+pub struct Contact {
+    pub pos: Vector3,
+    pub typ: String,
+    pub tags: UnitTags,
+    pub last_move: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
@@ -166,6 +166,7 @@ impl JtacTarget {
 
 #[derive(Debug, Clone, Copy)]
 pub struct JtacLocation {
+    pub pos: Vector2,
     pub oid: ObjectiveId,
     pub bearing: f64,
     pub distance: f64,
@@ -173,15 +174,45 @@ pub struct JtacLocation {
 
 impl JtacLocation {
     fn new(db: &Db, pos: Vector3) -> Self {
+        let pos = Vector2::new(pos.x, pos.z);
         let (distance, bearing, obj) =
-            Db::objective_near_point(&db.persisted.objectives, Vector2::new(pos.x, pos.z), |_| {
-                true
-            })
-            .unwrap();
+            Db::objective_near_point(&db.persisted.objectives, pos, |_| true).unwrap();
         Self {
+            pos,
             oid: obj.id,
             bearing,
             distance,
+        }
+    }
+}
+
+pub struct ContactsIter<'a> {
+    contacts: Vec<indexmap::map::Iter<'a, UnitId, Contact>>,
+    i: usize,
+}
+
+impl<'a> Iterator for ContactsIter<'a> {
+    type Item = (&'a UnitId, &'a Contact);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.contacts.len() == 0 {
+                break None;
+            }
+            if self.i < self.contacts.len() {
+                match self.contacts[self.i].next() {
+                    Some(item) => {
+                        self.i += 1;
+                        break Some(item);
+                    }
+                    None => {
+                        self.contacts.remove(self.i);
+                        self.i += 1;
+                    }
+                }
+            } else {
+                self.i = 0;
+            }
         }
     }
 }
@@ -697,6 +728,23 @@ impl Jtacs {
             j.values()
                 .filter_map(|jt| jt.target.as_ref().map(|target| target.uid))
         })
+    }
+
+    pub fn contacts_near_point(&self, side: Side, point: Vector2, dist: f64) -> ContactsIter {
+        let dist = dist.powi(2);
+        let contacts = self
+            .jtacs()
+            .filter_map(|jt| {
+                if jt.side == side
+                    && na::distance_squared(&jt.location.pos.into(), &point.into()) <= dist
+                {
+                    Some(jt.contacts.iter())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        ContactsIter { i: 0, contacts }
     }
 
     pub fn add_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {

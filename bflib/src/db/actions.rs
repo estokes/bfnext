@@ -28,15 +28,18 @@ use dcso3::{
     controller::{Command, MissionPoint, OrbitPattern, PointType, Task},
     env::miz::MizIndex,
     group::Group,
+    land::Land,
     net::Ucid,
     pointing_towards2,
     timer::Timer,
-    trigger::MarkId,
+    trigger::{MarkId, Trigger},
     world::World,
-    LuaVec2, MizLua, String, Vector2,
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
+use enumflags2::BitFlags;
 use fxhash::FxHashSet;
 use mlua::Value;
+use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
 use std::f64;
 
@@ -535,7 +538,6 @@ impl Db {
             )
             .context("creating group")?;
         let group = group!(self, gid)?;
-        let name = group.name.clone();
         ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
         self.move_awacs(
             spctx,
@@ -680,27 +682,120 @@ impl Db {
         Ok(())
     }
 
-    fn bomb_targets(&self, jtacs: &Jtacs, cfg: &BomberCfg, target: Vector2) -> Result<()> {
-        unimplemented!()
+    fn bomb_targets(
+        &self,
+        lua: MizLua,
+        side: Side,
+        jtacs: &Jtacs,
+        cfg: &BomberCfg,
+        target: Vector2,
+    ) -> Result<()> {
+        let mut rng = thread_rng();
+        let land = Land::singleton(lua)?;
+        let act = Trigger::singleton(lua)?.action()?;
+        for (i, (_, ct)) in jtacs.contacts_near_point(side, target, 15_000.).enumerate() {
+            if i < cfg.targets as usize {
+                let dir = Vector2::new(rng.gen_range(0. ..1.), rng.gen_range(0. ..1.)).normalize();
+                let mag = rng.gen_range(0. ..cfg.accuracy as f64);
+                let pos = Vector2::new(ct.pos.x, ct.pos.z) + dir * mag;
+                let alt = land.get_height(LuaVec2(pos))?;
+                let pos = Vector3::new(pos.x, alt, pos.y);
+                act.explosion(LuaVec3(pos), cfg.power as f32)?
+            }
+        }
+        Ok(())
     }
 
-    fn repair_target(&mut self, target: Vector2) -> Result<()> {
-        unimplemented!()
+    fn repair_target(&mut self, target: Vector2, side: Side) -> Result<()> {
+        let (dist, _, obj) =
+            Self::objective_near_point(&self.persisted.objectives, target, |o| o.owner == side)
+                .ok_or_else(|| anyhow!("no friendly objective near drop off point"))?;
+        if dist > 5_000. {
+            bail!("no friendly objective near drop off point")
+        }
+        let oid = obj.id;
+        self.repair_one_logi_step(side, Utc::now(), oid)?;
+        Ok(())
     }
 
-    fn transfer_to_target(&mut self, src: Vector2, target: Vector2) -> Result<()> {
-        unimplemented!()
+    fn transfer_to_target(
+        &mut self,
+        lua: MizLua,
+        src: Vector2,
+        target: Vector2,
+        side: Side,
+    ) -> Result<()> {
+        let (dist, _, src) =
+            Self::objective_near_point(&self.persisted.objectives, src, |o| o.owner == side)
+                .ok_or_else(|| anyhow!("no friendly objective near source point"))?;
+        if dist > 5_000. {
+            bail!("no friendly objective near source point")
+        }
+        let (dist, _, tgt) =
+            Self::objective_near_point(&self.persisted.objectives, target, |o| o.owner == side)
+                .ok_or_else(|| anyhow!("no friendly objective near target point"))?;
+        if dist > 5_000. {
+            bail!("no friendly objective near target point")
+        }
+        let src = src.id;
+        let tgt = tgt.id;
+        self.transfer_supplies(lua, src, tgt)
     }
 
-//    fn paratroops_to_point(&mut self, )
+    fn paratroops_to_point(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        pos: Vector2,
+        troop: String,
+        side: Side,
+        ucid: Ucid,
+    ) -> Result<()> {
+        let troop_cfg = self
+            .ephemeral
+            .deployable_idx
+            .get(&side)
+            .ok_or_else(|| anyhow!("no such troop {troop} for {side}"))?
+            .squads_by_name
+            .get(troop.as_str())
+            .ok_or_else(|| anyhow!("no such troop {troop} for {side}"))?
+            .clone();
+        let spawnpos = SpawnLoc::AtPos {
+            pos,
+            offset_direction: Vector2::new(1., 0.),
+            group_heading: 0.,
+        };
+        let dk = DeployKind::Troop {
+            player: ucid.clone(),
+            spec: troop_cfg.clone(),
+        };
+        let spctx = SpawnCtx::new(lua)?;
+        self.add_and_queue_group(
+            &spctx,
+            idx,
+            side,
+            spawnpos,
+            &*troop_cfg.template,
+            dk,
+            BitFlags::empty(),
+            None,
+        )?;
+        Ok(())
+    }
 
-    pub fn advance_actions(&mut self, jtacs: &Jtacs, now: DateTime<Utc>) -> Result<()> {
+    pub fn advance_actions(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        jtacs: &Jtacs,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
         let mut to_delete: SmallVec<[GroupId; 4]> = smallvec![];
-        let mut to_bomb: SmallVec<[(BomberCfg, Vector2); 2]> = smallvec![];
-        let mut to_repair: SmallVec<[Vector2; 2]> = smallvec![];
-        let mut to_transfer: SmallVec<[(Vector2, Vector2); 2]> = smallvec![];
+        let mut to_bomb: SmallVec<[(BomberCfg, Vector2, Side); 2]> = smallvec![];
+        let mut to_repair: SmallVec<[(Vector2, Side); 2]> = smallvec![];
+        let mut to_transfer: SmallVec<[(Vector2, Vector2, Side); 2]> = smallvec![];
         let mut to_deploy: SmallVec<[(Vector2, String); 2]> = smallvec![];
-        let mut to_paratroop: SmallVec<[(Vector2, String); 2]> = smallvec![];
+        let mut to_paratroop: SmallVec<[(Vector2, String, Side, Ucid); 2]> = smallvec![];
         macro_rules! at_dest {
             ($group:expr, $dest:expr, $radius:expr) => {{
                 let r2 = f64::powi($radius, 2);
@@ -725,6 +820,7 @@ impl Db {
                 time,
                 destination,
                 rtb,
+                player,
                 ..
             } = &mut group.origin
             {
@@ -741,7 +837,7 @@ impl Db {
                         if let Some(target) = *destination {
                             if at_dest!(group, target, 10_000.) {
                                 destination.take();
-                                to_bomb.push((b.clone(), target));
+                                to_bomb.push((b.clone(), target, group.side));
                             }
                         }
                         if let Some(target) = *rtb {
@@ -754,7 +850,7 @@ impl Db {
                         if let Some(target) = *destination {
                             if at_dest!(group, target, 500.) {
                                 destination.take();
-                                to_repair.push(target);
+                                to_repair.push((target, group.side));
                             }
                         }
                     }
@@ -763,7 +859,7 @@ impl Db {
                             if at_dest!(group, target, 500.) {
                                 destination.take();
                                 if let Some(rtb) = *rtb {
-                                    to_transfer.push((rtb, target));
+                                    to_transfer.push((rtb, target, group.side));
                                 }
                             }
                         }
@@ -772,7 +868,11 @@ impl Db {
                         if let Some(target) = *destination {
                             if at_dest!(group, target, 500.) {
                                 destination.take();
-                                to_paratroop.push((target, t.name.clone()));
+                                let ucid = player
+                                    .as_ref()
+                                    .map(|u| u.clone())
+                                    .ok_or_else(|| anyhow!("paratroop missions require a ucid"))?;
+                                to_paratroop.push((target, t.name.clone(), group.side, ucid));
                             }
                         }
                         if let Some(target) = *rtb {
@@ -808,15 +908,18 @@ impl Db {
         for gid in to_delete {
             self.delete_group(&gid)?
         }
-        for (cfg, target) in to_bomb {
-            self.bomb_targets(jtacs, &cfg, target)?;
+        for (cfg, target, side) in to_bomb {
+            self.bomb_targets(lua, side, jtacs, &cfg, target)?;
         }
-        for target in to_repair {
-            self.repair_target(target)?
+        for (target, side) in to_repair {
+            self.repair_target(target, side)?
         }
-        for (src, target) in to_transfer {
-            self.transfer_to_target(src, target)?
+        for (src, target, side) in to_transfer {
+            self.transfer_to_target(lua, src, target, side)?
         }
-        unimplemented!()
+        for (dst, troop, side, ucid) in to_paratroop {
+            self.paratroops_to_point(lua, idx, dst, troop, side, ucid)?;
+        }
+        Ok(())
     }
 }

@@ -541,21 +541,6 @@ impl Db {
                 UnitTag::Driveable.into(),
             )
             .context("creating group")?;
-        let group = group_mut!(self, gid)?;
-        if let DeployKind::Action { marks, .. } = &mut group.origin {
-            marks.insert(self.ephemeral.msgs().mark_to_side(
-                side,
-                src,
-                true,
-                format_compact!("bomber mission {gid} rtb point"),
-            ));
-            marks.insert(self.ephemeral.msgs().mark_to_side(
-                side,
-                tgt,
-                true,
-                format_compact!("bomber mission {gid} target point"),
-            ));
-        }
         let group = group!(self, gid)?;
         let name = group.name.clone();
         ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;

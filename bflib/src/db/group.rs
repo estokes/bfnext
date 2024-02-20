@@ -186,8 +186,10 @@ impl Db {
     }
 
     pub(super) fn mark_group(&mut self, gid: &GroupId) -> Result<()> {
-        if let Some(id) = self.ephemeral.group_marks.remove(gid) {
-            self.ephemeral.msgs.delete_mark(id)
+        if let Some(ids) = self.ephemeral.group_marks.remove(gid) {
+            for id in ids {
+                self.ephemeral.msgs.delete_mark(id)
+            }
         }
         let group = group!(self, gid)?;
         let group_center = centroid2d(
@@ -251,7 +253,7 @@ impl Db {
             }
         };
         for id in ids {
-            self.ephemeral.group_marks.insert(*gid, id);
+            self.ephemeral.group_marks.entry(*gid).or_default().push(id);
         }
         Ok(())
     }

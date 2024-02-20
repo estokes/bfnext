@@ -300,6 +300,12 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let spctx = SpawnCtx::new(lua)?;
     let side = ctx.jtac.get(&arg.fst)?.side;
+    let name = ctx
+        .db
+        .player(&arg.snd)
+        .ok_or_else(|| anyhow!("no such player"))?
+        .name
+        .clone();
     let action = ctx
         .db
         .ephemeral
@@ -312,21 +318,33 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
         ActionKind::Bomber(cfg) => cfg.clone(),
         _ => bail!("not a bomber action"),
     };
-    ctx.db.start_action(
+    match ctx.db.start_action(
         &spctx,
         &ctx.idx,
         &ctx.jtac,
         side,
-        Some(arg.snd),
+        Some(arg.snd.clone()),
         ActionCmd {
             name: arg.trd,
             action: action.clone(),
-            args: ActionArgs::Bomber(WithJtac {
-                jtac: arg.fst,
-                cfg,
-            }),
+            args: ActionArgs::Bomber(WithJtac { jtac: arg.fst, cfg }),
         },
-    )?;
+    ) {
+        Ok(()) => ctx.db.ephemeral.msgs().panel_to_side(
+            15,
+            false,
+            side,
+            format_compact!(
+                "Bomber mission started by {name} targeting by jtac {}",
+                arg.fst
+            ),
+        ),
+        Err(e) => ctx.db.ephemeral.panel_to_player(
+            &ctx.db.persisted,
+            &arg.snd,
+            format_compact!("bomber mission could not start {e:?}"),
+        ),
+    }
     Ok(())
 }
 

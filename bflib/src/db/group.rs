@@ -36,8 +36,8 @@ use dcso3::{
     net::Ucid,
     object::{DcsObject, DcsOid},
     rotate2d,
-    trigger::MarkId,
     static_object::{ClassStatic, StaticObject},
+    trigger::MarkId,
     unit::{ClassUnit, Unit},
     LuaVec2, MizLua, Position3, String, Vector2, Vector3,
 };
@@ -297,8 +297,10 @@ impl Db {
                 }
             }
         }
-        if let Some(mark) = self.ephemeral.group_marks.remove(gid) {
-            self.ephemeral.msgs.delete_mark(mark);
+        if let Some(marks) = self.ephemeral.group_marks.remove(gid) {
+            for mark in marks {
+                self.ephemeral.msgs.delete_mark(mark);
+            }
         }
         let mut units: SmallVec<[String; 16]> = smallvec![];
         for uid in &group.units {

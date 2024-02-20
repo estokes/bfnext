@@ -1187,7 +1187,13 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
                 let near = ctx
                     .db
                     .objective(&jtac.location.oid)
-                    .map(|o| o.name.clone())
+                    .map(|o| {
+                        let name = o.name.clone();
+                        match name.rsplit_once(" ") {
+                            Some((s, _)) => String::from(s),
+                            None => name,
+                        }
+                    })
                     .unwrap_or_else(|_| String::from("unknown"));
                 let root = match roots.entry(near.clone()) {
                     Entry::Occupied(e) => e.get().clone(),

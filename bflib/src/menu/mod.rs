@@ -207,7 +207,7 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
     debug!("initializing menus for {slot:?}");
     let cfg = &ctx.db.ephemeral.cfg;
     let mc = MissionCommands::singleton(lua)?;
-    let add_jtac = |side, gid| -> Result<()> {
+    let add_jtac = |side, gid, ucid| -> Result<()> {
         let mut roots: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
         let root = mc.add_submenu_for_group(gid, "JTAC".into(), None)?;
         for jtac in ctx.jtac.jtacs() {
@@ -230,7 +230,7 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
                         e.insert(root).clone()
                     }
                 };
-                jtac::add_menu_for_jtac(root, lua, gid, jtac).context("adding jtac menu")?
+                jtac::add_menu_for_jtac(&ctx.db, side, root, lua, gid, jtac, ucid).context("adding jtac menu")?
             }
         }
         Ok(())
@@ -253,7 +253,7 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Troops".into()]))?;
             ewr::add_ewr_menu_for_group(&mc, si.miz_gid)?;
             if ctx.db.ephemeral.cfg.rules.jtac.check(ucid) {
-                add_jtac(si.side, si.miz_gid)?;
+                add_jtac(si.side, si.miz_gid, ucid)?;
             }
             let cap = CarryCap::from_typ(cfg, si.typ.as_str());
             if cap.crates && ctx.db.ephemeral.cfg.rules.cargo.check(ucid) {

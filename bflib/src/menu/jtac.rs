@@ -16,17 +16,24 @@ for more details.
 
 use super::{ArgTriple, ArgTuple};
 use crate::{
-    cfg::UnitTag,
-    db::group::GroupId as DbGid,
+    cfg::{ActionKind, UnitTag},
+    db::{
+        actions::{ActionArgs, ActionCmd, WithJtac},
+        group::GroupId as DbGid,
+        Db,
+    },
     jtac::{AdjustmentDir, JtId, Jtac},
+    spawnctx::SpawnCtx,
     Context,
 };
-use anyhow::{anyhow, Context as ErrContext, Result};
+use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use compact_str::format_compact;
 use dcso3::{
+    coalition::Side,
     env::miz::GroupId,
     mission_commands::{GroupSubMenu, MissionCommands},
-    MizLua,
+    net::Ucid,
+    MizLua, String,
 };
 use enumflags2::{BitFlag, BitFlags};
 
@@ -289,7 +296,49 @@ fn add_artillery_menu_for_jtac(
     Ok(())
 }
 
-pub(super) fn add_menu_for_jtac(root: GroupSubMenu, lua: MizLua, mizgid: GroupId, jtac: &Jtac) -> Result<()> {
+fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let spctx = SpawnCtx::new(lua)?;
+    let side = ctx.jtac.get(&arg.fst)?.side;
+    let action = ctx
+        .db
+        .ephemeral
+        .cfg
+        .actions
+        .get(&side)
+        .and_then(|acts| acts.get(&arg.trd))
+        .ok_or_else(|| anyhow!("no such action {}", arg.trd))?;
+    let cfg = match &action.kind {
+        ActionKind::Bomber(cfg) => cfg.clone(),
+        _ => bail!("not a bomber action"),
+    };
+    ctx.db.start_action(
+        &spctx,
+        &ctx.idx,
+        &ctx.jtac,
+        side,
+        Some(arg.snd),
+        ActionCmd {
+            name: arg.trd,
+            action: action.clone(),
+            args: ActionArgs::Bomber(WithJtac {
+                jtac: arg.fst,
+                cfg,
+            }),
+        },
+    )?;
+    Ok(())
+}
+
+pub(super) fn add_menu_for_jtac(
+    db: &Db,
+    side: Side,
+    root: GroupSubMenu,
+    lua: MizLua,
+    mizgid: GroupId,
+    jtac: &Jtac,
+    ucid: &Ucid,
+) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root =
         mc.add_submenu_for_group(mizgid, format_compact!("{}", jtac.gid).into(), Some(root))?;
@@ -372,6 +421,26 @@ pub(super) fn add_menu_for_jtac(root: GroupSubMenu, lua: MizLua, mizgid: GroupId
             )?;
         }
     }
-    add_artillery_menu_for_jtac(lua, mizgid, root, jtac.gid, &jtac.nearby_artillery)?;
+    add_artillery_menu_for_jtac(lua, mizgid, root.clone(), jtac.gid, &jtac.nearby_artillery)?;
+    let bomber_missions = db.ephemeral.cfg.actions.get(&side);
+    let bomber_missions = bomber_missions.iter().flat_map(|acts| {
+        acts.iter().filter_map(|(n, a)| match a.kind {
+            ActionKind::Bomber(_) => Some(n.clone()),
+            _ => None,
+        })
+    });
+    for name in bomber_missions {
+        mc.add_command_for_group(
+            mizgid,
+            "Bomber Mission".into(),
+            Some(root.clone()),
+            call_bomber,
+            ArgTriple {
+                fst: jtac.gid,
+                snd: ucid.clone(),
+                trd: name,
+            },
+        )?;
+    }
     Ok(())
 }

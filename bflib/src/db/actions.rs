@@ -183,9 +183,9 @@ impl ActionArgs {
 
 #[derive(Debug, Clone)]
 pub struct ActionCmd {
-    name: String,
-    action: Action,
-    args: ActionArgs,
+    pub name: String,
+    pub action: Action,
+    pub args: ActionArgs,
 }
 
 impl ActionCmd {

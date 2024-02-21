@@ -560,7 +560,7 @@ impl Db {
                         pos: LuaVec2($pos),
                         alt: args.cfg.altitude,
                         alt_typ: Some(args.cfg.altitude_typ.clone()),
-                        speed: 320.,
+                        speed: 240.,
                         eta: None,
                         speed_locked: None,
                         eta_locked: None,

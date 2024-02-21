@@ -6,7 +6,8 @@ use super::{
 use crate::{
     admin,
     cfg::{
-        Action, ActionKind, AiPlaneCfg, BomberCfg, DeployableCfg, LimitEnforceTyp, NukeCfg, UnitTag,
+        Action, ActionKind, AiPlaneCfg, AiPlaneKind, BomberCfg, DeployableCfg, LimitEnforceTyp,
+        NukeCfg, UnitTag,
     },
     db::{cargo::Oldest, ephemeral, group::DeployKind},
     group, group_mut,
@@ -252,7 +253,7 @@ impl Db {
                     .ok_or_else(|| anyhow!("missing deployable"))?;
                 dp.cost + cmd.action.cost
             }
-            _ => cmd.action.cost
+            _ => cmd.action.cost,
         };
         if let Some(ucid) = ucid.as_ref() {
             if !self.ephemeral.cfg.rules.actions.check(ucid) {
@@ -748,7 +749,12 @@ impl Db {
         destination: Option<Vector2>,
     ) -> Result<GroupId> {
         let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, args.pos, |o| {
-            o.owner == side && o.is_airbase()
+            o.owner == side
+                && match args.cfg.kind {
+                    AiPlaneKind::Helicopter => true,
+                    AiPlaneKind::FixedWing => o.is_airbase(),
+                }
+                && o.pos != args.pos
         })
         .ok_or_else(|| anyhow!("no objectives available for the ai mission"))?;
         let pos = obj.pos;
@@ -805,10 +811,8 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        let enemy = side.opposite();
-        let (_, heading) = racetrack_dist_and_heading(&self.persisted.objectives, args.pos, enemy);
         let gid =
-            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, heading, &args, None)?;
+            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
         self.move_awacs(
             spctx,
             side,

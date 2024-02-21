@@ -517,7 +517,7 @@ impl Db {
         let src = obj.pos;
         let sloc = SpawnLoc::InAir {
             pos: src,
-            heading: 0.,
+            heading: 3.14159,
             altitude: args.cfg.altitude,
         };
         let origin = DeployKind::Action {
@@ -560,12 +560,12 @@ impl Db {
                         pos: LuaVec2($pos),
                         alt: args.cfg.altitude,
                         alt_typ: Some(args.cfg.altitude_typ.clone()),
-                        speed: 260.,
+                        speed: 320.,
                         eta: None,
                         speed_locked: None,
                         eta_locked: None,
                         name: Some($name.into()),
-                        task: Box::new(Task::Hold),
+                        task: Box::new(Task::ComboTask(vec![])),
                     }
                 };
             }
@@ -990,9 +990,11 @@ impl Db {
                                 to_bomb.push((b.clone(), target, group.side));
                             }
                         }
-                        if let Some(target) = *rtb {
-                            if at_dest!(group, target, 10_000.) {
-                                to_delete.push(*gid);
+                        if destination.is_none() {
+                            if let Some(target) = *rtb {
+                                if at_dest!(group, target, 10_000.) {
+                                    to_delete.push(*gid);
+                                }
                             }
                         }
                     }
@@ -1041,9 +1043,11 @@ impl Db {
                                 to_deploy.push((target, d.name.clone(), group.side, ucid));
                             }
                         }
-                        if let Some(target) = *rtb {
-                            if at_dest!(group, target, 500.) {
-                                to_delete.push(*gid);
+                        if destination.is_none() {
+                            if let Some(target) = *rtb {
+                                if at_dest!(group, target, 500.) {
+                                    to_delete.push(*gid);
+                                }
                             }
                         }
                     }

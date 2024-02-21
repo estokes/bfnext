@@ -707,7 +707,7 @@ pub(super) fn spawn_group<'lua>(
                             eta: None,
                             eta_locked: None,
                             name: None,
-                            task: Box::new(Task::Hold),
+                            task: Box::new(Task::ComboTask(vec![])),
                         }
                     };
                 }

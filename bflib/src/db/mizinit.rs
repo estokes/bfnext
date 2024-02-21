@@ -314,6 +314,9 @@ impl Db {
             for gid in &self.persisted.troops {
                 self.ephemeral.push_spawn(*gid);
             }
+            for gid in &self.persisted.actions {
+                self.ephemeral.push_spawn(*gid);
+            }
             for (_, obj) in &self.persisted.objectives {
                 if let ObjectiveKind::Farp {
                     spec: _,

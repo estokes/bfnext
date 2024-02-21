@@ -672,7 +672,7 @@ impl Db {
                                 let pos = *oldpos + dir * (step * i as f64);
                                 let (dist, _) =
                                     awacs_dist_and_heading(&self.persisted.objectives, pos, enemy);
-                                if old_dist < dist && dist - old_dist >= 500. {
+                                if old_dist < dist && dist - old_dist >= 800. {
                                     *player = ucid.clone();
                                 }
                             }
@@ -1005,7 +1005,7 @@ impl Db {
                     }
                     ActionKind::LogisticsRepair(_) => {
                         if let Some(target) = *destination {
-                            if at_dest!(group, target, 500.) {
+                            if at_dest!(group, target, 800.) {
                                 destination.take();
                                 to_repair.push((target, group.side));
                             }
@@ -1013,7 +1013,7 @@ impl Db {
                     }
                     ActionKind::LogisticsTransfer(_) => {
                         if let Some(target) = *destination {
-                            if at_dest!(group, target, 500.) {
+                            if at_dest!(group, target, 800.) {
                                 destination.take();
                                 if let Some(rtb) = *rtb {
                                     to_transfer.push((rtb, target, group.side));
@@ -1023,7 +1023,7 @@ impl Db {
                     }
                     ActionKind::Paratrooper(t) => {
                         if let Some(target) = *destination {
-                            if at_dest!(group, target, 500.) {
+                            if at_dest!(group, target, 800.) {
                                 destination.take();
                                 let ucid = player
                                     .as_ref()
@@ -1033,14 +1033,14 @@ impl Db {
                             }
                         }
                         if let Some(target) = *rtb {
-                            if at_dest!(group, target, 500.) {
+                            if at_dest!(group, target, 800.) {
                                 to_delete.push(*gid);
                             }
                         }
                     }
                     ActionKind::Deployable(d) => {
                         if let Some(target) = *destination {
-                            if at_dest!(group, target, 500.) {
+                            if at_dest!(group, target, 800.) {
                                 destination.take();
                                 let ucid = player.as_ref().map(|u| u.clone()).ok_or_else(|| {
                                     anyhow!("deployables missions require a ucid")
@@ -1050,7 +1050,7 @@ impl Db {
                         }
                         if destination.is_none() {
                             if let Some(target) = *rtb {
-                                if at_dest!(group, target, 500.) {
+                                if at_dest!(group, target, 800.) {
                                     to_delete.push(*gid);
                                 }
                             }

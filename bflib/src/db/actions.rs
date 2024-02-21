@@ -26,7 +26,7 @@ use compact_str::format_compact;
 use dcso3::{
     change_heading,
     coalition::Side,
-    controller::{Command, MissionPoint, OrbitPattern, PointType, Task},
+    controller::{Command, FACParams, MissionPoint, OrbitPattern, PointType, Task},
     env::miz::MizIndex,
     group::Group,
     land::Land,
@@ -278,7 +278,14 @@ impl Db {
                 .awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling awacs")?,
             ActionArgs::AwacsWaypoint(args) => self
-                .move_ai_loiter_point(spctx, side, ucid.clone(), args, OrbitPattern::RaceTrack, || Task::AWACS)
+                .move_ai_loiter_point(
+                    spctx,
+                    side,
+                    ucid.clone(),
+                    args,
+                    OrbitPattern::RaceTrack,
+                    || Task::AWACS,
+                )
                 .context("moving awacs")?,
             ActionArgs::Bomber(args) => self
                 .bomber_strike(
@@ -308,7 +315,7 @@ impl Db {
                 .drone(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling drone")?,
             ActionArgs::DroneWaypoint(args) => self
-                .move_drone(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .move_drone(spctx, side, ucid.clone(), args)
                 .context("moving drone")?,
             ActionArgs::LogisticsRepair(args) => self
                 .ai_logistics_repair(spctx, idx, side, ucid.clone(), name, cmd.action, args)
@@ -382,14 +389,13 @@ impl Db {
     fn move_drone(
         &mut self,
         spctx: &SpawnCtx,
-        idx: &MizIndex,
         side: Side,
         ucid: Option<Ucid>,
-        name: String,
-        action: Action,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        unimplemented!()
+        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::Circle, || {
+            Task::ComboTask(vec![])
+        })
     }
 
     fn drone(
@@ -403,7 +409,18 @@ impl Db {
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
         let gid = self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args)?;
-        unimplemented!()
+        self.move_ai_loiter_point(
+            spctx,
+            side,
+            ucid,
+            WithPosAndGroup {
+                group: gid,
+                pos: args.pos,
+                cfg: (),
+            },
+            OrbitPattern::Circle,
+            || Task::ComboTask(vec![]),
+        )
     }
 
     fn move_ai_fighters(
@@ -632,8 +649,12 @@ impl Db {
         heading: f64,
         args: &WithPos<AiPlaneCfg>,
     ) -> Result<GroupId> {
+        let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, args.pos, |o| {
+            o.owner == side && o.is_airbase()
+        })
+        .ok_or_else(|| anyhow!("no objectives available for the ai mission"))?;
         let sloc = SpawnLoc::InAir {
-            pos: args.pos,
+            pos: obj.pos,
             heading,
             altitude: args.cfg.altitude,
         };
@@ -716,7 +737,7 @@ impl Db {
             bail!("can't move the other team's awacs")
         }
         let name = group.name.clone();
-        let (altitude, alt_typ, marks, player) = match &mut group.origin {
+        let (altitude, alt_typ, speed, marks, player) = match &mut group.origin {
             DeployKind::Action {
                 marks,
                 spec,
@@ -756,7 +777,7 @@ impl Db {
                         }
                         _ => bail!("race tracker not spawning in air"),
                     }
-                    (a.altitude, a.altitude_typ.clone(), marks, player)
+                    (a.altitude, a.altitude_typ.clone(), a.speed, marks, player)
                 }
                 _ => bail!("not a race tracker"),
             },
@@ -782,7 +803,8 @@ impl Db {
                 (pos, None)
             }
             OrbitPattern::RaceTrack => {
-                let point1 = pos + pointing_towards2(change_heading(heading, -f64::consts::PI)) * 30_000.;
+                let point1 =
+                    pos + pointing_towards2(change_heading(heading, -f64::consts::PI)) * 30_000.;
                 let point2 = pos + pointing_towards2(heading) * 30_000.;
                 marks.insert(self.ephemeral.msgs().mark_to_side(
                     side,
@@ -806,7 +828,7 @@ impl Db {
                 ));
                 (point1, Some(point2))
             }
-            OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}")
+            OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}"),
         };
         self.ephemeral.dirty();
         let tm = Timer::singleton(spctx.lua())?;
@@ -825,7 +847,7 @@ impl Db {
                         pos: LuaVec2($pos),
                         alt: altitude,
                         alt_typ: Some(alt_typ.clone()),
-                        speed: 200.,
+                        speed,
                         eta: None,
                         speed_locked: None,
                         eta_locked: None,

@@ -576,6 +576,7 @@ impl Ephemeral {
                         duration: _,
                         altitude: _,
                         altitude_typ: _,
+                        speed: _,
                         template,
                     })
                     | ActionKind::Bomber(BomberCfg {
@@ -591,18 +592,21 @@ impl Ephemeral {
                         duration: _,
                         altitude: _,
                         altitude_typ: _,
+                        speed: _,
                         template,
                     })
                     | ActionKind::Drone(AiPlaneCfg {
                         duration: _,
                         template,
                         altitude: _,
+                        speed: _,
                         altitude_typ: _,
                     })
                     | ActionKind::Fighters(AiPlaneCfg {
                         duration: _,
                         template,
                         altitude: _,
+                        speed: _,
                         altitude_typ: _,
                     })
                     | ActionKind::LogisticsRepair(LogiCfg {

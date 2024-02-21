@@ -1155,6 +1155,7 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                     template: "RAWACS".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
+                    speed: 180.
                 }),
             },
         ),
@@ -1178,6 +1179,7 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                     template: "RTANKER".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
+                    speed: 180.
                 }),
             },
         ),
@@ -1201,6 +1203,7 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                     template: "RDRONE".into(),
                     altitude: 6000.,
                     altitude_typ: AltType::BARO,
+                    speed: 90.
                 }),
             },
         ),
@@ -1240,6 +1243,7 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                     template: "RFIGHTERS".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
+                    speed: 250.
                 }),
             },
         ),
@@ -1320,6 +1324,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     template: "BAWACS".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
+                    speed: 180.
                 }),
             },
         ),
@@ -1343,6 +1348,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     template: "BBASKETTANKER".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
+                    speed: 180.
                 }),
             },
         ),
@@ -1357,6 +1363,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     template: "BBOOMTANKER".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
+                    speed: 180.
                 }),
             },
         ),
@@ -1380,6 +1387,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     template: "BDRONE".into(),
                     altitude: 6000.,
                     altitude_typ: AltType::BARO,
+                    speed: 90.
                 }),
             },
         ),
@@ -1419,6 +1427,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     template: "BFIGHTERS".into(),
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
+                    speed: 250.
                 }),
             },
         ),

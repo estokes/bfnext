@@ -396,6 +396,7 @@ pub struct AiPlaneCfg {
     pub template: String,
     pub altitude: f64,
     pub altitude_typ: AltType,
+    pub speed: f64
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

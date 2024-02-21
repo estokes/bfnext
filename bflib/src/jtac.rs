@@ -146,8 +146,9 @@ pub struct Contact {
 }
 
 #[derive(Debug, Clone)]
-struct JtacTarget {
-    uid: UnitId,
+pub struct JtacTarget {
+    pub uid: UnitId,
+    pub pos: Vector3,
     source: DcsOid<ClassUnit>,
     spot: DcsOid<ClassSpot>,
     ir_pointer: Option<DcsOid<ClassSpot>>,
@@ -237,7 +238,7 @@ pub struct Jtac {
     filter: BitFlags<UnitTag>,
     pub location: JtacLocation,
     priority: Vec<UnitTags>,
-    target: Option<JtacTarget>,
+    pub target: Option<JtacTarget>,
     autoshift: bool,
     ir_pointer: bool,
     code: u16,
@@ -454,6 +455,7 @@ impl Jtac {
                     None
                 };
                 self.target = Some(JtacTarget {
+                    pos,
                     spot,
                     source: jtid,
                     ir_pointer,

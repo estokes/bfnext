@@ -509,7 +509,12 @@ impl Db {
         action: Action,
         args: WithJtac<BomberCfg>,
     ) -> Result<()> {
-        let tgt = jtacs.get(&args.jtac)?.location.pos;
+        let jt = jtacs.get(&args.jtac)?;
+        let tgt = jt
+            .target
+            .as_ref()
+            .map(|t| Vector2::new(t.pos.x, t.pos.z))
+            .unwrap_or(jt.location.pos);
         let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, tgt, |o| {
             o.owner == side && o.is_airbase()
         })

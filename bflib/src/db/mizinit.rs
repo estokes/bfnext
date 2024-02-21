@@ -15,7 +15,7 @@ for more details.
 */
 
 use super::{
-    group::DeployKind,
+    group::{DeployKind, GroupId},
     objective::{ObjGroup, SlotInfo},
     Db, Map,
 };
@@ -32,11 +32,15 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
-    coalition::Side, controller::PointType, env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp}, MizLua, String, Vector2
+    coalition::Side,
+    controller::PointType,
+    env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
+    MizLua, String, Vector2,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
-use log::info;
+use log::{error, info};
+use smallvec::SmallVec;
 
 impl Db {
     /// objectives are just trigger zones named according to type codes
@@ -156,7 +160,7 @@ impl Db {
             },
             name,
             DeployKind::Objective,
-            BitFlags::empty()
+            BitFlags::empty(),
         )?;
         objective_mut!(self, obj)?
             .groups
@@ -314,8 +318,12 @@ impl Db {
             for gid in &self.persisted.troops {
                 self.ephemeral.push_spawn(*gid);
             }
-            for gid in &self.persisted.actions {
-                self.ephemeral.push_spawn(*gid);
+            let actions: SmallVec<[GroupId; 16]> =
+                SmallVec::from_iter(self.persisted.actions.into_iter().map(|g| *g));
+            for gid in actions {
+                if let Err(e) = self.respawn_action(spctx, idx, gid) {
+                    error!("failed to respawn action {e:?}");
+                }
             }
             for (_, obj) in &self.persisted.objectives {
                 if let ObjectiveKind::Farp {
@@ -364,7 +372,9 @@ impl Db {
                 let group = group!(self, unit.group)?;
                 match group.origin {
                     DeployKind::Crate { .. } => (),
-                    DeployKind::Deployed { .. } | DeployKind::Troop { .. } | DeployKind::Action { .. } => {
+                    DeployKind::Deployed { .. }
+                    | DeployKind::Troop { .. }
+                    | DeployKind::Action { .. } => {
                         self.ephemeral
                             .units_potentially_close_to_enemies
                             .insert(*uid);

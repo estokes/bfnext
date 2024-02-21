@@ -69,6 +69,7 @@ pub enum DeployKind {
         spec: Crate,
     },
     Action {
+        #[serde(skip)]
         marks: FxHashSet<MarkId>,
         loc: SpawnLoc,
         player: Option<Ucid>,

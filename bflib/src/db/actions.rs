@@ -214,7 +214,7 @@ impl ActionCmd {
 
 // setup the awacs race track 90 degrees offset from the heading
 // to the nearest enemy objective
-fn awacs_dist_and_heading(
+fn racetrack_dist_and_heading(
     obj: &Map<ObjectiveId, Objective>,
     pos: Vector2,
     enemy: Side,
@@ -278,7 +278,7 @@ impl Db {
                 .awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling awacs")?,
             ActionArgs::AwacsWaypoint(args) => self
-                .move_awacs(spctx, side, ucid.clone(), args)
+                .move_ai_loiter_point(spctx, side, ucid.clone(), args, OrbitPattern::RaceTrack, || Task::AWACS)
                 .context("moving awacs")?,
             ActionArgs::Bomber(args) => self
                 .bomber_strike(
@@ -342,6 +342,43 @@ impl Db {
         Ok(())
     }
 
+    pub(super) fn respawn_action(
+        &mut self,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        gid: GroupId,
+    ) -> Result<()> {
+        let group = group!(self, gid)?;
+        let side = group.side;
+        match &group.origin {
+            DeployKind::Action {
+                loc, player, spec, ..
+            } => match &spec.kind {
+                ActionKind::Awacs(_) => match loc {
+                    SpawnLoc::InAir { pos, .. } => {
+                        ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                        return self.move_ai_loiter_point(
+                            spctx,
+                            side,
+                            player.clone(),
+                            WithPosAndGroup {
+                                pos: *pos,
+                                group: gid,
+                                cfg: (),
+                            },
+                            OrbitPattern::RaceTrack,
+                            || Task::AWACS,
+                        );
+                    }
+                    _ => bail!("awacs expected to have in air spawn"),
+                },
+                _ => (),
+            },
+            _ => bail!("expected an action group"),
+        }
+        self.delete_group(&gid)
+    }
+
     fn move_drone(
         &mut self,
         spctx: &SpawnCtx,
@@ -365,6 +402,7 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
+        let gid = self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args)?;
         unimplemented!()
     }
 
@@ -583,18 +621,17 @@ impl Db {
         Ok(())
     }
 
-    fn awacs(
+    fn add_and_spawn_ai_air(
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
-        ucid: Option<Ucid>,
+        ucid: &Option<Ucid>,
         name: String,
         action: Action,
-        args: WithPos<AiPlaneCfg>,
-    ) -> Result<()> {
-        let enemy = side.opposite();
-        let (_, heading) = awacs_dist_and_heading(&self.persisted.objectives, args.pos, enemy);
+        heading: f64,
+        args: &WithPos<AiPlaneCfg>,
+    ) -> Result<GroupId> {
         let sloc = SpawnLoc::InAir {
             pos: args.pos,
             heading,
@@ -621,9 +658,26 @@ impl Db {
                 UnitTag::Driveable.into(),
             )
             .context("creating group")?;
-        let group = group!(self, gid)?;
-        ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
-        self.move_awacs(
+        ephemeral::spawn_group(&self.persisted, idx, spctx, group!(self, gid)?)
+            .context("spawning group")?;
+        Ok(gid)
+    }
+
+    fn awacs(
+        &mut self,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        side: Side,
+        ucid: Option<Ucid>,
+        name: String,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<()> {
+        let enemy = side.opposite();
+        let (_, heading) = racetrack_dist_and_heading(&self.persisted.objectives, args.pos, enemy);
+        let gid =
+            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, heading, &args)?;
+        self.move_ai_loiter_point(
             spctx,
             side,
             ucid,
@@ -632,21 +686,31 @@ impl Db {
                 pos: args.pos,
                 group: gid,
             },
+            OrbitPattern::RaceTrack,
+            || Task::AWACS,
         )
         .context("setup orbit")?;
         Ok(())
     }
 
-    fn move_awacs(
+    fn move_ai_loiter_point<'a>(
         &mut self,
         spctx: &SpawnCtx,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
+        pattern: OrbitPattern,
+        task: impl Fn() -> Task<'a> + 'static,
     ) -> Result<()> {
         let pos = args.pos;
         let enemy = side.opposite();
-        let (_, heading) = awacs_dist_and_heading(&self.persisted.objectives, pos, enemy);
+        let heading = match pattern {
+            OrbitPattern::Circle => 0.,
+            OrbitPattern::RaceTrack => {
+                racetrack_dist_and_heading(&self.persisted.objectives, pos, enemy).1
+            }
+            OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}"),
+        };
         let group = group_mut!(self, args.group)?;
         if group.side != side {
             bail!("can't move the other team's awacs")
@@ -660,19 +724,28 @@ impl Db {
                 player,
                 ..
             } => match &mut spec.kind {
-                ActionKind::Awacs(a) => {
+                ActionKind::Awacs(a)
+                | ActionKind::Tanker(a)
+                | ActionKind::Drone(a)
+                | ActionKind::Fighters(a) => {
                     match loc {
                         SpawnLoc::InAir { pos: oldpos, .. } => {
                             let dir = *oldpos - pos;
                             let step = dir.magnitude() / 4.;
                             let dir = dir.normalize();
-                            let (old_dist, _) =
-                                awacs_dist_and_heading(&self.persisted.objectives, *oldpos, enemy);
+                            let (old_dist, _) = racetrack_dist_and_heading(
+                                &self.persisted.objectives,
+                                *oldpos,
+                                enemy,
+                            );
                             for i in 1..4 {
                                 let pos = *oldpos + dir * (step * i as f64);
-                                let (dist, _) =
-                                    awacs_dist_and_heading(&self.persisted.objectives, pos, enemy);
-                                if old_dist < dist && dist - old_dist >= 800. {
+                                let (dist, _) = racetrack_dist_and_heading(
+                                    &self.persisted.objectives,
+                                    pos,
+                                    enemy,
+                                );
+                                if old_dist < dist && dist - old_dist >= 500. {
                                     *player = ucid.clone();
                                 }
                             }
@@ -681,41 +754,60 @@ impl Db {
                                 self.ephemeral.msgs().delete_mark(id)
                             }
                         }
-                        _ => bail!("awacs not spawning in air"),
+                        _ => bail!("race tracker not spawning in air"),
                     }
                     (a.altitude, a.altitude_typ.clone(), marks, player)
                 }
-                _ => bail!("not an awacs"),
+                _ => bail!("not a race tracker"),
             },
-            _ => bail!("not an awacs"),
+            _ => bail!("not a race tracker"),
         };
-        let point1 = pos + pointing_towards2(change_heading(heading, -f64::consts::PI)) * 30_000.;
-        let point2 = pos + pointing_towards2(heading) * 30_000.;
         let responsible = player
             .as_ref()
             .and_then(|u| self.persisted.players.get(u))
             .map(|p| p.name.clone())
             .unwrap_or(String::from(""));
-        marks.insert(self.ephemeral.msgs().mark_to_side(
-            side,
-            point1,
-            true,
-            format_compact!(
-                "awacs {} race point 1\nresponsible party: {}",
-                args.group,
-                responsible
-            ),
-        ));
-        marks.insert(self.ephemeral.msgs().mark_to_side(
-            side,
-            point2,
-            true,
-            format_compact!(
-                "awacs {} race point 2\nresponsible party: {}",
-                args.group,
-                responsible
-            ),
-        ));
+        let (point1, point2) = match pattern {
+            OrbitPattern::Circle => {
+                marks.insert(self.ephemeral.msgs().mark_to_side(
+                    side,
+                    pos,
+                    true,
+                    format_compact!(
+                        "{} orbit point 1\nresponsible party: {}",
+                        args.group,
+                        responsible
+                    ),
+                ));
+                (pos, None)
+            }
+            OrbitPattern::RaceTrack => {
+                let point1 = pos + pointing_towards2(change_heading(heading, -f64::consts::PI)) * 30_000.;
+                let point2 = pos + pointing_towards2(heading) * 30_000.;
+                marks.insert(self.ephemeral.msgs().mark_to_side(
+                    side,
+                    point1,
+                    true,
+                    format_compact!(
+                        "{} race point 1\nresponsible party: {}",
+                        args.group,
+                        responsible
+                    ),
+                ));
+                marks.insert(self.ephemeral.msgs().mark_to_side(
+                    side,
+                    point2,
+                    true,
+                    format_compact!(
+                        "{} race point 2\nresponsible party: {}",
+                        args.group,
+                        responsible
+                    ),
+                ));
+                (point1, Some(point2))
+            }
+            OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}")
+        };
         self.ephemeral.dirty();
         let tm = Timer::singleton(spctx.lua())?;
         tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
@@ -746,17 +838,20 @@ impl Db {
             con.set_task(Task::Mission {
                 airborne: None,
                 route: vec![
-                    wpt!("ip", pos, Task::AWACS),
+                    wpt!("ip", pos, task()),
                     wpt!(
                         "race",
                         point1,
-                        Task::Orbit {
-                            pattern: OrbitPattern::RaceTrack,
-                            point: Some(LuaVec2(point1)),
-                            point2: Some(LuaVec2(point2)),
-                            speed: None,
-                            altitude: None,
-                        }
+                        Task::ComboTask(vec![
+                            Task::Orbit {
+                                pattern: pattern.clone(),
+                                point: Some(LuaVec2(point1)),
+                                point2: point2.map(LuaVec2),
+                                speed: None,
+                                altitude: None,
+                            },
+                            task()
+                        ])
                     ),
                 ],
             })

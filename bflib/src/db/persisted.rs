@@ -53,6 +53,8 @@ pub struct Persisted {
     pub players: Map<Ucid, Player>,
     #[serde(default)]
     pub logistics_hubs: Set<ObjectiveId>,
+    #[serde(default)]
+    pub nukes_used: u32,
 }
 
 impl Persisted {

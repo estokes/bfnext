@@ -11,6 +11,7 @@ use crate::{
     db::{cargo::Oldest, ephemeral, group::DeployKind},
     group, group_mut,
     jtac::{JtId, Jtacs},
+    objective,
     spawnctx::{SpawnCtx, SpawnLoc},
     unit,
 };
@@ -38,7 +39,7 @@ use log::error;
 use mlua::Value;
 use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
-use std::f64;
+use std::{cmp::max, f64};
 
 #[derive(Debug, Clone)]
 pub struct WithPos<T> {
@@ -228,6 +229,31 @@ impl Db {
         ucid: Option<Ucid>,
         cmd: ActionCmd,
     ) -> Result<()> {
+        let cost = match &cmd.action.kind {
+            ActionKind::Nuke(nc) => {
+                let div = max(1, self.persisted.nukes_used * nc.cost_scale as u32);
+                max(1, cmd.action.cost / div)
+            }
+            ActionKind::Paratrooper(p) => {
+                let sq = self
+                    .ephemeral
+                    .deployable_idx
+                    .get(&side)
+                    .and_then(|idx| idx.squads_by_name.get(&p.name))
+                    .ok_or_else(|| anyhow!("missin squad"))?;
+                sq.cost + cmd.action.cost
+            }
+            ActionKind::Deployable(d) => {
+                let dp = self
+                    .ephemeral
+                    .deployable_idx
+                    .get(&side)
+                    .and_then(|idx| idx.deployables_by_name.get(&d.name))
+                    .ok_or_else(|| anyhow!("missing deployable"))?;
+                dp.cost + cmd.action.cost
+            }
+            _ => cmd.action.cost
+        };
         if let Some(ucid) = ucid.as_ref() {
             if !self.ephemeral.cfg.rules.actions.check(ucid) {
                 bail!("you are not authorized for actions")
@@ -235,11 +261,11 @@ impl Db {
             match self.persisted.players.get(ucid) {
                 None => bail!("unknown player {ucid}"),
                 Some(player) => {
-                    if cmd.action.cost > 0 && player.points < cmd.action.cost as i32 {
+                    if cost > 0 && player.points < cost as i32 {
                         bail!(
                             "{ucid}({}) this action costs {} points and you have {} points",
                             player.name,
-                            cmd.action.cost,
+                            cost,
                             player.points
                         )
                     }
@@ -265,7 +291,6 @@ impl Db {
             }
         }
         let name = cmd.name.clone();
-        let cost = cmd.action.cost;
         match cmd.args {
             ActionArgs::Awacs(args) => self
                 .awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
@@ -306,9 +331,7 @@ impl Db {
             ActionArgs::LogisticsTransfer(args) => self
                 .ai_logistics_transfer(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai log transfer")?,
-            ActionArgs::Nuke(args) => self
-                .nuke(spctx, idx, side, ucid.clone(), name, cmd.action, args)
-                .context("calling nuke")?,
+            ActionArgs::Nuke(args) => self.nuke(spctx, args).context("calling nuke")?,
             ActionArgs::Paratrooper(args) => self
                 .paratroops(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling paratroops")?,
@@ -500,20 +523,32 @@ impl Db {
         action: Action,
         args: WithPos<DeployableCfg>,
     ) -> Result<()> {
-        unimplemented!()
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &WithPos {
+                cfg: args.cfg.plane.clone(),
+                pos: args.pos,
+            },
+            Some(args.pos),
+        )?;
+        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
 
-    fn nuke(
-        &mut self,
-        spctx: &SpawnCtx,
-        idx: &MizIndex,
-        side: Side,
-        ucid: Option<Ucid>,
-        name: String,
-        action: Action,
-        args: WithPos<NukeCfg>,
-    ) -> Result<()> {
-        unimplemented!()
+    fn nuke(&mut self, spctx: &SpawnCtx, args: WithPos<NukeCfg>) -> Result<()> {
+        let land = Land::singleton(spctx.lua())?;
+        let act = Trigger::singleton(spctx.lua())?.action()?;
+        let alt = land.get_height(LuaVec2(args.pos))? + 500.;
+        let pos = Vector3::new(args.pos.x, alt, args.pos.y);
+        act.explosion(LuaVec3(pos), args.cfg.power as f32)?;
+        self.persisted.nukes_used += 1;
+        self.ephemeral.dirty();
+        Ok(())
     }
 
     fn ai_logistics_transfer(
@@ -526,7 +561,23 @@ impl Db {
         action: Action,
         args: WithFromTo<AiPlaneCfg>,
     ) -> Result<()> {
-        unimplemented!()
+        let from = objective!(self, args.from)?.pos;
+        let to = objective!(self, args.to)?.pos;
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &WithPos {
+                cfg: args.cfg.clone(),
+                pos: from,
+            },
+            Some(to),
+        )?;
+        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
 
     fn ai_logistics_repair(
@@ -539,7 +590,22 @@ impl Db {
         action: Action,
         args: WithObj<AiPlaneCfg>,
     ) -> Result<()> {
-        unimplemented!()
+        let pos = objective!(self, args.oid)?.pos;
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &WithPos {
+                pos,
+                cfg: args.cfg.clone(),
+            },
+            Some(pos),
+        )?;
+        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
 
     fn ai_deploy(
@@ -552,7 +618,21 @@ impl Db {
         action: Action,
         args: WithPos<DeployableCfg>,
     ) -> Result<()> {
-        unimplemented!()
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &WithPos {
+                cfg: args.cfg.plane.clone(),
+                pos: args.pos,
+            },
+            Some(args.pos),
+        )?;
+        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
 
     fn ai_point_to_point_mission<'a>(

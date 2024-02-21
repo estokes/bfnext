@@ -390,9 +390,16 @@ pub struct PointsCfg {
     pub capture: u32,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum AiPlaneKind {
+    FixedWing,
+    Helicopter
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiPlaneCfg {
-    pub duration: u8,
+    pub kind: AiPlaneKind,
+    pub duration: Option<u8>,
     pub template: String,
     pub altitude: f64,
     pub altitude_typ: AltType,
@@ -405,29 +412,13 @@ pub struct BomberCfg {
     pub power: u32,
     // in meters radius around the target point
     pub accuracy: u32,
-    pub template: String,
-    pub altitude: f64,
-    pub altitude_typ: AltType,
+    pub plane: AiPlaneCfg,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeployableCfg {
     pub name: String,
-    pub template: String,
-    pub altitude: f64,
-    pub altitude_typ: AltType,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogiCfg {
-    pub template: String,
-    pub altitude: f64,
-    pub altitude_typ: AltType,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CruiseMissileCfg {
-    pub template: String,
+    pub plane: AiPlaneCfg,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -447,7 +438,6 @@ pub enum ActionKind {
     Bomber(BomberCfg),
     Fighters(AiPlaneCfg),
     Drone(AiPlaneCfg),
-    CruiseMissileStrike(CruiseMissileCfg),
     Nuke(NukeCfg),
     FighersWaypoint,
     DroneWaypoint,
@@ -455,8 +445,8 @@ pub enum ActionKind {
     AwacsWaypoint,
     Paratrooper(DeployableCfg),
     Deployable(DeployableCfg),
-    LogisticsRepair(LogiCfg),
-    LogisticsTransfer(LogiCfg),
+    LogisticsRepair(AiPlaneCfg),
+    LogisticsTransfer(AiPlaneCfg),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

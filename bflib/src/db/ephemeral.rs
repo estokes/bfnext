@@ -23,8 +23,8 @@ use super::{
 };
 use crate::{
     cfg::{
-        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, CruiseMissileCfg, Deployable, DeployableCfg,
-        DeployableLogistics, LogiCfg, NukeCfg, Troop, Vehicle, WarehouseConfig,
+        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        DeployableLogistics, NukeCfg, Troop, Vehicle, WarehouseConfig,
     },
     maybe,
     msgq::MsgQ,
@@ -572,61 +572,22 @@ impl Ephemeral {
                     bail!("the points system is disabled but {act:?} costs points")
                 }
                 match &act.kind {
-                    ActionKind::Awacs(AiPlaneCfg {
-                        duration: _,
-                        altitude: _,
-                        altitude_typ: _,
-                        speed: _,
-                        template,
-                    })
+                    ActionKind::Awacs(AiPlaneCfg { template, .. })
                     | ActionKind::Bomber(BomberCfg {
-                        targets: _,
-                        power: _,
-                        accuracy: _,
-                        altitude: _,
-                        altitude_typ: _,
-                        template,
+                        plane: AiPlaneCfg { template, .. },
+                        ..
                     })
-                    | ActionKind::CruiseMissileStrike(CruiseMissileCfg { template })
-                    | ActionKind::Tanker(AiPlaneCfg {
-                        duration: _,
-                        altitude: _,
-                        altitude_typ: _,
-                        speed: _,
-                        template,
-                    })
-                    | ActionKind::Drone(AiPlaneCfg {
-                        duration: _,
-                        template,
-                        altitude: _,
-                        speed: _,
-                        altitude_typ: _,
-                    })
-                    | ActionKind::Fighters(AiPlaneCfg {
-                        duration: _,
-                        template,
-                        altitude: _,
-                        speed: _,
-                        altitude_typ: _,
-                    })
-                    | ActionKind::LogisticsRepair(LogiCfg {
-                        altitude: _,
-                        altitude_typ: _,
-                        template,
-                    })
-                    | ActionKind::LogisticsTransfer(LogiCfg {
-                        altitude: _,
-                        altitude_typ: _,
-                        template,
-                    }) => {
+                    | ActionKind::Tanker(AiPlaneCfg { template, .. })
+                    | ActionKind::Drone(AiPlaneCfg { template, .. })
+                    | ActionKind::Fighters(AiPlaneCfg { template, .. })
+                    | ActionKind::LogisticsRepair(AiPlaneCfg { template, .. })
+                    | ActionKind::LogisticsTransfer(AiPlaneCfg { template, .. }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
                     }
                     ActionKind::Deployable(DeployableCfg {
-                        altitude: _,
-                        altitude_typ: _,
                         name,
-                        template,
+                        plane: AiPlaneCfg { template, .. },
                     }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
@@ -636,10 +597,8 @@ impl Ephemeral {
                             .ok_or_else(|| anyhow!("missing deployable for action {act:?}"))?;
                     }
                     ActionKind::Paratrooper(DeployableCfg {
-                        altitude: _,
-                        altitude_typ: _,
                         name,
-                        template,
+                        plane: AiPlaneCfg { template, .. },
                     }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;

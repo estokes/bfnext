@@ -6,15 +6,9 @@ use super::{
 use crate::{
     admin,
     cfg::{
-        Action, ActionKind, AiPlaneCfg, BomberCfg, CruiseMissileCfg, DeployableCfg,
-        LimitEnforceTyp, LogiCfg, NukeCfg, UnitTag,
+        Action, ActionKind, AiPlaneCfg, BomberCfg, DeployableCfg, LimitEnforceTyp, NukeCfg, UnitTag,
     },
-    chatcmd::format_duration,
-    db::{
-        cargo::Oldest,
-        ephemeral,
-        group::{DeployKind, SpawnedGroup},
-    },
+    db::{cargo::Oldest, ephemeral, group::DeployKind},
     group, group_mut,
     jtac::{JtId, Jtacs},
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -24,9 +18,10 @@ use anyhow::{anyhow, bail, Context, Ok, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
+    attribute::Attribute,
     change_heading,
     coalition::Side,
-    controller::{Command, FACParams, MissionPoint, OrbitPattern, PointType, Task},
+    controller::{Command, MissionPoint, OrbitPattern, PointType, Task},
     env::miz::MizIndex,
     group::Group,
     land::Land,
@@ -86,14 +81,13 @@ pub enum ActionArgs {
     FightersWaypoint(WithPosAndGroup<()>),
     Drone(WithPos<AiPlaneCfg>),
     DroneWaypoint(WithPosAndGroup<()>),
-    CruiseMissileStrike(WithJtac<CruiseMissileCfg>),
     Nuke(WithPos<NukeCfg>),
     TankerWaypoint(WithPosAndGroup<()>),
     AwacsWaypoint(WithPosAndGroup<()>),
     Paratrooper(WithPos<DeployableCfg>),
     Deployable(WithPos<DeployableCfg>),
-    LogisticsRepair(WithObj<LogiCfg>),
-    LogisticsTransfer(WithFromTo<LogiCfg>),
+    LogisticsRepair(WithObj<AiPlaneCfg>),
+    LogisticsTransfer(WithFromTo<AiPlaneCfg>),
 }
 
 impl ActionArgs {
@@ -168,7 +162,6 @@ impl ActionArgs {
             ActionKind::FighersWaypoint => Ok(Self::FightersWaypoint(pos_group(db, lua, side, s)?)),
             ActionKind::Drone(c) => Ok(Self::Drone(pos(db, lua, side, c, s)?)),
             ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(db, lua, side, s)?)),
-            ActionKind::CruiseMissileStrike(c) => Ok(Self::CruiseMissileStrike(jtac(c, s)?)),
             ActionKind::Nuke(c) => Ok(Self::Nuke(pos(db, lua, side, c, s)?)),
             ActionKind::Paratrooper(c) => Ok(Self::Paratrooper(pos(db, lua, side, c, s)?)),
             ActionKind::Deployable(c) => Ok(Self::Deployable(pos(db, lua, side, c, s)?)),
@@ -278,14 +271,7 @@ impl Db {
                 .awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling awacs")?,
             ActionArgs::AwacsWaypoint(args) => self
-                .move_ai_loiter_point(
-                    spctx,
-                    side,
-                    ucid.clone(),
-                    args,
-                    OrbitPattern::RaceTrack,
-                    || Task::AWACS,
-                )
+                .move_awacs(spctx, side, ucid.clone(), args)
                 .context("moving awacs")?,
             ActionArgs::Bomber(args) => self
                 .bomber_strike(
@@ -299,9 +285,6 @@ impl Db {
                     args,
                 )
                 .context("calling bomber strike")?,
-            ActionArgs::CruiseMissileStrike(args) => self
-                .cruise_missile_strike(spctx, idx, side, ucid.clone(), name, cmd.action, args)
-                .context("calling cruise missile strike")?,
             ActionArgs::Deployable(args) => self
                 .ai_deploy(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai deployment")?,
@@ -309,7 +292,7 @@ impl Db {
                 .ai_fighters(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai fighters")?,
             ActionArgs::FightersWaypoint(args) => self
-                .move_ai_fighters(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .move_ai_fighters(spctx, side, ucid.clone(), args)
                 .context("moving ai fighters")?,
             ActionArgs::Drone(args) => self
                 .drone(spctx, idx, side, ucid.clone(), name, cmd.action, args)
@@ -333,7 +316,7 @@ impl Db {
                 .tanker(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling tanker")?,
             ActionArgs::TankerWaypoint(args) => self
-                .move_tanker(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .move_tanker(spctx, side, ucid.clone(), args)
                 .context("moving tanker")?,
         }
         if let Some(ucid) = ucid.as_ref() {
@@ -357,31 +340,33 @@ impl Db {
     ) -> Result<()> {
         let group = group!(self, gid)?;
         let side = group.side;
-        match &group.origin {
-            DeployKind::Action {
-                loc, player, spec, ..
-            } => match &spec.kind {
-                ActionKind::Awacs(_) => match loc {
-                    SpawnLoc::InAir { pos, .. } => {
-                        ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
-                        return self.move_ai_loiter_point(
-                            spctx,
-                            side,
-                            player.clone(),
-                            WithPosAndGroup {
-                                pos: *pos,
-                                group: gid,
-                                cfg: (),
-                            },
-                            OrbitPattern::RaceTrack,
-                            || Task::AWACS,
-                        );
-                    }
-                    _ => bail!("awacs expected to have in air spawn"),
-                },
-                _ => (),
-            },
-            _ => bail!("expected an action group"),
+        if let DeployKind::Action {
+            loc, player, spec, ..
+        } = &group.origin
+        {
+            if let SpawnLoc::InAir { pos, .. } = loc {
+                let args = WithPosAndGroup {
+                    pos: *pos,
+                    group: gid,
+                    cfg: (),
+                };
+                if let ActionKind::Awacs(_) = &spec.kind {
+                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    return self.move_awacs(spctx, side, player.clone(), args);
+                }
+                if let ActionKind::Tanker(_) = &spec.kind {
+                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    return self.move_tanker(spctx, side, player.clone(), args);
+                }
+                if let ActionKind::Drone(_) = &spec.kind {
+                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    return self.move_drone(spctx, side, player.clone(), args);
+                }
+                if let ActionKind::Fighters(_) = &spec.kind {
+                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    return self.move_ai_fighters(spctx, side, player.clone(), args);
+                }
+            }
         }
         self.delete_group(&gid)
     }
@@ -408,8 +393,9 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        let gid = self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args)?;
-        self.move_ai_loiter_point(
+        let gid =
+            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        self.move_drone(
             spctx,
             side,
             ucid,
@@ -418,25 +404,33 @@ impl Db {
                 pos: args.pos,
                 cfg: (),
             },
-            OrbitPattern::Circle,
-            || Task::ComboTask(vec![]),
         )
     }
 
     fn move_ai_fighters(
         &mut self,
         spctx: &SpawnCtx,
-        idx: &MizIndex,
         side: Side,
         ucid: Option<Ucid>,
-        name: String,
-        action: Action,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        unimplemented!()
+        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::Circle, || {
+            Task::EngageTargets {
+                target_types: vec![
+                    Attribute::Fighters,
+                    Attribute::MultiroleFighters,
+                    Attribute::BattleAirplanes,
+                    Attribute::Battleplanes,
+                    Attribute::Helicopters,
+                    Attribute::AttackHelicopters,
+                ],
+                max_dist: Some(50_000.),
+                priority: None,
+            }
+        })
     }
 
-    fn move_tanker(
+    fn ai_fighters(
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
@@ -444,9 +438,32 @@ impl Db {
         ucid: Option<Ucid>,
         name: String,
         action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<()> {
+        let gid =
+            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        self.move_ai_fighters(
+            spctx,
+            side,
+            ucid,
+            WithPosAndGroup {
+                pos: args.pos,
+                group: gid,
+                cfg: (),
+            },
+        )
+    }
+
+    fn move_tanker(
+        &mut self,
+        spctx: &SpawnCtx,
+        side: Side,
+        ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        unimplemented!()
+        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::RaceTrack, || {
+            Task::Tanker
+        })
     }
 
     fn tanker(
@@ -459,7 +476,18 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        unimplemented!()
+        let gid =
+            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        self.move_ai_fighters(
+            spctx,
+            side,
+            ucid,
+            WithPosAndGroup {
+                pos: args.pos,
+                group: gid,
+                cfg: (),
+            },
+        )
     }
 
     fn paratroops(
@@ -496,7 +524,7 @@ impl Db {
         ucid: Option<Ucid>,
         name: String,
         action: Action,
-        args: WithFromTo<LogiCfg>,
+        args: WithFromTo<AiPlaneCfg>,
     ) -> Result<()> {
         unimplemented!()
     }
@@ -509,20 +537,7 @@ impl Db {
         ucid: Option<Ucid>,
         name: String,
         action: Action,
-        args: WithObj<LogiCfg>,
-    ) -> Result<()> {
-        unimplemented!()
-    }
-
-    fn ai_fighters(
-        &mut self,
-        spctx: &SpawnCtx,
-        idx: &MizIndex,
-        side: Side,
-        ucid: Option<Ucid>,
-        name: String,
-        action: Action,
-        args: WithPos<AiPlaneCfg>,
+        args: WithObj<AiPlaneCfg>,
     ) -> Result<()> {
         unimplemented!()
     }
@@ -540,17 +555,70 @@ impl Db {
         unimplemented!()
     }
 
-    fn cruise_missile_strike(
+    fn ai_point_to_point_mission<'a>(
         &mut self,
         spctx: &SpawnCtx,
-        idx: &MizIndex,
-        side: Side,
-        ucid: Option<Ucid>,
-        name: String,
-        action: Action,
-        args: WithJtac<CruiseMissileCfg>,
+        gid: GroupId,
+        task: impl Fn() -> Task<'a> + 'static,
     ) -> Result<()> {
-        unimplemented!()
+        let group = group!(self, gid)?;
+        let name = group.name.clone();
+        let (src, tgt, alt, alt_typ, speed) = match &group.origin {
+            DeployKind::Action {
+                spec,
+                destination: Some(tgt),
+                rtb: Some(src),
+                ..
+            } => match &spec.kind {
+                ActionKind::Bomber(b) => (
+                    *src,
+                    *tgt,
+                    b.plane.altitude,
+                    b.plane.altitude_typ.clone(),
+                    b.plane.speed,
+                ),
+                ActionKind::LogisticsRepair(p)
+                | ActionKind::LogisticsTransfer(p)
+                | ActionKind::Paratrooper(DeployableCfg { name: _, plane: p })
+                | ActionKind::Deployable(DeployableCfg { name: _, plane: p }) => {
+                    (*src, *tgt, p.altitude, p.altitude_typ.clone(), p.speed)
+                }
+                _ => bail!("expected a point to point action"),
+            },
+            _ => bail!("expected action group with rtb and destination"),
+        };
+        let tm = Timer::singleton(spctx.lua())?;
+        tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
+            let group = Group::get_by_name(lua, &name)?;
+            let con = group.get_controller()?;
+            macro_rules! wpt {
+                ($name:expr, $pos:expr) => {
+                    MissionPoint {
+                        action: None,
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2($pos),
+                        alt,
+                        alt_typ: Some(alt_typ.clone()),
+                        speed,
+                        eta: None,
+                        speed_locked: None,
+                        eta_locked: None,
+                        name: Some($name.into()),
+                        task: Box::new(task()),
+                    }
+                };
+            }
+            con.set_task(Task::Mission {
+                airborne: None,
+                route: vec![wpt!("ip", src), wpt!("tgt", tgt), wpt!("rtb", src)],
+            })?;
+            Ok(None)
+        })?;
+        Ok(())
     }
 
     fn bomber_strike(
@@ -570,72 +638,21 @@ impl Db {
             .as_ref()
             .map(|t| Vector2::new(t.pos.x, t.pos.z))
             .unwrap_or(jt.location.pos);
-        let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, tgt, |o| {
-            o.owner == side && o.is_airbase()
-        })
-        .ok_or_else(|| anyhow!("no origin objective"))?;
-        let src = obj.pos;
-        let sloc = SpawnLoc::InAir {
-            pos: src,
-            heading: 3.14159,
-            altitude: args.cfg.altitude,
-        };
-        let origin = DeployKind::Action {
-            marks: FxHashSet::default(),
-            loc: sloc.clone(),
-            player: ucid,
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
             name,
-            spec: action,
-            time: Utc::now(),
-            destination: Some(tgt),
-            rtb: Some(src),
-        };
-        let gid = self
-            .add_group(
-                spctx,
-                idx,
-                side,
-                sloc,
-                &args.cfg.template,
-                origin,
-                UnitTag::Driveable.into(),
-            )
-            .context("creating group")?;
-        let group = group!(self, gid)?;
-        let name = group.name.clone();
-        ephemeral::spawn_group(&self.persisted, idx, spctx, group).context("spawning group")?;
-        let tm = Timer::singleton(spctx.lua())?;
-        tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
-            let group = Group::get_by_name(lua, &name)?;
-            let con = group.get_controller()?;
-            macro_rules! wpt {
-                ($name:expr, $pos:expr) => {
-                    MissionPoint {
-                        action: None,
-                        typ: PointType::TurningPoint,
-                        airdrome_id: None,
-                        helipad: None,
-                        time_re_fu_ar: None,
-                        link_unit: None,
-                        pos: LuaVec2($pos),
-                        alt: args.cfg.altitude,
-                        alt_typ: Some(args.cfg.altitude_typ.clone()),
-                        speed: 240.,
-                        eta: None,
-                        speed_locked: None,
-                        eta_locked: None,
-                        name: Some($name.into()),
-                        task: Box::new(Task::ComboTask(vec![])),
-                    }
-                };
-            }
-            con.set_task(Task::Mission {
-                airborne: None,
-                route: vec![wpt!("ip", src), wpt!("tgt", tgt), wpt!("rtb", src)],
-            })?;
-            Ok(None)
-        })?;
-        Ok(())
+            action,
+            0.,
+            &WithPos {
+                cfg: args.cfg.plane,
+                pos: tgt,
+            },
+            Some(tgt),
+        )?;
+        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
 
     fn add_and_spawn_ai_air(
@@ -648,13 +665,15 @@ impl Db {
         action: Action,
         heading: f64,
         args: &WithPos<AiPlaneCfg>,
+        destination: Option<Vector2>,
     ) -> Result<GroupId> {
         let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, args.pos, |o| {
             o.owner == side && o.is_airbase()
         })
         .ok_or_else(|| anyhow!("no objectives available for the ai mission"))?;
+        let pos = obj.pos;
         let sloc = SpawnLoc::InAir {
-            pos: obj.pos,
+            pos,
             heading,
             altitude: args.cfg.altitude,
         };
@@ -665,8 +684,8 @@ impl Db {
             name,
             spec: action,
             time: Utc::now(),
-            destination: None,
-            rtb: None,
+            destination,
+            rtb: Some(pos),
         };
         let gid = self
             .add_group(
@@ -684,6 +703,18 @@ impl Db {
         Ok(gid)
     }
 
+    fn move_awacs(
+        &mut self,
+        spctx: &SpawnCtx,
+        side: Side,
+        ucid: Option<Ucid>,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
+        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::RaceTrack, || {
+            Task::AWACS
+        })
+    }
+
     fn awacs(
         &mut self,
         spctx: &SpawnCtx,
@@ -697,8 +728,8 @@ impl Db {
         let enemy = side.opposite();
         let (_, heading) = racetrack_dist_and_heading(&self.persisted.objectives, args.pos, enemy);
         let gid =
-            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, heading, &args)?;
-        self.move_ai_loiter_point(
+            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, heading, &args, None)?;
+        self.move_awacs(
             spctx,
             side,
             ucid,
@@ -707,8 +738,6 @@ impl Db {
                 pos: args.pos,
                 group: gid,
             },
-            OrbitPattern::RaceTrack,
-            || Task::AWACS,
         )
         .context("setup orbit")?;
         Ok(())
@@ -1101,8 +1130,10 @@ impl Db {
                     | ActionKind::Fighters(ai)
                     | ActionKind::Drone(ai)
                     | ActionKind::Tanker(ai) => {
-                        if now - *time > Duration::hours(ai.duration as i64) {
-                            to_delete.push(*gid);
+                        if let Some(d) = ai.duration {
+                            if now - *time > Duration::hours(d as i64) {
+                                to_delete.push(*gid);
+                            }
                         }
                     }
                     ActionKind::Bomber(b) => {
@@ -1174,7 +1205,6 @@ impl Db {
                         }
                     }
                     ActionKind::AwacsWaypoint
-                    | ActionKind::CruiseMissileStrike(_)
                     | ActionKind::FighersWaypoint
                     | ActionKind::TankerWaypoint
                     | ActionKind::DroneWaypoint

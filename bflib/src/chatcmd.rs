@@ -266,7 +266,6 @@ fn action_help(ctx: &mut Context, actions: &FxHashMap<String, Action>, id: Playe
                 action.cost
             )),
             ActionKind::Bomber(_) => None,
-            ActionKind::CruiseMissileStrike(_) => None,
             ActionKind::Deployable(d) => Some(format_compact!(
                 "{name}: <key> | Ai deploy a {} at key a mark point. cost {}",
                 d.name,

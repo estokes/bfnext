@@ -812,27 +812,15 @@ fn run_slow_timed_events(
         if let Err(e) = ctx.db.advance_actions(lua, &ctx.idx, &ctx.jtac, start_ts) {
             error!("could not advance actions {e:?}")
         }
-        let start_ts = Utc::now();
-        let mut dead = vec![];
-        match ctx
-            .db
-            .update_unit_positions_incremental(lua, ctx.last_unit_position)
-        {
-            Err(e) => error!("could not update unit positions {e}"),
-            Ok((i, v)) => {
-                ctx.last_unit_position = i;
-                dead = v
-            }
-        }
-        record_perf(&mut perf.unit_positions, start_ts);
         let ts = Utc::now();
         match ctx.db.update_player_positions(lua) {
             Err(e) => error!("could not update player positions {e}"),
-            Ok(mut v) => dead.extend(v.drain(..)),
-        }
-        for id in dead {
-            if let Err(e) = unit_killed(lua, ctx, id.clone()) {
-                error!("unit killed failed {:?} {:?}", id, e)
+            Ok(dead) => {
+                for id in dead {
+                    if let Err(e) = unit_killed(lua, ctx, id.clone()) {
+                        error!("unit killed failed {:?} {:?}", id, e)
+                    }
+                }
             }
         }
         record_perf(&mut perf.player_positions, ts);
@@ -898,6 +886,21 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
+    match ctx
+        .db
+        .update_unit_positions_incremental(lua, ctx.last_unit_position)
+    {
+        Err(e) => error!("could not update unit positions {e}"),
+        Ok((i, dead)) => {
+            ctx.last_unit_position = i;
+            for id in dead {
+                if let Err(e) = unit_killed(lua, ctx, id.clone()) {
+                    error!("unit killed failed {:?} {:?}", id, e)
+                }
+            }
+        }
+    }
+    record_perf(&mut perf.unit_positions, ts);
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, path, ts) {
         error!("error running slow timed events {:?}", e)
     }

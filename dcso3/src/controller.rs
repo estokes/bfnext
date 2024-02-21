@@ -21,11 +21,13 @@ use crate::{
     static_object::StaticObjectId,
     string_enum,
     trigger::Modulation,
-    wrapped_table, LuaVec2, Sequence, Time,
+    value_to_json, wrapped_table, LuaVec2, Sequence, Time,
 };
 use anyhow::Result;
 use compact_str::format_compact;
 use enumflags2::{bitflags, BitFlags};
+use fxhash::FxHashMap;
+use log::debug;
 use mlua::{prelude::*, Value, Variadic};
 use na::Vector2;
 use serde_derive::{Deserialize, Serialize};
@@ -42,12 +44,12 @@ string_enum!(PointType, u8, [
 ]);
 
 string_enum!(WeaponExpend, u8, [
-    Quarter => "QUARTER",
-    Two => "TWO",
-    One => "ONE",
-    Four => "FOUR",
-    Half => "HALF",
-    All => "ALL"
+    Quarter => "Quarter",
+    Two => "Two",
+    One => "One",
+    Four => "Four",
+    Half => "Half",
+    All => "All"
 ]);
 
 string_enum!(OrbitPattern, u8, [
@@ -56,16 +58,16 @@ string_enum!(OrbitPattern, u8, [
 ]);
 
 string_enum!(TurnMethod, u8, [
-    FlyOverPoint => "FLY_OVER_POINT",
-    FinPoint => "FIN_POINT"
+    FlyOverPoint => "Fly Over Point",
+    FinPoint => "Fin Point"
 ]);
 
 string_enum!(Designation, u8, [
-    No => "NO",
+    No => "No",
     WP => "WP",
-    IrPointer => "IR_POINTER",
-    Laser => "LASER",
-    Auto => "AUTO"
+    IrPointer => "IR-Pointer",
+    Laser => "Laser",
+    Auto => "Auto"
 ]);
 
 string_enum!(AltType, u8, [
@@ -690,7 +692,7 @@ impl<'lua> FromLua<'lua> for Task<'lua> {
                 route: FromLua::from_lua(Value::Table(params), lua)?,
             }),
             "ComboTask" => Ok(Self::ComboTask(FromLua::from_lua(
-                Value::Table(params),
+                Value::Table(params.raw_get("tasks")?),
                 lua,
             )?)),
             "ControlledTask" => Ok(Self::ControlledTask {
@@ -1014,11 +1016,14 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
             }
             Self::ComboTask(tasks) => {
                 root.raw_set("id", "ComboTask")?;
+                let tbl = lua.create_table()?;
                 for (i, task) in tasks.into_iter().enumerate() {
-                    params.push(task)?;
-                    let tbl: LuaTable = params.raw_get(i + 1)?;
-                    tbl.raw_set("number", i + 1)?;
+                    tbl.push(task)?;
+                    params
+                        .raw_get::<_, LuaTable>(i + 1)?
+                        .raw_set("number", i + 1)?;
                 }
+                params.raw_set("tasks", tbl)?;
             }
             Self::ControlledTask {
                 mut task,
@@ -1048,6 +1053,11 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
             }
         }
         root.raw_set("params", params)?;
+        let mut tbl = FxHashMap::default();
+        debug!(
+            "{}",
+            value_to_json(&mut tbl, None, &Value::Table(root.clone()))
+        );
         Ok(Value::Table(root))
     }
 }
@@ -1347,6 +1357,10 @@ impl<'lua> FromLua<'lua> for Command {
             }),
             "DeactivateBeacon" => Ok(Self::DeactivateBeacon),
             "DeactivateICLS" => Ok(Self::DeactivateACLS),
+            "EPLRS" => Ok(Self::EPLRS {
+                enable: params.raw_get("value")?,
+                group: params.raw_get("groupId")?,
+            }),
             "Start" => Ok(Self::Start),
             "TransmitMessage" => Ok(Self::TransmitMessage {
                 duration: params.raw_get("duration")?,
@@ -1516,6 +1530,12 @@ impl<'lua> AirOption<'lua> {
     }
 
     fn from_tag_val(lua: &'lua Lua, tag: u8, val: Value<'lua>) -> LuaResult<Self> {
+        let attr_or_none = |val: Value<'lua>| match val {
+            Value::String(s) if s.to_string_lossy().as_ref().starts_with("none") => {
+                Attributes::new(lua).map_err(|e| err(&format_compact!("{}", e)))
+            }
+            v => FromLua::from_lua(v, lua),
+        };
         match tag {
             13 => Ok(Self::EcmUsing(FromLua::from_lua(val, lua)?)),
             4 => Ok(Self::FlareUsing(FromLua::from_lua(val, lua)?)),
@@ -1523,9 +1543,9 @@ impl<'lua> AirOption<'lua> {
             5 => Ok(Self::Formation(FromLua::from_lua(val, lua)?)),
             25 => Ok(Self::JettTanksIfEmpty(FromLua::from_lua(val, lua)?)),
             18 => Ok(Self::MissileAttack(FromLua::from_lua(val, lua)?)),
-            21 => Ok(Self::OptionRadioUsageContact(FromLua::from_lua(val, lua)?)),
-            22 => Ok(Self::OptionRadioUsageEngage(FromLua::from_lua(val, lua)?)),
-            23 => Ok(Self::OptionRadioUsageKill(FromLua::from_lua(val, lua)?)),
+            21 => Ok(Self::OptionRadioUsageContact(attr_or_none(val)?)),
+            22 => Ok(Self::OptionRadioUsageEngage(attr_or_none(val)?)),
+            23 => Ok(Self::OptionRadioUsageKill(attr_or_none(val)?)),
             14 => Ok(Self::ProhibitAA(FromLua::from_lua(val, lua)?)),
             16 => Ok(Self::ProhibitAB(FromLua::from_lua(val, lua)?)),
             17 => Ok(Self::ProhibitAG(FromLua::from_lua(val, lua)?)),
@@ -1661,11 +1681,13 @@ impl<'lua> AiOption<'lua> {
     fn from_tag_val(lua: &'lua Lua, tag: u8, val: Value<'lua>) -> LuaResult<Self> {
         match AirOption::from_tag_val(lua, tag, val.clone()) {
             Ok(v) => Ok(Self::Air(v)),
-            Err(_) => match GroundOption::from_tag_val(lua, tag, val.clone()) {
+            Err(ae) => match GroundOption::from_tag_val(lua, tag, val.clone()) {
                 Ok(v) => Ok(Self::Ground(v)),
-                Err(_) => match NavalOption::from_tag_val(lua, tag, val) {
+                Err(ge) => match NavalOption::from_tag_val(lua, tag, val) {
                     Ok(v) => Ok(Self::Naval(v)),
-                    Err(e) => Err(e),
+                    Err(ne) => Err(err(&format_compact!(
+                        "unknown option, air: {ae:?} ground: {ge:?} naval: {ne:?}"
+                    ))),
                 },
             },
         }

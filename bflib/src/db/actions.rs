@@ -40,7 +40,7 @@ use log::error;
 use mlua::Value;
 use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
-use std::{cmp::max, f64};
+use std::{cmp::max, f64, vec};
 
 #[derive(Debug, Clone)]
 pub struct WithPos<T> {
@@ -947,6 +947,8 @@ impl Db {
         let tm = Timer::singleton(spctx.lua())?;
         tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
             let group = Group::get_by_name(lua, &name)?;
+            let pos = group.get_unit(1)?.get_point()?;
+            let pos = Vector2::new(pos.x, pos.z);
             let con = group.get_controller().context("getting controller")?;
             macro_rules! wpt {
                 ($name:expr, $pos:expr, $task:expr) => {
@@ -970,27 +972,54 @@ impl Db {
                 };
             }
             con.set_command(Command::SetUnlimitedFuel(true))?;
-            con.set_task(Task::Mission {
-                airborne: None,
-                route: vec![
-                    wpt!("ip", pos, task()),
-                    wpt!(
-                        "race",
-                        point1,
-                        Task::ComboTask(vec![
-                            task(),
-                            Task::Orbit {
-                                pattern: pattern.clone(),
-                                point: Some(LuaVec2(point1)),
-                                point2: point2.map(LuaVec2),
-                                speed: Some(speed),
-                                altitude: Some(altitude),
-                            }
-                        ])
-                    ),
-                ],
-            })
-            .context("setup orbit")?;
+            match &pattern {
+                OrbitPattern::Circle => con
+                    .set_task(Task::Mission {
+                        airborne: Some(true),
+                        route: vec![
+                            wpt!("ip", pos, task()),
+                            wpt!(
+                                "orbit",
+                                point1,
+                                Task::ComboTask(vec![
+                                    Task::Orbit {
+                                        pattern: OrbitPattern::Circle,
+                                        point: Some(LuaVec2(point1)),
+                                        point2: None,
+                                        speed: Some(speed),
+                                        altitude: Some(altitude)
+                                    },
+                                    task(),
+                                ])
+                            )
+                        ],
+                    })
+                    .context("setup orbit")?,
+                OrbitPattern::RaceTrack => con
+                    .set_task(Task::Mission {
+                        airborne: Some(true),
+                        route: vec![
+                            wpt!("ip", pos, task()),
+                            wpt!(
+                                "point1",
+                                point1,
+                                Task::ComboTask(vec![
+                                    Task::Orbit {
+                                        pattern: OrbitPattern::RaceTrack,
+                                        point: Some(LuaVec2(point1)),
+                                        point2: Some(LuaVec2(point2.unwrap())),
+                                        speed: Some(speed),
+                                        altitude: Some(altitude),
+                                    },
+                                    task(),
+                                ])
+                            ),
+                            wpt!("point2", point2.unwrap(), task()),
+                        ],
+                    })
+                    .context("setup racetrack")?,
+                OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}"),
+            }
             Ok(None)
         })?;
         Ok(())

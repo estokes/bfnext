@@ -129,7 +129,7 @@ pub(super) fn add_ewr_menu_for_group(mc: &MissionCommands, group: GroupId) -> Re
     )?;
     mc.add_command_for_group(
         group,
-        "toggle".into(),
+        "Toggle".into(),
         Some(root.clone()),
         toggle_ewr,
         group,

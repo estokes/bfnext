@@ -23,7 +23,7 @@ use dcso3::{
     attribute::Attribute,
     change_heading,
     coalition::Side,
-    controller::{Command, MissionPoint, OrbitPattern, PointType, Task},
+    controller::{Command, MissionPoint, OrbitPattern, PointType, Task, TurnMethod},
     env::miz::MizIndex,
     group::Group,
     land::Land,
@@ -951,7 +951,7 @@ impl Db {
             macro_rules! wpt {
                 ($name:expr, $pos:expr, $task:expr) => {
                     MissionPoint {
-                        action: None,
+                        action: Some(TurnMethod::FlyOverPoint),
                         typ: PointType::TurningPoint,
                         airdrome_id: None,
                         helipad: None,
@@ -978,14 +978,14 @@ impl Db {
                         "race",
                         point1,
                         Task::ComboTask(vec![
+                            task(),
                             Task::Orbit {
                                 pattern: pattern.clone(),
                                 point: Some(LuaVec2(point1)),
                                 point2: point2.map(LuaVec2),
-                                speed: None,
-                                altitude: None,
-                            },
-                            task()
+                                speed: Some(speed),
+                                altitude: Some(altitude),
+                            }
                         ])
                     ),
                 ],

@@ -1014,8 +1014,10 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
             }
             Self::ComboTask(tasks) => {
                 root.raw_set("id", "ComboTask")?;
-                for task in tasks {
+                for (i, task) in tasks.into_iter().enumerate() {
                     params.push(task)?;
+                    let tbl: LuaTable = params.raw_get(i + 1)?;
+                    tbl.raw_set("number", i + 1)?;
                 }
             }
             Self::ControlledTask {

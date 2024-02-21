@@ -27,7 +27,7 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
-    controller::{MissionPoint, PointType, Task, TurnMethod},
+    controller::{AltType, MissionPoint, PointType, Task, TurnMethod},
     cvt_err, err,
     group::Group,
     land::Land,
@@ -606,8 +606,8 @@ impl Jtac {
                     radius: None,
                     expend_qty: Some(n as i64),
                     weapon_type: None,
-                    altitude: None,
-                    altitude_type: None,
+                    altitude: Some(land.get_height(LuaVec2(pos))?),
+                    altitude_type: Some(AltType::BARO),
                 };
                 let task = Task::Mission {
                     airborne: Some(false),
@@ -620,7 +620,7 @@ impl Jtac {
                         link_unit: None,
                         pos: LuaVec2(apos),
                         alt: land.get_height(LuaVec2(apos))?,
-                        alt_typ: None,
+                        alt_typ: Some(AltType::BARO),
                         speed: 0.,
                         speed_locked: None,
                         eta: None,

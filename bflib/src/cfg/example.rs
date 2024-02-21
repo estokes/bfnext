@@ -1285,6 +1285,25 @@ fn default_red_actions() -> FxHashMap<String, Action> {
             },
         ),
         (
+            "deploy-ewr".into(),
+            Action {
+                cost: 50,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Deployable(DeployableCfg {
+                    name: "1L13".into(),
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::Helicopter,
+                        template: "RTROOPCARRIER".into(),
+                        altitude: 100.,
+                        altitude_typ: AltType::RADIO,
+                        duration: None,
+                        speed: 60.
+                    }
+                }),
+            },
+        ),
+        (
             "repair".into(),
             Action {
                 cost: 100,
@@ -1490,6 +1509,25 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
             },
         ),
         (
+            "deploy-ewr".into(),
+            Action {
+                cost: 50,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Deployable(DeployableCfg {
+                    name: "AN/FPS-117".into(),
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::Helicopter,
+                        template: "BTROOPCARRIER".into(),
+                        altitude: 100.,
+                        altitude_typ: AltType::RADIO,
+                        duration: None,
+                        speed: 60.
+                    }
+                }),
+            },
+        ),
+        (
             "repair".into(),
             Action {
                 cost: 100,
@@ -1615,6 +1653,7 @@ impl Default for Cfg {
             airborne_jtacs: FxHashMap::from_iter([
                 ("L-39ZA".into(), DeployableJtac { range: 16000 }),
                 ("MB-339A".into(), DeployableJtac { range: 16000 }),
+                ("MQ-9 Reaper".into(), DeployableJtac { range: 16000 })
             ]),
             jtac_priority: default_jtac_priority(),
         }

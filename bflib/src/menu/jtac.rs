@@ -279,6 +279,17 @@ fn add_artillery_menu_for_jtac(
         )?;
         mc.add_command_for_group(
             mizgid,
+            "40".into(),
+            Some(for_effect.clone()),
+            jtac_artillery_mission,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: 40,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
             "Show Adjustment".into(),
             Some(root.clone()),
             jtac_show_adjustment,

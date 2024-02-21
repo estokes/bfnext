@@ -27,7 +27,7 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
-    controller::Task,
+    controller::{MissionPoint, PointType, Task, TurnMethod},
     cvt_err, err,
     group::Group,
     land::Land,
@@ -596,6 +596,7 @@ impl Jtac {
         match self.target.as_mut() {
             None => bail!("no target"),
             Some(target) => {
+                let land = Land::singleton(lua)?;
                 let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
                 let pos = db.unit(&target.uid)?.pos;
@@ -607,6 +608,26 @@ impl Jtac {
                     weapon_type: None,
                     altitude: None,
                     altitude_type: None,
+                };
+                let task = Task::Mission {
+                    airborne: Some(false),
+                    route: vec![MissionPoint {
+                        action: Some(TurnMethod::Custom(String::from("Off Road"))),
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2(apos),
+                        alt: land.get_height(LuaVec2(apos))?,
+                        alt_typ: None,
+                        speed: 0.,
+                        speed_locked: None,
+                        eta: None,
+                        eta_locked: None,
+                        name: None,
+                        task: Box::new(task),
+                    }],
                 };
                 let group = Group::get_by_name(lua, &name)
                     .with_context(|| format_compact!("getting group {}", name))?;

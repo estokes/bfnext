@@ -675,7 +675,7 @@ impl Db {
             macro_rules! wpt {
                 ($name:expr, $pos:expr) => {
                     MissionPoint {
-                        action: None,
+                        action: Some(TurnMethod::FlyOverPoint),
                         typ: PointType::TurningPoint,
                         airdrome_id: None,
                         helipad: None,

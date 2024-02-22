@@ -1269,6 +1269,31 @@ fn default_red_actions() -> FxHashMap<String, Action> {
             },
         ),
         (
+            "attack-helicopters".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Attackers(AiPlaneCfg {
+                    kind: AiPlaneKind::Helicopter,
+                    duration: Some(2),
+                    template: "RATTACKHELI".into(),
+                    altitude: 500.,
+                    altitude_typ: AltType::RADIO,
+                    speed: 80.,
+                }),
+            },
+        ),
+        (
+            "attack-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::AttackersWaypoint,
+            },
+        ),
+        (
             "paratroops".into(),
             Action {
                 cost: 50,
@@ -1505,6 +1530,31 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 penalty: None,
                 limit: None,
                 kind: ActionKind::FighersWaypoint,
+            },
+        ),
+        (
+            "attack-helicopters".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Attackers(AiPlaneCfg {
+                    kind: AiPlaneKind::Helicopter,
+                    duration: Some(2),
+                    template: "BATTACKHELI".into(),
+                    altitude: 500.,
+                    altitude_typ: AltType::RADIO,
+                    speed: 60.,
+                }),
+            },
+        ),
+        (
+            "attack-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::AttackersWaypoint,
             },
         ),
         (

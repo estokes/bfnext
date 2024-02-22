@@ -226,24 +226,40 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
                         Err(e) => reply!("could not delete group {id} {e:?}"),
                         Ok(()) => reply!("delted {id}"),
                     },
-                    DeployKind::Deployed { player, spec, moved_by: _ } => {
+                    DeployKind::Deployed {
+                        player,
+                        spec,
+                        moved_by: _,
+                    } => {
                         let player = player.clone();
                         let points = (spec.cost as f32 / 2.).ceil() as i32;
                         match ctx.db.delete_group(&id) {
                             Err(e) => reply!("could not delete group {id} {e:?}"),
                             Ok(()) => {
-                                ctx.db.adjust_points(&player, points, &format_compact!("reclaimed {id}"));
+                                ctx.db.adjust_points(
+                                    &player,
+                                    points,
+                                    &format_compact!("reclaimed {id}"),
+                                );
                                 reply!("deleted {id}")
                             }
                         }
                     }
-                    DeployKind::Troop { player, spec, moved_by: _ } => {
+                    DeployKind::Troop {
+                        player,
+                        spec,
+                        moved_by: _,
+                    } => {
                         let player = player.clone();
                         let points = (spec.cost as f32 / 2.).ceil() as i32;
                         match ctx.db.delete_group(&id) {
                             Err(e) => reply!("could not delete group {id} {e:?}"),
                             Ok(()) => {
-                                ctx.db.adjust_points(&player, points, &format_compact!("reclaimed {id}"));
+                                ctx.db.adjust_points(
+                                    &player,
+                                    points,
+                                    &format_compact!("reclaimed {id}"),
+                                );
                                 reply!("deleted {id}")
                             }
                         }
@@ -257,6 +273,8 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
 fn action_help(ctx: &mut Context, actions: &FxHashMap<String, Action>, id: PlayerId) {
     for (name, action) in actions {
         let msg = match &action.kind {
+            ActionKind::Attackers(_) => Some(format_compact!("{name}: <key> | Spawn ai attackers. cost {}", action.cost)),
+            ActionKind::AttackersWaypoint => Some(format_compact!("{name}: <group> <key> | Move ai attackers. cost {}", action.cost)),
             ActionKind::Move(_) => Some(format_compact!("{name}: <group> <key> | Move a ground unit. cost {}", action.cost)),
             ActionKind::Awacs(_) => Some(format_compact!(
                 "{name}: <key> | Spawn an awacs at key, a mark point. cost {}",

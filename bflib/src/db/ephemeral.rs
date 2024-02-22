@@ -580,6 +580,7 @@ impl Ephemeral {
                     | ActionKind::Tanker(AiPlaneCfg { template, .. })
                     | ActionKind::Drone(DroneCfg { plane: AiPlaneCfg { template, .. }, ..})
                     | ActionKind::Fighters(AiPlaneCfg { template, .. })
+                    | ActionKind::Attackers(AiPlaneCfg { template, ..})
                     | ActionKind::LogisticsRepair(AiPlaneCfg { template, .. })
                     | ActionKind::LogisticsTransfer(AiPlaneCfg { template, .. }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
@@ -611,6 +612,7 @@ impl Ephemeral {
                     | ActionKind::TankerWaypoint
                     | ActionKind::DroneWaypoint
                     | ActionKind::FighersWaypoint
+                    | ActionKind::AttackersWaypoint
                     | ActionKind::Move(_)
                     | ActionKind::Nuke(_) => (),
                 }

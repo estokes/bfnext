@@ -84,6 +84,8 @@ pub enum ActionArgs {
     Bomber(WithJtac<BomberCfg>),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
+    Attackers(WithPos<AiPlaneCfg>),
+    AttackersWaypoint(WithPosAndGroup<()>),
     Drone(WithPos<DroneCfg>),
     DroneWaypoint(WithPosAndGroup<()>),
     Nuke(WithPos<NukeCfg>),
@@ -173,6 +175,10 @@ impl ActionArgs {
             ActionKind::Fighters(c) => Ok(Self::Fighters(pos(db, lua, side, c, s)?)),
             ActionKind::FighersWaypoint => {
                 Ok(Self::FightersWaypoint(pos_group(db, lua, side, (), s)?))
+            }
+            ActionKind::Attackers(c) => Ok(Self::Attackers(pos(db, lua, side, c, s)?)),
+            ActionKind::AttackersWaypoint => {
+                Ok(Self::AttackersWaypoint(pos_group(db, lua, side, (), s)?))
             }
             ActionKind::Drone(c) => Ok(Self::Drone(pos(db, lua, side, c, s)?)),
             ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(db, lua, side, (), s)?)),
@@ -335,6 +341,12 @@ impl Db {
             ActionArgs::FightersWaypoint(args) => self
                 .move_ai_fighters(spctx, side, ucid.clone(), args)
                 .context("moving ai fighters")?,
+            ActionArgs::Attackers(args) => {
+                self.ai_attackers(spctx, idx, side, ucid.clone(), name, cmd.action, args)?
+            }
+            ActionArgs::AttackersWaypoint(args) => {
+                self.move_ai_attackers(spctx, side, ucid.clone(), args)?
+            }
             ActionArgs::Drone(args) => self
                 .drone(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling drone")?,
@@ -500,6 +512,56 @@ impl Db {
         let gid =
             self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
         self.move_ai_fighters(
+            spctx,
+            side,
+            ucid,
+            WithPosAndGroup {
+                pos: args.pos,
+                group: gid,
+                cfg: (),
+            },
+        )
+    }
+
+    fn move_ai_attackers(
+        &mut self,
+        spctx: &SpawnCtx,
+        side: Side,
+        ucid: Option<Ucid>,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
+        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::Circle, || {
+            Task::EngageTargets {
+                target_types: vec![
+                    Attribute::Fighters,
+                    Attribute::MultiroleFighters,
+                    Attribute::BattleAirplanes,
+                    Attribute::Battleplanes,
+                    Attribute::Helicopters,
+                    Attribute::AttackHelicopters,
+                    Attribute::GroundUnits,
+                    Attribute::GroundVehicles,
+                    Attribute::ArmedGroundUnits,
+                ],
+                max_dist: Some(20_000.),
+                priority: None,
+            }
+        })
+    }
+
+    fn ai_attackers(
+        &mut self,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        side: Side,
+        ucid: Option<Ucid>,
+        name: String,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<()> {
+        let gid =
+            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        self.move_ai_attackers(
             spctx,
             side,
             ucid,
@@ -1362,6 +1424,7 @@ impl Db {
                 match &spec.kind {
                     ActionKind::Awacs(ai)
                     | ActionKind::Fighters(ai)
+                    | ActionKind::Attackers(ai)
                     | ActionKind::Drone(DroneCfg { plane: ai, .. })
                     | ActionKind::Tanker(ai) => {
                         if let Some(d) = ai.duration {
@@ -1479,6 +1542,7 @@ impl Db {
                     }
                     ActionKind::AwacsWaypoint
                     | ActionKind::FighersWaypoint
+                    | ActionKind::AttackersWaypoint
                     | ActionKind::TankerWaypoint
                     | ActionKind::DroneWaypoint
                     | ActionKind::Nuke(_) => {

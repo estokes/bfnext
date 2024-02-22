@@ -1019,7 +1019,7 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
                 let tbl = lua.create_table()?;
                 for (i, task) in tasks.into_iter().enumerate() {
                     tbl.push(task)?;
-                    params
+                    tbl 
                         .raw_get::<_, LuaTable>(i + 1)?
                         .raw_set("number", i + 1)?;
                 }

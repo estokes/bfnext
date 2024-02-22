@@ -422,6 +422,12 @@ pub struct DeployableCfg {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DroneCfg {
+    pub jtac: DeployableJtac,
+    pub plane: AiPlaneCfg,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NukeCfg {
     /// using a nuke reduces the cost of nukes for everyone by this factor. e.g. cost_scale: 4, with initial cost 1000.
     /// The first nuke would cost 1000 points. The next nuke would cost 250 points. The next nuke would cost 62 points.
@@ -437,7 +443,7 @@ pub enum ActionKind {
     Awacs(AiPlaneCfg),
     Bomber(BomberCfg),
     Fighters(AiPlaneCfg),
-    Drone(AiPlaneCfg),
+    Drone(DroneCfg),
     Nuke(NukeCfg),
     FighersWaypoint,
     DroneWaypoint,

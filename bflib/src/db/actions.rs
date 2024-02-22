@@ -6,8 +6,8 @@ use super::{
 use crate::{
     admin,
     cfg::{
-        Action, ActionKind, AiPlaneCfg, AiPlaneKind, BomberCfg, DeployableCfg, LimitEnforceTyp,
-        NukeCfg, UnitTag,
+        Action, ActionKind, AiPlaneCfg, AiPlaneKind, BomberCfg, DeployableCfg, DroneCfg,
+        LimitEnforceTyp, NukeCfg, UnitTag,
     },
     db::{cargo::Oldest, ephemeral, group::DeployKind},
     group, group_mut,
@@ -81,7 +81,7 @@ pub enum ActionArgs {
     Bomber(WithJtac<BomberCfg>),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
-    Drone(WithPos<AiPlaneCfg>),
+    Drone(WithPos<DroneCfg>),
     DroneWaypoint(WithPosAndGroup<()>),
     Nuke(WithPos<NukeCfg>),
     TankerWaypoint(WithPosAndGroup<()>),
@@ -415,10 +415,22 @@ impl Db {
         ucid: Option<Ucid>,
         name: String,
         action: Action,
-        args: WithPos<AiPlaneCfg>,
+        args: WithPos<DroneCfg>,
     ) -> Result<()> {
-        let gid =
-            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &WithPos {
+                pos: args.pos,
+                cfg: args.cfg.plane,
+            },
+            None,
+        )?;
         self.move_drone(
             spctx,
             side,
@@ -860,7 +872,7 @@ impl Db {
             } => match &mut spec.kind {
                 ActionKind::Awacs(a)
                 | ActionKind::Tanker(a)
-                | ActionKind::Drone(a)
+                | ActionKind::Drone(DroneCfg { plane: a, .. })
                 | ActionKind::Fighters(a) => {
                     match loc {
                         SpawnLoc::InAir { pos: oldpos, .. } => {
@@ -991,7 +1003,7 @@ impl Db {
                                     },
                                     task(),
                                 ])
-                            )
+                            ),
                         ],
                     })
                     .context("setup orbit")?,
@@ -1241,7 +1253,7 @@ impl Db {
                 match &spec.kind {
                     ActionKind::Awacs(ai)
                     | ActionKind::Fighters(ai)
-                    | ActionKind::Drone(ai)
+                    | ActionKind::Drone(DroneCfg { plane: ai, .. })
                     | ActionKind::Tanker(ai) => {
                         if let Some(d) = ai.duration {
                             if now - *time > Duration::hours(d as i64) {

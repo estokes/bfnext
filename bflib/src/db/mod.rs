@@ -17,7 +17,7 @@ for more details.
 extern crate nalgebra as na;
 use self::{group::DeployKind, persisted::Persisted};
 use crate::{
-    cfg::{Cfg, Deployable, DeployableEwr, DeployableJtac, Troop},
+    cfg::{Action, ActionKind, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg, Troop},
     db::ephemeral::Ephemeral,
     jtac::JtId,
 };
@@ -212,6 +212,10 @@ impl Db {
                             Deployable {
                                 jtac: Some(jtac), ..
                             },
+                        ..
+                    }
+                    | DeployKind::Action {
+                        spec: Action { kind: ActionKind::Drone(DroneCfg { jtac, .. }), ..},
                         ..
                     } => {
                         let pos = centroid3d(

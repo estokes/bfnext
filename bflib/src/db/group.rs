@@ -19,7 +19,7 @@ use super::{
     Db, Set,
 };
 use crate::{
-    cfg::{Action, Crate, Deployable, Troop, UnitTag, UnitTags},
+    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags},
     group, group_by_name,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut,
@@ -277,6 +277,7 @@ impl Db {
                     self.ephemeral.msgs().delete_mark(*id);
                 }
                 self.persisted.actions.remove_cow(gid);
+                self.persisted.jtacs.remove_cow(gid);
             }
             DeployKind::Crate { player, .. } => {
                 self.persisted.crates.remove_cow(gid);
@@ -598,8 +599,11 @@ impl Db {
         }
         match &mut spawned.origin {
             DeployKind::Objective => (),
-            DeployKind::Action { .. } => {
+            DeployKind::Action { spec, .. } => {
                 self.persisted.actions.insert_cow(gid);
+                if let ActionKind::Drone(_) = &spec.kind {
+                    self.persisted.jtacs.insert_cow(gid);
+                }
             }
             DeployKind::Crate { player, .. } => {
                 self.persisted.crates.insert_cow(gid);

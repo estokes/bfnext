@@ -23,8 +23,7 @@ use super::{
 };
 use crate::{
     cfg::{
-        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
-        DeployableLogistics, NukeCfg, Troop, Vehicle, WarehouseConfig,
+        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg, DeployableLogistics, DroneCfg, NukeCfg, Troop, Vehicle, WarehouseConfig
     },
     maybe,
     msgq::MsgQ,
@@ -578,7 +577,7 @@ impl Ephemeral {
                         ..
                     })
                     | ActionKind::Tanker(AiPlaneCfg { template, .. })
-                    | ActionKind::Drone(AiPlaneCfg { template, .. })
+                    | ActionKind::Drone(DroneCfg { plane: AiPlaneCfg { template, .. }, ..})
                     | ActionKind::Fighters(AiPlaneCfg { template, .. })
                     | ActionKind::LogisticsRepair(AiPlaneCfg { template, .. })
                     | ActionKind::LogisticsTransfer(AiPlaneCfg { template, .. }) => {

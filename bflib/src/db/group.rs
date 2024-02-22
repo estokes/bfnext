@@ -26,7 +26,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
-use compact_str::format_compact;
+use compact_str::{format_compact, CompactString};
 use dcso3::{
     atomic_id, azumith3d, centroid2d, centroid3d,
     coalition::Side,
@@ -57,10 +57,12 @@ pub enum DeployKind {
     Objective,
     Deployed {
         player: Ucid,
+        moved_by: Option<(Ucid, u32)>,
         spec: Deployable,
     },
     Troop {
         player: Ucid,
+        moved_by: Option<(Ucid, u32)>,
         spec: Troop,
     },
     Crate {
@@ -236,17 +238,42 @@ impl Db {
                     .msgs
                     .mark_to_side(group.side, group_center, true, msg),]
             }
-            DeployKind::Deployed { spec, player } => {
+            DeployKind::Deployed {
+                spec,
+                player,
+                moved_by,
+            } => {
                 let name = self.persisted.players[player].name.clone();
-                let msg = format_compact!("{} {gid} deployed by {name}", spec.path.last().unwrap());
+                let resp = moved_by
+                    .as_ref()
+                    .map(|(u, _)| {
+                        let name = self.persisted.players[u].name.clone();
+                        format_compact!("\nresponsible party: {name}")
+                    })
+                    .unwrap_or(CompactString::from(""));
+                let msg = format_compact!(
+                    "{} {gid} deployed by {name}{resp}",
+                    spec.path.last().unwrap()
+                );
                 smallvec![self
                     .ephemeral
                     .msgs
                     .mark_to_side(group.side, group_center, true, msg),]
             }
-            DeployKind::Troop { player, spec } => {
+            DeployKind::Troop {
+                player,
+                spec,
+                moved_by,
+            } => {
                 let name = self.persisted.players[player].name.clone();
-                let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
+                let resp = moved_by
+                    .as_ref()
+                    .map(|(u, _)| {
+                        let name = self.persisted.players[u].name.clone();
+                        format_compact!("\nresponsible party: {name}")
+                    })
+                    .unwrap_or(CompactString::from(""));
+                let msg = format_compact!("{} {gid} deployed by {name}{resp}", spec.name);
                 smallvec![self
                     .ephemeral
                     .msgs
@@ -736,18 +763,44 @@ impl Db {
                     || self.persisted.crates.contains(&gid)
                 {
                     if self.group_health(&gid)?.0 == 0 {
+                        match &group!(self, gid)?.origin {
+                            DeployKind::Troop {
+                                player,
+                                moved_by: Some((ucid, p)),
+                                ..
+                            }
+                            | DeployKind::Deployed {
+                                player,
+                                moved_by: Some((ucid, p)),
+                                ..
+                            } => {
+                                let owner = self.persisted.players[player].name.clone();
+                                let ucid = ucid.clone();
+                                let p = -(*p as i32);
+                                let msg = format_compact!("for the death of {gid} which was deployed by {owner} and moved by you");
+                                self.adjust_points(&ucid, p, &msg)
+                            }
+                            DeployKind::Troop { .. }
+                            | DeployKind::Deployed { .. }
+                            | DeployKind::Action { .. }
+                            | DeployKind::Crate { .. }
+                            | DeployKind::Objective => (),
+                        }
                         self.delete_group(&gid)?
                     }
                 }
                 if self.persisted.actions.contains(&gid) {
                     if let DeployKind::Action { player, spec, .. } = &group!(self, gid)?.origin {
                         if self.group_health(&gid)?.0 == 0 {
-                            if let Some((player, penalty)) = spec.penalty.and_then(|n| {
-                                player.as_ref().and_then(|u| {
-                                    self.persisted.players.get_mut_cow(u).map(|p| (p, n))
-                                })
-                            }) {
-                                player.points -= penalty as i32;
+                            if let Some((penalty, ucid)) = spec
+                                .penalty
+                                .and_then(|p| player.as_ref().map(|pl| (p, pl.clone())))
+                            {
+                                self.adjust_points(
+                                    &ucid,
+                                    -(penalty as i32),
+                                    &format_compact!("for the loss of action group {gid}"),
+                                )
                             }
                         }
                         self.delete_group(&gid)?

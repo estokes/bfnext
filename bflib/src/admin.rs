@@ -369,6 +369,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         .clone();
                     let origin = DeployKind::Troop {
                         player: ifo.ucid.clone(),
+                        moved_by: None,
                         spec: spec.clone(),
                     };
                     ctx.db
@@ -406,6 +407,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         None => {
                             let origin = DeployKind::Deployed {
                                 player: ifo.ucid.clone(),
+                                moved_by: None,
                                 spec: spec.clone(),
                             };
                             ctx.db

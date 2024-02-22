@@ -171,8 +171,8 @@ impl Db {
                         .and_then(|uid| self.persisted.units.get(uid))
                         .and_then(|unit| self.persisted.groups.get(&unit.group))
                         .and_then(|group| match &group.origin {
-                            DeployKind::Deployed { player, spec: _ } => Some(player.clone()),
-                            DeployKind::Troop { player, spec: _ } => Some(player.clone()),
+                            DeployKind::Deployed { player, spec: _, moved_by: _ } => Some(player.clone()),
+                            DeployKind::Troop { player, spec: _, moved_by: _ } => Some(player.clone()),
                             DeployKind::Action { player, .. } => player.clone(),
                             DeployKind::Crate { .. } | DeployKind::Objective => None,
                         })
@@ -737,12 +737,12 @@ impl Db {
         }
     }
 
-    pub fn adjust_points(&mut self, ucid: &Ucid, amount: i32) {
+    pub fn adjust_points(&mut self, ucid: &Ucid, amount: i32, why: &str) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             player.points += amount;
             let pp = player.points;
             if amount != 0 {
-                let m = format_compact!("{}({}) points", pp, amount);
+                let m = format_compact!("{}({}) points {}", pp, amount, why);
                 self.ephemeral.panel_to_player(&self.persisted, ucid, m);
                 self.ephemeral.dirty();
             }

@@ -940,7 +940,7 @@ impl Db {
                 for gid in &self.persisted.troops {
                     let group = group!(self, gid)?;
                     match &group.origin {
-                        DeployKind::Troop { spec, player } if spec.can_capture => {
+                        DeployKind::Troop { spec, player, moved_by: _ } if spec.can_capture => {
                             let in_range = group
                                 .units
                                 .into_iter()
@@ -970,6 +970,7 @@ impl Db {
             let (side, _, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
             if gids.iter().all(|(s, _, _)| side == s) {
                 let obj = objective_mut!(self, oid)?;
+                let name = obj.name.clone();
                 obj.spawned = false;
                 obj.threatened = true;
                 obj.last_threatened_ts = now;
@@ -1024,7 +1025,7 @@ impl Db {
                 if let Some(points) = self.ephemeral.cfg.points.as_ref() {
                     let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
                     for ucid in ucids {
-                        self.adjust_points(&ucid, ppp);
+                        self.adjust_points(&ucid, ppp, &format!("for capturing {name}"));
                     }
                 }
                 let obj = objective!(self, oid)?;

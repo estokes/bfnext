@@ -777,7 +777,7 @@ impl Db {
                     self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_repair) {
-                        self.adjust_points(&st.ucid, amount as i32);
+                        self.adjust_points(&st.ucid, amount as i32, "for logistics repair");
                     }
                     let obj = objective!(self, oid)?;
                     return Ok(Unpakistan::RepairedBase(obj.name.clone(), obj.logi()));
@@ -802,7 +802,7 @@ impl Db {
                     self.transfer_supplies(lua, from, to)?;
                     self.delete_group(&gid)?;
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_transfer) {
-                        self.adjust_points(&st.ucid, amount as i32);
+                        self.adjust_points(&st.ucid, amount as i32, "for supply transfer");
                     }
                     return Ok(Unpakistan::TransferedSupplies(
                         objective!(self, from)?.name.clone(),
@@ -840,7 +840,7 @@ impl Db {
                                 }
                                 let oid =
                                     self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
-                                self.adjust_points(&st.ucid, -(spec.cost as i32));
+                                self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name, oid));
                             }
@@ -850,6 +850,7 @@ impl Db {
                                     compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
                                 let origin = DeployKind::Deployed {
                                     player: st.ucid.clone(),
+                                    moved_by: None,
                                     spec: spec.clone(),
                                 };
                                 let gid = self.add_and_queue_group(
@@ -865,7 +866,7 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                self.adjust_points(&st.ucid, -(spec.cost as i32));
+                                self.adjust_points(&st.ucid, -(spec.cost as i32), &format_compact!("for {dep} unpack"));
                                 return Ok(Unpakistan::Unpacked(dep, gid));
                             }
                         },
@@ -1062,7 +1063,7 @@ impl Db {
                         troop_cfg.cost
                     )
                 }
-                self.adjust_points(&ucid, -(troop_cfg.cost as i32));
+                self.adjust_points(&ucid, -(troop_cfg.cost as i32), &format_compact!("for {name} troop"));
             }
         }
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
@@ -1126,6 +1127,7 @@ impl Db {
         };
         let dk = DeployKind::Troop {
             player: ucid.clone(),
+            moved_by: None,
             spec: troop_cfg.clone(),
         };
         let spctx = SpawnCtx::new(lua)?;
@@ -1174,7 +1176,7 @@ impl Db {
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
-        self.adjust_points(&ucid, troop_cfg.cost as i32);
+        self.adjust_points(&ucid, troop_cfg.cost as i32, "for troop return");
         Ok(troop_cfg)
     }
 
@@ -1189,7 +1191,7 @@ impl Db {
                 .into_iter()
                 .filter_map(|gid| self.persisted.groups.get(gid).map(|g| (*gid, g)))
                 .find_map(|(gid, g)| {
-                    if let DeployKind::Troop { spec, player } = &g.origin {
+                    if let DeployKind::Troop { spec, player, moved_by: _ } = &g.origin {
                         if g.side == side {
                             let in_range = g
                                 .units

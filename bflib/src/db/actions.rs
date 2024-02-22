@@ -357,9 +357,12 @@ impl Db {
             ActionArgs::TankerWaypoint(args) => self
                 .move_tanker(spctx, side, ucid.clone(), args)
                 .context("moving tanker")?,
-            ActionArgs::Move(args) => self
-                .move_unit(spctx, side, args)
-                .context("moving unit")?,
+            ActionArgs::Move(args) => match &ucid {
+                None => bail!("ucid is required for move"),
+                Some(ucid) => self
+                    .move_group(spctx, side, ucid, cmd.action.penalty.unwrap_or(0), args)
+                    .context("moving unit")?,
+            },
         }
         if let Some(ucid) = ucid.as_ref() {
             self.persisted.players[ucid].points -= cost as i32;
@@ -508,13 +511,16 @@ impl Db {
         )
     }
 
-    fn move_unit(
+    fn move_group(
         &mut self,
         spctx: &SpawnCtx,
         side: Side,
+        ucid: &Ucid,
+        penalty: u32,
         args: WithPosAndGroup<MoveCfg>,
     ) -> Result<()> {
-        let group = group!(self, args.group)?;
+        let pos = self.group_center(&args.group)?;
+        let group = group_mut!(self, args.group)?;
         if group.side != side {
             bail!("can't move an enemy unit")
         }
@@ -527,7 +533,6 @@ impl Db {
             bail!("you can't move this type of unit")
         }
         let max_dist2 = (max_dist as f64).powi(2);
-        let pos = self.group_center(&args.group)?;
         if na::distance_squared(&pos.into(), &args.pos.into()) > max_dist2 {
             bail!("You can move this type of unit at most {max_dist}M at a time")
         }
@@ -536,6 +541,21 @@ impl Db {
             .insert(args.group, args.pos);
         for uid in &group.units {
             self.ephemeral.units_able_to_move.insert(*uid);
+        }
+        if penalty > 0 {
+            match &mut group.origin {
+                DeployKind::Deployed {
+                    player, moved_by, ..
+                }
+                | DeployKind::Troop {
+                    player, moved_by, ..
+                } if ucid != player => *moved_by = Some((ucid.clone(), penalty)),
+                DeployKind::Action { .. }
+                | DeployKind::Crate { .. }
+                | DeployKind::Objective
+                | DeployKind::Troop { .. }
+                | DeployKind::Deployed { .. } => (),
+            }
         }
         let alt = Land::singleton(spctx.lua())?.get_height(LuaVec2(args.pos))?;
         let group = Group::get_by_name(spctx.lua(), &group.name).context("getting group")?;
@@ -1223,6 +1243,7 @@ impl Db {
         };
         let origin = DeployKind::Deployed {
             player: ucid,
+            moved_by: None,
             spec: spec.clone(),
         };
         self.add_and_queue_group(
@@ -1263,6 +1284,7 @@ impl Db {
         };
         let dk = DeployKind::Troop {
             player: ucid.clone(),
+            moved_by: None,
             spec: troop_cfg.clone(),
         };
         let spctx = SpawnCtx::new(lua)?;

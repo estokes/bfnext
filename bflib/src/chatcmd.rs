@@ -226,24 +226,24 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
                         Err(e) => reply!("could not delete group {id} {e:?}"),
                         Ok(()) => reply!("delted {id}"),
                     },
-                    DeployKind::Deployed { player, spec } => {
+                    DeployKind::Deployed { player, spec, moved_by: _ } => {
                         let player = player.clone();
                         let points = (spec.cost as f32 / 2.).ceil() as i32;
                         match ctx.db.delete_group(&id) {
                             Err(e) => reply!("could not delete group {id} {e:?}"),
                             Ok(()) => {
-                                ctx.db.adjust_points(&player, points);
+                                ctx.db.adjust_points(&player, points, &format_compact!("reclaimed {id}"));
                                 reply!("deleted {id}")
                             }
                         }
                     }
-                    DeployKind::Troop { player, spec } => {
+                    DeployKind::Troop { player, spec, moved_by: _ } => {
                         let player = player.clone();
                         let points = (spec.cost as f32 / 2.).ceil() as i32;
                         match ctx.db.delete_group(&id) {
                             Err(e) => reply!("could not delete group {id} {e:?}"),
                             Ok(()) => {
-                                ctx.db.adjust_points(&player, points);
+                                ctx.db.adjust_points(&player, points, &format_compact!("reclaimed {id}"));
                                 reply!("deleted {id}")
                             }
                         }

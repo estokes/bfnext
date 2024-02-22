@@ -377,7 +377,11 @@ impl Db {
             },
         }
         if let Some(ucid) = ucid.as_ref() {
-            self.persisted.players[ucid].points -= cost as i32;
+            self.adjust_points(
+                ucid,
+                -(cost as i32),
+                &format!("perform action {}", cmd.name),
+            );
         }
         *self
             .ephemeral

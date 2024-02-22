@@ -438,6 +438,14 @@ pub struct NukeCfg {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MoveCfg {
+    /// max distance for troop moves in meters
+    pub troop: u32,
+    /// max distance for deployable moves in meters
+    pub deployable: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActionKind {
     Tanker(AiPlaneCfg),
     Awacs(AiPlaneCfg),
@@ -453,6 +461,7 @@ pub enum ActionKind {
     Deployable(DeployableCfg),
     LogisticsRepair(AiPlaneCfg),
     LogisticsTransfer(AiPlaneCfg),
+    Move(MoveCfg)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

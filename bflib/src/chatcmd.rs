@@ -257,6 +257,7 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
 fn action_help(ctx: &mut Context, actions: &FxHashMap<String, Action>, id: PlayerId) {
     for (name, action) in actions {
         let msg = match &action.kind {
+            ActionKind::Move(_) => Some(format_compact!("{name}: <group> <key> | Move a ground unit. cost {}", action.cost)),
             ActionKind::Awacs(_) => Some(format_compact!(
                 "{name}: <key> | Spawn an awacs at key, a mark point. cost {}",
                 action.cost
@@ -339,7 +340,10 @@ pub(super) fn run_action_commands(ctx: &mut Context, lua: MizLua) -> Result<()> 
                 let side = player.side;
                 let r = match ActionCmd::parse(&mut ctx.db, lua, side, &s) {
                     Err(e) => Err(e),
-                    Ok(cmd) => ctx.db.start_action(&spctx, &ctx.idx, &ctx.jtac, side, Some(ucid), cmd),
+                    Ok(cmd) => {
+                        ctx.db
+                            .start_action(&spctx, &ctx.idx, &ctx.jtac, side, Some(ucid), cmd)
+                    }
                 };
                 let msg = match r {
                     Err(e) => format_compact!("could not run action {s}: {e:?}"),

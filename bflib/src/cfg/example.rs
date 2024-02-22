@@ -1350,6 +1350,18 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 }),
             },
         ),
+        (
+            "move".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::Move(MoveCfg {
+                    troop: 1000,
+                    deployable: 1000,
+                }),
+            },
+        ),
     ])
 }
 
@@ -1574,6 +1586,18 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::Nuke(NukeCfg {
                     cost_scale: 5,
                     power: 1000,
+                }),
+            },
+        ),
+        (
+            "move".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::Move(MoveCfg {
+                    troop: 1000,
+                    deployable: 1000,
                 }),
             },
         ),

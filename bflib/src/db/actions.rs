@@ -7,7 +7,7 @@ use crate::{
     admin,
     cfg::{
         Action, ActionKind, AiPlaneCfg, AiPlaneKind, BomberCfg, DeployableCfg, DroneCfg,
-        LimitEnforceTyp, NukeCfg, UnitTag,
+        LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
     db::{cargo::Oldest, ephemeral, group::DeployKind},
     group, group_mut,
@@ -21,9 +21,12 @@ use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
     attribute::Attribute,
-    change_heading,
+    centroid2d, change_heading,
     coalition::Side,
-    controller::{Command, MissionPoint, OrbitPattern, PointType, Task, TurnMethod},
+    controller::{
+        ActionTyp, AltType, Command, MissionPoint, OrbitPattern, PointType, Task, TurnMethod,
+        VehicleFormation,
+    },
     env::miz::MizIndex,
     group::Group,
     land::Land,
@@ -90,6 +93,7 @@ pub enum ActionArgs {
     Deployable(WithPos<DeployableCfg>),
     LogisticsRepair(WithObj<AiPlaneCfg>),
     LogisticsTransfer(WithFromTo<AiPlaneCfg>),
+    Move(WithPosAndGroup<MoveCfg>),
 }
 
 impl ActionArgs {
@@ -121,11 +125,17 @@ impl ActionArgs {
                 Ok(found[0].1)
             }
         }
-        fn pos_group(db: &mut Db, lua: MizLua, side: Side, s: &str) -> Result<WithPosAndGroup<()>> {
+        fn pos_group<T>(
+            db: &mut Db,
+            lua: MizLua,
+            side: Side,
+            c: T,
+            s: &str,
+        ) -> Result<WithPosAndGroup<T>> {
             match s.split_once(" ") {
                 None => Err(anyhow!("expected <gid> <key>")),
                 Some((gid, key)) => Ok(WithPosAndGroup {
-                    cfg: (),
+                    cfg: c,
                     pos: get_key_pos(db, lua, side, key)?,
                     group: gid.parse()?,
                 }),
@@ -161,17 +171,22 @@ impl ActionArgs {
             ActionKind::Tanker(c) => Ok(Self::Tanker(pos(db, lua, side, c, s)?)),
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
             ActionKind::Fighters(c) => Ok(Self::Fighters(pos(db, lua, side, c, s)?)),
-            ActionKind::FighersWaypoint => Ok(Self::FightersWaypoint(pos_group(db, lua, side, s)?)),
+            ActionKind::FighersWaypoint => {
+                Ok(Self::FightersWaypoint(pos_group(db, lua, side, (), s)?))
+            }
             ActionKind::Drone(c) => Ok(Self::Drone(pos(db, lua, side, c, s)?)),
-            ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(db, lua, side, s)?)),
+            ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(db, lua, side, (), s)?)),
             ActionKind::Nuke(c) => Ok(Self::Nuke(pos(db, lua, side, c, s)?)),
             ActionKind::Paratrooper(c) => Ok(Self::Paratrooper(pos(db, lua, side, c, s)?)),
             ActionKind::Deployable(c) => Ok(Self::Deployable(pos(db, lua, side, c, s)?)),
             ActionKind::LogisticsRepair(c) => Ok(Self::LogisticsRepair(obj(db, c, s)?)),
             ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(from_to(db, c, s)?)),
-            ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(db, lua, side, s)?)),
-            ActionKind::TankerWaypoint => Ok(Self::TankerWaypoint(pos_group(db, lua, side, s)?)),
+            ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(db, lua, side, (), s)?)),
+            ActionKind::TankerWaypoint => {
+                Ok(Self::TankerWaypoint(pos_group(db, lua, side, (), s)?))
+            }
             ActionKind::Bomber(c) => Ok(Self::Bomber(jtac(c, s)?)),
+            ActionKind::Move(c) => Ok(Self::Move(pos_group(db, lua, side, c, s)?)),
         }
     }
 }
@@ -342,6 +357,9 @@ impl Db {
             ActionArgs::TankerWaypoint(args) => self
                 .move_tanker(spctx, side, ucid.clone(), args)
                 .context("moving tanker")?,
+            ActionArgs::Move(args) => self
+                .move_unit(spctx, side, args)
+                .context("moving unit")?,
         }
         if let Some(ucid) = ucid.as_ref() {
             self.persisted.players[ucid].points -= cost as i32;
@@ -488,6 +506,75 @@ impl Db {
                 cfg: (),
             },
         )
+    }
+
+    fn move_unit(
+        &mut self,
+        spctx: &SpawnCtx,
+        side: Side,
+        args: WithPosAndGroup<MoveCfg>,
+    ) -> Result<()> {
+        let group = group!(self, args.group)?;
+        if group.side != side {
+            bail!("can't move an enemy unit")
+        }
+        let max_dist = match &group.origin {
+            DeployKind::Deployed { .. } => args.cfg.deployable,
+            DeployKind::Troop { .. } => args.cfg.troop,
+            DeployKind::Action { .. } | DeployKind::Crate { .. } | DeployKind::Objective => 0,
+        };
+        if max_dist == 0 {
+            bail!("you can't move this type of unit")
+        }
+        let max_dist2 = (max_dist as f64).powi(2);
+        let pos = self.group_center(&args.group)?;
+        if na::distance_squared(&pos.into(), &args.pos.into()) > max_dist2 {
+            bail!("You can move this type of unit at most {max_dist}M at a time")
+        }
+        self.ephemeral
+            .groups_with_move_missions
+            .insert(args.group, args.pos);
+        for uid in &group.units {
+            self.ephemeral.units_able_to_move.insert(*uid);
+        }
+        let alt = Land::singleton(spctx.lua())?.get_height(LuaVec2(args.pos))?;
+        let group = Group::get_by_name(spctx.lua(), &group.name).context("getting group")?;
+        let con = group.get_controller()?;
+        con.set_task(Task::Mission {
+            airborne: Some(false),
+            route: vec![MissionPoint {
+                action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
+                airdrome_id: None,
+                helipad: None,
+                typ: PointType::TurningPoint,
+                time_re_fu_ar: None,
+                link_unit: None,
+                pos: LuaVec2(args.pos),
+                alt,
+                alt_typ: Some(AltType::BARO),
+                speed: 20.,
+                speed_locked: None,
+                eta: None,
+                eta_locked: None,
+                name: Some(String::from("move")),
+                task: Box::new(Task::EngageTargets {
+                    target_types: vec![
+                        Attribute::Fighters,
+                        Attribute::MultiroleFighters,
+                        Attribute::BattleAirplanes,
+                        Attribute::Battleplanes,
+                        Attribute::Helicopters,
+                        Attribute::AttackHelicopters,
+                        Attribute::GroundUnits,
+                        Attribute::GroundVehicles,
+                        Attribute::ArmedGroundUnits,
+                    ],
+                    max_dist: None,
+                    priority: None,
+                }),
+            }],
+        })?;
+        Ok(())
     }
 
     fn move_tanker(
@@ -687,7 +774,7 @@ impl Db {
             macro_rules! wpt {
                 ($name:expr, $pos:expr) => {
                     MissionPoint {
-                        action: Some(TurnMethod::FlyOverPoint),
+                        action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
                         typ: PointType::TurningPoint,
                         airdrome_id: None,
                         helipad: None,
@@ -965,7 +1052,7 @@ impl Db {
             macro_rules! wpt {
                 ($name:expr, $pos:expr, $task:expr) => {
                     MissionPoint {
-                        action: Some(TurnMethod::FlyOverPoint),
+                        action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
                         typ: PointType::TurningPoint,
                         airdrome_id: None,
                         helipad: None,
@@ -1330,6 +1417,43 @@ impl Db {
                                 }
                             }
                         }
+                    }
+                    ActionKind::Move(_) => {
+                        self.ephemeral.groups_with_move_missions.retain(|gid, dst| {
+                            match self.persisted.groups.get(gid) {
+                                None => false,
+                                Some(group) => {
+                                    let pos = centroid2d(
+                                        group
+                                            .units
+                                            .into_iter()
+                                            .filter_map(|uid| self.persisted.units.get(uid))
+                                            .map(|u| u.pos),
+                                    );
+                                    if (pos - *dst).magnitude() > 100. {
+                                        true
+                                    } else {
+                                        for uid in &group.units {
+                                            match self.persisted.units.get(uid) {
+                                                None => {
+                                                    self.ephemeral
+                                                        .units_able_to_move
+                                                        .swap_remove(uid);
+                                                }
+                                                Some(unit) => {
+                                                    if !unit.tags.contains(UnitTag::Driveable) {
+                                                        self.ephemeral
+                                                            .units_able_to_move
+                                                            .swap_remove(uid);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        false
+                                    }
+                                }
+                            }
+                        });
                     }
                     ActionKind::AwacsWaypoint
                     | ActionKind::FighersWaypoint

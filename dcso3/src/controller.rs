@@ -59,7 +59,7 @@ string_enum!(OrbitPattern, u8, [
 
 string_enum!(TurnMethod, u8, [
     FlyOverPoint => "Fly Over Point",
-    FinPoint => "Fin Point"
+    OffRoad => "Off Road"
 ]);
 
 string_enum!(Designation, u8, [
@@ -248,13 +248,42 @@ impl FACParams {
 }
 
 #[derive(Debug, Clone)]
+pub enum ActionTyp {
+    Air(TurnMethod),
+    Ground(VehicleFormation),
+}
+
+impl<'lua> IntoLua<'lua> for ActionTyp {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        match self {
+            ActionTyp::Air(a) => IntoLua::into_lua(a, lua),
+            ActionTyp::Ground(a) => IntoLua::into_lua(a, lua),
+        }
+    }
+}
+
+impl<'lua> FromLua<'lua> for ActionTyp {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        match TurnMethod::from_lua(value.clone(), lua) {
+            Ok(v) => Ok(Self::Air(v)),
+            Err(te) => match VehicleFormation::from_lua(value, lua) {
+                Ok(v) => Ok(Self::Ground(v)),
+                Err(ve) => Err(err(&format_compact!(
+                    "unknown action turn method: {te:?}, vehicle formation: {ve:?}"
+                ))),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct MissionPoint<'lua> {
     pub typ: PointType,
     pub airdrome_id: Option<AirbaseId>,
     pub time_re_fu_ar: Option<i64>,
     pub helipad: Option<AirbaseId>,
     pub link_unit: Option<UnitId>,
-    pub action: Option<TurnMethod>,
+    pub action: Option<ActionTyp>,
     pub pos: LuaVec2,
     pub alt: f64,
     pub alt_typ: Option<AltType>,
@@ -1019,8 +1048,7 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
                 let tbl = lua.create_table()?;
                 for (i, task) in tasks.into_iter().enumerate() {
                     tbl.push(task)?;
-                    tbl 
-                        .raw_get::<_, LuaTable>(i + 1)?
+                    tbl.raw_get::<_, LuaTable>(i + 1)?
                         .raw_set("number", i + 1)?;
                 }
                 params.raw_set("tasks", tbl)?;
@@ -1428,15 +1456,6 @@ string_enum!(VehicleFormation, u8, [
     OnRoad => "On Road",
     Rank => "Rank",
     Vee => "Vee"
-], [
-    Cone => "CONE",
-    Diamond => "DIAMOND",
-    EchelonLeft => "ECHELON_LEFT",
-    EchelonRight => "ECHELON_RIGHT",
-    OffRoad => "OFF_ROAD",
-    OnRoad => "ON_ROAD",
-    Rank => "RANK",
-    Vee => "VEE"
 ]);
 
 simple_enum!(AirMissileAttack, u8, [

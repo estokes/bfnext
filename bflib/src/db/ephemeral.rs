@@ -23,7 +23,7 @@ use super::{
 };
 use crate::{
     cfg::{
-        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg, DeployableLogistics, DroneCfg, NukeCfg, Troop, Vehicle, WarehouseConfig
+        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg, DeployableLogistics, DroneCfg, Troop, Vehicle, WarehouseConfig
     },
     maybe,
     msgq::MsgQ,
@@ -98,6 +98,7 @@ pub struct Ephemeral {
     used_pad_templates: FxHashSet<String>,
     force_to_spectators: BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>>,
     pub(super) units_able_to_move: IndexSet<UnitId, FxBuildHasher>,
+    pub(super) groups_with_move_missions: FxHashMap<GroupId, Vector2>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
     pub(super) production_by_side: FxHashMap<Side, Arc<Production>>,
     pub(super) actions_taken: FxHashMap<Side, FxHashMap<String, u32>>,
@@ -610,10 +611,8 @@ impl Ephemeral {
                     | ActionKind::TankerWaypoint
                     | ActionKind::DroneWaypoint
                     | ActionKind::FighersWaypoint
-                    | ActionKind::Nuke(NukeCfg {
-                        cost_scale: _,
-                        power: _,
-                    }) => (),
+                    | ActionKind::Move(_)
+                    | ActionKind::Nuke(_) => (),
                 }
             }
         }

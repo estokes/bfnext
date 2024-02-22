@@ -27,7 +27,7 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
-    controller::{AltType, MissionPoint, PointType, Task, TurnMethod},
+    controller::{ActionTyp, AltType, MissionPoint, PointType, Task, VehicleFormation},
     cvt_err, err,
     group::Group,
     land::Land,
@@ -612,7 +612,7 @@ impl Jtac {
                 let task = Task::Mission {
                     airborne: Some(false),
                     route: vec![MissionPoint {
-                        action: Some(TurnMethod::Custom(String::from("Off Road"))),
+                        action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
                         typ: PointType::TurningPoint,
                         airdrome_id: None,
                         helipad: None,

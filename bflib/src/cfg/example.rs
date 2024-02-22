@@ -1276,9 +1276,9 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                     plane: AiPlaneCfg {
                         kind: AiPlaneKind::Helicopter,
                         template: "RTROOPCARRIER".into(),
-                        altitude: 100.,
+                        altitude: 300.,
                         altitude_typ: AltType::RADIO,
-                        speed: 60.,
+                        speed: 70.,
                         duration: None,
                     },
                 }),
@@ -1295,10 +1295,10 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                     plane: AiPlaneCfg {
                         kind: AiPlaneKind::Helicopter,
                         template: "RTROOPCARRIER".into(),
-                        altitude: 100.,
+                        altitude: 300.,
                         altitude_typ: AltType::RADIO,
                         duration: None,
-                        speed: 60.
+                        speed: 70.
                     }
                 }),
             },
@@ -1312,10 +1312,10 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::LogisticsRepair(AiPlaneCfg {
                     kind: AiPlaneKind::Helicopter,
                     template: "RCARGOCARRIER".into(),
-                    altitude: 100.,
+                    altitude: 300.,
                     altitude_typ: AltType::RADIO,
                     duration: None,
-                    speed: 60.,
+                    speed: 70.,
                 }),
             },
         ),
@@ -1328,10 +1328,10 @@ fn default_red_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::LogisticsTransfer(AiPlaneCfg {
                     kind: AiPlaneKind::Helicopter,
                     template: "RCARGOCARRIER".into(),
-                    altitude: 100.,
+                    altitude: 300.,
                     altitude_typ: AltType::RADIO,
                     duration: None,
-                    speed: 60.
+                    speed: 70.
                 }),
             },
         ),
@@ -1500,7 +1500,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     plane: AiPlaneCfg {
                         kind: AiPlaneKind::Helicopter,
                         template: "BTROOPCARRIER".into(),
-                        altitude: 100.,
+                        altitude: 300.,
                         altitude_typ: AltType::RADIO,
                         duration: None,
                         speed: 60.
@@ -1519,7 +1519,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                     plane: AiPlaneCfg {
                         kind: AiPlaneKind::Helicopter,
                         template: "BTROOPCARRIER".into(),
-                        altitude: 100.,
+                        altitude: 300.,
                         altitude_typ: AltType::RADIO,
                         duration: None,
                         speed: 60.
@@ -1536,7 +1536,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::LogisticsRepair(AiPlaneCfg {
                     kind: AiPlaneKind::Helicopter,
                     template: "BCARGOCARRIER".into(),
-                    altitude: 100.,
+                    altitude: 300.,
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 60.
@@ -1552,7 +1552,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
                 kind: ActionKind::LogisticsTransfer(AiPlaneCfg {
                     kind: AiPlaneKind::Helicopter,
                     template: "BCARGOCARRIER".into(),
-                    altitude: 100.,
+                    altitude: 300.,
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 60.

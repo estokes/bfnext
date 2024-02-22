@@ -1354,7 +1354,7 @@ fn default_red_actions() -> FxHashMap<String, Action> {
             "move".into(),
             Action {
                 cost: 10,
-                penalty: None,
+                penalty: Some(25),
                 limit: None,
                 kind: ActionKind::Move(MoveCfg {
                     troop: 1000,
@@ -1593,7 +1593,7 @@ fn default_blue_actions() -> FxHashMap<String, Action> {
             "move".into(),
             Action {
                 cost: 10,
-                penalty: None,
+                penalty: Some(25),
                 limit: None,
                 kind: ActionKind::Move(MoveCfg {
                     troop: 1000,

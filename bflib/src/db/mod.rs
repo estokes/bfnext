@@ -215,7 +215,11 @@ impl Db {
                         ..
                     }
                     | DeployKind::Action {
-                        spec: Action { kind: ActionKind::Drone(DroneCfg { jtac, .. }), ..},
+                        spec:
+                            Action {
+                                kind: ActionKind::Drone(DroneCfg { jtac, .. }),
+                                ..
+                            },
                         ..
                     } => {
                         let pos = centroid3d(

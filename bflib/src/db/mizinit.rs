@@ -15,7 +15,7 @@ for more details.
 */
 
 use super::{
-    group::DeployKind,
+    group::{DeployKind, GroupId},
     objective::{ObjGroup, SlotInfo},
     Db, Map,
 };
@@ -33,11 +33,14 @@ use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
     coalition::Side,
-    env::miz::{Group, Miz, MizIndex, PointType, Skill, TriggerZone, TriggerZoneTyp},
+    controller::PointType,
+    env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
     MizLua, String, Vector2,
 };
+use enumflags2::BitFlags;
 use fxhash::FxHashSet;
-use log::info;
+use log::{error, info};
+use smallvec::SmallVec;
 
 impl Db {
     /// objectives are just trigger zones named according to type codes
@@ -157,6 +160,7 @@ impl Db {
             },
             name,
             DeployKind::Objective,
+            BitFlags::empty(),
         )?;
         objective_mut!(self, obj)?
             .groups
@@ -170,7 +174,7 @@ impl Db {
         let mut ground_start = false;
         for point in slot.route()?.points()? {
             let point = point?;
-            match point.typ()? {
+            match point.typ {
                 PointType::TakeOffGround | PointType::TakeOffGroundHot => ground_start = true,
                 PointType::Land
                 | PointType::TakeOff
@@ -182,6 +186,14 @@ impl Db {
         }
         for unit in slot.units()? {
             let unit = unit?;
+            let vehicle = Vehicle::from(unit.typ()?);
+            match self.ephemeral.cfg.threatened_distance.get(&vehicle) {
+                Some(_) => (),
+                None => bail!(
+                    "vehicle {:?} doesn't have a configured theatened distance",
+                    vehicle
+                ),
+            }
             if unit.skill()? != Skill::Client {
                 continue;
             }
@@ -203,14 +215,6 @@ impl Db {
                     }
                 }
             };
-            let vehicle = Vehicle::from(unit.typ()?);
-            match self.ephemeral.cfg.threatened_distance.get(&vehicle) {
-                Some(_) => (),
-                None => bail!(
-                    "vehicle {:?} doesn't have a configured theatened distance",
-                    vehicle
-                ),
-            }
             match self.ephemeral.cfg.life_types.get(&vehicle) {
                 None => bail!("vehicle {:?} doesn't have a configured life type", vehicle),
                 Some(typ) => match self.ephemeral.cfg.default_lives.get(&typ) {
@@ -314,6 +318,13 @@ impl Db {
             for gid in &self.persisted.troops {
                 self.ephemeral.push_spawn(*gid);
             }
+            let actions: SmallVec<[GroupId; 16]> =
+                SmallVec::from_iter(self.persisted.actions.into_iter().map(|g| *g));
+            for gid in actions {
+                if let Err(e) = self.respawn_action(spctx, idx, gid) {
+                    error!("failed to respawn action {e:?}");
+                }
+            }
             for (_, obj) in &self.persisted.objectives {
                 if let ObjectiveKind::Farp {
                     spec: _,
@@ -361,7 +372,9 @@ impl Db {
                 let group = group!(self, unit.group)?;
                 match group.origin {
                     DeployKind::Crate { .. } => (),
-                    DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
+                    DeployKind::Deployed { .. }
+                    | DeployKind::Troop { .. }
+                    | DeployKind::Action { .. } => {
                         self.ephemeral
                             .units_potentially_close_to_enemies
                             .insert(*uid);

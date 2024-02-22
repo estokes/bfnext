@@ -62,7 +62,7 @@ impl<'lua> Land<'lua> {
             .call_function("getIP", (origin, direction, distance))?)
     }
 
-    pub fn get_profile(&self, origin: LuaVec3, destination: LuaVec3) -> Result<Sequence<LuaVec3>> {
+    pub fn get_profile(&self, origin: LuaVec3, destination: LuaVec3) -> Result<Sequence<'lua, LuaVec3>> {
         Ok(self.t.call_function("profile", (origin, destination))?)
     }
 
@@ -82,7 +82,7 @@ impl<'lua> Land<'lua> {
         typ: RoadType,
         origin: LuaVec2,
         destination: LuaVec2,
-    ) -> Result<Sequence<LuaVec2>> {
+    ) -> Result<Sequence<'lua, LuaVec2>> {
         let typ = match typ {
             RoadType::Road => "roads",
             RoadType::Rail => "rails",

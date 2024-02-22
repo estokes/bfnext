@@ -30,6 +30,7 @@ use dcso3::{
 };
 use std::{fs::File, path::Path};
 
+pub mod actions;
 pub mod cargo;
 pub mod ephemeral;
 pub mod group;
@@ -174,7 +175,10 @@ impl Db {
         self.persisted.ewrs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
             match &group.origin {
-                DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
+                DeployKind::Crate { .. }
+                | DeployKind::Objective
+                | DeployKind::Troop { .. }
+                | DeployKind::Action { .. } => None,
                 DeployKind::Deployed { spec, .. } => {
                     let ewr = spec.ewr.as_ref()?;
                     let pos = centroid3d(
@@ -219,6 +223,7 @@ impl Db {
                         Some((pos, JtId::Group(*gid), group.side, jtac))
                     }
                     DeployKind::Crate { .. }
+                    | DeployKind::Action { .. }
                     | DeployKind::Objective
                     | DeployKind::Troop { .. }
                     | DeployKind::Deployed { .. } => None,

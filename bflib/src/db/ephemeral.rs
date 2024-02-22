@@ -16,22 +16,37 @@ for more details.
 
 use super::{
     cargo::Cargo,
-    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+    group::{DeployKind, GroupId, SpawnedGroup, SpawnedUnit, UnitId},
     markup::ObjectiveMarkup,
     objective::{Objective, ObjectiveId},
     persisted::Persisted,
 };
 use crate::{
-    cfg::{Cfg, Crate, Deployable, DeployableLogistics, Troop, Vehicle, WarehouseConfig},
+    cfg::{
+        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        DeployableLogistics, NukeCfg, Troop, Vehicle, WarehouseConfig,
+    },
     maybe,
     msgq::MsgQ,
-    spawnctx::{Despawn, SpawnCtx},
+    spawnctx::{Despawn, SpawnCtx, SpawnLoc, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
-    airbase::ClassAirbase, centroid2d, coalition::Side, env::miz::{GroupKind, Miz, MizIndex}, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, static_object::ClassStatic, trigger::MarkId, unit::{ClassUnit, Unit}, warehouse::{LiquidType, WSCategory}, MizLua, Position3, String, Vector2
+    airbase::ClassAirbase,
+    centroid2d,
+    coalition::Side,
+    controller::{MissionPoint, PointType, Task},
+    env::miz::{GroupKind, Miz, MizIndex},
+    net::{SlotId, Ucid},
+    object::{DcsObject, DcsOid},
+    pointing_towards2,
+    static_object::ClassStatic,
+    trigger::MarkId,
+    unit::{ClassUnit, Unit},
+    warehouse::{LiquidType, WSCategory},
+    LuaVec2, MizLua, Position3, String, Vector2,
 };
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexSet;
@@ -73,7 +88,7 @@ pub struct Ephemeral {
     pub(super) players_by_slot: FxHashMap<SlotId, Ucid>,
     pub(super) cargo: FxHashMap<SlotId, Cargo>,
     pub(super) deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
-    pub(super) group_marks: FxHashMap<GroupId, MarkId>,
+    pub(super) group_marks: FxHashMap<GroupId, SmallVec<[MarkId; 2]>>,
     objective_markup: FxHashMap<ObjectiveId, ObjectiveMarkup>,
     pub(super) object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
     pub(super) uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
@@ -86,6 +101,7 @@ pub struct Ephemeral {
     pub(super) units_able_to_move: IndexSet<UnitId, FxBuildHasher>,
     pub(super) units_potentially_close_to_enemies: FxHashSet<UnitId>,
     pub(super) production_by_side: FxHashMap<Side, Arc<Production>>,
+    pub(super) actions_taken: FxHashMap<Side, FxHashMap<String, u32>>,
     pub(super) delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<(GroupId, Despawn)>,
@@ -192,7 +208,7 @@ impl Ephemeral {
             for _ in 0..max(1, slen >> 3) {
                 if let Some(gid) = self.spawnq.pop_front() {
                     let group = maybe!(persisted.groups, gid, "group")?;
-                    spawn_group(persisted, idx, spctx, group)?
+                    spawn_group(persisted, idx, spctx, group)?;
                 }
             }
         }
@@ -550,9 +566,56 @@ impl Ephemeral {
                 };
             }
         }
-        for act in &cfg.actions {
-            if !points && (act.cost > 0 || act.penalty.unwrap_or(0) > 0) {
-                bail!("the points system is disabled but {act:?} costs points")
+        for (side, actions) in &cfg.actions {
+            for (_, act) in actions {
+                if !points && (act.cost > 0 || act.penalty.unwrap_or(0) > 0) {
+                    bail!("the points system is disabled but {act:?} costs points")
+                }
+                match &act.kind {
+                    ActionKind::Awacs(AiPlaneCfg { template, .. })
+                    | ActionKind::Bomber(BomberCfg {
+                        plane: AiPlaneCfg { template, .. },
+                        ..
+                    })
+                    | ActionKind::Tanker(AiPlaneCfg { template, .. })
+                    | ActionKind::Drone(AiPlaneCfg { template, .. })
+                    | ActionKind::Fighters(AiPlaneCfg { template, .. })
+                    | ActionKind::LogisticsRepair(AiPlaneCfg { template, .. })
+                    | ActionKind::LogisticsTransfer(AiPlaneCfg { template, .. }) => {
+                        miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
+                            .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
+                    }
+                    ActionKind::Deployable(DeployableCfg {
+                        name,
+                        plane: AiPlaneCfg { template, .. },
+                    }) => {
+                        miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
+                            .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
+                        self.deployable_idx
+                            .get(side)
+                            .and_then(|idx| idx.deployables_by_name.get(name))
+                            .ok_or_else(|| anyhow!("missing deployable for action {act:?}"))?;
+                    }
+                    ActionKind::Paratrooper(DeployableCfg {
+                        name,
+                        plane: AiPlaneCfg { template, .. },
+                    }) => {
+                        miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
+                            .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
+                        self.deployable_idx
+                            .get(side)
+                            .and_then(|idx| idx.squads_by_name.get(name))
+                            .ok_or_else(|| anyhow!("missing troop for action {act:?}"))?;
+                    }
+                    ActionKind::AwacsWaypoint
+                    | ActionKind::TankerWaypoint
+                    | ActionKind::DroneWaypoint
+                    | ActionKind::FighersWaypoint
+                    | ActionKind::Nuke(NukeCfg {
+                        cost_scale: _,
+                        power: _,
+                    }) => (),
+                }
             }
         }
         self.cfg = Arc::new(cfg);
@@ -563,9 +626,9 @@ impl Ephemeral {
 pub(super) fn spawn_group<'lua>(
     persisted: &Persisted,
     idx: &MizIndex,
-    spctx: &SpawnCtx,
+    spctx: &SpawnCtx<'lua>,
     group: &SpawnedGroup,
-) -> Result<()> {
+) -> Result<Option<Spawned<'lua>>> {
     let template = spctx
         .get_template(
             idx,
@@ -577,6 +640,46 @@ pub(super) fn spawn_group<'lua>(
     template.group.set("lateActivation", false)?;
     template.group.set("hidden", false)?;
     template.group.set_name(group.name.clone())?;
+    if let DeployKind::Action { loc, .. } = &group.origin {
+        match loc {
+            SpawnLoc::AtPos { .. }
+            | SpawnLoc::AtPosWithCenter { .. }
+            | SpawnLoc::AtPosWithComponents { .. }
+            | SpawnLoc::AtTrigger { .. } => (),
+            SpawnLoc::InAir {
+                pos,
+                heading,
+                altitude,
+            } => {
+                let dst = pos + pointing_towards2(*heading) * 10_000.;
+                let route = template.group.route()?;
+                macro_rules! pt {
+                    ($pos:expr) => {
+                        MissionPoint {
+                            action: None,
+                            typ: PointType::TurningPoint,
+                            airdrome_id: None,
+                            time_re_fu_ar: None,
+                            helipad: None,
+                            link_unit: None,
+                            pos: LuaVec2($pos),
+                            alt: *altitude,
+                            alt_typ: None,
+                            speed: 200.,
+                            speed_locked: None,
+                            eta: None,
+                            eta_locked: None,
+                            name: None,
+                            task: Box::new(Task::ComboTask(vec![])),
+                        }
+                    };
+                }
+                route.set_points(vec![pt!(*pos), pt!(dst)])?;
+                template.group.set_route(route)?;
+                template.group.set("heading", *heading)?;
+            }
+        }
+    }
     let mut points: SmallVec<[Vector2; 16]> = smallvec![];
     let by_tname: FxHashMap<&str, &SpawnedUnit> = group
         .units
@@ -602,6 +705,7 @@ pub(super) fn spawn_group<'lua>(
                 Some(su) => {
                     unit.raw_remove("unitId")?;
                     unit.set_pos(su.pos)?;
+                    unit.set_alt(su.position.p.y)?;
                     unit.set_heading(su.heading)?;
                     unit.set_name(su.name.clone())?;
                     i += 1;
@@ -622,10 +726,10 @@ pub(super) fn spawn_group<'lua>(
             .with_context(|| {
                 format_compact!("removing junk before spawn of {}", group.template_name)
             })?;
-        spctx
-            .spawn(template)
-            .with_context(|| format_compact!("spawning template {}", group.template_name))
+        Ok(Some(spctx.spawn(template).with_context(|| {
+            format_compact!("spawning template {}", group.template_name)
+        })?))
     } else {
-        Ok(())
+        Ok(None)
     }
 }

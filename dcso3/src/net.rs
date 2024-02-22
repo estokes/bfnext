@@ -371,7 +371,7 @@ impl<'lua> Net<'lua> {
             .call_function("send_chat_to", (message, player, from_id))?)
     }
 
-    pub fn get_player_list(&self) -> Result<Sequence<PlayerId>> {
+    pub fn get_player_list(&self) -> Result<Sequence<'lua, PlayerId>> {
         Ok(self.t.call_function("get_player_list", ())?)
     }
 

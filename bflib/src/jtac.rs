@@ -27,11 +27,12 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
-    controller::Task,
+    controller::{AltType, MissionPoint, PointType, Task, TurnMethod},
     cvt_err, err,
     group::Group,
     land::Land,
     net::SlotId,
+    normal2,
     object::{DcsObject, DcsOid},
     radians_to_degrees, simple_enum,
     spot::{ClassSpot, Spot},
@@ -47,12 +48,24 @@ use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{collections::hash_map::Entry, fmt};
+use std::{collections::hash_map::Entry, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
     Group(GroupId),
     Slot(SlotId),
+}
+
+impl FromStr for JtId {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        if let Some(s) = s.strip_prefix("sl") {
+            Ok(JtId::Slot(SlotId::Unit(s.parse()?)))
+        } else {
+            Ok(JtId::Group(s.parse()?))
+        }
+    }
 }
 
 impl<'lua> FromLua<'lua> for JtId {
@@ -117,7 +130,7 @@ pub struct ArtilleryAdjustment {
 impl ArtilleryAdjustment {
     fn compute_final_solution(&self, ip: Vector2, tp: Vector2) -> Vector2 {
         let v = (tp - ip).normalize();
-        let normal = Vector2::new(v.y, -v.x) * self.left_right.signum() as f64;
+        let normal = normal2(v) * self.left_right.signum() as f64;
         tp + (v * self.short_long as f64) + (normal * self.left_right as f64)
     }
 }
@@ -125,16 +138,17 @@ impl ArtilleryAdjustment {
 type LocByCode = FxHashMap<ObjectiveId, FxHashMap<u16, FxHashSet<JtId>>>;
 
 #[derive(Debug, Clone, Default)]
-struct Contact {
-    pos: Vector3,
-    typ: String,
-    tags: UnitTags,
-    last_move: Option<DateTime<Utc>>,
+pub struct Contact {
+    pub pos: Vector3,
+    pub typ: String,
+    pub tags: UnitTags,
+    pub last_move: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
-struct JtacTarget {
-    uid: UnitId,
+pub struct JtacTarget {
+    pub uid: UnitId,
+    pub pos: Vector3,
     source: DcsOid<ClassUnit>,
     spot: DcsOid<ClassSpot>,
     ir_pointer: Option<DcsOid<ClassSpot>>,
@@ -165,6 +179,7 @@ impl JtacTarget {
 
 #[derive(Debug, Clone, Copy)]
 pub struct JtacLocation {
+    pub pos: Vector2,
     pub oid: ObjectiveId,
     pub bearing: f64,
     pub distance: f64,
@@ -172,11 +187,45 @@ pub struct JtacLocation {
 
 impl JtacLocation {
     fn new(db: &Db, pos: Vector3) -> Self {
-        let (distance, bearing, obj) = db.objective_near_point(Vector2::new(pos.x, pos.z));
+        let pos = Vector2::new(pos.x, pos.z);
+        let (distance, bearing, obj) =
+            Db::objective_near_point(&db.persisted.objectives, pos, |_| true).unwrap();
         Self {
+            pos,
             oid: obj.id,
             bearing,
             distance,
+        }
+    }
+}
+
+pub struct ContactsIter<'a> {
+    contacts: Vec<indexmap::map::Iter<'a, UnitId, Contact>>,
+    i: usize,
+}
+
+impl<'a> Iterator for ContactsIter<'a> {
+    type Item = (&'a UnitId, &'a Contact);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.contacts.len() == 0 {
+                break None;
+            }
+            if self.i < self.contacts.len() {
+                match self.contacts[self.i].next() {
+                    Some(item) => {
+                        self.i += 1;
+                        break Some(item);
+                    }
+                    None => {
+                        self.contacts.remove(self.i);
+                        self.i += 1;
+                    }
+                }
+            } else {
+                self.i = 0;
+            }
         }
     }
 }
@@ -189,7 +238,7 @@ pub struct Jtac {
     filter: BitFlags<UnitTag>,
     pub location: JtacLocation,
     priority: Vec<UnitTags>,
-    target: Option<JtacTarget>,
+    pub target: Option<JtacTarget>,
     autoshift: bool,
     ir_pointer: bool,
     code: u16,
@@ -406,6 +455,7 @@ impl Jtac {
                     None
                 };
                 self.target = Some(JtacTarget {
+                    pos,
                     spot,
                     source: jtid,
                     ir_pointer,
@@ -546,6 +596,7 @@ impl Jtac {
         match self.target.as_mut() {
             None => bail!("no target"),
             Some(target) => {
+                let land = Land::singleton(lua)?;
                 let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
                 let pos = db.unit(&target.uid)?.pos;
@@ -555,8 +606,28 @@ impl Jtac {
                     radius: None,
                     expend_qty: Some(n as i64),
                     weapon_type: None,
-                    altitude: None,
-                    altitude_type: None,
+                    altitude: Some(land.get_height(LuaVec2(pos))?),
+                    altitude_type: Some(AltType::BARO),
+                };
+                let task = Task::Mission {
+                    airborne: Some(false),
+                    route: vec![MissionPoint {
+                        action: Some(TurnMethod::Custom(String::from("Off Road"))),
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2(apos),
+                        alt: land.get_height(LuaVec2(apos))?,
+                        alt_typ: Some(AltType::BARO),
+                        speed: 0.,
+                        speed_locked: None,
+                        eta: None,
+                        eta_locked: None,
+                        name: None,
+                        task: Box::new(task),
+                    }],
                 };
                 let group = Group::get_by_name(lua, &name)
                     .with_context(|| format_compact!("getting group {}", name))?;
@@ -692,6 +763,23 @@ impl Jtacs {
             j.values()
                 .filter_map(|jt| jt.target.as_ref().map(|target| target.uid))
         })
+    }
+
+    pub fn contacts_near_point(&self, side: Side, point: Vector2, dist: f64) -> ContactsIter {
+        let dist = dist.powi(2);
+        let contacts = self
+            .jtacs()
+            .filter_map(|jt| {
+                if jt.side == side
+                    && na::distance_squared(&jt.location.pos.into(), &point.into()) <= dist
+                {
+                    Some(jt.contacts.iter())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        ContactsIter { i: 0, contacts }
     }
 
     pub fn add_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {

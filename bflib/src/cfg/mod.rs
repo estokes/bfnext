@@ -17,7 +17,7 @@ for more details.
 use anyhow::{anyhow, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
-use dcso3::{coalition::Side, net::Ucid, String};
+use dcso3::{coalition::Side, controller::AltType, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
 use fxhash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
@@ -390,31 +390,63 @@ pub struct PointsCfg {
     pub capture: u32,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum AiPlaneKind {
+    FixedWing,
+    Helicopter
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiPlaneCfg {
+    pub kind: AiPlaneKind,
+    pub duration: Option<u8>,
+    pub template: String,
+    pub altitude: f64,
+    pub altitude_typ: AltType,
+    pub speed: f64
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BomberCfg {
+    pub targets: u32,
+    pub power: u32,
+    // in meters radius around the target point
+    pub accuracy: u32,
+    pub plane: AiPlaneCfg,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeployableCfg {
+    pub name: String,
+    pub plane: AiPlaneCfg,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NukeCfg {
+    /// using a nuke reduces the cost of nukes for everyone by this factor. e.g. cost_scale: 4, with initial cost 1000.
+    /// The first nuke would cost 1000 points. The next nuke would cost 250 points. The next nuke would cost 62 points.
+    /// and so on until a nuke costs 1 point at which point it stops scaling.
+    pub cost_scale: u8,
+    /// in Kilotons of TNT
+    pub power: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActionKind {
-    Tanker {
-        duration: u8,
-    },
-    Awacs {
-        duration: u8,
-    },
-    Bomber {
-        targets: u32,
-        power: u32,
-        // in meters radius around the target point
-        accuracy: u32,
-    },
-    CruiseMissileStrike {
-        missiles: u32,
-    },
+    Tanker(AiPlaneCfg),
+    Awacs(AiPlaneCfg),
+    Bomber(BomberCfg),
+    Fighters(AiPlaneCfg),
+    Drone(AiPlaneCfg),
+    Nuke(NukeCfg),
+    FighersWaypoint,
+    DroneWaypoint,
     TankerWaypoint,
     AwacsWaypoint,
-    Paratrooper {
-        troop: String,
-    },
-    PalletDrop {
-        deployable: String,
-    }
+    Paratrooper(DeployableCfg),
+    Deployable(DeployableCfg),
+    LogisticsRepair(AiPlaneCfg),
+    LogisticsTransfer(AiPlaneCfg),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -504,9 +536,9 @@ pub struct Cfg {
     /// the life reset configuration for each life type. A pair
     /// of number of lives per reset, and reset time in seconds.
     pub default_lives: FxHashMap<LifeType, (u8, u32)>,
-    /// Available actions
+    /// Available actions per side
     #[serde(default)]
-    pub actions: Vec<Action>,
+    pub actions: FxHashMap<Side, FxHashMap<String, Action>>,
     /// vehicle cargo configuration
     #[serde(default)]
     pub cargo: FxHashMap<Vehicle, CargoConfig>,

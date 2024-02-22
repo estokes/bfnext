@@ -34,24 +34,27 @@ use std::{
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Persisted {
-    pub(super) groups: Map<GroupId, SpawnedGroup>,
-    pub(super) units: Map<UnitId, SpawnedUnit>,
-    pub(super) groups_by_name: Map<String, GroupId>,
-    pub(super) units_by_name: Map<String, UnitId>,
-    pub(super) groups_by_side: Map<Side, Set<GroupId>>,
-    pub(super) deployed: Set<GroupId>,
-    pub(super) farps: Set<ObjectiveId>,
-    pub(super) crates: Set<GroupId>,
-    pub(super) troops: Set<GroupId>,
-    pub(super) jtacs: Set<GroupId>,
-    pub(super) ewrs: Set<GroupId>,
-    pub(super) objectives: Map<ObjectiveId, Objective>,
-    pub(super) objectives_by_slot: Map<SlotId, ObjectiveId>,
-    pub(super) objectives_by_name: Map<String, ObjectiveId>,
-    pub(super) objectives_by_group: Map<GroupId, ObjectiveId>,
-    pub(super) players: Map<Ucid, Player>,
+    pub groups: Map<GroupId, SpawnedGroup>,
+    pub units: Map<UnitId, SpawnedUnit>,
+    pub groups_by_name: Map<String, GroupId>,
+    pub units_by_name: Map<String, UnitId>,
+    pub groups_by_side: Map<Side, Set<GroupId>>,
+    pub deployed: Set<GroupId>,
+    pub farps: Set<ObjectiveId>,
+    pub crates: Set<GroupId>,
+    pub troops: Set<GroupId>,
+    pub jtacs: Set<GroupId>,
+    pub ewrs: Set<GroupId>,
+    pub actions: Set<GroupId>,
+    pub objectives: Map<ObjectiveId, Objective>,
+    pub objectives_by_slot: Map<SlotId, ObjectiveId>,
+    pub objectives_by_name: Map<String, ObjectiveId>,
+    pub objectives_by_group: Map<GroupId, ObjectiveId>,
+    pub players: Map<Ucid, Player>,
     #[serde(default)]
-    pub(super) logistics_hubs: Set<ObjectiveId>,
+    pub logistics_hubs: Set<ObjectiveId>,
+    #[serde(default)]
+    pub nukes_used: u32,
 }
 
 impl Persisted {

@@ -172,11 +172,11 @@ impl<'lua> World<'lua> {
         Ok(())
     }
 
-    pub fn get_player(&self) -> Result<Sequence<Unit<'lua>>> {
+    pub fn get_player(&self) -> Result<Sequence<'lua, Unit<'lua>>> {
         Ok(self.t.call_function("getPlayer", ())?)
     }
 
-    pub fn get_airbases(&self) -> Result<Sequence<Airbase<'lua>>> {
+    pub fn get_airbases(&self) -> Result<Sequence<'lua, Airbase<'lua>>> {
         Ok(self.t.call_function("getAirbases", ())?)
     }
 
@@ -205,7 +205,7 @@ impl<'lua> World<'lua> {
         Ok(self.t.call_function("removeJunk", volume)?)
     }
 
-    pub fn get_mark_panels(&self) -> Result<Sequence<MarkPanel<'lua>>> {
+    pub fn get_mark_panels(&self) -> Result<Sequence<'lua, MarkPanel<'lua>>> {
         Ok(self.t.call_function("getMarkPanels", ())?)
     }
 }

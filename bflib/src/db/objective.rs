@@ -41,12 +41,13 @@ use dcso3::{
     warehouse::LiquidType,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
+use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{cmp::max, str::FromStr};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectiveKind {
@@ -283,6 +284,13 @@ impl Objective {
         }
     }
 
+    pub fn is_airbase(&self) -> bool {
+        match &self.kind {
+            ObjectiveKind::Airbase => true,
+            ObjectiveKind::Farp { .. } | ObjectiveKind::Fob | ObjectiveKind::Logistics => false
+        }
+    }
+
     pub fn get_equipment(&self, name: &str) -> Inventory {
         self.warehouse
             .equipment
@@ -315,21 +323,28 @@ impl Db {
         maybe!(obj.slots, slot, "objective slot")
     }
 
+    /// returns the closest objective that matches the critera to the specified point
     /// (distance, heading from objective to point, objective)
-    pub fn objective_near_point(&self, pos: Vector2) -> (f64, f64, &Objective) {
-        let (dist, obj) = self.persisted.objectives.into_iter().fold(
-            (f64::MAX, None),
-            |(cur_dist, cur_obj), (_, obj)| {
-                let dist = na::distance_squared(&pos.into(), &obj.pos.into());
-                if dist < cur_dist {
-                    (dist, Some(obj))
-                } else {
-                    (cur_dist, cur_obj)
-                }
-            },
-        );
-        let obj = obj.unwrap();
-        (dist.sqrt(), azumith2d_to(obj.pos, pos), obj)
+    pub fn objective_near_point<P: Fn(&Objective) -> bool>(
+        obj: &Map<ObjectiveId, Objective>,
+        pos: Vector2,
+        p: P,
+    ) -> Option<(f64, f64, &Objective)> {
+        let (dist, obj) =
+            obj.into_iter()
+                .fold((f64::MAX, None), |(cur_dist, cur_obj), (_, obj)| {
+                    if !p(obj) {
+                        (cur_dist, cur_obj)
+                    } else {
+                        let dist = na::distance_squared(&pos.into(), &obj.pos.into());
+                        if dist < cur_dist {
+                            (dist, Some(obj))
+                        } else {
+                            (cur_dist, cur_obj)
+                        }
+                    }
+                });
+        obj.map(|obj| (dist.sqrt(), azumith2d_to(obj.pos, pos), obj))
     }
 
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
@@ -461,6 +476,7 @@ impl Db {
                 location.clone(),
                 &name,
                 DeployKind::Objective,
+                BitFlags::empty(),
                 Some(now + Duration::seconds(60)),
             )?);
         }
@@ -651,10 +667,24 @@ impl Db {
             for uid in &self.ephemeral.units_potentially_close_to_enemies {
                 let unit = unit!(self, uid)?;
                 if obj.owner != unit.side {
+                    let air = unit.tags.0.contains(UnitTag::Aircraft);
+                    let cull_dist = if air {
+                        cull_distance
+                    } else {
+                        ground_cull_distance
+                    };
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
-                    if dist <= ground_cull_distance {
+                    if dist <= cull_dist {
                         *spawn = true;
-                        *threat = true;
+                        if air {
+                            let threat_dist =
+                                (cfg.threatened_distance[unit.typ.as_str()] as f64).powi(2);
+                            if dist <= threat_dist {
+                                *threat = true
+                            }
+                        } else {
+                            *threat = true;
+                        }
                         is_close_to_enemies.insert(*uid);
                     }
                 }
@@ -835,29 +865,27 @@ impl Db {
         oid: ObjectiveId,
     ) -> Result<()> {
         let obj = objective_mut!(self, oid)?;
-        let mut to_repair = None;
-        let current_logi = obj.logi as f64 / 100.;
+        let mut total_logi = 0;
         for gid in maybe!(&obj.groups, &side, "side group")? {
             let group = group_mut!(self, gid)?;
             if group.class.is_logi() {
-                if to_repair.is_none() {
-                    let len = group.units.len();
-                    let cur = (current_logi * len as f64).ceil() as usize;
-                    to_repair = Some(cur + max(1, len >> 1));
+                total_logi = group.units.len();
+                break;
+            }
+        }
+        let mut to_repair = 1 + (total_logi >> 1);
+        for gid in maybe!(&obj.groups, &side, "side group")? {
+            let group = group_mut!(self, gid)?;
+            if group.class.is_logi() {
+                for uid in &group.units {
+                    let unit = unit_mut!(self, uid)?;
+                    if to_repair > 0 {
+                        to_repair -= 1;
+                        unit.dead = false;
+                    }
                 }
-                if let Some(to_repair) = to_repair.as_mut() {
-                    for uid in &group.units {
-                        let unit = unit_mut!(self, uid)?;
-                        if *to_repair > 0 {
-                            *to_repair -= 1;
-                            unit.dead = false;
-                        } else {
-                            unit.dead = true;
-                        }
-                    }
-                    if obj.spawned {
-                        self.ephemeral.push_spawn(*gid);
-                    }
+                if obj.spawned {
+                    self.ephemeral.push_spawn(*gid);
                 }
             }
         }
@@ -931,6 +959,7 @@ impl Db {
                         DeployKind::Crate { .. }
                         | DeployKind::Deployed { .. }
                         | DeployKind::Objective
+                        | DeployKind::Action { .. }
                         | DeployKind::Troop { .. } => (),
                     }
                 }

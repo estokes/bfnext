@@ -867,6 +867,15 @@ fn default_threatened_distance() -> FxHashMap<Vehicle, u32> {
         ("MiG-19P".into(), 9000),
         ("Mirage-F1EE".into(), 14400),
         ("Mirage-F1CE".into(), 14400),
+        ("A-50".into(), 0),
+        ("IL-78".into(), 0),
+        ("IL-78M".into(), 0),
+        ("MQ-9 Reaper".into(), 0),
+        ("Tu-22M3".into(), 36000),
+        ("KC-135".into(), 0),
+        ("KC130".into(), 0),
+        ("B-1B".into(), 36000),
+        ("E-3A".into(), 0),
     ])
 }
 
@@ -1018,10 +1027,10 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("SNR_75V".into(), SAM | LR | RadarGuided | TrackRadar),
             ("S_75M_Volhov".into(), SAM | LR | RadarGuided | Launcher),
             ("RD_75".into(), SAM | LR | RadarGuided | AuxRadarUnit),
-            ("MiG-29A".into(), Aircraft.into()),
-            ("Su-27".into(), Aircraft.into()),
+            ("MiG-29A".into(), Aircraft | Driveable),
+            ("Su-27".into(), Aircraft | Driveable),
             ("SA342L".into(), Helicopter.into()),
-            ("Su-25T".into(), Aircraft.into()),
+            ("Su-25T".into(), Aircraft | Driveable),
             ("MiG-21Bis".into(), Aircraft.into()),
             ("AH-64D_BLK_II".into(), Helicopter.into()),
             ("F-16C_50".into(), Aircraft.into()),
@@ -1043,6 +1052,15 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("Mi-24P".into(), Helicopter.into()),
             ("F-15ESE".into(), Aircraft.into()),
             ("Mirage-F1EE".into(), Aircraft.into()),
+            ("E-3A".into(), Aircraft.into()),
+            ("A-50".into(), Aircraft.into()),
+            ("MQ-9 Reaper".into(), Aircraft.into()),
+            ("KC-135".into(), Aircraft.into()),
+            ("KC130".into(), Aircraft.into()),
+            ("F-15C".into(), Aircraft.into()),
+            ("B-1B".into(), Aircraft.into()),
+            ("IL-78M".into(), Aircraft.into()),
+            ("Tu-22M3".into(), Aircraft.into()),
             (".Ammunition depot".into(), Logistics | Unarmed),
         ]
         .into_iter()
@@ -1124,63 +1142,445 @@ fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
     ])
 }
 
-fn default_actions() -> Vec<Action> {
-    vec![
-        Action {
-            cost: 100,
-            penalty: Some(100),
-            limit: None,
-            kind: ActionKind::Awacs { duration: 5 },
-        },
-        Action {
-            cost: 10,
-            penalty: None,
-            limit: None,
-            kind: ActionKind::AwacsWaypoint,
-        },
-        Action {
-            cost: 50,
-            penalty: Some(50),
-            limit: None,
-            kind: ActionKind::Tanker { duration: 5 },
-        },
-        Action {
-            cost: 10,
-            penalty: None,
-            limit: None,
-            kind: ActionKind::TankerWaypoint,
-        },
-        Action {
-            cost: 100,
-            penalty: Some(100),
-            limit: None,
-            kind: ActionKind::Bomber {
-                targets: 15,
-                power: 1000,
-                accuracy: 15,
+fn default_red_actions() -> FxHashMap<String, Action> {
+    FxHashMap::from_iter([
+        (
+            "awacs".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Awacs(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(8),
+                    template: "RAWACS".into(),
+                    altitude: 11000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 200.,
+                }),
             },
-        },
-        Action {
-            cost: 150,
-            penalty: None,
-            limit: None,
-            kind: ActionKind::CruiseMissileStrike { missiles: 10 },
-        },
-        Action {
-            cost: 50,
-            penalty: Some(100),
-            limit: None,
-            kind: ActionKind::Paratrooper {
-                troop: "Standard".into(),
+        ),
+        (
+            "awacs-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::AwacsWaypoint,
             },
-        },
-    ]
+        ),
+        (
+            "tanker".into(),
+            Action {
+                cost: 50,
+                penalty: Some(50),
+                limit: None,
+                kind: ActionKind::Tanker(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(8),
+                    template: "RTANKER".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 180.,
+                }),
+            },
+        ),
+        (
+            "tanker-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::TankerWaypoint,
+            },
+        ),
+        (
+            "drone".into(),
+            Action {
+                cost: 25,
+                penalty: Some(25),
+                limit: None,
+                kind: ActionKind::Drone(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(12),
+                    template: "RDRONE".into(),
+                    altitude: 6000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 90.,
+                }),
+            },
+        ),
+        (
+            "drone-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::DroneWaypoint,
+            },
+        ),
+        (
+            "bomber".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Bomber(BomberCfg {
+                    targets: 15,
+                    power: 1000,
+                    accuracy: 15,
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::FixedWing,
+                        template: "RBOMBER".into(),
+                        altitude: 12000.,
+                        altitude_typ: AltType::BARO,
+                        duration: None,
+                        speed: 300.,
+                    },
+                }),
+            },
+        ),
+        (
+            "fighters".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Fighters(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(2),
+                    template: "RFIGHTERS".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 250.,
+                }),
+            },
+        ),
+        (
+            "fighters-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::FighersWaypoint,
+            },
+        ),
+        (
+            "paratroops".into(),
+            Action {
+                cost: 50,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Paratrooper(DeployableCfg {
+                    name: "Standard".into(),
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::Helicopter,
+                        template: "RTROOPCARRIER".into(),
+                        altitude: 100.,
+                        altitude_typ: AltType::RADIO,
+                        speed: 60.,
+                        duration: None,
+                    },
+                }),
+            },
+        ),
+        (
+            "deploy-ewr".into(),
+            Action {
+                cost: 50,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Deployable(DeployableCfg {
+                    name: "1L13".into(),
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::Helicopter,
+                        template: "RTROOPCARRIER".into(),
+                        altitude: 100.,
+                        altitude_typ: AltType::RADIO,
+                        duration: None,
+                        speed: 60.
+                    }
+                }),
+            },
+        ),
+        (
+            "repair".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::LogisticsRepair(AiPlaneCfg {
+                    kind: AiPlaneKind::Helicopter,
+                    template: "RCARGOCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::RADIO,
+                    duration: None,
+                    speed: 60.,
+                }),
+            },
+        ),
+        (
+            "transfer".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::LogisticsTransfer(AiPlaneCfg {
+                    kind: AiPlaneKind::Helicopter,
+                    template: "RCARGOCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::RADIO,
+                    duration: None,
+                    speed: 60.
+                }),
+            },
+        ),
+        (
+            "nuke".into(),
+            Action {
+                cost: 5000,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::Nuke(NukeCfg {
+                    cost_scale: 5,
+                    power: 1000,
+                }),
+            },
+        ),
+    ])
+}
+
+fn default_blue_actions() -> FxHashMap<String, Action> {
+    FxHashMap::from_iter([
+        (
+            "awacs".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Awacs(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(8),
+                    template: "BAWACS".into(),
+                    altitude: 11000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 200.,
+                }),
+            },
+        ),
+        (
+            "awacs-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::AwacsWaypoint,
+            },
+        ),
+        (
+            "basket-tanker".into(),
+            Action {
+                cost: 50,
+                penalty: Some(50),
+                limit: None,
+                kind: ActionKind::Tanker(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(8),
+                    template: "BBASKETTANKER".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 180.,
+                }),
+            },
+        ),
+        (
+            "boom-tanker".into(),
+            Action {
+                cost: 50,
+                penalty: Some(50),
+                limit: None,
+                kind: ActionKind::Tanker(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(8),
+                    template: "BBOOMTANKER".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 180.,
+                }),
+            },
+        ),
+        (
+            "tanker-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::TankerWaypoint,
+            },
+        ),
+        (
+            "drone".into(),
+            Action {
+                cost: 25,
+                penalty: Some(25),
+                limit: None,
+                kind: ActionKind::Drone(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(12),
+                    template: "BDRONE".into(),
+                    altitude: 6000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 90.,
+                }),
+            },
+        ),
+        (
+            "drone-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::DroneWaypoint,
+            },
+        ),
+        (
+            "bomber".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Bomber(BomberCfg {
+                    targets: 15,
+                    power: 1000,
+                    accuracy: 15,
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::FixedWing,
+                        template: "BBOMBER".into(),
+                        duration: None,
+                        altitude: 12000.,
+                        altitude_typ: AltType::BARO,
+                        speed: 300.,
+                    },
+                }),
+            },
+        ),
+        (
+            "fighters".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Fighters(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(2),
+                    template: "BFIGHTERS".into(),
+                    altitude: 10000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 250.,
+                }),
+            },
+        ),
+        (
+            "fighters-waypoint".into(),
+            Action {
+                cost: 5,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::FighersWaypoint,
+            },
+        ),
+        (
+            "paratroops".into(),
+            Action {
+                cost: 50,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Paratrooper(DeployableCfg {
+                    name: "Standard".into(),
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::Helicopter,
+                        template: "BTROOPCARRIER".into(),
+                        altitude: 100.,
+                        altitude_typ: AltType::RADIO,
+                        duration: None,
+                        speed: 60.
+                    }
+                }),
+            },
+        ),
+        (
+            "deploy-ewr".into(),
+            Action {
+                cost: 50,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::Deployable(DeployableCfg {
+                    name: "AN/FPS-117".into(),
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::Helicopter,
+                        template: "BTROOPCARRIER".into(),
+                        altitude: 100.,
+                        altitude_typ: AltType::RADIO,
+                        duration: None,
+                        speed: 60.
+                    }
+                }),
+            },
+        ),
+        (
+            "repair".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::LogisticsRepair(AiPlaneCfg {
+                    kind: AiPlaneKind::Helicopter,
+                    template: "BCARGOCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::RADIO,
+                    duration: None,
+                    speed: 60.
+                }),
+            },
+        ),
+        (
+            "transfer".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::LogisticsTransfer(AiPlaneCfg {
+                    kind: AiPlaneKind::Helicopter,
+                    template: "BCARGOCARRIER".into(),
+                    altitude: 100.,
+                    altitude_typ: AltType::RADIO,
+                    duration: None,
+                    speed: 60.
+                }),
+            },
+        ),
+        (
+            "nuke".into(),
+            Action {
+                cost: 5000,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::Nuke(NukeCfg {
+                    cost_scale: 5,
+                    power: 1000,
+                }),
+            },
+        ),
+    ])
 }
 
 impl Default for Cfg {
     fn default() -> Self {
         Self {
-            admins: FxHashMap::default(),
+            admins: FxHashMap::from_iter([(
+                "f279deb7a6b62c96a78eca3ddb2bd8d0".into(),
+                "REAPER 32 | EvilKipper".into(),
+            )]),
             banned: FxHashMap::default(),
             repair_time: 1800,
             repair_crate: default_repair_crate(),
@@ -1232,7 +1632,10 @@ impl Default for Cfg {
                 (LifeType::Recon, (6, 21600)),
             ]),
             life_types: default_life_types(),
-            actions: default_actions(),
+            actions: FxHashMap::from_iter([
+                (Side::Red, default_red_actions()),
+                (Side::Blue, default_blue_actions()),
+            ]),
             cargo: default_cargo(),
             crate_template: FxHashMap::from_iter([
                 (Side::Red, "RCRATE".into()),
@@ -1250,6 +1653,7 @@ impl Default for Cfg {
             airborne_jtacs: FxHashMap::from_iter([
                 ("L-39ZA".into(), DeployableJtac { range: 16000 }),
                 ("MB-339A".into(), DeployableJtac { range: 16000 }),
+                ("MQ-9 Reaper".into(), DeployableJtac { range: 16000 })
             ]),
             jtac_priority: default_jtac_priority(),
         }

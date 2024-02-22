@@ -1277,8 +1277,10 @@ impl Db {
                         if let Some(target) = *destination {
                             if at_dest!(group, target, 800.) {
                                 destination.take();
-                                to_transfer.push((rtb, target, group.side));
-                                to_delete.push(group.id);
+                                if let Some(rtb) = *rtb {
+                                    to_transfer.push((rtb, target, group.side));
+                                    to_delete.push(group.id);
+                                }
                             }
                         }
                     }

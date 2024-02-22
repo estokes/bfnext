@@ -287,7 +287,7 @@ impl Objective {
     pub fn is_airbase(&self) -> bool {
         match &self.kind {
             ObjectiveKind::Airbase => true,
-            ObjectiveKind::Farp { .. } | ObjectiveKind::Fob | ObjectiveKind::Logistics => false
+            ObjectiveKind::Farp { .. } | ObjectiveKind::Fob | ObjectiveKind::Logistics => false,
         }
     }
 
@@ -667,7 +667,8 @@ impl Db {
             for uid in &self.ephemeral.units_potentially_close_to_enemies {
                 let unit = unit!(self, uid)?;
                 if obj.owner != unit.side {
-                    let air = unit.tags.0.contains(UnitTag::Aircraft);
+                    let air = unit.tags.0.contains(UnitTag::Aircraft)
+                        || unit.tags.0.contains(UnitTag::Helicopter);
                     let cull_dist = if air {
                         cull_distance
                     } else {
@@ -940,7 +941,11 @@ impl Db {
                 for gid in &self.persisted.troops {
                     let group = group!(self, gid)?;
                     match &group.origin {
-                        DeployKind::Troop { spec, player, moved_by: _ } if spec.can_capture => {
+                        DeployKind::Troop {
+                            spec,
+                            player,
+                            moved_by: _,
+                        } if spec.can_capture => {
                             let in_range = group
                                 .units
                                 .into_iter()

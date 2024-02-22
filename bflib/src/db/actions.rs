@@ -1483,9 +1483,11 @@ impl Db {
                                 to_paratroop.push((target, t.name.clone(), group.side, ucid));
                             }
                         }
-                        if let Some(target) = *rtb {
-                            if at_dest!(group, target, 800.) {
-                                to_delete.push(*gid);
+                        if destination.is_none() {
+                            if let Some(target) = *rtb {
+                                if at_dest!(group, target, 800.) {
+                                    to_delete.push(*gid);
+                                }
                             }
                         }
                     }

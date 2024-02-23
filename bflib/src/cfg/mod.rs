@@ -273,7 +273,7 @@ pub struct DeployableEwr {
     // CR estokes: Actual radar simulation ...
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeployableJtac {
     /// jtac detection and lasing range (Meters)

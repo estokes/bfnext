@@ -44,6 +44,14 @@ pub mod player;
 pub type Map<K, V> = immutable_chunkmap::map::Map<K, V, 256>;
 pub type Set<K> = immutable_chunkmap::set::Set<K, 256>;
 
+pub struct JtDesc {
+    pub pos: Vector3,
+    pub id: JtId,
+    pub side: Side,
+    pub spec: DeployableJtac,
+    pub air: bool,
+}
+
 #[macro_export]
 macro_rules! maybe {
     ($t:expr, $id:expr, $name:expr) => {
@@ -193,12 +201,18 @@ impl Db {
         })
     }
 
-    pub fn jtacs(&self) -> impl Iterator<Item = (Vector3, JtId, Side, &DeployableJtac)> {
+    pub fn jtacs<'a>(&'a self) -> impl Iterator<Item = JtDesc> + 'a {
         self.persisted
             .jtacs
             .into_iter()
             .filter_map(|gid| {
                 let group = self.persisted.groups.get(gid)?;
+                let pos = centroid3d(
+                    group
+                        .units
+                        .into_iter()
+                        .filter_map(|u| self.persisted.units.get(u).map(|u| u.position.p.0)),
+                );
                 match &group.origin {
                     DeployKind::Troop {
                         spec:
@@ -213,23 +227,27 @@ impl Db {
                                 jtac: Some(jtac), ..
                             },
                         ..
-                    }
-                    | DeployKind::Action {
+                    } => Some(JtDesc {
+                        pos,
+                        id: JtId::Group(*gid),
+                        side: group.side,
+                        spec: *jtac,
+                        air: false,
+                    }),
+                    DeployKind::Action {
                         spec:
                             Action {
                                 kind: ActionKind::Drone(DroneCfg { jtac, .. }),
                                 ..
                             },
                         ..
-                    } => {
-                        let pos = centroid3d(
-                            group
-                                .units
-                                .into_iter()
-                                .map(|u| self.persisted.units[u].position.p.0),
-                        );
-                        Some((pos, JtId::Group(*gid), group.side, jtac))
-                    }
+                    } => Some(JtDesc {
+                        pos,
+                        id: JtId::Group(*gid),
+                        side: group.side,
+                        spec: *jtac,
+                        air: true,
+                    }),
                     DeployKind::Crate { .. }
                     | DeployKind::Action { .. }
                     | DeployKind::Objective
@@ -242,13 +260,25 @@ impl Db {
                 let pos = inst.position.p.0;
                 let id = JtId::Slot(slot);
                 match self.ephemeral.cfg.airborne_jtacs.get(&inst.typ) {
-                    Some(jt) => Some((pos, id, p.side, jt)),
+                    Some(jt) => Some(JtDesc {
+                        pos,
+                        id,
+                        side: p.side,
+                        spec: *jt,
+                        air: true,
+                    }),
                     None => match self.ephemeral.cargo.get(&slot) {
                         None => None,
                         Some(cargo) => {
                             for (_, tr) in &cargo.troops {
                                 if let Some(jt) = &tr.jtac {
-                                    return Some((pos, id, p.side, jt));
+                                    return Some(JtDesc {
+                                        pos,
+                                        id,
+                                        side: p.side,
+                                        spec: *jt,
+                                        air: false,
+                                    });
                                 }
                             }
                             None

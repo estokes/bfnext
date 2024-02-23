@@ -19,7 +19,7 @@ use crate::{
     db::{
         group::{GroupId, SpawnedUnit, UnitId},
         objective::ObjectiveId,
-        Db,
+        Db, JtDesc,
     },
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -245,10 +245,18 @@ pub struct Jtac {
     last_smoke: DateTime<Utc>,
     pub nearby_artillery: SmallVec<[GroupId; 8]>,
     menu_dirty: bool,
+    air: bool,
 }
 
 impl Jtac {
-    fn new(db: &Db, gid: JtId, side: Side, priority: Vec<UnitTags>, pos: Vector3) -> Self {
+    fn new(
+        db: &Db,
+        gid: JtId,
+        side: Side,
+        priority: Vec<UnitTags>,
+        pos: Vector3,
+        air: bool,
+    ) -> Self {
         Self {
             gid,
             side,
@@ -263,6 +271,7 @@ impl Jtac {
             last_smoke: DateTime::<Utc>::default(),
             nearby_artillery: smallvec![],
             menu_dirty: false,
+            air,
         }
     }
 
@@ -431,10 +440,15 @@ impl Jtac {
                         return Ok(true);
                     }
                 };
+                let offset = if self.air {
+                    Vector3::new(0., -5., 0.)
+                } else {
+                    Vector3::new(0., 10., 0.)
+                };
                 let spot = Spot::create_laser(
                     lua,
                     jt.as_object()?,
-                    Some(LuaVec3(Vector3::new(0., 10., 0.))),
+                    Some(LuaVec3(offset)),
                     LuaVec3(pos),
                     self.code,
                 )
@@ -912,20 +926,33 @@ impl Jtacs {
         let mut saw_jtacs: SmallVec<[JtId; 32]> = smallvec![];
         let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
         let mut lost_targets: SmallVec<[(Side, JtId, Option<UnitId>); 64]> = smallvec![];
-        for (mut pos, group, side, ifo) in db.jtacs() {
-            if !saw_jtacs.contains(&group) {
-                saw_jtacs.push(group)
+        for JtDesc {
+            mut pos,
+            id,
+            side,
+            spec,
+            air,
+        } in db.jtacs()
+        {
+            if !saw_jtacs.contains(&id) {
+                saw_jtacs.push(id)
             }
-            let range = (ifo.range as f64).powi(2);
+            let range = (spec.range as f64).powi(2);
             let jtac = self
                 .jtacs
                 .entry(side)
                 .or_default()
-                .entry(group)
+                .entry(id)
                 .or_insert_with(|| {
                     *self.menu_dirty.entry(side).or_default() = true;
-                    let jt =
-                        Jtac::new(db, group, side, db.ephemeral.cfg.jtac_priority.clone(), pos);
+                    let jt = Jtac::new(
+                        db,
+                        id,
+                        side,
+                        db.ephemeral.cfg.jtac_priority.clone(),
+                        pos,
+                        air,
+                    );
                     Self::add_code_by_location(
                         &mut self.code_by_location,
                         jt.location.oid,
@@ -951,7 +978,11 @@ impl Jtacs {
                 );
                 *self.menu_dirty.entry(jtac.side).or_default() = true;
             }
-            pos.y += 10.;
+            if air {
+                pos.y -= 5.
+            } else {
+                pos.y += 10.
+            };
             for (unit, _) in db.instanced_units() {
                 saw_units.insert(unit.id);
                 if unit.side == jtac.side {

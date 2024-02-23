@@ -21,13 +21,11 @@ use crate::{
     static_object::StaticObjectId,
     string_enum,
     trigger::Modulation,
-    value_to_json, wrapped_table, LuaVec2, Sequence, Time,
+    wrapped_table, LuaVec2, Sequence, Time,
 };
 use anyhow::Result;
 use compact_str::format_compact;
 use enumflags2::{bitflags, BitFlags};
-use fxhash::FxHashMap;
-use log::debug;
 use mlua::{prelude::*, Value, Variadic};
 use na::Vector2;
 use serde_derive::{Deserialize, Serialize};
@@ -1081,11 +1079,6 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
             }
         }
         root.raw_set("params", params)?;
-        let mut tbl = FxHashMap::default();
-        debug!(
-            "{}",
-            value_to_json(&mut tbl, None, &Value::Table(root.clone()))
-        );
         Ok(Value::Table(root))
     }
 }

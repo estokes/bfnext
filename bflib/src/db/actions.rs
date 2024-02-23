@@ -1081,7 +1081,8 @@ impl Db {
                 ActionKind::Awacs(a)
                 | ActionKind::Tanker(a)
                 | ActionKind::Drone(DroneCfg { plane: a, .. })
-                | ActionKind::Fighters(a) => {
+                | ActionKind::Fighters(a)
+                | ActionKind::Attackers(a) => {
                     match loc {
                         SpawnLoc::InAir { pos: oldpos, .. } => {
                             let dir = *oldpos - pos;
@@ -1108,13 +1109,30 @@ impl Db {
                                 self.ephemeral.msgs().delete_mark(id)
                             }
                         }
-                        _ => bail!("race tracker not spawning in air"),
+                        SpawnLoc::AtPos { .. }
+                        | SpawnLoc::AtPosWithCenter { .. }
+                        | SpawnLoc::AtPosWithComponents { .. }
+                        | SpawnLoc::AtTrigger { .. } => bail!("race tracker not spawning in air"),
                     }
                     (a.altitude, a.altitude_typ.clone(), a.speed, marks, player)
                 }
-                _ => bail!("not a race tracker"),
+                ActionKind::AttackersWaypoint
+                | ActionKind::AwacsWaypoint
+                | ActionKind::DroneWaypoint
+                | ActionKind::TankerWaypoint
+                | ActionKind::FighersWaypoint
+                | ActionKind::Move(_)
+                | ActionKind::Deployable(_)
+                | ActionKind::Paratrooper(_)
+                | ActionKind::Bomber(_)
+                | ActionKind::Nuke(_)
+                | ActionKind::LogisticsRepair(_)
+                | ActionKind::LogisticsTransfer(_) => bail!("not a race tracker"),
             },
-            _ => bail!("not a race tracker"),
+            DeployKind::Crate { .. }
+            | DeployKind::Deployed { .. }
+            | DeployKind::Objective
+            | DeployKind::Troop { .. } => bail!("not a race tracker"),
         };
         let responsible = player
             .as_ref()

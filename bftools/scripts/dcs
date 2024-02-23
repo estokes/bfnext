@@ -3,7 +3,7 @@
 trap quit SIGINT SIGTERM SIGQUIT
 
 if test -z "$1" -o -z "$2" -o -z "$3"; then
-    echo "usage: dcs <name> <git-path> <miz-name>"
+    echo "usage: dcs <name> <git-path> <miz-name> <srs>"
     exit 1
 fi
 
@@ -22,9 +22,20 @@ if ! test -f "${HOME}/bfnext/${2}/${3}"; then
     exit 4
 fi
 
+if test "$4" == "true"; then
+    USE_SRS=1
+elif test "$4" == "false"; then
+    USE_SRS=0
+else
+    echo "usage: dcs <name> <git-path> <miz-name> <srs>"
+    echo "expected true or false for srs"
+    exit 5
+fi
+
 NAME="$1"
-DCS="$HOME/.wine/drive_c/Program Files/Eagle Dynamics/DCS World OpenBeta Server"
-DATA="$HOME/.wine/drive_c/users/dcs/Saved Games/$NAME"
+SRS="${HOME}/.wine/drive_c/Program Files/srs_${NAME}"
+DCS="${HOME}/.wine/drive_c/Program Files/Eagle Dynamics/DCS World OpenBeta Server"
+DATA="${HOME}/.wine/drive_c/users/dcs/Saved Games/$NAME"
 BFLOG="${DATA}/Logs/bfnext.txt"
 INSTALLED_MIZ="${DATA}/Missions/$(ls "${DATA}"/Missions)"
 INSTALLED_CFG="$(ls "${DATA}"/*_CFG)"
@@ -59,20 +70,15 @@ fi
 
 function update_from_git {
     cd ~/bfnext
-    git fetch
-    our_rev=$(git rev-parse --abbrev-ref HEAD)
-    changes=$(git log --oneline ${our_rev}..origin/main)
-    if test -n "$changes"; then
-	git merge
-	cp miz/bflib.dll "${DATA}/Scripts"
-	cp "${GIT_PATH}/${GIT_MIZ}" "$INSTALLED_MIZ"
-	# merge git config changes with the local admin, banned, and rules lists
-	jq --slurpfile ic "$INSTALLED_CFG" \
-	   '($ic[0] | { admins, rules, banned }) as $s | del(.[$s | keys[]]) + $s' \
-	   "$GIT_CFG" \
-	   >"${INSTALLED_CFG}.tmp"
-	mv "${INSTALLED_CFG}.tmp" "$INSTALLED_CFG"
-    fi
+    git pull
+    cp miz/bflib.dll "${DATA}/Scripts"
+    cp "${GIT_PATH}/${GIT_MIZ}" "$INSTALLED_MIZ"
+    # merge git config changes with the local admin, banned, and rules lists
+    jq --slurpfile ic "$INSTALLED_CFG" \
+       '($ic[0] | { admins, rules, banned }) as $s | del(.[$s | keys[]]) + $s' \
+       "$GIT_CFG" \
+       >"${INSTALLED_CFG}.tmp"
+    mv "${INSTALLED_CFG}.tmp" "$INSTALLED_CFG"
 }
 
 function kill_dcs() {
@@ -105,6 +111,14 @@ function watchdog() {
     done 
 }
 
+function run_srs() {
+    while true; do
+        cd "$SRS"
+	wine ./SR-Server.exe
+	sleep 10
+    done
+}
+
 function run_dcs() {
     while true; do
 	update_from_git
@@ -118,4 +132,7 @@ function run_dcs() {
 touch "$BFLOG"
 watchdog &
 run_dcs &
+if test $USE_SRS -eq 1; then
+    run_srs &
+fi
 wait

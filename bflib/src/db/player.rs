@@ -720,6 +720,8 @@ impl Db {
                     .map(|tags| {
                         if tags.contains(UnitTag::LR | UnitTag::TrackRadar | UnitTag::SAM) {
                             cfg.ground_kill + cfg.lr_sam_bonus
+                        } else if tags.contains(UnitTag::Aircraft) || tags.contains(UnitTag::Helicopter) {
+                            cfg.air_kill
                         } else {
                             cfg.ground_kill
                         }

@@ -770,11 +770,11 @@ impl Db {
                                 let tp = player.points;
                                 self.ephemeral.dirty();
                                 let lost = if lost {
-                                    format_compact!("You have lost a {life_type} life")
+                                    format_compact!("\nYou have lost a {life_type} life")
                                 } else {
                                     format_compact!("")
                                 };
-                                format_compact!("{tp}(-{total_points}) points, you have team killed {victim}. {}", lost)
+                                format_compact!("{tp}(-{total_points}) points, you have team killed {victim}.{}", lost)
                             }
                         }
                     };

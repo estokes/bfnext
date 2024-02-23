@@ -184,8 +184,8 @@ impl<'lua> World<'lua> {
         &self,
         category: ObjectCategory,
         volume: SearchVolume,
-        f: F,
         arg: T,
+        f: F,
     ) -> Result<()>
     where
         T: IntoLua<'lua> + FromLua<'lua>,

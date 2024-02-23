@@ -427,6 +427,10 @@ impl Db {
                     ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
                     return self.move_ai_fighters(spctx, side, player.clone(), args);
                 }
+                if let ActionKind::Attackers(_) = &spec.kind {
+                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    return self.move_ai_attackers(spctx, side, player.clone(), args);
+                }
             }
         }
         self.delete_group(&gid)

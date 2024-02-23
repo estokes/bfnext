@@ -23,7 +23,8 @@ use super::{
 };
 use crate::{
     cfg::{
-        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg, DeployableLogistics, DroneCfg, Troop, Vehicle, WarehouseConfig
+        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        DeployableLogistics, DroneCfg, Troop, Vehicle, WarehouseConfig,
     },
     maybe,
     msgq::MsgQ,
@@ -578,9 +579,12 @@ impl Ephemeral {
                         ..
                     })
                     | ActionKind::Tanker(AiPlaneCfg { template, .. })
-                    | ActionKind::Drone(DroneCfg { plane: AiPlaneCfg { template, .. }, ..})
+                    | ActionKind::Drone(DroneCfg {
+                        plane: AiPlaneCfg { template, .. },
+                        ..
+                    })
                     | ActionKind::Fighters(AiPlaneCfg { template, .. })
-                    | ActionKind::Attackers(AiPlaneCfg { template, ..})
+                    | ActionKind::Attackers(AiPlaneCfg { template, .. })
                     | ActionKind::LogisticsRepair(AiPlaneCfg { template, .. })
                     | ActionKind::LogisticsTransfer(AiPlaneCfg { template, .. }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
@@ -721,11 +725,10 @@ pub(super) fn spawn_group<'lua>(
             .iter()
             .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
             .fold(0., |acc, d| if d > acc { d } else { acc });
-        spctx
-            .remove_junk(point, radius.sqrt() * 1.10)
-            .with_context(|| {
-                format_compact!("removing junk before spawn of {}", group.template_name)
-            })?;
+        let radius = radius.sqrt();
+        spctx.remove_junk(point, radius * 1.10).with_context(|| {
+            format_compact!("removing junk before spawn of {}", group.template_name)
+        })?;
         Ok(Some(spctx.spawn(template).with_context(|| {
             format_compact!("spawning template {}", group.template_name)
         })?))

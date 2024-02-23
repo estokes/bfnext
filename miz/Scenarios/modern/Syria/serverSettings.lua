@@ -44,5 +44,5 @@ cfg =
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,
     ["require_pure_models"] = true,
-    ["maxPlayers"] = "64",
+    ["maxPlayers"] = "51",
 } -- end of cfg

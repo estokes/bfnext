@@ -114,7 +114,15 @@
     "Su-25": 21600,
     "Mirage-F1EE": 14400,
     "F-15ESE": 36000,
-    "AV8BNA": 36000
+    "AV8BNA": 36000,
+    "B-1B": 36000,
+    "A-50": 0,
+    "MQ-9 Reaper": 0,
+    "E-3A": 0,
+    "IL-78M": 0,
+    "Tu-22M3": 36000,
+    "KC130": 0,
+    "KC-135": 0 
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
@@ -2075,6 +2083,30 @@
       "Driveable"
     ],
     "F-15ESE": [
+      "Aircraft"
+    ],
+    "B-1B": [
+      "Aircraft"
+    ],
+    "A-50": [
+      "Aircraft"
+    ],
+    "MQ-9 Reaper": [
+      "Aircraft"
+    ],
+    "E-3A": [
+      "Aircraft"
+    ],
+    "IL-78M": [
+      "Aircraft"
+    ],
+    "Tu-22M3": [
+      "Aircraft"
+    ],
+    "KC130": [
+      "Aircraft"
+    ],
+    "KC-135": [
       "Aircraft"
     ]
   },

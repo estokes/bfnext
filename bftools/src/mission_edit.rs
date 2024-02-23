@@ -381,6 +381,10 @@ impl VehicleTemplates {
                         .pairs::<Value, Table>()
                     {
                         let unit = unit.context("getting unit")?.1;
+                        // skip ai aircraft
+                        if unit.raw_get::<_, String>("skill")?.as_str() != "Client" {
+                            continue
+                        }
                         let unit_type: String = unit.raw_get("type")?;
                         match self.payload.get(&unit_type) {
                             Some(w) => unit.set("payload", w.deep_clone(lua)?)?,

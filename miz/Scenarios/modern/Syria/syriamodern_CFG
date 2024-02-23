@@ -1106,6 +1106,441 @@
       }
     ]
   },
+  "actions": {
+    "Red": {
+      "awacs-waypoint": {
+        "kind": "AwacsWaypoint",
+        "cost": 10,
+        "penalty": null,
+        "limit": null
+      },
+      "tanker": {
+        "kind": {
+          "Tanker": {
+            "kind": "FixedWing",
+            "duration": 8,
+            "template": "RTANKER",
+            "altitude": 10000.0,
+            "altitude_typ": "BARO",
+            "speed": 180.0
+          }
+        },
+        "cost": 50,
+        "penalty": 50,
+        "limit": null
+      },
+      "attack-waypoint": {
+        "kind": "AttackersWaypoint",
+        "cost": 5,
+        "penalty": null,
+        "limit": null
+      },
+      "drone-waypoint": {
+        "kind": "DroneWaypoint",
+        "cost": 5,
+        "penalty": null,
+        "limit": null
+      },
+      "bomber": {
+        "kind": {
+          "Bomber": {
+            "targets": 15,
+            "power": 1000,
+            "accuracy": 15,
+            "plane": {
+              "kind": "FixedWing",
+              "duration": null,
+              "template": "RBOMBER",
+              "altitude": 12000.0,
+              "altitude_typ": "BARO",
+              "speed": 500.0
+            }
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "paratroops": {
+        "kind": {
+          "Paratrooper": {
+            "name": "Standard",
+            "plane": {
+              "kind": "Helicopter",
+              "duration": null,
+              "template": "RTROOPCARRIER",
+              "altitude": 500.0,
+              "altitude_typ": "RADIO",
+              "speed": 70.0
+            }
+          }
+        },
+        "cost": 50,
+        "penalty": 100,
+        "limit": null
+      },
+      "fighters-waypoint": {
+        "kind": "FighersWaypoint",
+        "cost": 5,
+        "penalty": null,
+        "limit": null
+      },
+      "tanker-waypoint": {
+        "kind": "TankerWaypoint",
+        "cost": 10,
+        "penalty": null,
+        "limit": null
+      },
+      "attack-helicopters": {
+        "kind": {
+          "Attackers": {
+            "kind": "Helicopter",
+            "duration": 2,
+            "template": "RATTACKHELI",
+            "altitude": 500.0,
+            "altitude_typ": "RADIO",
+            "speed": 80.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "deploy-ewr": {
+        "kind": {
+          "Deployable": {
+            "name": "1L13",
+            "plane": {
+              "kind": "Helicopter",
+              "duration": null,
+              "template": "RTROOPCARRIER",
+              "altitude": 500.0,
+              "altitude_typ": "RADIO",
+              "speed": 70.0
+            }
+          }
+        },
+        "cost": 50,
+        "penalty": 100,
+        "limit": null
+      },
+      "repair": {
+        "kind": {
+          "LogisticsRepair": {
+            "kind": "Helicopter",
+            "duration": null,
+            "template": "RCARGOCARRIER",
+            "altitude": 500.0,
+            "altitude_typ": "RADIO",
+            "speed": 70.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "transfer": {
+        "kind": {
+          "LogisticsTransfer": {
+            "kind": "Helicopter",
+            "duration": null,
+            "template": "RCARGOCARRIER",
+            "altitude": 500.0,
+            "altitude_typ": "RADIO",
+            "speed": 70.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "drone": {
+        "kind": {
+          "Drone": {
+            "jtac": {
+              "range": 16000
+            },
+            "plane": {
+              "kind": "FixedWing",
+              "duration": 12,
+              "template": "RDRONE",
+              "altitude": 6000.0,
+              "altitude_typ": "BARO",
+              "speed": 90.0
+            }
+          }
+        },
+        "cost": 25,
+        "penalty": 25,
+        "limit": null
+      },
+      "move": {
+        "kind": {
+          "Move": {
+            "troop": 1000,
+            "deployable": 1000
+          }
+        },
+        "cost": 10,
+        "penalty": 25,
+        "limit": null
+      },
+      "fighters": {
+        "kind": {
+          "Fighters": {
+            "kind": "FixedWing",
+            "duration": 2,
+            "template": "RFIGHTERS",
+            "altitude": 10000.0,
+            "altitude_typ": "BARO",
+            "speed": 250.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "awacs": {
+        "kind": {
+          "Awacs": {
+            "kind": "FixedWing",
+            "duration": 8,
+            "template": "RAWACS",
+            "altitude": 11000.0,
+            "altitude_typ": "BARO",
+            "speed": 200.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      }
+    },
+    "Blue": {
+      "awacs-waypoint": {
+        "kind": "AwacsWaypoint",
+        "cost": 10,
+        "penalty": null,
+        "limit": null
+      },
+      "attack-waypoint": {
+        "kind": "AttackersWaypoint",
+        "cost": 5,
+        "penalty": null,
+        "limit": null
+      },
+      "drone-waypoint": {
+        "kind": "DroneWaypoint",
+        "cost": 5,
+        "penalty": null,
+        "limit": null
+      },
+      "bomber": {
+        "kind": {
+          "Bomber": {
+            "targets": 15,
+            "power": 1000,
+            "accuracy": 15,
+            "plane": {
+              "kind": "FixedWing",
+              "duration": null,
+              "template": "BBOMBER",
+              "altitude": 12000.0,
+              "altitude_typ": "BARO",
+              "speed": 300.0
+            }
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "basket-tanker": {
+        "kind": {
+          "Tanker": {
+            "kind": "FixedWing",
+            "duration": 8,
+            "template": "BBASKETTANKER",
+            "altitude": 10000.0,
+            "altitude_typ": "BARO",
+            "speed": 180.0
+          }
+        },
+        "cost": 50,
+        "penalty": 50,
+        "limit": null
+      },
+      "paratroops": {
+        "kind": {
+          "Paratrooper": {
+            "name": "Standard",
+            "plane": {
+              "kind": "Helicopter",
+              "duration": null,
+              "template": "BTROOPCARRIER",
+              "altitude": 500.0,
+              "altitude_typ": "RADIO",
+              "speed": 60.0
+            }
+          }
+        },
+        "cost": 50,
+        "penalty": 100,
+        "limit": null
+      },
+      "fighters-waypoint": {
+        "kind": "FighersWaypoint",
+        "cost": 5,
+        "penalty": null,
+        "limit": null
+      },
+      "tanker-waypoint": {
+        "kind": "TankerWaypoint",
+        "cost": 10,
+        "penalty": null,
+        "limit": null
+      },
+      "attack-helicopters": {
+        "kind": {
+          "Attackers": {
+            "kind": "Helicopter",
+            "duration": 2,
+            "template": "BATTACKHELI",
+            "altitude": 500.0,
+            "altitude_typ": "RADIO",
+            "speed": 60.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "deploy-ewr": {
+        "kind": {
+          "Deployable": {
+            "name": "AN/FPS-117",
+            "plane": {
+              "kind": "Helicopter",
+              "duration": null,
+              "template": "BTROOPCARRIER",
+              "altitude": 500.0,
+              "altitude_typ": "RADIO",
+              "speed": 60.0
+            }
+          }
+        },
+        "cost": 50,
+        "penalty": 100,
+        "limit": null
+      },
+      "repair": {
+        "kind": {
+          "LogisticsRepair": {
+            "kind": "Helicopter",
+            "duration": null,
+            "template": "BCARGOCARRIER",
+            "altitude": 500.0,
+            "altitude_typ": "RADIO",
+            "speed": 60.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "transfer": {
+        "kind": {
+          "LogisticsTransfer": {
+            "kind": "Helicopter",
+            "duration": null,
+            "template": "BCARGOCARRIER",
+            "altitude": 500.0,
+            "altitude_typ": "RADIO",
+            "speed": 60.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "drone": {
+        "kind": {
+          "Drone": {
+            "jtac": {
+              "range": 16000
+            },
+            "plane": {
+              "kind": "FixedWing",
+              "duration": 12,
+              "template": "BDRONE",
+              "altitude": 6000.0,
+              "altitude_typ": "BARO",
+              "speed": 90.0
+            }
+          }
+        },
+        "cost": 25,
+        "penalty": 25,
+        "limit": null
+      },
+      "boom-tanker": {
+        "kind": {
+          "Tanker": {
+            "kind": "FixedWing",
+            "duration": 8,
+            "template": "BBOOMTANKER",
+            "altitude": 10000.0,
+            "altitude_typ": "BARO",
+            "speed": 180.0
+          }
+        },
+        "cost": 50,
+        "penalty": 50,
+        "limit": null
+      },
+      "move": {
+        "kind": {
+          "Move": {
+            "troop": 1000,
+            "deployable": 1000
+          }
+        },
+        "cost": 10,
+        "penalty": 25,
+        "limit": null
+      },
+      "fighters": {
+        "kind": {
+          "Fighters": {
+            "kind": "FixedWing",
+            "duration": 2,
+            "template": "BFIGHTERS",
+            "altitude": 10000.0,
+            "altitude_typ": "BARO",
+            "speed": 250.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      },
+      "awacs": {
+        "kind": {
+          "Awacs": {
+            "kind": "FixedWing",
+            "duration": 8,
+            "template": "BAWACS",
+            "altitude": 11000.0,
+            "altitude_typ": "BARO",
+            "speed": 200.0
+          }
+        },
+        "cost": 100,
+        "penalty": 100,
+        "limit": null
+      }
+    }
+  },
   "unit_classification": {
     "Mirage-F1EE": [
       "Aircraft"

@@ -27,7 +27,11 @@ wrapped_prim!(GroupId, i64, Hash, Copy);
 
 string_enum!(Skill, u8, [
     Client => "Client",
-    Excellant => "Excellant"
+    Excellant => "Excellant",
+    Player => "Player",
+    Average => "Average",
+    Good => "Good",
+    High => "High"
 ]);
 
 #[derive(Debug, Clone, Copy)]

@@ -153,7 +153,7 @@ impl MsgQ {
         remove(1);
         remove(2);
         if push {
-            self.0[2].push_back(Cmd::DeleteMark(did))
+            self.0[1].push_back(Cmd::DeleteMark(did))
         }
     }
 

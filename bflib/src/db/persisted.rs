@@ -45,6 +45,7 @@ pub struct Persisted {
     pub troops: Set<GroupId>,
     pub jtacs: Set<GroupId>,
     pub ewrs: Set<GroupId>,
+    #[serde(default)]
     pub actions: Set<GroupId>,
     pub objectives: Map<ObjectiveId, Objective>,
     pub objectives_by_slot: Map<SlotId, ObjectiveId>,

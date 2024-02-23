@@ -57,11 +57,13 @@ pub enum DeployKind {
     Objective,
     Deployed {
         player: Ucid,
+        #[serde(default)]
         moved_by: Option<(Ucid, u32)>,
         spec: Deployable,
     },
     Troop {
         player: Ucid,
+        #[serde(default)]
         moved_by: Option<(Ucid, u32)>,
         spec: Troop,
     },

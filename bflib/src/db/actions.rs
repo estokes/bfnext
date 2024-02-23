@@ -24,8 +24,8 @@ use dcso3::{
     centroid2d, change_heading,
     coalition::Side,
     controller::{
-        ActionTyp, AltType, Command, MissionPoint, OrbitPattern, PointType, Task, TurnMethod,
-        VehicleFormation,
+        ActionTyp, AiOption, AlarmState, AltType, Command, GroundOption, MissionPoint,
+        OrbitPattern, PointType, Task, TurnMethod, VehicleFormation,
     },
     env::miz::MizIndex,
     group::Group,
@@ -35,7 +35,7 @@ use dcso3::{
     timer::Timer,
     trigger::{MarkId, Trigger},
     world::World,
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
+    LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
@@ -623,42 +623,77 @@ impl Db {
                 | DeployKind::Deployed { .. } => (),
             }
         }
-        let alt = Land::singleton(spctx.lua())?.get_height(LuaVec2(args.pos))?;
+        let land = Land::singleton(spctx.lua())?;
+        let alt0 = land.get_height(LuaVec2(pos))?;
+        let alt1 = land.get_height(LuaVec2(args.pos))?;
         let group = Group::get_by_name(spctx.lua(), &group.name).context("getting group")?;
         let con = group.get_controller()?;
+        let att = Task::EngageTargets {
+            target_types: vec![
+                Attribute::Fighters,
+                Attribute::MultiroleFighters,
+                Attribute::BattleAirplanes,
+                Attribute::Battleplanes,
+                Attribute::Helicopters,
+                Attribute::AttackHelicopters,
+                Attribute::GroundUnits,
+                Attribute::GroundVehicles,
+                Attribute::ArmedGroundUnits,
+            ],
+            max_dist: Some(2_000.),
+            priority: None,
+        };
         con.set_task(Task::Mission {
             airborne: Some(false),
-            route: vec![MissionPoint {
-                action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
-                airdrome_id: None,
-                helipad: None,
-                typ: PointType::TurningPoint,
-                time_re_fu_ar: None,
-                link_unit: None,
-                pos: LuaVec2(args.pos),
-                alt,
-                alt_typ: Some(AltType::BARO),
-                speed: 20.,
-                speed_locked: None,
-                eta: None,
-                eta_locked: None,
-                name: Some(String::from("move")),
-                task: Box::new(Task::EngageTargets {
-                    target_types: vec![
-                        Attribute::Fighters,
-                        Attribute::MultiroleFighters,
-                        Attribute::BattleAirplanes,
-                        Attribute::Battleplanes,
-                        Attribute::Helicopters,
-                        Attribute::AttackHelicopters,
-                        Attribute::GroundUnits,
-                        Attribute::GroundVehicles,
-                        Attribute::ArmedGroundUnits,
-                    ],
-                    max_dist: None,
-                    priority: None,
-                }),
-            }],
+            route: vec![
+                MissionPoint {
+                    action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
+                    airdrome_id: None,
+                    helipad: None,
+                    typ: PointType::TurningPoint,
+                    link_unit: None,
+                    pos: LuaVec2(pos),
+                    alt: alt0,
+                    alt_typ: Some(AltType::BARO),
+                    time_re_fu_ar: None,
+                    eta: Some(Time(0.)),
+                    eta_locked: Some(true),
+                    speed: 20.,
+                    speed_locked: Some(true),
+                    name: None,
+                    task: Box::new(Task::ComboTask(vec![
+                        Task::WrappedOption(AiOption::Ground(GroundOption::AlarmState(
+                            AlarmState::Green,
+                        ))),
+                        Task::WrappedOption(AiOption::Ground(GroundOption::AlarmState(
+                            AlarmState::Auto,
+                        ))),
+                        att.clone(),
+                    ])),
+                },
+                MissionPoint {
+                    action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
+                    airdrome_id: None,
+                    helipad: None,
+                    typ: PointType::TurningPoint,
+                    time_re_fu_ar: None,
+                    link_unit: None,
+                    pos: LuaVec2(args.pos),
+                    alt: alt1,
+                    alt_typ: Some(AltType::BARO),
+                    speed: 20.,
+                    speed_locked: None,
+                    eta: None,
+                    eta_locked: None,
+                    name: Some(String::from("move")),
+                    task: Box::new(Task::ComboTask(vec![
+                        Task::WrappedOption(AiOption::Ground(GroundOption::AlarmState(
+                            AlarmState::Red,
+                        ))),
+                        att,
+                    ])),
+                },
+            ],
         })?;
         Ok(())
     }
@@ -687,7 +722,7 @@ impl Db {
     ) -> Result<()> {
         let gid =
             self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
-        self.move_ai_fighters(
+        self.move_tanker(
             spctx,
             side,
             ucid,

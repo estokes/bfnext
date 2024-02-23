@@ -171,8 +171,16 @@ impl Db {
                         .and_then(|uid| self.persisted.units.get(uid))
                         .and_then(|unit| self.persisted.groups.get(&unit.group))
                         .and_then(|group| match &group.origin {
-                            DeployKind::Deployed { player, spec: _, moved_by: _ } => Some(player.clone()),
-                            DeployKind::Troop { player, spec: _, moved_by: _ } => Some(player.clone()),
+                            DeployKind::Deployed {
+                                player,
+                                spec: _,
+                                moved_by: _,
+                            } => Some(player.clone()),
+                            DeployKind::Troop {
+                                player,
+                                spec: _,
+                                moved_by: _,
+                            } => Some(player.clone()),
                             DeployKind::Action { player, .. } => player.clone(),
                             DeployKind::Crate { .. } | DeployKind::Objective => None,
                         })
@@ -683,18 +691,20 @@ impl Db {
     }
 
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
-        let mut hit_by: SmallVec<[Ucid; 4]> = smallvec![];
+        let mut hit_by: SmallVec<[&Ucid; 4]> = smallvec![];
         for shot in &dead.shots {
             if shot.hit {
-                if !hit_by.contains(&shot.shooter_ucid) {
-                    hit_by.push(shot.shooter_ucid.clone())
+                if !hit_by.contains(&&shot.shooter_ucid) {
+                    hit_by.push(&shot.shooter_ucid)
                 }
             }
         }
         if hit_by.is_empty() {
             for shot in &dead.shots {
                 if dead.time - shot.time <= Duration::minutes(3) {
-                    hit_by.push(shot.shooter_ucid.clone())
+                    if !hit_by.contains(&&shot.shooter_ucid) {
+                        hit_by.push(&shot.shooter_ucid)
+                    }
                 }
             }
         }
@@ -705,8 +715,8 @@ impl Db {
                 (&dead.shots)
                     .into_iter()
                     .find(|s| s.target_typ.trim() != "")
-                    .map(|s| s.target_typ.clone())
-                    .and_then(|typ| self.ephemeral.cfg.unit_classification.get(&Vehicle(typ)))
+                    .map(|s| &s.target_typ)
+                    .and_then(|typ| self.ephemeral.cfg.unit_classification.get(typ.as_str()))
                     .map(|tags| {
                         if tags.contains(UnitTag::LR | UnitTag::TrackRadar | UnitTag::SAM) {
                             cfg.ground_kill + cfg.lr_sam_bonus
@@ -717,18 +727,55 @@ impl Db {
                     .unwrap_or(cfg.ground_kill)
             };
             let pps = (total_points as f32 / hit_by.len() as f32).ceil() as i32;
+            let victim_name = dead
+                .victim_ucid
+                .as_ref()
+                .and_then(|i| self.persisted.players.get(i))
+                .map(|p| p.name.clone());
             for ucid in hit_by {
-                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
-                    player.points += pps;
-                    let tp = player.points;
-                    let msg = match dead
-                        .victim_ucid
-                        .as_ref()
-                        .and_then(|i| self.persisted.players.get(i))
-                    {
-                        None => format_compact!("{tp}(+{pps}) points"),
-                        Some(victim) => {
-                            format_compact!("{tp}(+{pps}) points, killed {}", victim.name)
+                if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
+                    let msg = if player.side != dead.victim_side {
+                        player.points += pps;
+                        let tp = player.points;
+                        match &victim_name {
+                            None => format_compact!("{tp}(+{pps}) points"),
+                            Some(victim) => {
+                                format_compact!("{tp}(+{pps}) points, killed {}", victim)
+                            }
+                        }
+                    } else {
+                        match &victim_name {
+                            None => {
+                                player.points -= total_points as i32;
+                                let tp = player.points;
+                                format_compact!(
+                                    "{tp}(-{total_points}) points, you have killed a friendly unit"
+                                )
+                            }
+                            Some(victim) => {
+                                let life_type = match player.airborne {
+                                    None => LifeType::Standard,
+                                    Some(lt) => lt,
+                                };
+                                let (_, player_lives) =
+                                    player.lives.get_or_insert_cow(life_type, || {
+                                        (Utc::now(), self.ephemeral.cfg.default_lives[&life_type].0)
+                                    });
+                                let mut lost = false;
+                                if *player_lives > 0 {
+                                    lost = true;
+                                    *player_lives -= 1;
+                                }
+                                player.points -= total_points as i32;
+                                let tp = player.points;
+                                self.ephemeral.dirty();
+                                let lost = if lost {
+                                    format_compact!("You have lost a {life_type} life")
+                                } else {
+                                    format_compact!("")
+                                };
+                                format_compact!("{tp}(-{total_points}) points, you have team killed {victim}. {}", lost)
+                            }
                         }
                     };
                     self.ephemeral.panel_to_player(&self.persisted, &ucid, msg)

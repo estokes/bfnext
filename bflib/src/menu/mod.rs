@@ -192,17 +192,6 @@ impl CarryCap {
     }
 }
 
-pub(super) fn update_menus_for_side(ctx: &Context, lua: MizLua, side: Side) -> Result<()> {
-    for (_, player, _) in ctx.db.instanced_players() {
-        if player.side == side {
-            if let Some((slot, _)) = player.current_slot.as_ref() {
-                init_for_slot(ctx, lua, slot)?
-            }
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result<()> {
     debug!("initializing menus for {slot:?}");
     let cfg = &ctx.db.ephemeral.cfg;

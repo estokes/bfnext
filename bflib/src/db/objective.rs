@@ -879,7 +879,7 @@ impl Db {
             if group.class.is_logi() {
                 for uid in &group.units {
                     let unit = unit_mut!(self, uid)?;
-                    if to_repair > 0 {
+                    if unit.dead && to_repair > 0 {
                         to_repair -= 1;
                         unit.dead = false;
                     }

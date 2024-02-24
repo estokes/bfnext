@@ -47,7 +47,7 @@ use log::{debug, error};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::str::FromStr;
+use std::{str::FromStr, cmp::max};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectiveKind {
@@ -868,10 +868,9 @@ impl Db {
         let obj = objective_mut!(self, oid)?;
         let mut total_logi = 0;
         for gid in maybe!(&obj.groups, &side, "side group")? {
-            let group = group_mut!(self, gid)?;
+            let group = group!(self, gid)?;
             if group.class.is_logi() {
-                total_logi = group.units.len();
-                break;
+                total_logi = max(total_logi, group.units.len());
             }
         }
         let mut to_repair = 1 + (total_logi >> 1);

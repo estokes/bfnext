@@ -344,7 +344,7 @@ impl MsgQ {
     }
 
     pub fn process(&mut self, net: &Net, act: &Action) {
-        for _ in 0..5 {
+        for _ in 0..3 {
             let cmd = match self.0[0].pop_front() {
                 Some(cmd) => cmd,
                 None => match self.0[1].pop_front() {

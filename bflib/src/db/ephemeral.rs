@@ -88,7 +88,7 @@ pub struct Ephemeral {
     pub(super) players_by_slot: FxHashMap<SlotId, Ucid>,
     pub(super) cargo: FxHashMap<SlotId, Cargo>,
     pub(super) deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
-    pub(super) group_marks: FxHashMap<GroupId, SmallVec<[MarkId; 2]>>,
+    pub(super) group_marks: FxHashMap<GroupId, MarkId>,
     objective_markup: FxHashMap<ObjectiveId, ObjectiveMarkup>,
     pub(super) object_id_by_uid: FxHashMap<UnitId, DcsOid<ClassUnit>>,
     pub(super) uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,

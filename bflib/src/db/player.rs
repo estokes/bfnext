@@ -731,24 +731,24 @@ impl Db {
                     .unwrap_or(cfg.ground_kill)
             };
             let pps = (total_points as f32 / hit_by.len() as f32).ceil() as i32;
-            let victim_name = dead
+            let victim_info = dead
                 .victim_ucid
                 .as_ref()
                 .and_then(|i| self.persisted.players.get(i))
-                .map(|p| p.name.clone());
+                .map(|p| (p.name.clone(), p.airborne.unwrap_or(LifeType::Standard)));
             for ucid in hit_by {
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                     let msg = if player.side != dead.victim_side {
                         player.points += pps;
                         let tp = player.points;
-                        match &victim_name {
+                        match &victim_info {
                             None => format_compact!("{tp}(+{pps}) points"),
-                            Some(victim) => {
+                            Some((victim, _)) => {
                                 format_compact!("{tp}(+{pps}) points, killed {}", victim)
                             }
                         }
                     } else {
-                        match &victim_name {
+                        match &victim_info {
                             None => {
                                 player.points -= total_points as i32;
                                 let tp = player.points;
@@ -756,13 +756,9 @@ impl Db {
                                     "{tp}(-{total_points}) points, you have killed a friendly unit"
                                 )
                             }
-                            Some(victim) => {
-                                let life_type = match player.airborne {
-                                    None => LifeType::Standard,
-                                    Some(lt) => lt,
-                                };
+                            Some((victim, life_type)) => {
                                 let (_, player_lives) =
-                                    player.lives.get_or_insert_cow(life_type, || {
+                                    player.lives.get_or_insert_cow(*life_type, || {
                                         (Utc::now(), self.ephemeral.cfg.default_lives[&life_type].0)
                                     });
                                 let mut lost = false;

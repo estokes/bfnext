@@ -81,6 +81,19 @@ macro_rules! some {
     };
 }
 
+fn target_side(db: &Db, target: &DcsOid<ClassUnit>) -> Side {
+    match db.ephemeral.get_uid_by_object_id(target) {
+        Some(uid) => db.unit(uid).ok().map(|u| u.side).unwrap_or(Side::Neutral),
+        None => db
+            .ephemeral
+            .get_slot_by_object_id(target)
+            .and_then(|sl| db.ephemeral.player_in_slot(sl))
+            .and_then(|ucid| db.player(ucid))
+            .map(|p| p.side)
+            .unwrap_or(Side::Neutral),
+    }
+}
+
 impl ShotDb {
     pub fn dead(&mut self, target: DcsOid<ClassUnit>, time: DateTime<Utc>) {
         if let Entry::Vacant(e) = self.dead.entry(target) {
@@ -97,13 +110,8 @@ impl ShotDb {
         let shooter = e.initiator.object_id()?;
         let shooter_ucid = some!(db.player_in_unit(true, &shooter));
         let target_typ = target.get_type_name()?;
+        let target_side = target_side(db, &target_oid);
         let target = target_oid;
-        let target_side = db
-            .ephemeral
-            .get_uid_by_object_id(&target)
-            .and_then(|uid| db.unit(uid).ok())
-            .map(|u| u.side)
-            .unwrap_or(Side::Neutral);
         self.by_target
             .entry(target.clone())
             .or_default()
@@ -138,12 +146,7 @@ impl ShotDb {
         let target_typ = target.get_type_name()?;
         let shooter = shooter.object_id()?;
         let shooter_ucid = some!(db.player_in_unit(true, &shooter));
-        let target_side = db
-            .ephemeral
-            .get_uid_by_object_id(&target_oid)
-            .and_then(|uid| db.unit(uid).ok())
-            .map(|u| u.side)
-            .unwrap_or(Side::Neutral);
+        let target_side = target_side(db, &target_oid);
         let target = target_oid;
         self.by_target
             .entry(target.clone())

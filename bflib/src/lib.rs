@@ -650,7 +650,7 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
         }
     }
     for (uid, msg) in msgs {
-        ctx.db.ephemeral.msgs().panel_to_unit(10, false, uid, msg)
+        ctx.db.ephemeral.msgs().panel_to_unit(10, true, uid, msg)
     }
     Ok(())
 }

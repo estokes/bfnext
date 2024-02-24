@@ -55,7 +55,8 @@ use dcso3::{
     HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use ewr::Ewr;
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
+use indexmap::IndexSet;
 use jtac::Jtacs;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
@@ -64,7 +65,7 @@ use perf::Perf;
 use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{mem, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
@@ -129,7 +130,7 @@ struct Context {
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
     shots_out: ShotDb,
-    menu_init_queue: SmallVec<[SlotId; 4]>,
+    menu_init_queue: IndexSet<SlotId, FxBuildHasher>,
     last_slow_timed_events: DateTime<Utc>,
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
@@ -364,7 +365,7 @@ fn on_player_try_change_slot(
         },
     };
     if let Ok(None) = res {
-        ctx.menu_init_queue.push(slot.clone());
+        ctx.menu_init_queue.insert(slot);
     }
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
@@ -855,8 +856,12 @@ fn run_slow_timed_events(
             Err(e) => error!("could not update jtac contacts {e}"),
             Ok(dirty_menus) => {
                 for side in dirty_menus {
-                    if let Err(e) = menu::update_menus_for_side(ctx, lua, side) {
-                        error!("could not update menus for {side} {e:?}")
+                    for (_, player, _) in ctx.db.instanced_players() {
+                        if player.side == side {
+                            if let Some((slot, _)) = player.current_slot.as_ref() {
+                                ctx.menu_init_queue.insert(*slot);
+                            }
+                        }
                     }
                 }
             }
@@ -897,9 +902,11 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         error!("error running slow timed events {:?}", e)
     }
     if !ctx.menu_init_queue.is_empty() {
-        for slot in mem::take(&mut ctx.menu_init_queue) {
-            if let Err(e) = menu::init_for_slot(ctx, lua, &slot) {
-                error!("could not init menus for slot {:?} {:?}", slot, e)
+        for _ in 0..2 {
+            if let Some(slot) = ctx.menu_init_queue.shift_remove_index(0) {
+                if let Err(e) = menu::init_for_slot(ctx, lua, &slot) {
+                    error!("could not init menus for slot {:?} {:?}", slot, e)
+                }
             }
         }
     }

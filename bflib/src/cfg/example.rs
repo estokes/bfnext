@@ -1662,6 +1662,7 @@ impl Default for Cfg {
                 "REAPER 32 | EvilKipper".into(),
             )]),
             banned: FxHashMap::default(),
+            max_msgs_per_second: 3,
             repair_time: 1800,
             repair_crate: default_repair_crate(),
             shutdown: Some(10),

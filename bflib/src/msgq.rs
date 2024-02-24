@@ -343,8 +343,8 @@ impl MsgQ {
         self.0[2].push_back(Cmd::Send(Msg::SetMarkupFillColor { id, color }))
     }
 
-    pub fn process(&mut self, net: &Net, act: &Action) {
-        for _ in 0..3 {
+    pub fn process(&mut self, max_rate: usize, net: &Net, act: &Action) {
+        for _ in 0..max_rate {
             let cmd = match self.0[0].pop_front() {
                 Some(cmd) => cmd,
                 None => match self.0[1].pop_front() {

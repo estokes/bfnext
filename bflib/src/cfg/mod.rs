@@ -489,6 +489,10 @@ pub struct Rules {
     pub ca: Rule,
 }
 
+fn default_msgs_per_second() -> usize {
+    3
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {
@@ -503,6 +507,10 @@ pub struct Cfg {
     pub rules: Rules,
     /// shutdown after the specified number of hours, don't shutdown
     /// if None.
+    /// The maximum number of messages, including markup, we will push to dcs
+    /// per second.
+    #[serde(default = "default_msgs_per_second")]
+    pub max_msgs_per_second: usize,
     #[serde(default)]
     pub shutdown: Option<u32>,
     /// how many points are various actions worth (if any)

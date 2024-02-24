@@ -936,7 +936,8 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.jtac_target_positions, now);
     let now = Utc::now();
-    ctx.db.ephemeral.msgs().process(&net, &act);
+    let max_rate = ctx.db.ephemeral.cfg.max_msgs_per_second;       
+    ctx.db.ephemeral.msgs().process(max_rate, &net, &act);
     record_perf(&mut perf.process_messages, now);
     if let Err(e) = run_logistics_events(lua, ctx, perf, ts) {
         error!("error running logistics events {e:?}")

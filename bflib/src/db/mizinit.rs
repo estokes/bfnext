@@ -35,7 +35,7 @@ use dcso3::{
     coalition::Side,
     controller::PointType,
     env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
-    MizLua, String, Vector2,
+    MizLua, String, Vector2, LuaVec2, Vector3, land::Land,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
@@ -111,6 +111,8 @@ impl Db {
             last_threatened_ts: Utc::now(),
             warehouse: Warehouse::default(),
             last_cull: DateTime::<Utc>::default(),
+            // initialized by load
+            threat_pos3: Vector3::default()
         };
         if let ObjectiveKind::Logistics = obj.kind {
             self.persisted.logistics_hubs.insert_cow(id);
@@ -309,6 +311,7 @@ impl Db {
 
     pub fn respawn_after_load(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
         let mut spawn_deployed_and_logistics = || -> Result<()> {
+            let land = Land::singleton(spctx.lua())?;
             for gid in &self.persisted.deployed {
                 self.ephemeral.push_spawn(*gid);
             }
@@ -325,7 +328,9 @@ impl Db {
                     error!("failed to respawn action {e:?}");
                 }
             }
-            for (_, obj) in &self.persisted.objectives {
+            for (_, obj) in self.persisted.objectives.iter_mut_cow() {
+                let alt = land.get_height(LuaVec2(obj.pos))? + 50.;
+                obj.threat_pos3 = Vector3::new(obj.pos.x, alt, obj.pos.y);
                 if let ObjectiveKind::Farp {
                     spec: _,
                     pad_template,
@@ -367,7 +372,7 @@ impl Db {
             Ok(())
         };
         mark_deployed_and_logistics().context("marking deployed and logistics")?;
-        let mut queue_check_walkabout_and_close_enemies = || -> Result<()> {
+        let mut queue_check_close_enemies = || -> Result<()> {
             for (uid, unit) in &self.persisted.units {
                 let group = group!(self, unit.group)?;
                 match group.origin {
@@ -410,7 +415,7 @@ impl Db {
                 self.ephemeral.dirty = true;
             }
         }
-        queue_check_walkabout_and_close_enemies().context("queuing unit pos checks")?;
+        queue_check_close_enemies().context("queuing unit pos checks")?;
         self.cull_or_respawn_objectives(spctx.lua(), Utc::now())
             .context("initial cull or respawn")?;
         Ok(())

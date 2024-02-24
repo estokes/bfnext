@@ -250,6 +250,8 @@ pub struct Objective {
     pub(super) spawned: bool,
     #[serde(skip)]
     pub(super) last_cull: DateTime<Utc>,
+    #[serde(skip)]
+    pub(super) threat_pos3: Vector3,
 }
 
 impl Objective {
@@ -426,6 +428,7 @@ impl Db {
         parts: &DeployableLogistics,
     ) -> Result<ObjectiveId> {
         let now = Utc::now();
+        let land = Land::singleton(spctx.lua())?;
         let DeployableLogistics {
             pad_templates: _,
             ammo_template,
@@ -494,6 +497,10 @@ impl Db {
                 }
             }
         };
+        let threat_pos3 = {
+            let alt = land.get_height(LuaVec2(pos))?;
+            Vector3::new(pos.x, alt, pos.y)
+        };
         let mut obj = Objective {
             id: ObjectiveId::new(),
             name: name.clone(),
@@ -516,6 +523,7 @@ impl Db {
             last_threatened_ts: now,
             last_change_ts: now,
             last_cull: DateTime::<Utc>::default(),
+            threat_pos3
         };
         let oid = obj.id;
         obj.warehouse.supplier = self.compute_supplier(&obj)?;
@@ -723,12 +731,9 @@ impl Db {
             Ok::<_, anyhow::Error>(())
         };
         for (oid, obj) in &self.persisted.objectives {
-            let pos3 = {
-                let alt = land.get_height(LuaVec2(obj.pos))? + 50.;
-                LuaVec3(Vector3::new(obj.pos.x, alt, obj.pos.y))
-            };
             let mut spawn = false;
             let mut is_threatened = false;
+            let pos3 = LuaVec3(obj.threat_pos3);
             if let Err(e) = check_close_players(obj, pos3, &mut spawn, &mut is_threatened) {
                 error!("failed to check for close players {} {e}", obj.id)
             }

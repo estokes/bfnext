@@ -49,7 +49,7 @@ use dcso3::{
     LuaVec2, MizLua, Position3, String, Vector2,
 };
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use log::info;
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -85,7 +85,7 @@ pub(super) struct Production {
 pub struct Ephemeral {
     pub(super) dirty: bool,
     pub cfg: Arc<Cfg>,
-    pub(super) players_by_slot: FxHashMap<SlotId, Ucid>,
+    pub(super) players_by_slot: IndexMap<SlotId, Ucid, FxBuildHasher>,
     pub(super) cargo: FxHashMap<SlotId, Cargo>,
     pub(super) deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
     pub(super) group_marks: FxHashMap<GroupId, MarkId>,
@@ -430,7 +430,7 @@ impl Ephemeral {
     }
 
     pub(super) fn player_deslot(&mut self, slot: &SlotId, kick: bool) -> Option<(UnitId, Ucid)> {
-        if let Some(ucid) = self.players_by_slot.remove(slot) {
+        if let Some(ucid) = self.players_by_slot.swap_remove(slot) {
             info!("deslotting player {ucid} from dead unit");
             if kick {
                 info!("queuing force player {ucid} to spectators");
@@ -453,7 +453,7 @@ impl Ephemeral {
     }
 
     pub(super) fn unit_dead(&mut self, id: &DcsOid<ClassUnit>) -> Option<(UnitId, Option<Ucid>)> {
-        let (uid, ucid) = match self.slot_by_object_id.remove(&id) {
+        let (uid, ucid) = match self.slot_by_object_id.remove(id) {
             Some(slot) => match self.player_deslot(&slot, true) {
                 Some((uid, ucid)) => (uid, Some(ucid)),
                 None => return None,
@@ -475,7 +475,7 @@ impl Ephemeral {
     }
 
     pub fn player_in_slot(&self, slot: &SlotId) -> Option<&Ucid> {
-        self.players_by_slot.get(&slot)
+        self.players_by_slot.get(slot)
     }
 
     pub fn player_in_unit(&self, id: &DcsOid<ClassUnit>) -> Option<&Ucid> {

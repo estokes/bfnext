@@ -879,7 +879,7 @@ impl Db {
         if last < total {
             let mut uids: SmallVec<[UnitId; 64]> = smallvec![];
             let elts = self.ephemeral.units_able_to_move.as_slice();
-            let stop = last + max(1, total >> 3);
+            let stop = last + max(1, total / 10);
             while last < total && uids.len() < stop {
                 uids.push(elts[last]);
                 last += 1;

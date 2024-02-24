@@ -38,6 +38,7 @@ use dcso3::{
 use log::{debug, error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
+use std::cmp::max;
 
 #[derive(Debug, Clone)]
 pub enum SlotAuth {
@@ -499,36 +500,44 @@ impl Db {
         }
     }
 
-    pub fn update_player_positions(&mut self, lua: MizLua) -> Result<Vec<DcsOid<ClassUnit>>> {
+    pub fn update_player_positions_incremental(&mut self, lua: MizLua, mut i: usize) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
         let mut unit: Option<Unit> = None;
-        for (slot, id) in &self.ephemeral.object_id_by_slot {
-            if let Some(ucid) = self.ephemeral.players_by_slot.get(slot) {
+        let total = self.ephemeral.players_by_slot.len();
+        if i < total {
+            let stop = i + max(1, total / 10);
+            while i < total && i < stop {
+                let (slot, ucid) = self.ephemeral.players_by_slot.get_index(i).unwrap();
                 if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
-                    let instance = match unit.take() {
-                        Some(unit) => unit.change_instance(id),
-                        None => Unit::get_instance(lua, id),
-                    };
-                    match instance {
-                        Err(e) => {
-                            warn!(
-                                "updating player positions, skipping invalid unit {ucid:?}, {id:?}, player {e:?}",
-                            );
-                            dead.push(id.clone())
-                        }
-                        Ok(instance) => {
-                            if let Some((_, Some(inst))) = &mut player.current_slot {
-                                inst.position = instance.get_position()?;
-                                inst.velocity = instance.get_velocity()?.0;
-                                inst.in_air = instance.in_air()?;
+                    if let Some(id) = self.ephemeral.object_id_by_slot.get(slot) {
+                        let instance = match unit.take() {
+                            Some(unit) => unit.change_instance(id),
+                            None => Unit::get_instance(lua, id),
+                        };
+                        match instance {
+                            Err(e) => {
+                                warn!(
+                                    "updating player positions, skipping invalid unit {ucid:?}, {id:?}, player {e:?}",
+                                );
+                                dead.push(id.clone())
                             }
-                            unit = Some(instance);
+                            Ok(instance) => {
+                                if let Some((_, Some(inst))) = &mut player.current_slot {
+                                    inst.position = instance.get_position()?;
+                                    inst.velocity = instance.get_velocity()?.0;
+                                    inst.in_air = instance.in_air()?;
+                                }
+                                unit = Some(instance);
+                            }
                         }
                     }
                 }
+                i += 1;
             }
+            Ok((i, dead))
+        } else {
+            Ok((0, vec![]))
         }
-        Ok(dead)
     }
 
     pub fn player_entered_slot(

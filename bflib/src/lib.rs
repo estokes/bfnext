@@ -135,6 +135,7 @@ struct Context {
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
     last_unit_position: usize,
+    last_player_position: usize,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -806,18 +807,6 @@ fn run_slow_timed_events(
             error!("could not advance actions {e:?}")
         }
         let ts = Utc::now();
-        match ctx.db.update_player_positions(lua) {
-            Err(e) => error!("could not update player positions {e}"),
-            Ok(dead) => {
-                for id in dead {
-                    if let Err(e) = unit_killed(lua, ctx, id.clone()) {
-                        error!("unit killed failed {:?} {:?}", id, e)
-                    }
-                }
-            }
-        }
-        record_perf(&mut perf.player_positions, ts);
-        let ts = Utc::now();
         if let Err(e) = ctx.ewr.update_tracks(lua, &ctx.db, ts) {
             error!("could not update ewr tracks {e}")
         }
@@ -898,6 +887,19 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         }
     }
     record_perf(&mut perf.unit_positions, ts);
+    let ts = Utc::now();
+    match ctx.db.update_player_positions_incremental(lua, ctx.last_player_position) {
+        Err(e) => error!("could not update player positions {e}"),
+        Ok((i, dead)) => {
+            ctx.last_player_position = i;
+            for id in dead {
+                if let Err(e) = unit_killed(lua, ctx, id.clone()) {
+                    error!("unit killed failed {:?} {:?}", id, e)
+                }
+            }
+        }
+    }
+    record_perf(&mut perf.player_positions, ts);
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, path, ts) {
         error!("error running slow timed events {:?}", e)
     }

@@ -133,7 +133,7 @@ pub struct SlotStats {
 
 impl SlotStats {
     pub fn get(db: &Db, lua: MizLua, slot: &SlotId) -> Result<Self> {
-        let ucid = maybe!(db.ephemeral.players_by_slot, slot, "no such player")?.clone();
+        let ucid = maybe!(db.ephemeral.players_by_slot, *slot, "no such player")?.clone();
         let side = maybe!(db.persisted.players, ucid, "no player for ucid")?.side;
         let unit = db.ephemeral.slot_instance_unit(lua, slot)?;
         let in_air = unit.in_air()?;

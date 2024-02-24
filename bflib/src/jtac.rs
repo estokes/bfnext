@@ -964,7 +964,7 @@ impl Jtacs {
             let prev_loc = jtac.location;
             jtac.location = JtacLocation::new(db, pos);
             if prev_loc.oid != jtac.location.oid {
-                Self::add_code_by_location(
+                Self::remove_code_by_location(
                     &mut self.code_by_location,
                     prev_loc.oid,
                     jtac.code,

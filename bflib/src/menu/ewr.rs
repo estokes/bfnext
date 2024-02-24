@@ -109,7 +109,7 @@ fn ewr_units_metric(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
-        ctx.ewr.set_units(ucid, EwrUnits::Imperial);
+        ctx.ewr.set_units(ucid, EwrUnits::Metric);
         ctx.db
             .ephemeral
             .msgs()

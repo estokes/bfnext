@@ -900,18 +900,18 @@ impl Jtacs {
             for jt in jtx.values_mut() {
                 if let Some(target) = &jt.target {
                     let unit = db.unit(&target.uid)?;
-                    if (jt.contacts[&target.uid].pos - unit.position.p.0).magnitude() > 1. {
+                    let contact = jt.contacts.get_mut(&target.uid).unwrap();
+                    if (contact.pos - unit.position.p.0).magnitude() > 2. {
                         let v = db
                             .ephemeral
                             .get_object_id_by_uid(&target.uid)
                             .and_then(|oid| Unit::get_instance(lua, oid).ok())
                             .and_then(|unit| unit.get_velocity().ok())
                             .unwrap_or(LuaVec3(Vector3::default()));
-                        let pos = &mut jt.contacts[&target.uid].pos;
-                        *pos = unit.position.p.0 + v.0;
+                        contact.pos = unit.position.p.0;
                         let spot = Spot::get_instance(lua, &target.spot)
                             .context("getting the spot instance")?;
-                        spot.set_point(LuaVec3(*pos))
+                        spot.set_point(LuaVec3(contact.pos + v.0))
                             .context("setting the spot position")?;
                         jt.mark_target(lua).context("marking moved target")?
                     }

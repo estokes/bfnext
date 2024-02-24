@@ -1,5 +1,5 @@
 use anyhow::Result;
-use dcso3::{land::Land, LuaVec3, MizLua, Vector3};
+use dcso3::{land::Land, LuaVec3, Vector3};
 use fxhash::FxBuildHasher;
 use indexmap::{map::Entry, IndexMap};
 use std::hash::Hash;

@@ -26,6 +26,7 @@ pub mod msgq;
 pub mod perf;
 pub mod shots;
 pub mod spawnctx;
+pub mod landcache;
 
 extern crate nalgebra as na;
 use crate::{cfg::Cfg, db::player::SlotAuth, perf::record_perf};

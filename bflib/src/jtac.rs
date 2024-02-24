@@ -21,6 +21,7 @@ use crate::{
         objective::ObjectiveId,
         Db, JtDesc,
     },
+    landcache::LandCache,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -659,6 +660,7 @@ pub struct Jtacs {
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
     code_by_location: LocByCode,
     menu_dirty: FxHashMap<Side, bool>,
+    landcache: LandCache,
 }
 
 impl Jtacs {
@@ -1000,7 +1002,7 @@ impl Jtacs {
                     }
                 };
                 let dist = na::distance_squared(&pos.into(), &unit.position.p.0.into());
-                if dist <= range && land.is_visible(LuaVec3(pos), unit.position.p)? {
+                if dist <= range && self.landcache.is_visible(&land, pos, unit.position.p.0)? {
                     jtac.add_contact(unit)
                 } else {
                     match jtac.remove_contact(lua, db, &unit.id) {

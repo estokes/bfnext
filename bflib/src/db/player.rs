@@ -745,6 +745,9 @@ impl Db {
                 .and_then(|i| self.persisted.players.get(i))
                 .map(|p| (p.name.clone(), p.airborne.unwrap_or(LifeType::Standard)));
             for ucid in hit_by {
+                if dead.victim_ucid.as_ref().map(|vid| ucid == vid).unwrap_or(false) {
+                    continue
+                }
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                     let msg = if player.side != dead.victim_side {
                         player.points += pps;

@@ -123,9 +123,17 @@ impl Db {
             )
         }
         sp.points -= amount as i32;
+        let sp_name = sp.name.clone();
         match self.persisted.players.get_mut_cow(target) {
             Some(tp) => {
                 tp.points += amount as i32;
+                let msg = format_compact!(
+                    "{}(+{}) you received points from {}",
+                    tp.points,
+                    amount,
+                    sp_name
+                );
+                self.ephemeral.panel_to_player(&self.persisted, target, msg);
                 self.ephemeral.dirty();
                 Ok(())
             }

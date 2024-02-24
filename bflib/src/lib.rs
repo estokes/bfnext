@@ -901,13 +901,9 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, path, ts) {
         error!("error running slow timed events {:?}", e)
     }
-    if !ctx.menu_init_queue.is_empty() {
-        for _ in 0..2 {
-            if let Some(slot) = ctx.menu_init_queue.shift_remove_index(0) {
-                if let Err(e) = menu::init_for_slot(ctx, lua, &slot) {
-                    error!("could not init menus for slot {:?} {:?}", slot, e)
-                }
-            }
+    if let Some(slot) = ctx.menu_init_queue.shift_remove_index(0) {
+        if let Err(e) = menu::init_for_slot(ctx, lua, &slot) {
+            error!("could not init menus for slot {:?} {:?}", slot, e)
         }
     }
     let now = Utc::now();
@@ -943,7 +939,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.jtac_target_positions, now);
     let now = Utc::now();
-    let max_rate = ctx.db.ephemeral.cfg.max_msgs_per_second;       
+    let max_rate = ctx.db.ephemeral.cfg.max_msgs_per_second;
     ctx.db.ephemeral.msgs().process(max_rate, &net, &act);
     record_perf(&mut perf.process_messages, now);
     if let Err(e) = run_logistics_events(lua, ctx, perf, ts) {

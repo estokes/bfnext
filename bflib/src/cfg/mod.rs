@@ -490,7 +490,7 @@ pub struct Rules {
 }
 
 fn default_msgs_per_second() -> usize {
-    3
+    10 
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

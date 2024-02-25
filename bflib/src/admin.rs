@@ -444,11 +444,6 @@ pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
     if ctx.db.player(&ucid).is_some() {
         return Ok(ucid);
     }
-    if let Some(id) = ctx.id_by_name.get(key) {
-        if let Some(ifo) = ctx.info_by_player_id.get(&id) {
-            return Ok(ifo.ucid.clone());
-        }
-    }
     enum Matcher<'a> {
         Re(Regex),
         Exact(&'a str),
@@ -466,28 +461,18 @@ pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
         Err(_) => Matcher::Exact(key),
     };
     let mut candidates: SmallVec<[(&Ucid, &String); 32]> = {
-        let connected: SmallVec<[(&Ucid, &String); 32]> = ctx
-            .id_by_name
-            .iter()
-            .filter(|(name, _)| expr.is_match(name.as_str()))
-            .filter_map(|(name, id)| ctx.info_by_player_id.get(id).map(|ifo| (&ifo.ucid, name)))
-            .collect();
-        if connected.len() > 0 {
-            connected
-        } else {
-            ctx.db
-                .persisted
-                .players()
-                .into_iter()
-                .filter(|(_, player)| {
-                    player
-                        .alts
-                        .into_iter()
-                        .any(|alt| expr.is_match(alt.as_str()))
-                })
-                .map(|(ucid, player)| (ucid, &player.name))
-                .collect()
-        }
+        ctx.db
+            .persisted
+            .players()
+            .into_iter()
+            .filter(|(_, player)| {
+                player
+                    .alts
+                    .into_iter()
+                    .any(|alt| expr.is_match(alt.as_str()))
+            })
+            .map(|(ucid, player)| (ucid, &player.name))
+            .collect()
     };
     if candidates.len() == 1 {
         return Ok(candidates.pop().unwrap().0.clone());

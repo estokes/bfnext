@@ -762,7 +762,7 @@ impl Db {
                     .unwrap_or(false)
                     || gid == dead.victim_gid
                 {
-                    debug!("skipping self kill");
+                    debug!("skipping self kill {ucid} {gid:?}");
                     continue;
                 }
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
@@ -806,7 +806,7 @@ impl Db {
                             }
                         }
                     };
-                    debug!("{}", msg);
+                    debug!("{ucid} kill message: {msg}");
                     self.ephemeral.panel_to_player(&self.persisted, &ucid, msg)
                 }
             }

@@ -35,6 +35,7 @@ use dcso3::{
     unit::{ClassUnit, Unit},
     MizLua, Position3, String, Vector2, Vector3,
 };
+use fxhash::FxHashMap;
 use log::{debug, error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -500,7 +501,11 @@ impl Db {
         }
     }
 
-    pub fn update_player_positions_incremental(&mut self, lua: MizLua, mut i: usize) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
+    pub fn update_player_positions_incremental(
+        &mut self,
+        lua: MizLua,
+        mut i: usize,
+    ) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
         let mut unit: Option<Unit> = None;
         let total = self.ephemeral.players_by_slot.len();
@@ -708,20 +713,16 @@ impl Db {
     }
 
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
-        let mut hit_by: SmallVec<[&Ucid; 4]> = smallvec![];
+        let mut hit_by: FxHashMap<&Ucid, Option<GroupId>> = FxHashMap::default();
         for shot in &dead.shots {
             if shot.hit {
-                if !hit_by.contains(&&shot.shooter_ucid) {
-                    hit_by.push(&shot.shooter_ucid)
-                }
+                hit_by.insert(&shot.shooter_ucid, shot.shooter_gid);
             }
         }
         if hit_by.is_empty() {
             for shot in &dead.shots {
                 if dead.time - shot.time <= Duration::minutes(3) {
-                    if !hit_by.contains(&&shot.shooter_ucid) {
-                        hit_by.push(&shot.shooter_ucid)
-                    }
+                    hit_by.insert(&shot.shooter_ucid, shot.shooter_gid);
                 }
             }
         }
@@ -753,9 +754,15 @@ impl Db {
                 .as_ref()
                 .and_then(|i| self.persisted.players.get(i))
                 .map(|p| (p.name.clone(), p.airborne.unwrap_or(LifeType::Standard)));
-            for ucid in hit_by {
-                if dead.victim_ucid.as_ref().map(|vid| ucid == vid).unwrap_or(false) {
-                    continue
+            for (ucid, gid) in hit_by {
+                if dead
+                    .victim_ucid
+                    .as_ref()
+                    .map(|vid| ucid == vid)
+                    .unwrap_or(false)
+                    || gid == dead.victim_gid
+                {
+                    continue;
                 }
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                     let msg = if player.side != dead.victim_side {

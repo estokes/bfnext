@@ -765,6 +765,14 @@ fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) 
                     if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator) {
                         error!("error forcing player {:?} to spectators {:?}", id, e);
                     }
+                    match net.get_slot(*id) {
+                        Err(_) => ctx.db.ephemeral.force_player_to_spectators(&ucid),
+                        Ok((side, slot)) => {
+                            if side != Side::Neutral || !slot.is_spectator() {
+                                ctx.db.ephemeral.force_player_to_spectators(&ucid)
+                            }
+                        }
+                    }
                 }
             }
         }

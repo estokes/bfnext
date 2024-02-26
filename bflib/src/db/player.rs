@@ -35,7 +35,6 @@ use dcso3::{
     unit::{ClassUnit, Unit},
     MizLua, Position3, String, Vector2, Vector3,
 };
-use fxhash::FxHashMap;
 use log::{debug, error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
@@ -713,7 +712,7 @@ impl Db {
     }
 
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
-        let mut hit_by: FxHashMap<&Ucid, Option<GroupId>> = FxHashMap::default();
+        let mut hit_by: SmallVec<[&Ucid; 16]> = smallvec![];
         let non_self_shots = || {
             dead.shots.iter().filter(|shot| {
                 (shot.target_gid.is_none() || shot.target_gid != shot.shooter_gid)
@@ -724,14 +723,16 @@ impl Db {
             })
         };
         for shot in non_self_shots() {
-            if shot.hit {
-                hit_by.insert(&shot.shooter_ucid, shot.shooter_gid);
+            if shot.hit && !hit_by.contains(&&shot.shooter_ucid) {
+                hit_by.push(&shot.shooter_ucid);
             }
         }
         if hit_by.is_empty() {
             for shot in non_self_shots() {
-                if dead.time - shot.time <= Duration::minutes(3) {
-                    hit_by.insert(&shot.shooter_ucid, shot.shooter_gid);
+                if dead.time - shot.time <= Duration::minutes(3)
+                    && !hit_by.contains(&&shot.shooter_ucid)
+                {
+                    hit_by.push(&shot.shooter_ucid);
                 }
             }
         }
@@ -763,7 +764,7 @@ impl Db {
                 .as_ref()
                 .and_then(|i| self.persisted.players.get(i))
                 .map(|p| (p.name.clone(), p.airborne.unwrap_or(LifeType::Standard)));
-            for (ucid, gid) in hit_by {
+            for ucid in hit_by {
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                     let msg = if player.side != dead.victim_side {
                         player.points += pps;

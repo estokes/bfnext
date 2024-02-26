@@ -714,13 +714,22 @@ impl Db {
 
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
         let mut hit_by: FxHashMap<&Ucid, Option<GroupId>> = FxHashMap::default();
-        for shot in &dead.shots {
+        let non_self_shots = || {
+            dead.shots.iter().filter(|shot| {
+                (shot.target_gid.is_none() || shot.target_gid != shot.shooter_gid)
+                    && match dead.victim_ucid.as_ref() {
+                        None => true,
+                        Some(victim) => victim != &shot.shooter_ucid,
+                    }
+            })
+        };
+        for shot in non_self_shots() {
             if shot.hit {
                 hit_by.insert(&shot.shooter_ucid, shot.shooter_gid);
             }
         }
         if hit_by.is_empty() {
-            for shot in &dead.shots {
+            for shot in non_self_shots() {
                 if dead.time - shot.time <= Duration::minutes(3) {
                     hit_by.insert(&shot.shooter_ucid, shot.shooter_gid);
                 }
@@ -755,16 +764,6 @@ impl Db {
                 .and_then(|i| self.persisted.players.get(i))
                 .map(|p| (p.name.clone(), p.airborne.unwrap_or(LifeType::Standard)));
             for (ucid, gid) in hit_by {
-                if dead
-                    .victim_ucid
-                    .as_ref()
-                    .map(|vid| ucid == vid)
-                    .unwrap_or(false)
-                    || (gid.is_some() && gid == dead.victim_gid)
-                {
-                    debug!("skipping self kill {ucid} {gid:?}");
-                    continue;
-                }
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                     let msg = if player.side != dead.victim_side {
                         player.points += pps;

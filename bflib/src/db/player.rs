@@ -760,7 +760,7 @@ impl Db {
                     .as_ref()
                     .map(|vid| ucid == vid)
                     .unwrap_or(false)
-                    || gid == dead.victim_gid
+                    || (gid.is_some() && gid == dead.victim_gid)
                 {
                     debug!("skipping self kill {ucid} {gid:?}");
                     continue;

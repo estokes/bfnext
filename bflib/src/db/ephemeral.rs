@@ -191,7 +191,7 @@ impl Ephemeral {
         let dlen = self.despawnq.len();
         let slen = self.spawnq.len();
         if dlen > 0 {
-            for _ in 0..max(1, dlen >> 3) {
+            for _ in 0..max(1, dlen >> 4) {
                 if let Some((gid, name)) = self.despawnq.pop_front() {
                     if let Some(group) = persisted.groups.get(&gid) {
                         for uid in &group.units {
@@ -206,7 +206,7 @@ impl Ephemeral {
                 }
             }
         } else if slen > 0 {
-            for _ in 0..max(1, slen >> 3) {
+            for _ in 0..max(1, slen >> 4) {
                 if let Some(gid) = self.spawnq.pop_front() {
                     let group = maybe!(persisted.groups, gid, "group")?;
                     spawn_group(persisted, idx, spctx, group)?;

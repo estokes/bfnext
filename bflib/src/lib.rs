@@ -1039,6 +1039,8 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
+        ctx.id_by_name.remove(&ifo.name);
+        ctx.id_by_ucid.remove(&ifo.ucid);
         info!("deslotting disconnected player {}", ifo.ucid);
         ctx.db.player_disconnected(&ifo.ucid)
     }

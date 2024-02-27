@@ -18,7 +18,7 @@ use crate::{
 use anyhow::{bail, Result};
 use compact_str::format_compact;
 use core::fmt;
-use fixedstr::str32;
+use fixedstr::str33;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{ops::Deref, str::FromStr};
@@ -285,12 +285,12 @@ impl SlotId {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "str32", into = "str32")]
+#[serde(try_from = "str33", into = "str33")]
 pub struct Ucid([u8; 16]);
 
 impl fmt::Display for Ucid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", Into::<str32>::into(*self))
+        write!(f, "{}", Into::<str33>::into(*self))
     }
 }
 
@@ -300,10 +300,10 @@ impl fmt::Debug for Ucid {
     }
 }
 
-impl TryFrom<str32> for Ucid {
+impl TryFrom<str33> for Ucid {
     type Error = anyhow::Error;
 
-    fn try_from(s: str32) -> Result<Self> {
+    fn try_from(s: str33) -> Result<Self> {
         s.parse()
     }
 }
@@ -324,10 +324,10 @@ impl FromStr for Ucid {
     }
 }
 
-impl Into<str32> for Ucid {
-    fn into(self) -> str32 {
+impl Into<str33> for Ucid {
+    fn into(self) -> str33 {
         use std::fmt::Write;
-        let mut s = str32::new();
+        let mut s = str33::new();
         for i in 0..16 {
             write!(s, "{:02x}", self.0[i]).unwrap()
         }
@@ -349,7 +349,7 @@ impl<'lua> FromLua<'lua> for Ucid {
 
 impl<'lua> IntoLua<'lua> for Ucid {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
-        let s: str32 = self.into();
+        let s: str33 = self.into();
         Ok(Value::String(lua.create_string(s.as_str())?))
     }
 }

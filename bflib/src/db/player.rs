@@ -134,7 +134,8 @@ impl Db {
                     amount,
                     sp_name
                 );
-                self.ephemeral.panel_to_player(&self.persisted, 10, target, msg);
+                self.ephemeral
+                    .panel_to_player(&self.persisted, 10, target, msg);
                 self.ephemeral.dirty();
                 Ok(())
             }
@@ -763,7 +764,7 @@ impl Db {
                 .victim_ucid
                 .as_ref()
                 .and_then(|i| self.persisted.players.get(i))
-                .map(|p| (p.name.clone(), p.airborne.unwrap_or(LifeType::Standard)));
+                .map(|p| (p.name.clone(), p.airborne));
             for ucid in hit_by {
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                     let msg = if player.side != dead.victim_side {
@@ -784,7 +785,7 @@ impl Db {
                                     "{tp}(-{total_points}) points, you have killed a friendly unit"
                                 )
                             }
-                            Some((victim, life_type)) => {
+                            Some((victim, Some(life_type))) => {
                                 let (_, player_lives) =
                                     player.lives.get_or_insert_cow(*life_type, || {
                                         (Utc::now(), self.ephemeral.cfg.default_lives[&life_type].0)
@@ -804,10 +805,14 @@ impl Db {
                                 };
                                 format_compact!("{tp}(-{total_points}) points, you have team killed {victim}.{}", lost)
                             }
+                            Some((victim, None)) => {
+                                format_compact!("you have team killed {victim} on the ground")
+                            }
                         }
                     };
                     debug!("{ucid} kill message: {msg}");
-                    self.ephemeral.panel_to_player(&self.persisted, 10, &ucid, msg)
+                    self.ephemeral
+                        .panel_to_player(&self.persisted, 10, &ucid, msg)
                 }
             }
         }

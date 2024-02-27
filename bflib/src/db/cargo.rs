@@ -248,7 +248,9 @@ impl Db {
                             player.points,
                             dep.cost
                         );
-                        self.ephemeral.msgs().panel_to_group(10, false, si.miz_gid, msg);
+                        self.ephemeral
+                            .msgs()
+                            .panel_to_group(10, false, si.miz_gid, msg);
                     }
                 }
             }
@@ -866,7 +868,11 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                self.adjust_points(&st.ucid, -(spec.cost as i32), &format_compact!("for {dep} unpack"));
+                                self.adjust_points(
+                                    &st.ucid,
+                                    -(spec.cost as i32),
+                                    &format_compact!("for {dep} unpack"),
+                                );
                                 return Ok(Unpakistan::Unpacked(dep, gid));
                             }
                         },
@@ -1063,7 +1069,6 @@ impl Db {
                         troop_cfg.cost
                     )
                 }
-                self.adjust_points(&ucid, -(troop_cfg.cost as i32), &format_compact!("for {name} troop"));
             }
         }
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
@@ -1073,10 +1078,15 @@ impl Db {
             bail!("you already have a full load onboard")
         }
         let weight = cargo.weight();
-        cargo.troops.push((ucid, troop_cfg.clone()));
+        cargo.troops.push((ucid.clone(), troop_cfg.clone()));
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, weight as i64)?;
+        self.adjust_points(
+            &ucid,
+            -(troop_cfg.cost as i32),
+            &format_compact!("for {name} troop"),
+        );
         Ok(troop_cfg)
     }
 
@@ -1191,7 +1201,12 @@ impl Db {
                 .into_iter()
                 .filter_map(|gid| self.persisted.groups.get(gid).map(|g| (*gid, g)))
                 .find_map(|(gid, g)| {
-                    if let DeployKind::Troop { spec, player, moved_by: _ } = &g.origin {
+                    if let DeployKind::Troop {
+                        spec,
+                        player,
+                        moved_by: _,
+                    } = &g.origin
+                    {
                         if g.side == side {
                             let in_range = g
                                 .units

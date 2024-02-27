@@ -42,6 +42,7 @@ rand = { version = "0.8" }
 humantime = { version = "2" }
 regex = { version = "1" }
 zstd = { version = "0.13" }
+fixedstr = { version = "0.5.5", features = ["serde"] }
 
 [workspace]
 resolver = "2"

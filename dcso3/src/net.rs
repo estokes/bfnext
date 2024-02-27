@@ -16,8 +16,9 @@ use crate::{
     env::miz::UnitId, err, lua_err, simple_enum, wrapped_prim, wrapped_table, LuaEnv, Sequence,
 };
 use anyhow::{bail, Result};
-use compact_str::{format_compact, CompactString};
+use compact_str::format_compact;
 use core::fmt;
+use fixedstr::str32;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{ops::Deref, str::FromStr};
@@ -284,7 +285,7 @@ impl SlotId {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
+#[serde(try_from = "str32", into = "str32")]
 pub struct Ucid([u8; 16]);
 
 impl fmt::Display for Ucid {
@@ -302,10 +303,10 @@ impl fmt::Debug for Ucid {
     }
 }
 
-impl TryFrom<String> for Ucid {
+impl TryFrom<str32> for Ucid {
     type Error = anyhow::Error;
 
-    fn try_from(s: String) -> Result<Self> {
+    fn try_from(s: str32) -> Result<Self> {
         s.parse()
     }
 }
@@ -315,7 +316,7 @@ impl FromStr for Ucid {
 
     fn from_str(s: &str) -> Result<Self> {
         if s.len() != 32 {
-            bail!("expected a 32 character string")
+            bail!("expected a 32 character string got \"{s}\"")
         }
         let mut a = [0; 16];
         for i in 0..16 {
@@ -326,14 +327,14 @@ impl FromStr for Ucid {
     }
 }
 
-impl Into<String> for Ucid {
-    fn into(self) -> String {
+impl Into<str32> for Ucid {
+    fn into(self) -> str32 {
         use std::fmt::Write;
-        let mut s = CompactString::with_capacity(32);
+        let mut s = str32::new();
         for i in 0..16 {
-            write!(s, "{:x}", self.0[i]).unwrap()
+            write!(s, "{:02x}", self.0[i]).unwrap()
         }
-        String::from(s)
+        s
     }
 }
 
@@ -351,7 +352,7 @@ impl<'lua> FromLua<'lua> for Ucid {
 
 impl<'lua> IntoLua<'lua> for Ucid {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
-        let s: String = self.into();
+        let s: str32 = self.into();
         Ok(Value::String(lua.create_string(s.as_str())?))
     }
 }

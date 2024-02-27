@@ -225,7 +225,7 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
                     }
                 };
                 jtac::add_menu_for_jtac(&ctx.db, side, root, lua, gid, jtac, ucid)
-                    .context("adding jtac menu")?
+                    .context("adding jtac menu")?;
                 n += 1;
             }
         }

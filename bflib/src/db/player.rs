@@ -134,7 +134,7 @@ impl Db {
                     amount,
                     sp_name
                 );
-                self.ephemeral.panel_to_player(&self.persisted, target, msg);
+                self.ephemeral.panel_to_player(&self.persisted, 10, target, msg);
                 self.ephemeral.dirty();
                 Ok(())
             }
@@ -807,7 +807,7 @@ impl Db {
                         }
                     };
                     debug!("{ucid} kill message: {msg}");
-                    self.ephemeral.panel_to_player(&self.persisted, &ucid, msg)
+                    self.ephemeral.panel_to_player(&self.persisted, 10, &ucid, msg)
                 }
             }
         }
@@ -819,7 +819,7 @@ impl Db {
             let pp = player.points;
             if amount != 0 {
                 let m = format_compact!("{}({}) points {}", pp, amount, why);
-                self.ephemeral.panel_to_player(&self.persisted, ucid, m);
+                self.ephemeral.panel_to_player(&self.persisted, 10, ucid, m);
                 self.ephemeral.dirty();
             }
         }

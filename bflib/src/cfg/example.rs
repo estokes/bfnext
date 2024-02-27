@@ -1658,7 +1658,7 @@ impl Default for Cfg {
     fn default() -> Self {
         Self {
             admins: FxHashMap::from_iter([(
-                "f279deb7a6b62c96a78eca3ddb2bd8d0".into(),
+                "f279deb7a6b62c96a78eca3ddb2bd8d0".parse().unwrap(),
                 "REAPER 32 | EvilKipper".into(),
             )]),
             banned: FxHashMap::default(),

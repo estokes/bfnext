@@ -287,6 +287,21 @@ impl SlotId {
 #[serde(try_from = "&str", into = "String")]
 pub struct Ucid([u8; 16]);
 
+impl fmt::Display for Ucid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for i in 0..16 {
+            write!(f, "{:x}", self.0[i])?
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Ucid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self}")
+    }
+}
+
 impl<'a> TryFrom<&'a str> for Ucid {
     type Error = anyhow::Error;
 

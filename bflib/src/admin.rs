@@ -440,9 +440,10 @@ pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
             return Ok(ifo.ucid.clone());
         }
     }
-    let ucid = Ucid::from(key);
-    if ctx.db.player(&ucid).is_some() {
-        return Ok(ucid);
+    if let Ok(ucid) = key.parse::<Ucid>() {
+        if ctx.db.player(&ucid).is_some() {
+            return Ok(ucid);
+        }
     }
     enum Matcher<'a> {
         Re(Regex),

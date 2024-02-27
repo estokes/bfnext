@@ -826,7 +826,7 @@ impl Jtacs {
     }
 
     pub fn location_by_code(&self) -> &LocByCode {
-        &self.location_by_code
+        &self.code_by_location
     }
 
     pub fn unit_dead(&mut self, lua: MizLua, db: &mut Db, id: &DcsOid<ClassUnit>) -> Result<()> {

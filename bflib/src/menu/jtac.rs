@@ -126,7 +126,7 @@ fn jtac_toggle_ir_pointer(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> 
 
 fn jtac_smoke_target(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let jtac = get_jtac(&ctx.jtac, &arg.snd)?;
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
     jtac.smoke_target(lua).context("smoking jtac target")?;
     let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
     let msg = format_compact!(
@@ -144,7 +144,7 @@ fn jtac_smoke_target(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
 
 fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let jtac = get_jtac(&ctx.jtac, &arg.snd)?;
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
     jtac.shift(&ctx.db, lua).context("shifting jtac target")?;
     let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
     let msg = format_compact!(
@@ -153,13 +153,17 @@ fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
         near,
         name
     );
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_side(10, false, jtac.side(), msg);
     Ok(())
 }
 
 fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
     let adjustment = ctx.jtac.get_artillery_adjustment(&arg.snd);
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
     match jtac.artillery_mission(&ctx.db, lua, adjustment, &arg.snd, arg.trd) {
         Ok(()) => {
             let (near, name) = change_info(jtac, &ctx.db, &arg.fth);

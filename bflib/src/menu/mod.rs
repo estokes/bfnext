@@ -201,14 +201,14 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         let mut root = mc.add_submenu_for_group(gid, "JTAC".into(), None)?;
         let mut n = 0;
         for jtac in ctx.jtac.jtacs() {
-            if jtac.side == side {
+            if jtac.side() == side {
                 if n >= 9 {
                     root = mc.add_submenu_for_group(gid, "NEXT>>".into(), Some(root.clone()))?;
                     n = 0;
                 }
                 let near = ctx
                     .db
-                    .objective(&jtac.location.oid)
+                    .objective(&jtac.location().oid)
                     .map(|o| {
                         let name = o.name.clone();
                         match name.rsplit_once(" ") {

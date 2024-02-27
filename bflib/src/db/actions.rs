@@ -939,10 +939,10 @@ impl Db {
     ) -> Result<()> {
         let jt = jtacs.get(&args.jtac)?;
         let tgt = jt
-            .target
+            .target()
             .as_ref()
             .map(|t| Vector2::new(t.pos.x, t.pos.z))
-            .unwrap_or(jt.location.pos);
+            .unwrap_or(jt.location().pos);
         let gid = self.add_and_spawn_ai_air(
             spctx,
             idx,
@@ -1648,6 +1648,7 @@ impl Db {
             if let Err(e) = self.paratroops_to_point(lua, idx, dst, troop, side, ucid.clone()) {
                 self.ephemeral.panel_to_player(
                     &self.persisted,
+                    10,
                     &ucid,
                     format_compact!("paratroop mission failed {e:?}"),
                 )
@@ -1657,6 +1658,7 @@ impl Db {
             if let Err(e) = self.deployable_to_point(lua, idx, dst, dep, side, ucid.clone()) {
                 self.ephemeral.panel_to_player(
                     &self.persisted,
+                    10,
                     &ucid,
                     format_compact!("deploy mission failed {e:?}"),
                 )

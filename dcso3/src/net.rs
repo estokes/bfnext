@@ -284,7 +284,7 @@ impl SlotId {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "&str", into = "String")]
+#[serde(try_from = "String", into = "String")]
 pub struct Ucid([u8; 16]);
 
 impl fmt::Display for Ucid {
@@ -302,10 +302,10 @@ impl fmt::Debug for Ucid {
     }
 }
 
-impl<'a> TryFrom<&'a str> for Ucid {
+impl TryFrom<String> for Ucid {
     type Error = anyhow::Error;
 
-    fn try_from(s: &str) -> Result<Self> {
+    fn try_from(s: String) -> Result<Self> {
         s.parse()
     }
 }
@@ -313,14 +313,14 @@ impl<'a> TryFrom<&'a str> for Ucid {
 impl FromStr for Ucid {
     type Err = anyhow::Error;
 
-    fn from_str(mut s: &str) -> Result<Self> {
+    fn from_str(s: &str) -> Result<Self> {
         if s.len() != 32 {
             bail!("expected a 32 character string")
         }
         let mut a = [0; 16];
         for i in 0..16 {
-            a[i] = u8::from_str_radix(s, 16)?;
-            s = &s[2..];
+            let j = i << 1;
+            a[i] = u8::from_str_radix(&s[j..j + 2], 16)?;
         }
         Ok(Self(a))
     }

@@ -147,8 +147,15 @@ fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
     jtac.shift(&ctx.db, lua).context("shifting jtac target")?;
     let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
+    let target = jtac
+        .target()
+        .as_ref()
+        .and_then(|t| ctx.db.unit(&t.uid).ok())
+        .map(|u| u.typ.clone())
+        .unwrap_or("no target".into());
     let msg = format_compact!(
-        "JTAC TARGET SHIFTED\njtac {} near {}\nrequested by {}",
+        "JTAC SHIFTED NOW TARGETING {}\njtac {} near {}\nrequested by {}",
+        target,
         arg.snd,
         near,
         name

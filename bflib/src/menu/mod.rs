@@ -202,7 +202,7 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         let mut n = 0;
         for jtac in ctx.jtac.jtacs() {
             if jtac.side() == side {
-                if n >= 9 {
+                if n >= 8 {
                     root = mc.add_submenu_for_group(gid, "NEXT>>".into(), Some(root.clone()))?;
                     n = 0;
                 }

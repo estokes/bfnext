@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{ArgTriple, ArgTuple};
+use super::{ArgQuad, ArgTriple, ArgTuple};
 use crate::{
     cfg::{ActionKind, UnitTag},
     db::{
@@ -22,7 +22,7 @@ use crate::{
         group::GroupId as DbGid,
         Db,
     },
-    jtac::{AdjustmentDir, JtId, Jtac},
+    jtac::{AdjustmentDir, JtId, Jtac, Jtacs},
     spawnctx::SpawnCtx,
     Context,
 };
@@ -37,144 +37,253 @@ use dcso3::{
 };
 use enumflags2::{BitFlag, BitFlags};
 
-fn jtac_status(_: MizLua, gid: JtId) -> Result<()> {
+fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let side = ctx.jtac.get(&gid)?.side;
-    let msg = ctx
+    let jtac = ctx
         .jtac
-        .jtac_status(&ctx.db, &gid)
-        .context("getting jtac status")?;
-    ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg);
-    Ok(())
-}
-
-fn jtac_toggle_auto_shift(lua: MizLua, gid: JtId) -> Result<()> {
-    {
-        let ctx = unsafe { Context::get_mut() };
-        ctx.jtac
-            .toggle_auto_shift(&ctx.db, lua, &gid)
-            .context("toggling jtac auto laser")?;
-    }
-    jtac_status(lua, gid)
-}
-
-fn jtac_toggle_ir_pointer(lua: MizLua, gid: JtId) -> Result<()> {
-    {
-        let ctx = unsafe { Context::get_mut() };
-        ctx.jtac
-            .toggle_ir_pointer(&ctx.db, lua, &gid)
-            .context("toggling ir pointer")?
-    }
-    jtac_status(lua, gid)
-}
-
-fn jtac_smoke_target(lua: MizLua, gid: JtId) -> Result<()> {
-    {
-        let ctx = unsafe { Context::get_mut() };
-        ctx.jtac
-            .smoke_target(lua, &gid)
-            .context("smoking jtac target")?;
-    }
-    jtac_status(lua, gid)
-}
-
-fn jtac_shift(lua: MizLua, gid: JtId) -> Result<()> {
-    {
-        let ctx = unsafe { Context::get_mut() };
-        ctx.jtac
-            .shift(&ctx.db, lua, &gid)
-            .context("shifting jtac target")?;
-    }
-    jtac_status(lua, gid)
-}
-
-fn jtac_artillery_mission(lua: MizLua, arg: ArgTriple<JtId, DbGid, u8>) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let side = ctx.jtac.get(&arg.fst)?.side;
-    match ctx
-        .jtac
-        .artillery_mission(lua, &ctx.db, &arg.fst, &arg.snd, arg.trd)
-    {
-        Ok(()) => ctx.db.ephemeral.msgs().panel_to_side(
-            10,
-            false,
-            side,
-            format!(
-                "jtac {} artillery fire mission started for {}",
-                arg.fst, arg.snd
-            ),
-        ),
-        Err(e) => ctx.db.ephemeral.msgs().panel_to_side(
-            10,
-            false,
-            side,
-            format!("jtac {} could not start artillery mission {:?}", arg.fst, e),
-        ),
+        .get(&arg.snd)
+        .with_context(|| format_compact!("get jtac {}", arg.snd))?;
+    let msg = jtac
+        .status(&ctx.db, ctx.jtac.location_by_code())
+        .context("generate jtac status")?;
+    match &arg.fst {
+        None => ctx
+            .db
+            .ephemeral
+            .msgs()
+            .panel_to_side(10, false, jtac.side(), msg),
+        Some(ucid) => ctx
+            .db
+            .ephemeral
+            .panel_to_player(&ctx.db.persisted, 10, ucid, msg),
     }
     Ok(())
 }
 
-fn jtac_adjust_solution(_lua: MizLua, arg: ArgTriple<DbGid, AdjustmentDir, u16>) -> Result<()> {
+fn change_info(jtac: &Jtac, db: &Db, ucid: &Ucid) -> (String, String) {
+    let near = db
+        .objective(&jtac.location().oid)
+        .map(|o| o.name.clone())
+        .unwrap_or("unknown".into());
+    let name = db
+        .player(ucid)
+        .map(|p| p.name.clone())
+        .unwrap_or("unknown".into());
+    (near, name)
+}
+
+fn get_jtac_mut<'a>(jtacs: &'a mut Jtacs, id: &JtId) -> Result<&'a mut Jtac> {
+    jtacs
+        .get_mut(id)
+        .with_context(|| format_compact!("get jtac {}", id))
+}
+
+fn get_jtac<'a>(jtacs: &'a Jtacs, id: &JtId) -> Result<&'a Jtac> {
+    jtacs
+        .get(id)
+        .with_context(|| format_compact!("get jtac {}", id))
+}
+
+fn jtac_toggle_auto_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
+    jtac.toggle_auto_shift(&ctx.db, lua)
+        .with_context(|| format_compact!("toggle auto shift {}", arg.snd))?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
+    let msg = format_compact!(
+        "AUTO SHIFT NOW {}\nfor jtac {} near {}\nchanged by {}",
+        jtac.autoshift(),
+        arg.snd,
+        near,
+        name
+    );
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_side(10, false, jtac.side(), msg);
+    Ok(())
+}
+
+fn jtac_toggle_ir_pointer(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
+    jtac.toggle_ir_pointer(&ctx.db, lua)
+        .context("toggling ir pointer")?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
+    let msg = format_compact!(
+        "IR POINTER NOW {}\nfor jtac {} near {}\nchanged by {}",
+        jtac.ir_pointer(),
+        arg.snd,
+        near,
+        name
+    );
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_side(10, false, jtac.side(), msg);
+    Ok(())
+}
+
+fn jtac_smoke_target(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let jtac = get_jtac(&ctx.jtac, &arg.snd)?;
+    jtac.smoke_target(lua).context("smoking jtac target")?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
+    let msg = format_compact!(
+        "SMOKE DEPLOYED ON TARGET\njtac {} near {}\nrequested by {}",
+        arg.snd,
+        near,
+        name
+    );
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_side(10, false, jtac.side(), msg);
+    Ok(())
+}
+
+fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let jtac = get_jtac(&ctx.jtac, &arg.snd)?;
+    jtac.shift(&ctx.db, lua).context("shifting jtac target")?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
+    let msg = format_compact!(
+        "JTAC TARGET SHIFTED\njtac {} near {}\nrequested by {}",
+        arg.snd,
+        near,
+        name
+    );
+    Ok(())
+}
+
+fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
+    let adjustment = ctx.jtac.get_artillery_adjustment(&arg.snd);
+    match jtac.artillery_mission(&ctx.db, lua, adjustment, &arg.snd, arg.trd) {
+        Ok(()) => {
+            let (near, name) = change_info(jtac, &ctx.db, &arg.fth);
+            let msg =
+                format_compact!(
+                "ARTILLERY MISSION STARTED for {}\ndirected by jtac {} near {}\nrequested by {}",
+                arg.snd, arg.fst, near, name
+            );
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_side(10, false, jtac.side(), msg)
+        }
+        Err(e) => {
+            let msg = format!("jtac {} could not start artillery mission {:?}", arg.fst, e);
+            ctx.db
+                .ephemeral
+                .panel_to_player(&ctx.db.persisted, 10, &arg.fth, msg);
+        }
+    }
+    Ok(())
+}
+
+fn jtac_adjust_solution(_lua: MizLua, arg: ArgQuad<DbGid, AdjustmentDir, u16, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let side = ctx.db.group(&arg.fst)?.side;
     ctx.jtac
         .adjust_artillery_solution(&arg.fst, arg.snd, arg.trd);
     let a = ctx.jtac.get_artillery_adjustment(&arg.fst);
+    let name = ctx
+        .db
+        .player(&arg.fth)
+        .map(|p| p.name.clone())
+        .unwrap_or("unknown".into());
     ctx.db.ephemeral.msgs().panel_to_side(
         10,
         false,
         side,
-        format_compact!("artillery solution for {} adjusted now {:?}", arg.fst, a),
+        format_compact!(
+            "artillery solution for {} adjusted now {:?}\nrequested by {}",
+            arg.fst,
+            a,
+            name
+        ),
     );
     Ok(())
 }
 
-fn jtac_show_adjustment(_lua: MizLua, arg: DbGid) -> Result<()> {
+fn jtac_show_adjustment(_lua: MizLua, arg: ArgTuple<Ucid, DbGid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let side = ctx.db.group(&arg)?.side;
-    let a = ctx.jtac.get_artillery_adjustment(&arg);
-    ctx.db.ephemeral.msgs().panel_to_side(
-        10,
-        false,
-        side,
-        format_compact!("adjustment for {} is {:?}", arg, a),
-    );
+    let a = ctx.jtac.get_artillery_adjustment(&arg.snd);
+    let msg = format_compact!("adjustment for {} is {:?}", arg.snd, a);
+    ctx.db
+        .ephemeral
+        .panel_to_player(&ctx.db.persisted, 10, &arg.fst, msg);
     Ok(())
 }
 
-fn jtac_clear_filter(lua: MizLua, gid: JtId) -> Result<()> {
+fn jtac_clear_filter(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    ctx.jtac
-        .clear_filter(&ctx.db, lua, &gid)
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
+    jtac.clear_filter(&ctx.db, lua)
         .context("clearing jtac target filter")?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
+    let msg = format_compact!(
+        "JTAC FILTER CLEARED\njtac {} near {}\ncleared by {}",
+        arg.snd,
+        near,
+        name
+    );
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_side(10, false, jtac.side(), msg);
     Ok(())
 }
 
-fn jtac_filter(lua: MizLua, arg: ArgTuple<JtId, u64>) -> Result<()> {
+fn jtac_filter(lua: MizLua, arg: ArgTriple<JtId, u64, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let filter =
         BitFlags::<UnitTag>::from_bits(arg.snd).map_err(|_| anyhow!("invalid filter bits"))?;
-    for tag in filter.iter() {
-        ctx.jtac
-            .add_filter(&ctx.db, lua, &arg.fst, tag)
-            .context("setting jtac target filter")?;
-    }
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
+    jtac.add_filter(&ctx.db, lua, filter)
+        .context("setting jtac target filter")?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.trd);
+    let msg = format_compact!(
+        "JTAC FILTER CHANGED TO {}\njtac {} near {}\nchanged by {}",
+        jtac.filter(),
+        arg.fst,
+        near,
+        name
+    );
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_side(10, false, jtac.side(), msg);
     Ok(())
 }
 
-fn jtac_set_code(lua: MizLua, arg: ArgTuple<JtId, u16>) -> Result<()> {
-    {
-        let ctx = unsafe { Context::get_mut() };
-        ctx.jtac
-            .set_code_part(lua, &arg.fst, arg.snd)
-            .context("setting jtac laser code")?;
-    }
-    jtac_status(lua, arg.fst)
+fn jtac_set_code(lua: MizLua, arg: ArgTriple<JtId, u16, Ucid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    ctx.jtac
+        .set_code_part(lua, &arg.fst, arg.snd)
+        .context("setting jtac laser code")?;
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.trd);
+    let msg = format_compact!(
+        "JTAC CODE CHANGED TO {}\njtac {} near {}\nchanged by {}",
+        jtac.code(),
+        arg.fst,
+        near,
+        name
+    );
+    ctx.db
+        .ephemeral
+        .msgs()
+        .panel_to_side(10, false, jtac.side(), msg);
+    Ok(())
 }
 
 fn add_artillery_menu_for_jtac(
     lua: MizLua,
     mizgid: GroupId,
+    ucid: Ucid,
     root: GroupSubMenu,
     jtac: JtId,
     arty: &[DbGid],
@@ -190,10 +299,11 @@ fn add_artillery_menu_for_jtac(
                 "10m".into(),
                 Some(root.clone()),
                 jtac_adjust_solution,
-                ArgTriple {
+                ArgQuad {
                     fst: *gid,
                     snd: dir,
                     trd: 10,
+                    fth: ucid,
                 },
             )?;
             mc.add_command_for_group(
@@ -201,10 +311,11 @@ fn add_artillery_menu_for_jtac(
                 "25m".into(),
                 Some(root.clone()),
                 jtac_adjust_solution,
-                ArgTriple {
+                ArgQuad {
                     fst: *gid,
                     snd: dir,
                     trd: 25,
+                    fth: ucid,
                 },
             )?;
             mc.add_command_for_group(
@@ -212,10 +323,11 @@ fn add_artillery_menu_for_jtac(
                 "50m".into(),
                 Some(root.clone()),
                 jtac_adjust_solution,
-                ArgTriple {
+                ArgQuad {
                     fst: *gid,
                     snd: dir,
                     trd: 50,
+                    fth: ucid,
                 },
             )?;
             mc.add_command_for_group(
@@ -223,10 +335,11 @@ fn add_artillery_menu_for_jtac(
                 "100m".into(),
                 Some(root.clone()),
                 jtac_adjust_solution,
-                ArgTriple {
+                ArgQuad {
                     fst: *gid,
                     snd: dir,
                     trd: 100,
+                    fth: ucid,
                 },
             )?;
             Ok(())
@@ -236,10 +349,11 @@ fn add_artillery_menu_for_jtac(
             "Fire One".into(),
             Some(root.clone()),
             jtac_artillery_mission,
-            ArgTriple {
+            ArgQuad {
                 fst: jtac,
                 snd: *gid,
                 trd: 1,
+                fth: ucid,
             },
         )?;
         let for_effect =
@@ -249,10 +363,11 @@ fn add_artillery_menu_for_jtac(
             "5".into(),
             Some(for_effect.clone()),
             jtac_artillery_mission,
-            ArgTriple {
+            ArgQuad {
                 fst: jtac,
                 snd: *gid,
                 trd: 5,
+                fth: ucid,
             },
         )?;
         mc.add_command_for_group(
@@ -260,10 +375,11 @@ fn add_artillery_menu_for_jtac(
             "10".into(),
             Some(for_effect.clone()),
             jtac_artillery_mission,
-            ArgTriple {
+            ArgQuad {
                 fst: jtac,
                 snd: *gid,
                 trd: 10,
+                fth: ucid,
             },
         )?;
         mc.add_command_for_group(
@@ -271,10 +387,11 @@ fn add_artillery_menu_for_jtac(
             "20".into(),
             Some(for_effect.clone()),
             jtac_artillery_mission,
-            ArgTriple {
+            ArgQuad {
                 fst: jtac,
                 snd: *gid,
                 trd: 20,
+                fth: ucid,
             },
         )?;
         mc.add_command_for_group(
@@ -282,10 +399,11 @@ fn add_artillery_menu_for_jtac(
             "40".into(),
             Some(for_effect.clone()),
             jtac_artillery_mission,
-            ArgTriple {
+            ArgQuad {
                 fst: jtac,
                 snd: *gid,
                 trd: 40,
+                fth: ucid,
             },
         )?;
         mc.add_command_for_group(
@@ -293,7 +411,10 @@ fn add_artillery_menu_for_jtac(
             "Show Adjustment".into(),
             Some(root.clone()),
             jtac_show_adjustment,
-            *gid,
+            ArgTuple {
+                fst: ucid,
+                snd: *gid,
+            },
         )?;
         let short = mc.add_submenu_for_group(mizgid, "Report Short".into(), Some(root.clone()))?;
         add_adjust(&short, AdjustmentDir::Short)?;
@@ -310,19 +431,14 @@ fn add_artillery_menu_for_jtac(
 fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let spctx = SpawnCtx::new(lua)?;
-    let side = ctx.jtac.get(&arg.fst)?.side;
-    let name = ctx
-        .db
-        .player(&arg.snd)
-        .ok_or_else(|| anyhow!("no such player"))?
-        .name
-        .clone();
+    let jtac = get_jtac(&ctx.jtac, &arg.fst)?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.snd);
     let action = ctx
         .db
         .ephemeral
         .cfg
         .actions
-        .get(&side)
+        .get(&jtac.side())
         .and_then(|acts| acts.get(&arg.trd))
         .ok_or_else(|| anyhow!("no such action {}", arg.trd))?;
     let cfg = match &action.kind {
@@ -333,7 +449,7 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
         &spctx,
         &ctx.idx,
         &ctx.jtac,
-        side,
+        jtac.side(),
         Some(arg.snd.clone()),
         ActionCmd {
             name: arg.trd,
@@ -341,17 +457,21 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
             args: ActionArgs::Bomber(WithJtac { jtac: arg.fst, cfg }),
         },
     ) {
-        Ok(()) => ctx.db.ephemeral.msgs().panel_to_side(
-            15,
-            false,
-            side,
-            format_compact!(
-                "Bomber mission started by {name} targeting by jtac {}",
-                arg.fst
-            ),
-        ),
+        Ok(()) => {
+            let msg = format_compact!(
+                "BOMBER MISSION STARTED\ntargeting by jtac {} near {}\nstarted by {}",
+                arg.fst,
+                near,
+                name
+            );
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_side(10, false, jtac.side(), msg)
+        }
         Err(e) => ctx.db.ephemeral.panel_to_player(
             &ctx.db.persisted,
+            10,
             &arg.snd,
             format_compact!("bomber mission could not start {e:?}"),
         ),
@@ -370,41 +490,56 @@ pub(super) fn add_menu_for_jtac(
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let root =
-        mc.add_submenu_for_group(mizgid, format_compact!("{}", jtac.gid).into(), Some(root))?;
+        mc.add_submenu_for_group(mizgid, format_compact!("{}", jtac.gid()).into(), Some(root))?;
     mc.add_command_for_group(
         mizgid,
         "Status".into(),
         Some(root.clone()),
         jtac_status,
-        jtac.gid,
+        ArgTuple {
+            fst: Some(*ucid),
+            snd: jtac.gid(),
+        },
     )?;
     mc.add_command_for_group(
         mizgid,
         "Toggle Auto Shift".into(),
         Some(root.clone()),
         jtac_toggle_auto_shift,
-        jtac.gid,
+        ArgTuple {
+            fst: *ucid,
+            snd: jtac.gid(),
+        },
     )?;
     mc.add_command_for_group(
         mizgid,
         "Toggle IR Pointer".into(),
         Some(root.clone()),
         jtac_toggle_ir_pointer,
-        jtac.gid,
+        ArgTuple {
+            fst: *ucid,
+            snd: jtac.gid(),
+        },
     )?;
     mc.add_command_for_group(
         mizgid,
         "Smoke Current Target".into(),
         Some(root.clone()),
         jtac_smoke_target,
-        jtac.gid,
+        ArgTuple {
+            fst: *ucid,
+            snd: jtac.gid(),
+        },
     )?;
     mc.add_command_for_group(
         mizgid,
         "Shift".into(),
         Some(root.clone()),
         jtac_shift,
-        jtac.gid,
+        ArgTuple {
+            fst: *ucid,
+            snd: jtac.gid(),
+        },
     )?;
     let mut filter_root = mc.add_submenu_for_group(mizgid, "Filter".into(), Some(root.clone()))?;
     mc.add_command_for_group(
@@ -412,7 +547,10 @@ pub(super) fn add_menu_for_jtac(
         "Clear".into(),
         Some(filter_root.clone()),
         jtac_clear_filter,
-        jtac.gid,
+        ArgTuple {
+            fst: *ucid,
+            snd: jtac.gid(),
+        },
     )?;
     for (i, tag) in UnitTag::all().iter().enumerate() {
         if (i + 1) % 9 == 0 {
@@ -424,9 +562,10 @@ pub(super) fn add_menu_for_jtac(
             format_compact!("{:?}", tag).into(),
             Some(filter_root.clone()),
             jtac_filter,
-            ArgTuple {
-                fst: jtac.gid,
+            ArgTriple {
+                fst: jtac.gid(),
                 snd: BitFlags::from(tag).bits(),
+                trd: *ucid,
             },
         )?;
     }
@@ -443,14 +582,22 @@ pub(super) fn add_menu_for_jtac(
                 format_compact!("{n}").into(),
                 Some(root.clone()),
                 jtac_set_code,
-                ArgTuple {
-                    fst: jtac.gid,
+                ArgTriple {
+                    fst: jtac.gid(),
                     snd: n * scale,
+                    trd: *ucid,
                 },
             )?;
         }
     }
-    add_artillery_menu_for_jtac(lua, mizgid, root.clone(), jtac.gid, &jtac.nearby_artillery)?;
+    add_artillery_menu_for_jtac(
+        lua,
+        mizgid,
+        *ucid,
+        root.clone(),
+        jtac.gid(),
+        jtac.nearby_artillery(),
+    )?;
     let bomber_missions = db.ephemeral.cfg.actions.get(&side);
     let bomber_missions = bomber_missions.iter().flat_map(|acts| {
         acts.iter().filter_map(|(n, a)| match a.kind {
@@ -465,7 +612,7 @@ pub(super) fn add_menu_for_jtac(
             Some(root.clone()),
             call_bomber,
             ArgTriple {
-                fst: jtac.gid,
+                fst: jtac.gid(),
                 snd: ucid.clone(),
                 trd: name,
             },

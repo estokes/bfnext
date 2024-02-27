@@ -484,7 +484,13 @@ impl Ephemeral {
             .and_then(|slot| self.players_by_slot.get(slot))
     }
 
-    pub fn panel_to_player<S: Into<String>>(&mut self, persisted: &Persisted, ucid: &Ucid, msg: S) {
+    pub fn panel_to_player<S: Into<String>>(
+        &mut self,
+        persisted: &Persisted,
+        duration: i64,
+        ucid: &Ucid,
+        msg: S,
+    ) {
         if let Some(player) = persisted.players.get(ucid) {
             let ifo = player.current_slot.as_ref().and_then(|(s, _)| {
                 persisted
@@ -494,7 +500,7 @@ impl Ephemeral {
             });
             if let Some(ifo) = ifo {
                 let miz_id = ifo.miz_gid;
-                self.msgs().panel_to_group(5, false, miz_id, msg);
+                self.msgs().panel_to_group(duration, false, miz_id, msg);
             }
         }
     }

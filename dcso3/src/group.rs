@@ -63,7 +63,13 @@ impl<'lua> Group<'lua> {
     pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> Result<Group<'lua>> {
         let globals = lua.inner().globals();
         let class = as_tbl("Group", None, globals.raw_get("Group")?)?;
-        Ok(class.call_function("getByName", name)?)
+        let g: Group = class.call_function("getByName", name)?;
+        // work around for dcs bug that can cause getByName to return
+        // a group even though the group is dead
+        if g.get_size()? == 0 {
+            bail!("{} is dead", name)
+        }
+        Ok(g)
     }
 
     pub fn is_exist(&self) -> Result<bool> {
@@ -140,6 +146,11 @@ impl<'lua> DcsObject<'lua> for Group<'lua> {
         if !t.is_exist()? {
             bail!("{} is an invalid group", id.id)
         }
+        // work around for dcs bug that can cause isExist to return
+        // true even though the group is dead
+        if t.get_size()? == 0 {
+            bail!("{} is dead", id.id)
+        }
         Ok(t)
     }
 
@@ -158,6 +169,11 @@ impl<'lua> DcsObject<'lua> for Group<'lua> {
         if !self.is_exist()? {
             bail!("{} is an invalid group", id.id)
         }
+        // work around for dcs bug that can cause isExist to return
+        // true even though the group is dead
+        if self.get_size()? == 0 {
+            bail!("{} is dead", id.id)
+        }
         Ok(self)
     }
 
@@ -166,6 +182,11 @@ impl<'lua> DcsObject<'lua> for Group<'lua> {
         self.t.raw_set("id_", id.id)?;
         if !self.is_exist()? {
             bail!("{} is an invalid group", id.id)
+        }
+        // work around for dcs bug that can cause isExist to return
+        // true even though the group is dead
+        if self.get_size()? == 0 {
+            bail!("{} is dead", id.id)
         }
         Ok(self)
     }

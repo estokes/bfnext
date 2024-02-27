@@ -233,18 +233,18 @@ impl<'a> Iterator for ContactsIter<'a> {
 
 #[derive(Debug, Clone)]
 pub struct Jtac {
-    pub gid: JtId,
-    pub side: Side,
+    gid: JtId,
+    side: Side,
     contacts: IndexMap<UnitId, Contact>,
     filter: BitFlags<UnitTag>,
-    pub location: JtacLocation,
+    location: JtacLocation,
     priority: Vec<UnitTags>,
-    pub target: Option<JtacTarget>,
+    target: Option<JtacTarget>,
     autoshift: bool,
     ir_pointer: bool,
     code: u16,
     last_smoke: DateTime<Utc>,
-    pub nearby_artillery: SmallVec<[GroupId; 8]>,
+    nearby_artillery: SmallVec<[GroupId; 8]>,
     menu_dirty: bool,
     air: bool,
 }
@@ -276,7 +276,7 @@ impl Jtac {
         }
     }
 
-    fn status(&self, db: &Db, loc_by_code: &LocByCode) -> Result<CompactString> {
+    pub fn status(&self, db: &Db, loc_by_code: &LocByCode) -> Result<CompactString> {
         use std::fmt::Write;
         let mut msg = CompactString::new("");
         write!(msg, "JTAC {} status\n", self.gid)?;
@@ -512,10 +512,11 @@ impl Jtac {
         Ok(())
     }
 
-    fn shift(&mut self, db: &Db, lua: MizLua) -> Result<bool> {
+    pub fn shift(&mut self, db: &Db, lua: MizLua) -> Result<bool> {
         if self.contacts.is_empty() {
             return Ok(false);
         }
+        self.autoshift = false;
         let i = match &self.target {
             None => 0,
             Some(target) => match self.contacts.get_index_of(&target.uid) {
@@ -562,7 +563,7 @@ impl Jtac {
         Ok(false)
     }
 
-    fn smoke_target(&mut self, lua: MizLua) -> Result<()> {
+    pub fn smoke_target(&mut self, lua: MizLua) -> Result<()> {
         if let Some(target) = &self.target {
             if let Some(ct) = self.contacts.get(&target.uid) {
                 let now = Utc::now();
@@ -600,7 +601,7 @@ impl Jtac {
         Ok(())
     }
 
-    fn artillery_mission(
+    pub fn artillery_mission(
         &mut self,
         db: &Db,
         lua: MizLua,
@@ -652,6 +653,68 @@ impl Jtac {
         }
         Ok(())
     }
+
+    pub fn toggle_auto_shift(&mut self, db: &Db, lua: MizLua) -> Result<()> {
+        self.autoshift = !self.autoshift;
+        if self.autoshift {
+            self.shift(db, lua)?;
+        } else {
+            self.remove_target(db, lua)?
+        }
+        Ok(())
+    }
+
+    pub fn toggle_ir_pointer(&mut self, db: &Db, lua: MizLua) -> Result<()> {
+        self.ir_pointer = !self.ir_pointer;
+        self.reset_target(db, lua).context("resetting target")?;
+        Ok(())
+    }
+
+    pub fn clear_filter(&mut self, db: &Db, lua: MizLua) -> Result<bool> {
+        self.filter = BitFlags::empty();
+        self.sort_contacts(db, lua)
+    }
+
+    pub fn add_filter(&mut self, db: &Db, lua: MizLua, tag: BitFlags<UnitTag>) -> Result<bool> {
+        self.filter |= tag;
+        self.sort_contacts(db, lua)
+    }
+
+    pub fn filter(&self) -> BitFlags<UnitTag> {
+        self.filter
+    }
+
+    pub fn gid(&self) -> JtId {
+        self.gid
+    }
+
+    pub fn side(&self) -> Side {
+        self.side
+    }
+
+    pub fn location(&self) -> JtacLocation {
+        self.location
+    }
+
+    pub fn target(&self) -> &Option<JtacTarget> {
+        &self.target
+    }
+
+    pub fn autoshift(&self) -> bool {
+        self.autoshift
+    }
+
+    pub fn ir_pointer(&self) -> bool {
+        self.ir_pointer
+    }
+
+    pub fn code(&self) -> u16 {
+        self.code
+    }
+
+    pub fn nearby_artillery(&self) -> &[GroupId] {
+        &self.nearby_artillery
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -671,7 +734,7 @@ impl Jtacs {
             .ok_or_else(|| anyhow!("no such jtac {gid}"))
     }
 
-    fn get_mut(&mut self, gid: &JtId) -> Result<&mut Jtac> {
+    pub fn get_mut(&mut self, gid: &JtId) -> Result<&mut Jtac> {
         self.jtacs
             .iter_mut()
             .find_map(|(_, jtx)| jtx.get_mut(gid))
@@ -682,21 +745,8 @@ impl Jtacs {
         self.jtacs.values().flat_map(|jtx| jtx.values())
     }
 
-    pub fn artillery_mission(
-        &mut self,
-        lua: MizLua,
-        db: &Db,
-        jtac: &JtId,
-        arty: &GroupId,
-        n: u8,
-    ) -> Result<()> {
-        let adjustment = self
-            .artillery_adjustment
-            .get(arty)
-            .map(|a| *a)
-            .unwrap_or_default();
-        self.get_mut(jtac)?
-            .artillery_mission(db, lua, adjustment, arty, n)
+    pub fn jtacs_mut(&mut self) -> impl Iterator<Item = &mut Jtac> {
+        self.jtacs.values_mut().flat_map(|jtx| jtx.values_mut())
     }
 
     pub fn adjust_artillery_solution(&mut self, arty: &GroupId, dir: AdjustmentDir, mag: u16) {
@@ -714,50 +764,6 @@ impl Jtacs {
             .get(arty)
             .map(|a| *a)
             .unwrap_or_default()
-    }
-
-    pub fn jtac_status(&self, db: &Db, gid: &JtId) -> Result<CompactString> {
-        self.get(gid)?.status(db, &self.code_by_location)
-    }
-
-    pub fn toggle_auto_shift(&mut self, db: &Db, lua: MizLua, gid: &JtId) -> Result<()> {
-        let jtac = self.get_mut(gid)?;
-        jtac.autoshift = !jtac.autoshift;
-        if jtac.autoshift {
-            jtac.shift(db, lua)?;
-        } else {
-            jtac.remove_target(db, lua)?
-        }
-        Ok(())
-    }
-
-    pub fn toggle_ir_pointer(&mut self, db: &Db, lua: MizLua, gid: &JtId) -> Result<()> {
-        let jtac = self.get_mut(gid)?;
-        jtac.ir_pointer = !jtac.ir_pointer;
-        jtac.reset_target(db, lua).context("resetting target")?;
-        Ok(())
-    }
-
-    pub fn smoke_target(&mut self, lua: MizLua, gid: &JtId) -> Result<()> {
-        self.get_mut(gid)?.smoke_target(lua)
-    }
-
-    pub fn shift(&mut self, db: &Db, lua: MizLua, gid: &JtId) -> Result<bool> {
-        let jtac = self.get_mut(gid)?;
-        jtac.autoshift = false;
-        jtac.shift(db, lua)
-    }
-
-    pub fn clear_filter(&mut self, db: &Db, lua: MizLua, gid: &JtId) -> Result<bool> {
-        let jtac = self.get_mut(gid)?;
-        jtac.filter = BitFlags::empty();
-        jtac.sort_contacts(db, lua)
-    }
-
-    pub fn add_filter(&mut self, db: &Db, lua: MizLua, gid: &JtId, tag: UnitTag) -> Result<bool> {
-        let jtac = self.get_mut(gid)?;
-        jtac.filter |= tag;
-        jtac.sort_contacts(db, lua)
     }
 
     /// set part of the laser code, defined by the scale of the passed in number. For example,
@@ -798,7 +804,7 @@ impl Jtacs {
         ContactsIter { i: 0, contacts }
     }
 
-    pub fn add_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {
+    fn add_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {
         t.entry(oid)
             .or_default()
             .entry(code)
@@ -806,7 +812,7 @@ impl Jtacs {
             .insert(gid);
     }
 
-    pub fn remove_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {
+    fn remove_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {
         match t.entry(oid).or_default().entry(code) {
             Entry::Vacant(_) => (),
             Entry::Occupied(mut e) => {
@@ -817,6 +823,10 @@ impl Jtacs {
                 }
             }
         }
+    }
+
+    pub fn location_by_code(&self) -> &LocByCode {
+        &self.location_by_code
     }
 
     pub fn unit_dead(&mut self, lua: MizLua, db: &mut Db, id: &DcsOid<ClassUnit>) -> Result<()> {

@@ -13,10 +13,10 @@ FITNESS FOR A PARTICULAR PURPOSE.
 
 use super::{as_tbl, coalition::Side, cvt_err, String};
 use crate::{
-    env::miz::UnitId, lua_err, simple_enum, wrapped_prim, wrapped_table, LuaEnv, Sequence,
+    env::miz::UnitId, err, lua_err, simple_enum, wrapped_prim, wrapped_table, LuaEnv, Sequence,
 };
-use anyhow::Result;
-use compact_str::format_compact;
+use anyhow::{bail, Result};
+use compact_str::{format_compact, CompactString};
 use core::fmt;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
@@ -283,17 +283,61 @@ impl SlotId {
     }
 }
 
-wrapped_prim!(Ucid, String, Hash);
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "&str", into = "String")]
+pub struct Ucid([u8; 16]);
 
-impl From<&str> for Ucid {
-    fn from(value: &str) -> Self {
-        Self(String::from(value))
+impl<'a> TryFrom<&'a str> for Ucid {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &str) -> Result<Self> {
+        s.parse()
     }
 }
 
-impl fmt::Display for Ucid {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.0)
+impl FromStr for Ucid {
+    type Err = anyhow::Error;
+
+    fn from_str(mut s: &str) -> Result<Self> {
+        if s.len() != 32 {
+            bail!("expected a 32 character string")
+        }
+        let mut a = [0; 16];
+        for i in 0..16 {
+            a[i] = u8::from_str_radix(s, 16)?;
+            s = &s[2..];
+        }
+        Ok(Self(a))
+    }
+}
+
+impl Into<String> for Ucid {
+    fn into(self) -> String {
+        use std::fmt::Write;
+        let mut s = CompactString::with_capacity(32);
+        for i in 0..16 {
+            write!(s, "{:x}", self.0[i]).unwrap()
+        }
+        String::from(s)
+    }
+}
+
+impl<'lua> FromLua<'lua> for Ucid {
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
+        match value {
+            Value::String(s) => s
+                .to_str()?
+                .parse()
+                .map_err(|e| err(&format_compact!("decoding ucid {}", e))),
+            _ => Err(err("expected ucid to be a string")),
+        }
+    }
+}
+
+impl<'lua> IntoLua<'lua> for Ucid {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let s: String = self.into();
+        Ok(Value::String(lua.create_string(s.as_str())?))
     }
 }
 

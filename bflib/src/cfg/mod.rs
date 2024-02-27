@@ -159,6 +159,21 @@ pub enum UnitTag {
 #[serde(from = "Vec<UnitTag>", into = "Vec<UnitTag>")]
 pub struct UnitTags(pub BitFlags<UnitTag>);
 
+impl fmt::Display for UnitTags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let len = self.0.len();
+        write!(f, "[")?;
+        for (i, tag) in self.0.iter().enumerate() {
+            if i < len - 1 {
+                write!(f, "{tag:?}, ")?
+            } else {
+                write!(f, "{tag:?}")?
+            }
+        }
+        write!(f, "]")
+    }
+}
+
 impl Deref for UnitTags {
     type Target = BitFlags<UnitTag>;
 

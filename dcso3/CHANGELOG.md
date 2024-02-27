@@ -1,6 +1,8 @@
 ## 0.1.5
 
-- 
+- work around a DCS bug that causes isExist to return true on dead
+  groups
+- make ucid copy
 
 ## 0.1.4
 

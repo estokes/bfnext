@@ -202,10 +202,6 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         let mut n = 0;
         for jtac in ctx.jtac.jtacs() {
             if jtac.side() == side {
-                if n >= 8 {
-                    root = mc.add_submenu_for_group(gid, "NEXT>>".into(), Some(root.clone()))?;
-                    n = 0;
-                }
                 let near = ctx
                     .db
                     .objective(&jtac.location().oid)
@@ -220,13 +216,17 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
                 let root = match roots.entry(near.clone()) {
                     Entry::Occupied(e) => e.get().clone(),
                     Entry::Vacant(e) => {
+                        if n >= 9 {
+                            root = mc.add_submenu_for_group(gid, "NEXT>>".into(), Some(root.clone()))?;
+                            n = 0;
+                        }
+                        n += 1;
                         let root = mc.add_submenu_for_group(gid, near, Some(root.clone()))?;
                         e.insert(root).clone()
                     }
                 };
                 jtac::add_menu_for_jtac(&ctx.db, side, root, lua, gid, jtac, ucid)
                     .context("adding jtac menu")?;
-                n += 1;
             }
         }
         Ok(())

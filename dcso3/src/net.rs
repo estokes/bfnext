@@ -290,10 +290,7 @@ pub struct Ucid([u8; 16]);
 
 impl fmt::Display for Ucid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for i in 0..16 {
-            write!(f, "{:x}", self.0[i])?
-        }
-        Ok(())
+        write!(f, "{}", Into::<str32>::into(*self))
     }
 }
 

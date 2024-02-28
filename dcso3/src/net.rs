@@ -115,7 +115,7 @@ impl<'lua> IntoLua<'lua> for SlotId {
                 }
                 Ok(Value::Integer(i))
             }
-            Self::Spectator => Ok(Value::Integer(0)),
+            Self::Spectator => Ok(Value::String(lua.create_string("")?)),
             Self::ArtilleryCommander(s, n) => {
                 if n < 1 {
                     return Err(lua_err("invalid ca slot number"));

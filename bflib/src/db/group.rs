@@ -730,7 +730,7 @@ impl Db {
         id: &DcsOid<ClassUnit>,
         now: DateTime<Utc>,
     ) -> Result<()> {
-        let uid = match self.ephemeral.unit_dead(id) {
+        let uid = match self.ephemeral.unit_dead(&self.persisted, id) {
             None => return Ok(()),
             Some((uid, ucid)) => {
                 if let Some(ucid) = ucid {

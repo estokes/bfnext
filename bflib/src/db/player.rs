@@ -87,17 +87,17 @@ pub struct Player {
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
     #[serde(skip)]
-    pub changing_slots: Option<SlotId>,
+    pub changing_slots: bool,
     #[serde(skip)]
     pub jtac_or_spectators: bool,
 }
 
 impl Db {
-    pub fn player_deslot(&mut self, ucid: &Ucid, kick: bool) {
+    pub fn player_deslot(&mut self, ucid: &Ucid) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             player.airborne = None;
             if let Some((slot, _)) = player.current_slot.take() {
-                let _ = self.ephemeral.player_deslot(&slot, kick);
+                let _ = self.ephemeral.player_deslot(&self.persisted, &slot);
             }
         }
     }
@@ -371,7 +371,7 @@ impl Db {
             SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
                 let oid = match self.persisted.objectives_by_slot.get(&slot) {
                     None => {
-                        player.changing_slots = Some(slot.clone());
+                        player.changing_slots = true;
                         player.jtac_or_spectators = false;
                         return SlotAuth::Yes; // it's a multicrew slot
                     }
@@ -398,7 +398,7 @@ impl Db {
                         self.ephemeral
                             .players_by_slot
                             .insert(slot.clone(), ucid.clone());
-                        player.changing_slots = Some(slot);
+                        player.changing_slots = true; 
                         player.jtac_or_spectators = false;
                         break SlotAuth::Yes;
                     };
@@ -417,9 +417,8 @@ impl Db {
                                 self.ephemeral.dirty();
                             } else if n == 0 {
                                 break SlotAuth::NoLives(life_type);
-                            } else {
-                                yes!();
-                            }
+                            } 
+                            yes!();
                         }
                     }
                 }
@@ -459,7 +458,7 @@ impl Db {
                             .map(|p| p.new_player_join as i32)
                             .unwrap_or(0),
                         current_slot: None,
-                        changing_slots: None,
+                        changing_slots: false,
                         jtac_or_spectators: true,
                     },
                 );
@@ -630,9 +629,7 @@ impl Db {
                         landed_at_objective,
                     }),
                 ));
-                if let Some(_) = player.changing_slots.take() {
-                    self.ephemeral.cancel_force_to_spectators(&ucid);
-                }
+                player.changing_slots = false;
             }
         }
         Ok(())
@@ -654,7 +651,6 @@ impl Db {
             if let Some(ucid) = self.ephemeral.player_in_slot(slot) {
                 let ucid = ucid.clone();
                 let player = maybe_mut!(self.persisted.players, ucid, "player")?;
-                let kick = !player.jtac_or_spectators;
                 if let Some((_, Some(inst))) = player.current_slot.as_mut() {
                     let typ = inst.typ.clone();
                     let ppos = inst.position.p.0;
@@ -692,7 +688,7 @@ impl Db {
                         }
                     }
                 }
-                self.player_deslot(&ucid, kick)
+                self.player_deslot(&ucid)
             }
         }
         Ok(dead)
@@ -709,7 +705,7 @@ impl Db {
                 self.ephemeral.push_sync_warehouse(oid, inst.typ.clone());
             }
         }
-        self.player_deslot(ucid, false);
+        self.player_deslot(ucid);
     }
 
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {

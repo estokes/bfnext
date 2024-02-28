@@ -788,7 +788,6 @@ fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
     perf: &mut Perf,
-    net: &Net,
     path: &PathBuf,
     ts: DateTime<Utc>,
 ) -> Result<()> {
@@ -796,7 +795,6 @@ fn run_slow_timed_events(
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         check_auto_shutdown(ctx, lua, ts);
-        force_players_to_spectators(ctx, net, ts);
         for (oid, vh) in ctx.db.ephemeral.warehouses_to_sync() {
             if let Err(e) = ctx.db.sync_vehicle_at_obj(lua, oid, vh.clone()) {
                 error!(
@@ -886,6 +884,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
+    force_players_to_spectators(ctx, &net, ts);
     match ctx
         .db
         .update_unit_positions_incremental(lua, ctx.last_unit_position)
@@ -914,7 +913,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         }
     }
     record_perf(&mut perf.player_positions, ts);
-    if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, path, ts) {
+    if let Err(e) = run_slow_timed_events(lua, ctx, perf, path, ts) {
         error!("error running slow timed events {:?}", e)
     }
     if let Some(slot) = ctx.menu_init_queue.shift_remove_index(0) {

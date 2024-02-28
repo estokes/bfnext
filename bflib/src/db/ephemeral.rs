@@ -429,15 +429,21 @@ impl Ephemeral {
             .push(ucid.clone())
     }
 
-    pub(super) fn player_deslot(&mut self, slot: &SlotId, kick: bool) -> Option<(UnitId, Ucid)> {
+    pub(super) fn player_deslot(
+        &mut self,
+        per: &Persisted,
+        slot: &SlotId,
+    ) -> Option<(UnitId, Ucid)> {
         if let Some(ucid) = self.players_by_slot.swap_remove(slot) {
             info!("deslotting player {ucid} from dead unit");
-            if kick {
-                info!("queuing force player {ucid} to spectators");
-                self.force_to_spectators
-                    .entry(Utc::now())
-                    .or_default()
-                    .push(ucid.clone());
+            if let Some(player) = per.players.get(&ucid) {
+                if !player.changing_slots && !player.jtac_or_spectators {
+                    info!("queuing force player {ucid} to spectators");
+                    self.force_to_spectators
+                        .entry(Utc::now())
+                        .or_default()
+                        .push(ucid.clone());
+                }
             }
             self.cargo.remove(slot);
             if let Some(id) = self.object_id_by_slot.remove(slot) {
@@ -452,9 +458,9 @@ impl Ephemeral {
         None
     }
 
-    pub(super) fn unit_dead(&mut self, id: &DcsOid<ClassUnit>) -> Option<(UnitId, Option<Ucid>)> {
+    pub(super) fn unit_dead(&mut self, per: &Persisted, id: &DcsOid<ClassUnit>) -> Option<(UnitId, Option<Ucid>)> {
         let (uid, ucid) = match self.slot_by_object_id.remove(id) {
-            Some(slot) => match self.player_deslot(&slot, true) {
+            Some(slot) => match self.player_deslot(per, &slot) {
                 Some((uid, ucid)) => (uid, Some(ucid)),
                 None => return None,
             },

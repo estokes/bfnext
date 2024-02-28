@@ -135,6 +135,7 @@ pub enum AdminCommand {
     Delete {
         group: GroupId,
     },
+    Deslot { player: String },
     Shutdown,
 }
 
@@ -163,6 +164,7 @@ impl AdminCommand {
             "balance <player>: show <player>'s point balance",
             "set-points <n> <player>: set <player>'s point balance to <n>",
             "delete <groupid>: delete deployed group, now with 100% less mess",
+            "deslot <player>: force <player> to spectators",
             "shutdown: shutdown the server"
         ]
     }
@@ -284,6 +286,8 @@ impl FromStr for AdminCommand {
             }
         } else if let Some(s) = s.strip_prefix("delete ") {
             Ok(Self::Delete { group: s.parse()? })
+        } else if let Some(s) = s.strip_prefix("deslot ") {
+            Ok(Self::Deslot { player: s.into() })
         } else {
             bail!("unknown command {s}")
         }
@@ -708,6 +712,12 @@ fn delete(ctx: &mut Context, id: &GroupId) -> Result<()> {
     }
 }
 
+fn deslot(ctx: &mut Context, player: &String) -> Result<()> {
+    let ucid = get_player_ucid(ctx, player)?;
+    ctx.db.ephemeral.force_player_to_spectators(&ucid);
+    Ok(())
+}
+
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     use std::fmt::Write;
     let mut cmds = mem::take(&mut ctx.admin_commands);
@@ -888,6 +898,10 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 Ok(()) => reply!("{group} deleted"),
                 Err(e) => reply!("could not delete group {e:?}"),
             },
+            AdminCommand::Deslot { player } => match deslot(ctx, &player) {
+                Ok(()) => reply!("{player} deslotted"),
+                Err(e) => reply!("could not deslot {player} {e:?}")
+            }
         }
     }
     ctx.admin_commands = cmds;

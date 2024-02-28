@@ -252,10 +252,15 @@ fn on_player_try_connect(
             }
         }
     }
-    ctx.id_by_ucid.insert(ucid.clone(), id);
+    if let Some(id) = ctx.id_by_ucid.remove(&ucid) {
+        if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
+            ctx.id_by_name.remove(&ifo.name);
+        }
+    }
+    ctx.id_by_ucid.insert(ucid, id);
     ctx.id_by_name.insert(name.clone(), id);
-    ctx.db.player_connected(ucid.clone(), name.clone());
-    ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
+    ctx.info_by_player_id.insert(id, PlayerInfo { name: name.clone(), ucid });
+    ctx.db.player_connected(ucid, name);
     record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
     Ok(None)
 }

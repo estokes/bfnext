@@ -651,7 +651,7 @@ fn add_jtacs_by_location(
     mc.remove_command_for_group(arg.snd, cmd.into())?;
     let root = mc.add_submenu_for_group(arg.snd, name, Some(arg.fth))?;
     for jtac in ctx.jtac.jtacs() {
-        if jtac.side() == player.side {
+        if jtac.side() == player.side && jtac.location().oid == arg.trd {
             add_menu_for_jtac(
                 &ctx.db,
                 player.side,
@@ -666,6 +666,16 @@ fn add_jtacs_by_location(
     Ok(())
 }
 
+fn jtac_refresh_locations(lua: MizLua, arg: Ucid) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let player = ctx.db.player(&arg).ok_or_else(|| anyhow!("missing player"))?;
+    if let Some((slot, _)) = player.current_slot.as_ref() {
+        let slot = *slot;
+        super::init_jtac_menu_for_slot(ctx, lua, &slot)?
+    }
+    Ok(())
+}
+
 pub(super) fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let mc = MissionCommands::singleton(lua)?;
@@ -676,6 +686,7 @@ pub(super) fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> R
     let mut roots: SmallVec<[String; 16]> = smallvec![];
     mc.remove_command_for_group(arg.snd, vec!["JTAC".into()].into())?;
     let mut root = mc.add_submenu_for_group(arg.snd, "JTAC".into(), None)?;
+    mc.add_command_for_group(arg.snd, "Refresh Locations".into(), Some(root.clone()), jtac_refresh_locations, arg.fst)?;
     let mut n = 0;
     for jtac in ctx.jtac.jtacs() {
         if jtac.side() == player.side {
@@ -693,7 +704,7 @@ pub(super) fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> R
             };
             if !roots.contains(&near) {
                 roots.push(near.clone());
-                if n >= 9 {
+                if n >= 8 {
                     root =
                         mc.add_submenu_for_group(arg.snd, "NEXT>>".into(), Some(root.clone()))?;
                     n = 0;

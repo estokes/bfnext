@@ -19,6 +19,8 @@ mod ewr;
 mod jtac;
 mod troop;
 
+use std::sync::Arc;
+
 use crate::{cfg::Cfg, db::Db, Context};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use compact_str::format_compact;
@@ -190,9 +192,32 @@ impl CarryCap {
     }
 }
 
-pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result<()> {
+pub(super) fn init_jtac_menu_for_slot(ctx: &mut Context, lua: MizLua, slot: &SlotId) -> Result<()> {
+    let ucid = match ctx.db.ephemeral.player_in_slot(slot) {
+        Some(ucid) => ucid,
+        None => return Ok(()),
+    };
+    let mc = MissionCommands::singleton(lua)?;
+    let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
+    ctx.subscribed_jtac_menus.remove(slot);
+    mc.remove_command_for_group(si.miz_gid, GroupCommandItem::from(vec!["JTAC".into()]))?;
+    mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;
+    mc.add_command_for_group(
+        si.miz_gid,
+        "JTAC".into(),
+        None,
+        jtac::add_jtac_locations,
+        ArgTuple {
+            fst: *ucid,
+            snd: si.miz_gid,
+        },
+    )?;
+    Ok(())
+}
+
+pub(super) fn init_for_slot(ctx: &mut Context, lua: MizLua, slot: &SlotId) -> Result<()> {
     debug!("initializing menus for {slot:?}");
-    let cfg = &ctx.db.ephemeral.cfg;
+    let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
     let mc = MissionCommands::singleton(lua)?;
     match slot {
         SlotId::Spectator => Ok(()),
@@ -202,34 +227,23 @@ pub(super) fn init_for_slot(ctx: &Context, lua: MizLua, slot: &SlotId) -> Result
         | SlotId::Observer(_, _) => Ok(()),
         SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
             let ucid = match ctx.db.ephemeral.player_in_slot(slot) {
-                Some(ucid) => ucid,
+                Some(ucid) => *ucid,
                 None => return Ok(()),
             };
             let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["EWR".into()]))?;
-            mc.remove_command_for_group(si.miz_gid, GroupCommandItem::from(vec!["JTAC".into()]))?;
-            mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Cargo".into()]))?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Troops".into()]))?;
             ewr::add_ewr_menu_for_group(&mc, si.miz_gid)?;
-            if ctx.db.ephemeral.cfg.rules.jtac.check(ucid) {
-                mc.add_command_for_group(
-                    si.miz_gid,
-                    "JTAC".into(),
-                    None,
-                    jtac::add_jtac_locations,
-                    ArgTuple {
-                        fst: *ucid,
-                        snd: si.miz_gid,
-                    },
-                )?;
+            let cap = CarryCap::from_typ(&cfg, si.typ.as_str());
+            if cap.crates && ctx.db.ephemeral.cfg.rules.cargo.check(&ucid) {
+                cargo::add_cargo_menu_for_group(&cfg, &mc, &si.side, si.miz_gid)?
             }
-            let cap = CarryCap::from_typ(cfg, si.typ.as_str());
-            if cap.crates && ctx.db.ephemeral.cfg.rules.cargo.check(ucid) {
-                cargo::add_cargo_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
+            if cap.troops && ctx.db.ephemeral.cfg.rules.troops.check(&ucid) {
+                troop::add_troops_menu_for_group(&cfg, &mc, &si.side, si.miz_gid)?
             }
-            if cap.troops && ctx.db.ephemeral.cfg.rules.troops.check(ucid) {
-                troop::add_troops_menu_for_group(cfg, &mc, &si.side, si.miz_gid)?
+            if ctx.db.ephemeral.cfg.rules.jtac.check(&ucid) {
+                init_jtac_menu_for_slot(ctx, lua, slot)?
             }
             Ok(())
         }

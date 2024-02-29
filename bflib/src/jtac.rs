@@ -722,7 +722,7 @@ pub struct Jtacs {
     jtacs: FxHashMap<Side, FxHashMap<JtId, Jtac>>,
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
     code_by_location: LocByCode,
-    menu_dirty: FxHashMap<Side, bool>,
+    menu_dirty: FxHashMap<Side, FxHashSet<ObjectiveId>>,
     landcache: LandCache,
 }
 
@@ -854,7 +854,7 @@ impl Jtacs {
                                     jt.code,
                                     jt.gid,
                                 );
-                                *self.menu_dirty.entry(jt.side).or_default() = true;
+                                self.menu_dirty.entry(jt.side).or_default().insert(jt.location.oid);
                                 return false;
                             }};
                         }
@@ -933,7 +933,7 @@ impl Jtacs {
         Ok(dead)
     }
 
-    pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<SmallVec<[Side; 2]>> {
+    pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<FxHashMap<Side, FxHashSet<ObjectiveId>>> {
         let land = Land::singleton(lua)?;
         let mut saw_jtacs: SmallVec<[JtId; 32]> = smallvec![];
         let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
@@ -956,7 +956,6 @@ impl Jtacs {
                 .or_default()
                 .entry(id)
                 .or_insert_with(|| {
-                    *self.menu_dirty.entry(side).or_default() = true;
                     let jt = Jtac::new(
                         db,
                         id,
@@ -965,6 +964,7 @@ impl Jtacs {
                         pos,
                         air,
                     );
+                    self.menu_dirty.entry(side).or_default().insert(jt.location.oid);
                     Self::add_code_by_location(
                         &mut self.code_by_location,
                         jt.location.oid,
@@ -988,7 +988,9 @@ impl Jtacs {
                     jtac.code,
                     jtac.gid,
                 );
-                *self.menu_dirty.entry(jtac.side).or_default() = true;
+                let menu = self.menu_dirty.entry(jtac.side).or_default();
+                menu.insert(prev_loc.oid);
+                menu.insert(jtac.location.oid);
             }
             if air {
                 pos.y -= 5.
@@ -1036,7 +1038,7 @@ impl Jtacs {
                         jt.code,
                         jt.gid,
                     );
-                    *self.menu_dirty.entry(*side).or_default() = true;
+                    self.menu_dirty.entry(*side).or_default().insert(jt.location.oid);
                     false
                 }
             })
@@ -1086,23 +1088,14 @@ impl Jtacs {
         for (side, msg) in msgs {
             db.ephemeral.msgs().panel_to_side(10, false, side, msg);
         }
-        let mut side_menus = smallvec![];
-        for (side, dirty) in self.menu_dirty.iter_mut() {
-            if *dirty {
-                side_menus.push(*side);
-                *dirty = false;
-            }
-        }
         for (side, jtx) in self.jtacs.iter_mut() {
             for jt in jtx.values_mut() {
                 if jt.menu_dirty {
-                    if !side_menus.contains(side) {
-                        side_menus.push(*side)
-                    }
+                    self.menu_dirty.entry(*side).or_default().insert(jt.location.oid);
                     jt.menu_dirty = false;
                 }
             }
         }
-        Ok(side_menus)
+        Ok(std::mem::take(&mut self.menu_dirty))
     }
 }

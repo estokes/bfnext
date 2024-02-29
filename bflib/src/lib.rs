@@ -21,12 +21,12 @@ pub mod chatcmd;
 pub mod db;
 pub mod ewr;
 pub mod jtac;
+pub mod landcache;
 pub mod menu;
 pub mod msgq;
 pub mod perf;
 pub mod shots;
 pub mod spawnctx;
-pub mod landcache;
 
 extern crate nalgebra as na;
 use crate::{cfg::Cfg, db::player::SlotAuth, perf::record_perf};
@@ -137,11 +137,10 @@ struct Context {
     logistics_ticks_since_delivery: u32,
     last_unit_position: usize,
     last_player_position: usize,
+    subscribed_jtac_menus: FxHashMap<SlotId, FxHashSet<ObjectiveId>>,
     ewr: Ewr,
     jtac: Jtacs,
 }
-
-static mut CONTEXT: Option<Context> = None;
 
 impl Context {
     // this must be used cautiously. Reasons why it's not totally nuts,
@@ -149,18 +148,23 @@ impl Context {
     // - the event handlers can be triggerred by api calls, making refcells and mutexes error prone
     // - as long as an event handler doesn't step on state in an api call it's ok, since concurrency never happens
     //   that isn't so hard to guarantee
-    unsafe fn get_mut() -> &'static mut Context {
-        match CONTEXT.as_mut() {
+    unsafe fn get_mut() -> &'static mut Self {
+        static mut SELF: Option<Context> = None;
+        match SELF.as_mut() {
             Some(ctx) => ctx,
             None => {
-                CONTEXT = Some(Context::default());
-                CONTEXT.as_mut().unwrap()
+                SELF = Some(Context::default());
+                SELF.as_mut().unwrap()
             }
         }
     }
 
     unsafe fn _get() -> &'static Context {
         Context::get_mut()
+    }
+
+    unsafe fn reset() {
+        *Self::get_mut() = Self::default();
     }
 
     fn do_bg_task(&mut self, task: bg::Task) {
@@ -259,7 +263,13 @@ fn on_player_try_connect(
     }
     ctx.id_by_ucid.insert(ucid, id);
     ctx.id_by_name.insert(name.clone(), id);
-    ctx.info_by_player_id.insert(id, PlayerInfo { name: name.clone(), ucid });
+    ctx.info_by_player_id.insert(
+        id,
+        PlayerInfo {
+            name: name.clone(),
+            ucid,
+        },
+    );
     ctx.db.player_connected(ucid, name);
     record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
     Ok(None)
@@ -381,7 +391,12 @@ fn on_player_try_change_slot(
     res
 }
 
-fn unit_killed(lua: MizLua, ctx: &mut Context, id: DcsOid<ClassUnit>, now: DateTime<Utc>) -> Result<()> {
+fn unit_killed(
+    lua: MizLua,
+    ctx: &mut Context,
+    id: DcsOid<ClassUnit>,
+    now: DateTime<Utc>,
+) -> Result<()> {
     ctx.recently_landed.remove(&id);
     if ctx.db.ephemeral.cfg.points.is_some() {
         ctx.shots_out.dead(id.clone(), now);
@@ -516,7 +531,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::MissionEnd => unsafe {
-            CONTEXT = None;
+            Context::reset();
             Context::get_mut().init_async_bg(lua.inner())?;
         },
         _ => (),
@@ -781,6 +796,34 @@ fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) 
     }
 }
 
+fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
+    match ctx.jtac.update_contacts(lua, &mut ctx.db) {
+        Err(e) => error!("could not update jtac contacts {e}"),
+        Ok(dirty_menus) => {
+            let mut dirty_slots: SmallVec<[SlotId; 16]> = smallvec![];
+            for (side, oids) in dirty_menus {
+                for (_, player, _) in ctx.db.instanced_players() {
+                    if player.side == side {
+                        if let Some((slot, _)) = player.current_slot.as_ref() {
+                            if let Some(subd) = ctx.subscribed_jtac_menus.get(&slot) {
+                                if oids.iter().any(|oid| subd.contains(oid)) {
+                                    ctx.subscribed_jtac_menus.remove(&slot);
+                                    dirty_slots.push(*slot)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for slot in dirty_slots {
+                if let Err(e) = menu::init_jtac_menu_for_slot(ctx, lua, &slot) {
+                    error!("could not init jtac menu for slot {slot}, {e:?}")
+                }
+            }
+        }
+    }
+}
+
 fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
@@ -850,20 +893,7 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.remark_objectives, ts);
         let ts = Utc::now();
-        match ctx.jtac.update_contacts(lua, &mut ctx.db) {
-            Err(e) => error!("could not update jtac contacts {e}"),
-            Ok(dirty_menus) => {
-                for side in dirty_menus {
-                    for (_, player, _) in ctx.db.instanced_players() {
-                        if player.side == side {
-                            if let Some((slot, _)) = player.current_slot.as_ref() {
-                                ctx.menu_init_queue.insert(*slot);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        update_jtac_contacts(ctx, lua);
         record_perf(&mut perf.update_jtac_contacts, ts);
         let now = Utc::now();
         if let Some(snap) = ctx.db.maybe_snapshot() {
@@ -898,7 +928,10 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.unit_positions, ts);
     let ts = Utc::now();
-    match ctx.db.update_player_positions_incremental(lua, ctx.last_player_position) {
+    match ctx
+        .db
+        .update_player_positions_incremental(lua, ctx.last_player_position)
+    {
         Err(e) => error!("could not update player positions {e}"),
         Ok((i, dead)) => {
             ctx.last_player_position = i;

@@ -67,6 +67,12 @@ macro_rules! item {
                 Self(ItemPath(v))
             }
         }
+
+        impl Into<Vec<String>> for $name {
+            fn into(self) -> Vec<String> {
+                (self.0).0
+            }
+        }
     };
 }
 

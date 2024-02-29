@@ -20,6 +20,7 @@ use crate::{
     db::{
         actions::{ActionArgs, ActionCmd, WithJtac},
         group::GroupId as DbGid,
+        objective::ObjectiveId,
         Db,
     },
     jtac::{AdjustmentDir, JtId, Jtac, Jtacs},
@@ -36,6 +37,8 @@ use dcso3::{
     MizLua, String,
 };
 use enumflags2::{BitFlag, BitFlags};
+use log::error;
+use smallvec::{smallvec, SmallVec};
 
 fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
@@ -628,6 +631,88 @@ pub(super) fn add_menu_for_jtac(
                 trd: name,
             },
         )?;
+    }
+    Ok(())
+}
+
+fn add_jtacs_by_location(
+    lua: MizLua,
+    arg: ArgQuad<Ucid, GroupId, ObjectiveId, GroupSubMenu>,
+) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let player = ctx
+        .db
+        .player(&arg.fst)
+        .ok_or_else(|| anyhow!("missing player"))?;
+    let mc = MissionCommands::singleton(lua)?;
+    let name = ctx.db.objective(&arg.trd)?.name.clone();
+    let mut cmd: Vec<String> = arg.fth.clone().into();
+    cmd.push(name.clone());
+    mc.remove_command_for_group(arg.snd, cmd.into())?;
+    let root = mc.add_submenu_for_group(arg.snd, name, Some(arg.fth))?;
+    for jtac in ctx.jtac.jtacs() {
+        if jtac.side() == player.side {
+            add_menu_for_jtac(
+                &ctx.db,
+                player.side,
+                root.clone(),
+                lua,
+                arg.snd,
+                jtac,
+                &arg.fst,
+            )?
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let mc = MissionCommands::singleton(lua)?;
+    let player = ctx
+        .db
+        .player(&arg.fst)
+        .ok_or_else(|| anyhow!("missing player"))?;
+    let mut roots: SmallVec<[String; 16]> = smallvec![];
+    mc.remove_command_for_group(arg.snd, vec!["JTAC".into()].into())?;
+    let mut root = mc.add_submenu_for_group(arg.snd, "JTAC".into(), None)?;
+    let mut n = 0;
+    for jtac in ctx.jtac.jtacs() {
+        if jtac.side() == player.side {
+            let (near, oid) = match ctx
+                .db
+                .objective(&jtac.location().oid)
+                .map(|o| (o.name.clone(), o.id))
+                .ok()
+            {
+                Some((near, oid)) => (near, oid),
+                None => {
+                    error!("jtac near missing objective {:?}", jtac.location());
+                    continue;
+                }
+            };
+            if !roots.contains(&near) {
+                roots.push(near.clone());
+                if n >= 9 {
+                    root =
+                        mc.add_submenu_for_group(arg.snd, "NEXT>>".into(), Some(root.clone()))?;
+                    n = 0;
+                }
+                n += 1;
+                mc.add_command_for_group(
+                    arg.snd,
+                    near,
+                    Some(root.clone()),
+                    add_jtacs_by_location,
+                    ArgQuad {
+                        fst: arg.fst,
+                        snd: arg.snd,
+                        trd: oid,
+                        fth: root.clone(),
+                    },
+                )?;
+            }
+        }
     }
     Ok(())
 }

@@ -141,26 +141,29 @@ struct Context {
     jtac: Jtacs,
 }
 
-static mut CONTEXT: Option<Context> = None;
-
 impl Context {
     // this must be used cautiously. Reasons why it's not totally nuts,
     // - the dcs scripting api is single threaded
     // - the event handlers can be triggerred by api calls, making refcells and mutexes error prone
     // - as long as an event handler doesn't step on state in an api call it's ok, since concurrency never happens
     //   that isn't so hard to guarantee
-    unsafe fn get_mut() -> &'static mut Context {
-        match CONTEXT.as_mut() {
+    unsafe fn get_mut() -> &'static mut Self{
+        static mut SELF: Option<Context> = None;
+        match SELF.as_mut() {
             Some(ctx) => ctx,
             None => {
-                CONTEXT = Some(Context::default());
-                CONTEXT.as_mut().unwrap()
+                SELF = Some(Context::default());
+                SELF.as_mut().unwrap()
             }
         }
     }
 
     unsafe fn _get() -> &'static Context {
         Context::get_mut()
+    }
+
+    unsafe fn reset() {
+        *Self::get_mut() = Self::default();
     }
 
     fn do_bg_task(&mut self, task: bg::Task) {
@@ -516,7 +519,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::MissionEnd => unsafe {
-            CONTEXT = None;
+            Context::reset();
             Context::get_mut().init_async_bg(lua.inner())?;
         },
         _ => (),

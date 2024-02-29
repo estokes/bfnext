@@ -414,11 +414,9 @@ impl Jtac {
         let prev_arty = self.nearby_artillery.clone();
         match &self.target {
             Some(target) if target.uid == uid => {
-                let arty = db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
-                if prev_arty != arty {
-                    self.menu_dirty = true;
-                    self.nearby_artillery = arty;
-                }
+                self.nearby_artillery =
+                    db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.menu_dirty |= prev_arty != self.nearby_artillery;
                 Ok(false)
             }
             Some(_) | None => {
@@ -479,7 +477,7 @@ impl Jtac {
                 });
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
-                self.menu_dirty |= prev_arty == self.nearby_artillery;
+                self.menu_dirty |= prev_arty != self.nearby_artillery;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }
@@ -854,7 +852,10 @@ impl Jtacs {
                                     jt.code,
                                     jt.gid,
                                 );
-                                self.menu_dirty.entry(jt.side).or_default().insert(jt.location.oid);
+                                self.menu_dirty
+                                    .entry(jt.side)
+                                    .or_default()
+                                    .insert(jt.location.oid);
                                 return false;
                             }};
                         }
@@ -933,7 +934,11 @@ impl Jtacs {
         Ok(dead)
     }
 
-    pub fn update_contacts(&mut self, lua: MizLua, db: &mut Db) -> Result<FxHashMap<Side, FxHashSet<ObjectiveId>>> {
+    pub fn update_contacts(
+        &mut self,
+        lua: MizLua,
+        db: &mut Db,
+    ) -> Result<FxHashMap<Side, FxHashSet<ObjectiveId>>> {
         let land = Land::singleton(lua)?;
         let mut saw_jtacs: SmallVec<[JtId; 32]> = smallvec![];
         let mut saw_units: FxHashSet<UnitId> = FxHashSet::default();
@@ -964,7 +969,10 @@ impl Jtacs {
                         pos,
                         air,
                     );
-                    self.menu_dirty.entry(side).or_default().insert(jt.location.oid);
+                    self.menu_dirty
+                        .entry(side)
+                        .or_default()
+                        .insert(jt.location.oid);
                     Self::add_code_by_location(
                         &mut self.code_by_location,
                         jt.location.oid,
@@ -1038,7 +1046,10 @@ impl Jtacs {
                         jt.code,
                         jt.gid,
                     );
-                    self.menu_dirty.entry(*side).or_default().insert(jt.location.oid);
+                    self.menu_dirty
+                        .entry(*side)
+                        .or_default()
+                        .insert(jt.location.oid);
                     false
                 }
             })
@@ -1091,7 +1102,10 @@ impl Jtacs {
         for (side, jtx) in self.jtacs.iter_mut() {
             for jt in jtx.values_mut() {
                 if jt.menu_dirty {
-                    self.menu_dirty.entry(*side).or_default().insert(jt.location.oid);
+                    self.menu_dirty
+                        .entry(*side)
+                        .or_default()
+                        .insert(jt.location.oid);
                     jt.menu_dirty = false;
                 }
             }

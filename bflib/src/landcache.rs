@@ -40,7 +40,7 @@ pub struct LandCache {
 
 impl Default for LandCache {
     fn default() -> Self {
-        Self::new(1024 * 1024)
+        Self::new(10 * 1024 * 1024)
     }
 }
 

@@ -21,7 +21,9 @@ use super::{
 };
 use crate::{
     cfg::{Deployable, DeployableLogistics, UnitTag, Vehicle},
-    group, group_mut, maybe, objective, objective_mut,
+    group, group_mut,
+    landcache::LandCache,
+    maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
@@ -47,7 +49,7 @@ use log::{debug, error};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{str::FromStr, cmp::max};
+use std::{cmp::max, str::FromStr};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectiveKind {
@@ -523,7 +525,7 @@ impl Db {
             last_threatened_ts: now,
             last_change_ts: now,
             last_cull: DateTime::<Utc>::default(),
-            threat_pos3
+            threat_pos3,
         };
         let oid = obj.id;
         obj.warehouse.supplier = self.compute_supplier(&obj)?;
@@ -646,6 +648,7 @@ impl Db {
     pub fn cull_or_respawn_objectives(
         &mut self,
         lua: MizLua,
+        landcache: &mut LandCache,
         now: DateTime<Utc>,
     ) -> Result<(SmallVec<[ObjectiveId; 4]>, SmallVec<[ObjectiveId; 4]>)> {
         let land = Land::singleton(lua)?;
@@ -700,10 +703,10 @@ impl Db {
             }
             Ok::<_, anyhow::Error>(())
         };
-        let check_close_players = |obj: &Objective,
-                                   pos3: LuaVec3,
-                                   spawn: &mut bool,
-                                   threat: &mut bool| {
+        let mut check_close_players = |obj: &Objective,
+                                       pos3: Vector3,
+                                       spawn: &mut bool,
+                                       threat: &mut bool| {
             for (side, pos, v, typ) in &players {
                 if obj.owner != *side {
                     let threat_dist = (cfg.threatened_distance[typ] as f64).powi(2);
@@ -723,8 +726,10 @@ impl Db {
                     {
                         *spawn = true;
                     }
-                    if dist <= threat_dist && land.is_visible(pos3, *pos)? {
-                        *threat = true;
+                    if dist <= threat_dist {
+                        if landcache.is_visible(&land, dist.sqrt(), pos3, pos.0)? {
+                            *threat = true;
+                        }
                     }
                 }
             }
@@ -733,7 +738,7 @@ impl Db {
         for (oid, obj) in &self.persisted.objectives {
             let mut spawn = false;
             let mut is_threatened = false;
-            let pos3 = LuaVec3(obj.threat_pos3);
+            let pos3 = obj.threat_pos3;
             if let Err(e) = check_close_players(obj, pos3, &mut spawn, &mut is_threatened) {
                 error!("failed to check for close players {} {e}", obj.id)
             }

@@ -721,7 +721,6 @@ pub struct Jtacs {
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
     code_by_location: LocByCode,
     menu_dirty: FxHashMap<Side, FxHashSet<ObjectiveId>>,
-    landcache: LandCache,
 }
 
 impl Jtacs {
@@ -937,6 +936,7 @@ impl Jtacs {
     pub fn update_contacts(
         &mut self,
         lua: MizLua,
+        landcache: &mut LandCache,
         db: &mut Db,
     ) -> Result<FxHashMap<Side, FxHashSet<ObjectiveId>>> {
         let land = Land::singleton(lua)?;
@@ -1022,8 +1022,10 @@ impl Jtacs {
                     }
                 };
                 let dist = na::distance_squared(&pos.into(), &unit.position.p.0.into());
-                if dist <= range && self.landcache.is_visible(&land, pos, unit.position.p.0)? {
-                    jtac.add_contact(unit)
+                if dist <= range {
+                    if landcache.is_visible(&land, dist.sqrt(), pos, unit.position.p.0)? {
+                        jtac.add_contact(unit)
+                    }
                 } else {
                     match jtac.remove_contact(lua, db, &unit.id) {
                         Err(e) => warn!("could not remove jtac contact {} {:?}", unit.name, e),

@@ -59,6 +59,7 @@ use ewr::Ewr;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexSet;
 use jtac::Jtacs;
+use landcache::LandCache;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
@@ -138,6 +139,7 @@ struct Context {
     last_unit_position: usize,
     last_player_position: usize,
     subscribed_jtac_menus: FxHashMap<SlotId, FxHashSet<ObjectiveId>>,
+    landcache: LandCache,
     ewr: Ewr,
     jtac: Jtacs,
 }
@@ -186,7 +188,8 @@ impl Context {
 
     fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
-        self.db.respawn_after_load(&self.idx, &spctx)
+        self.db
+            .respawn_after_load(&self.idx, &mut self.landcache, &spctx)
     }
 
     fn log_perf(&mut self, now: DateTime<Utc>) {
@@ -797,7 +800,10 @@ fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) 
 }
 
 fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
-    match ctx.jtac.update_contacts(lua, &mut ctx.db) {
+    match ctx
+        .jtac
+        .update_contacts(lua, &mut ctx.landcache, &mut ctx.db)
+    {
         Err(e) => error!("could not update jtac contacts {e}"),
         Ok(dirty_menus) => {
             let mut dirty_slots: SmallVec<[SlotId; 16]> = smallvec![];
@@ -859,7 +865,7 @@ fn run_slow_timed_events(
             error!("could not advance actions {e:?}")
         }
         let ts = Utc::now();
-        if let Err(e) = ctx.ewr.update_tracks(lua, &ctx.db, ts) {
+        if let Err(e) = ctx.ewr.update_tracks(lua, &mut ctx.landcache, &ctx.db, ts) {
             error!("could not update ewr tracks {e}")
         }
         record_perf(&mut perf.ewr_tracks, ts);
@@ -869,7 +875,10 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.ewr_reports, ts);
         let ts = Utc::now();
-        match ctx.db.cull_or_respawn_objectives(lua, ts) {
+        match ctx
+            .db
+            .cull_or_respawn_objectives(lua, &mut ctx.landcache, ts)
+        {
             Err(e) => error!("could not cull or respawn objectives {e}"),
             Ok((threatened, cleared)) => {
                 for oid in threatened {

@@ -17,9 +17,11 @@ for more details.
 pub mod admin;
 pub mod bg;
 pub mod cfg;
+pub mod chatcmd;
 pub mod db;
 pub mod ewr;
 pub mod jtac;
+pub mod landcache;
 pub mod menu;
 pub mod msgq;
 pub mod perf;
@@ -27,20 +29,14 @@ pub mod shots;
 pub mod spawnctx;
 
 extern crate nalgebra as na;
-use crate::{
-    cfg::Cfg,
-    db::{
-        group::{DeployKind, GroupId},
-        player::SlotAuth,
-    },
-    perf::record_perf,
-};
+use crate::{cfg::Cfg, db::player::SlotAuth, perf::record_perf};
 use admin::{run_admin_commands, AdminCommand};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use cfg::LifeType;
+use chatcmd::run_action_commands;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::{objective::ObjectiveId, player::{RegErr, TakeoffRes}, Db};
+use db::{objective::ObjectiveId, player::TakeoffRes, Db};
 use dcso3::{
     coalition::Side,
     env::{
@@ -60,7 +56,8 @@ use dcso3::{
     HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use ewr::Ewr;
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
+use indexmap::IndexSet;
 use jtac::Jtacs;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
@@ -69,7 +66,7 @@ use perf::Perf;
 use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{mem, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
@@ -83,7 +80,7 @@ enum LogiStage {
     SyncToWarehouses {
         objectives: SmallVec<[ObjectiveId; 128]>,
     },
-    Init
+    Init,
 }
 
 impl Default for LogiStage {
@@ -125,6 +122,7 @@ struct Context {
     idx: env::miz::MizIndex,
     db: Db,
     admin_commands: Vec<(PlayerId, AdminCommand)>,
+    action_commands: Vec<(PlayerId, String)>,
     to_background: Option<UnboundedSender<bg::Task>>,
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
@@ -133,16 +131,16 @@ struct Context {
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
     shots_out: ShotDb,
-    menu_init_queue: SmallVec<[SlotId; 4]>,
+    menu_init_queue: IndexSet<SlotId, FxBuildHasher>,
     last_slow_timed_events: DateTime<Utc>,
     logistics_stage: LogiStage,
     logistics_ticks_since_delivery: u32,
     last_unit_position: usize,
+    last_player_position: usize,
+    subscribed_jtac_menus: FxHashMap<SlotId, FxHashSet<ObjectiveId>>,
     ewr: Ewr,
     jtac: Jtacs,
 }
-
-static mut CONTEXT: Option<Context> = None;
 
 impl Context {
     // this must be used cautiously. Reasons why it's not totally nuts,
@@ -150,18 +148,23 @@ impl Context {
     // - the event handlers can be triggerred by api calls, making refcells and mutexes error prone
     // - as long as an event handler doesn't step on state in an api call it's ok, since concurrency never happens
     //   that isn't so hard to guarantee
-    unsafe fn get_mut() -> &'static mut Context {
-        match CONTEXT.as_mut() {
+    unsafe fn get_mut() -> &'static mut Self {
+        static mut SELF: Option<Context> = None;
+        match SELF.as_mut() {
             Some(ctx) => ctx,
             None => {
-                CONTEXT = Some(Context::default());
-                CONTEXT.as_mut().unwrap()
+                SELF = Some(Context::default());
+                SELF.as_mut().unwrap()
             }
         }
     }
 
     unsafe fn _get() -> &'static Context {
         Context::get_mut()
+    }
+
+    unsafe fn reset() {
+        *Self::get_mut() = Self::default();
     }
 
     fn do_bg_task(&mut self, task: bg::Task) {
@@ -253,264 +256,23 @@ fn on_player_try_connect(
             }
         }
     }
-    ctx.id_by_ucid.insert(ucid.clone(), id);
+    if let Some(id) = ctx.id_by_ucid.remove(&ucid) {
+        if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
+            ctx.id_by_name.remove(&ifo.name);
+        }
+    }
+    ctx.id_by_ucid.insert(ucid, id);
     ctx.id_by_name.insert(name.clone(), id);
-    ctx.db.player_connected(ucid.clone(), name.clone());
-    ctx.info_by_player_id.insert(id, PlayerInfo { name, ucid });
+    ctx.info_by_player_id.insert(
+        id,
+        PlayerInfo {
+            name: name.clone(),
+            ucid,
+        },
+    );
+    ctx.db.player_connected(ucid, name);
     record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
     Ok(None)
-}
-
-fn register_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
-    let ctx = unsafe { Context::get_mut() };
-    let ifo = get_player_info(
-        &mut ctx.info_by_player_id,
-        &mut ctx.id_by_ucid,
-        &mut ctx.id_by_name,
-        lua,
-        id,
-    )?;
-    let side = if msg.eq_ignore_ascii_case("blue") {
-        Side::Blue
-    } else if msg.eq_ignore_ascii_case("red") {
-        Side::Red
-    } else {
-        bail!("side \"{msg}\" is not blue or red")
-    };
-    match ctx
-        .db
-        .register_player(ifo.ucid.clone(), ifo.name.clone(), side)
-    {
-        Ok(()) => {
-            let msg = String::from(format_compact!("Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!", side));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            ctx.db.ephemeral.msgs().send(
-                MsgTyp::Chat(None),
-                format_compact!("{} has joined {:?} team", ifo.name, side),
-            );
-        }
-        Err(RegErr::AlreadyOn(side)) => ctx.db.ephemeral.msgs().send(
-            MsgTyp::Chat(Some(id)),
-            format_compact!("you are already on {:?} team!", side),
-        ),
-        Err(RegErr::AlreadyRegistered(side_switches, orig_side)) => {
-            let msg = String::from(match side_switches {
-                None => format_compact!("You are already on the {:?} team. You may switch sides by typing -switch {:?}.", orig_side, side),
-                Some(0) => format_compact!("You are already on {:?} team, and you may not switch sides.", orig_side),
-                Some(1) => format_compact!("You are already on {:?} team. You may sitch sides 1 time by typing -switch {:?}.", orig_side, side),
-                Some(n) => format_compact!("You are already on {:?} team. You may switch sides {n} times. Type -switch {:?}.", orig_side, side),
-            });
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-        }
-    }
-    Ok("".into())
-}
-
-fn sideswitch_player(lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
-    let ctx = unsafe { Context::get_mut() };
-    let ifo = get_player_info(
-        &mut ctx.info_by_player_id,
-        &mut ctx.id_by_ucid,
-        &mut ctx.id_by_name,
-        lua,
-        id,
-    )?;
-    let (_, slot) = Net::singleton(lua)?.get_slot(id)?;
-    if !slot.is_spectator() {
-        bail!("you must be in spectators to switch sides")
-    }
-    let side = if msg.eq_ignore_ascii_case("-switch blue") {
-        Side::Blue
-    } else if msg.eq_ignore_ascii_case("-switch red") {
-        Side::Red
-    } else {
-        bail!("side must be blue or red \"{msg}\"");
-    };
-    match ctx.db.sideswitch_player(&ifo.ucid, side) {
-        Ok(()) => {
-            let msg = String::from(format_compact!("{} has switched to {:?}", ifo.name, side));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(None), msg);
-        }
-        Err(e) => ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), e),
-    }
-    Ok("".into())
-}
-
-fn lives_command(id: PlayerId) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let ifo = ctx
-        .info_by_player_id
-        .get(&id)
-        .ok_or_else(|| anyhow!("missing info for player {:?}", id))?;
-    let msg = lives(&mut ctx.db, &ifo.ucid, None)?;
-    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-    Ok(())
-}
-
-fn do_admin_command(id: PlayerId, cmd: String) {
-    let ctx = unsafe { Context::get_mut() };
-    let ifo = match ctx.info_by_player_id.get(&id) {
-        Some(ifo) => ifo,
-        None => return,
-    };
-    if !ctx.db.ephemeral.cfg.admins.contains_key(&ifo.ucid) {
-        return;
-    }
-    match cmd.parse::<AdminCommand>() {
-        Err(e) => ctx.db.ephemeral.msgs().send(
-            MsgTyp::Chat(Some(id)),
-            format_compact!("parse error {:?}", e),
-        ),
-        Ok(AdminCommand::Help) => {
-            for cmd in AdminCommand::help() {
-                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), *cmd);
-            }
-        }
-        Ok(cmd) => {
-            info!("queueing admin command {:?} from {:?}", cmd, ifo);
-            ctx.admin_commands.push((id, cmd))
-        }
-    }
-}
-
-fn time_command(id: PlayerId, now: DateTime<Utc>) {
-    let ctx = unsafe { Context::get_mut() };
-    match ctx.shutdown.as_ref() {
-        None => ctx.db.ephemeral.msgs().send(
-            MsgTyp::Chat(Some(id)),
-            "The server isn't configured to restart automatically",
-        ),
-        Some(asd) => {
-            let remains = format_duration(asd.when - now);
-            ctx.db.ephemeral.msgs().send(
-                MsgTyp::Chat(Some(id)),
-                format_compact!("The server will shutdown in {remains}"),
-            )
-        }
-    }
-}
-
-fn balance_command(id: PlayerId) {
-    let ctx = unsafe { Context::get_mut() };
-    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
-        if let Some(player) = ctx.db.player(&ifo.ucid) {
-            let points = player.points;
-            ctx.db.ephemeral.msgs().send(
-                MsgTyp::Chat(Some(id)),
-                format_compact!("You have {points} points"),
-            );
-        }
-    }
-}
-
-fn transfer_command(id: PlayerId, s: &str) {
-    let ctx = unsafe { Context::get_mut() };
-    macro_rules! reply {
-        ($msg:tt) => {
-            ctx.db
-                .ephemeral
-                .msgs()
-                .send(MsgTyp::Chat(Some(id)), format_compact!($msg))
-        };
-    }
-    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
-        match s.split_once(" ") {
-            None => reply!("transfer expected amount and player"),
-            Some((amount, player)) => match amount.parse::<u32>() {
-                Err(e) => reply!("transfer expected a number {e:?}"),
-                Ok(amount) => match admin::get_player_ucid(ctx, player) {
-                    Err(e) => reply!("could not transfer to {player}, {e:?}"),
-                    Ok(ucid) => match ctx.db.transfer_points(&ifo.ucid, &ucid, amount) {
-                        Err(e) => reply!("transfer failed {e:?}"),
-                        Ok(()) => reply!("transfer complete"),
-                    },
-                },
-            },
-        }
-    }
-}
-
-fn delete_command(id: PlayerId, s: &str) {
-    let ctx = unsafe { Context::get_mut() };
-    macro_rules! reply {
-        ($msg:tt) => {
-            ctx.db
-                .ephemeral
-                .msgs()
-                .send(MsgTyp::Chat(Some(id)), format_compact!($msg))
-        };
-    }
-    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
-        match s.parse::<GroupId>() {
-            Err(e) => reply!("delete expected a group id {e:?}"),
-            Ok(id) => match ctx.db.group(&id) {
-                Err(e) => reply!("could not get group {id} {e:?}"),
-                Ok(group) => match &group.origin {
-                    DeployKind::Crate { player, .. }
-                    | DeployKind::Deployed { player, .. }
-                    | DeployKind::Troop { player, .. }
-                        if player != &ifo.ucid =>
-                    {
-                        reply!("group {id} wasn't deployed by you")
-                    }
-                    DeployKind::Objective => reply!("can't delete an objective group"),
-                    DeployKind::Crate { .. } => match ctx.db.delete_group(&id) {
-                        Err(e) => reply!("could not delete group {id} {e:?}"),
-                        Ok(()) => reply!("delted {id}"),
-                    },
-                    DeployKind::Deployed { player, spec } => {
-                        let player = player.clone();
-                        let points = (spec.cost as f32 / 2.).ceil() as i32;
-                        match ctx.db.delete_group(&id) {
-                            Err(e) => reply!("could not delete group {id} {e:?}"),
-                            Ok(()) => {
-                                ctx.db.adjust_points(&player, points);
-                                reply!("deleted {id}")
-                            }
-                        }
-                    }
-                    DeployKind::Troop { player, spec } => {
-                        let player = player.clone();
-                        let points = (spec.cost as f32 / 2.).ceil() as i32;
-                        match ctx.db.delete_group(&id) {
-                            Err(e) => reply!("could not delete group {id} {e:?}"),
-                            Ok(()) => {
-                                ctx.db.adjust_points(&player, points);
-                                reply!("deleted {id}")
-                            }
-                        }
-                    }
-                },
-            },
-        }
-    }
-}
-
-fn help_command(id: PlayerId) {
-    let ctx = unsafe { Context::get_mut() };
-    let admin = match ctx.info_by_player_id.get(&id) {
-        None => false,
-        Some(ifo) => ctx.db.ephemeral.cfg.admins.contains_key(&ifo.ucid),
-    };
-    for cmd in [
-        " blue: join the blue team",
-        " red: join the red team",
-        " -switch <color>: side switch to <color>",
-        " -lives: display your current lives",
-        " -time: how long until server restart",
-        " -balance: show your points balance",
-        " -transfer <amount> <player>: transfer points to another player",
-        " -delete <groupid>: delete a group you deployed for a partial refund",
-        " -help: show this help message",
-    ] {
-        ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
-    }
-    if admin {
-        ctx.db.ephemeral.msgs().send(
-            MsgTyp::Chat(Some(id)),
-            " -admin <command>: run admin commands, -admin help for details",
-        );
-    }
 }
 
 fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
@@ -519,36 +281,7 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
     );
-    let r = if msg.eq_ignore_ascii_case("blue") || msg.eq_ignore_ascii_case("red") {
-        register_player(lua, id, msg)
-    } else if msg.eq_ignore_ascii_case("-switch blue") || msg.eq_ignore_ascii_case("-switch red") {
-        sideswitch_player(lua, id, msg)
-    } else if msg.eq_ignore_ascii_case("-lives") {
-        if let Err(e) = lives_command(id) {
-            error!("lives command failed for player {:?} {:?}", id, e);
-        }
-        Ok("".into())
-    } else if msg.eq_ignore_ascii_case("-time") {
-        time_command(id, start_ts);
-        Ok("".into())
-    } else if msg.starts_with("-admin ") {
-        do_admin_command(id, msg);
-        Ok("".into())
-    } else if msg.starts_with("-balance") {
-        balance_command(id);
-        Ok("".into())
-    } else if let Some(s) = msg.strip_prefix("-transfer ") {
-        transfer_command(id, s);
-        Ok("".into())
-    } else if let Some(s) = msg.strip_prefix("-delete ") {
-        delete_command(id, s);
-        Ok("".into())
-    } else if msg.starts_with("-help") {
-        help_command(id);
-        Ok("".into())
-    } else {
-        Ok(msg)
-    };
+    let r = chatcmd::process(unsafe { Context::get_mut() }, lua, start_ts, id, msg);
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
         start_ts,
@@ -649,7 +382,7 @@ fn on_player_try_change_slot(
         },
     };
     if let Ok(None) = res {
-        ctx.menu_init_queue.push(slot.clone());
+        ctx.menu_init_queue.insert(slot);
     }
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
@@ -658,8 +391,16 @@ fn on_player_try_change_slot(
     res
 }
 
-fn unit_killed(lua: MizLua, ctx: &mut Context, id: DcsOid<ClassUnit>) -> Result<()> {
+fn unit_killed(
+    lua: MizLua,
+    ctx: &mut Context,
+    id: DcsOid<ClassUnit>,
+    now: DateTime<Utc>,
+) -> Result<()> {
     ctx.recently_landed.remove(&id);
+    if ctx.db.ephemeral.cfg.points.is_some() {
+        ctx.shots_out.dead(id.clone(), now);
+    }
     if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
         error!("jtac unit dead failed for {:?} {:?}", id, e)
     }
@@ -682,6 +423,10 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 if let Err(e) = ctx.db.unit_born(lua, &unit) {
                     error!("unit born failed {:?} {:?}", unit, e);
                 }
+            } else if let Ok(st) = b.initiator.as_static() {
+                if let Err(e) = ctx.db.static_born(&st) {
+                    error!("static born failed {:?} {:?}", st, e);
+                }
             }
         }
         Event::PlayerLeaveUnit(e) => {
@@ -692,7 +437,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::Hit(e) | Event::Kill(e) => {
-            if let Some(target) = e.target.and_then(|t| t.as_unit().ok()) {
+            if let Some(target) = e.target.as_ref().and_then(|t| t.as_unit().ok()) {
                 let dead = target.get_life()? < 1;
                 if ctx.db.ephemeral.cfg.points.is_some() {
                     if let Some(shooter) = e.initiator.and_then(|u| u.as_unit().ok()) {
@@ -709,8 +454,14 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                     }
                 }
                 if dead {
-                    if let Err(e) = unit_killed(lua, ctx, target.object_id()?) {
+                    if let Err(e) = unit_killed(lua, ctx, target.object_id()?, start_ts) {
                         error!("0 unit killed failed {:?}", e)
+                    }
+                }
+            } else if let Some(target) = e.target.as_ref().and_then(|t| t.as_static().ok()) {
+                if target.get_life()? < 1 {
+                    if let Err(e) = ctx.db.static_dead(&target.object_id()?, start_ts) {
+                        error!("static dead failed {e:?}")
                     }
                 }
             }
@@ -723,23 +474,21 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
-            if let Some(unit) = e.initiator.and_then(|u| u.as_unit().ok()) {
+            if let Some(unit) = e.initiator.as_ref().and_then(|u| u.as_unit().ok()) {
                 let id = unit.object_id()?;
-                if ctx.db.ephemeral.cfg.points.is_some() {
-                    ctx.shots_out.dead(id.clone(), start_ts);
-                }
-                if let Err(e) = unit_killed(lua, ctx, id) {
+                if let Err(e) = unit_killed(lua, ctx, id, start_ts) {
                     error!("1 unit killed failed {:?}", e)
+                }
+            } else if let Some(st) = e.initiator.as_ref().and_then(|s| s.as_static().ok()) {
+                if let Err(e) = ctx.db.static_dead(&st.object_id()?, start_ts) {
+                    error!("static killed failed {e:?}")
                 }
             }
         }
         Event::Ejection(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.object_id()?;
-                if ctx.db.ephemeral.cfg.points.is_some() {
-                    ctx.shots_out.dead(id.clone(), start_ts);
-                }
-                if let Err(e) = unit_killed(lua, ctx, id) {
+                if let Err(e) = unit_killed(lua, ctx, id, start_ts) {
                     error!("2 unit killed failed {}", e)
                 }
             }
@@ -761,7 +510,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                             if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
                                 error!("could not display life taken message {:?}", e)
                             }
-                            let _ = menu::list_cargo_for_slot(lua, ctx, &slot);
+                            let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
                         }
                         Ok(TakeoffRes::OutOfLives) => {
                             if let Err(e) = e.initiator.destroy() {
@@ -782,7 +531,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::MissionEnd => unsafe {
-            CONTEXT = None;
+            Context::reset();
             Context::get_mut().init_async_bg(lua.inner())?;
         },
         _ => (),
@@ -792,13 +541,6 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         start_ts,
     );
     Ok(())
-}
-
-fn format_duration(d: Duration) -> CompactString {
-    let hrs = d.num_hours();
-    let min = d.num_minutes() - hrs * 60;
-    let sec = d.num_seconds() - hrs * 3600 - min * 60;
-    format_compact!("{:02}:{:02}:{:02}", hrs, min, sec)
 }
 
 fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<CompactString> {
@@ -816,8 +558,9 @@ fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<Compac
                 None => msg.push_str(&format_compact!("{typ} {n}/{n}\n")),
                 Some((reset, cur)) => {
                     let since_reset = now - *reset;
-                    let reset =
-                        format_duration(Duration::seconds(*reset_after as i64) - since_reset);
+                    let reset = chatcmd::format_duration(
+                        Duration::seconds(*reset_after as i64) - since_reset,
+                    );
                     msg.push_str(&format_compact!("{typ} {cur}/{n} resetting in {reset}\n"));
                 }
             }
@@ -1036,8 +779,7 @@ fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) 
                 None => warn!("no id for player ucid {:?}", ucid),
                 Some(id) => {
                     info!("forcing player {} to spectators", ucid);
-                    if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator)
-                    {
+                    if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator) {
                         error!("error forcing player {:?} to spectators {:?}", id, e);
                     }
                     match net.get_slot(*id) {
@@ -1054,11 +796,38 @@ fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) 
     }
 }
 
+fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
+    match ctx.jtac.update_contacts(lua, &mut ctx.db) {
+        Err(e) => error!("could not update jtac contacts {e}"),
+        Ok(dirty_menus) => {
+            let mut dirty_slots: SmallVec<[SlotId; 16]> = smallvec![];
+            for (side, oids) in dirty_menus {
+                for (_, player, _) in ctx.db.instanced_players() {
+                    if player.side == side {
+                        if let Some((slot, _)) = player.current_slot.as_ref() {
+                            if let Some(subd) = ctx.subscribed_jtac_menus.get(&slot) {
+                                if oids.iter().any(|oid| subd.contains(oid)) {
+                                    ctx.subscribed_jtac_menus.remove(&slot);
+                                    dirty_slots.push(*slot)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for slot in dirty_slots {
+                if let Err(e) = menu::init_jtac_menu_for_slot(ctx, lua, &slot) {
+                    error!("could not init jtac menu for slot {slot}, {e:?}")
+                }
+            }
+        }
+    }
+}
+
 fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
     perf: &mut Perf,
-    net: &Net,
     path: &PathBuf,
     ts: DateTime<Utc>,
 ) -> Result<()> {
@@ -1066,7 +835,6 @@ fn run_slow_timed_events(
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
         check_auto_shutdown(ctx, lua, ts);
-        force_players_to_spectators(ctx, net, ts);
         for (oid, vh) in ctx.db.ephemeral.warehouses_to_sync() {
             if let Err(e) = ctx.db.sync_vehicle_at_obj(lua, oid, vh.clone()) {
                 error!(
@@ -1087,30 +855,9 @@ fn run_slow_timed_events(
             error!("error doing repairs {:?}", e)
         }
         record_perf(&mut perf.do_repairs, start_ts);
-        let start_ts = Utc::now();
-        let mut dead = vec![];
-        match ctx
-            .db
-            .update_unit_positions_incremental(lua, ctx.last_unit_position)
-        {
-            Err(e) => error!("could not update unit positions {e}"),
-            Ok((i, v)) => {
-                ctx.last_unit_position = i;
-                dead = v
-            }
+        if let Err(e) = ctx.db.advance_actions(lua, &ctx.idx, &ctx.jtac, start_ts) {
+            error!("could not advance actions {e:?}")
         }
-        record_perf(&mut perf.unit_positions, start_ts);
-        let ts = Utc::now();
-        match ctx.db.update_player_positions(lua) {
-            Err(e) => error!("could not update player positions {e}"),
-            Ok(mut v) => dead.extend(v.drain(..)),
-        }
-        for id in dead {
-            if let Err(e) = unit_killed(lua, ctx, id.clone()) {
-                error!("unit killed failed {:?} {:?}", id, e)
-            }
-        }
-        record_perf(&mut perf.player_positions, ts);
         let ts = Utc::now();
         if let Err(e) = ctx.ewr.update_tracks(lua, &ctx.db, ts) {
             error!("could not update ewr tracks {e}")
@@ -1146,9 +893,7 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.remark_objectives, ts);
         let ts = Utc::now();
-        if let Err(e) = ctx.jtac.update_contacts(lua, &mut ctx.db) {
-            error!("could not update jtac contacts {e}")
-        }
+        update_jtac_contacts(ctx, lua);
         record_perf(&mut perf.update_jtac_contacts, ts);
         let now = Utc::now();
         if let Some(snap) = ctx.db.maybe_snapshot() {
@@ -1166,14 +911,44 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let perf = Arc::make_mut(unsafe { Perf::get_mut() });
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
-    if let Err(e) = run_slow_timed_events(lua, ctx, perf, &net, path, ts) {
+    force_players_to_spectators(ctx, &net, ts);
+    match ctx
+        .db
+        .update_unit_positions_incremental(lua, ctx.last_unit_position)
+    {
+        Err(e) => error!("could not update unit positions {e}"),
+        Ok((i, dead)) => {
+            ctx.last_unit_position = i;
+            for id in dead {
+                if let Err(e) = unit_killed(lua, ctx, id.clone(), ts) {
+                    error!("unit killed failed {:?} {:?}", id, e)
+                }
+            }
+        }
+    }
+    record_perf(&mut perf.unit_positions, ts);
+    let ts = Utc::now();
+    match ctx
+        .db
+        .update_player_positions_incremental(lua, ctx.last_player_position)
+    {
+        Err(e) => error!("could not update player positions {e}"),
+        Ok((i, dead)) => {
+            ctx.last_player_position = i;
+            for id in dead {
+                if let Err(e) = unit_killed(lua, ctx, id.clone(), ts) {
+                    error!("unit killed failed {:?} {:?}", id, e)
+                }
+            }
+        }
+    }
+    record_perf(&mut perf.player_positions, ts);
+    if let Err(e) = run_slow_timed_events(lua, ctx, perf, path, ts) {
         error!("error running slow timed events {:?}", e)
     }
-    if !ctx.menu_init_queue.is_empty() {
-        for slot in mem::take(&mut ctx.menu_init_queue) {
-            if let Err(e) = menu::init_for_slot(ctx, lua, &slot) {
-                error!("could not init menus for slot {:?} {:?}", slot, e)
-            }
+    if let Some(slot) = ctx.menu_init_queue.shift_remove_index(0) {
+        if let Err(e) = menu::init_for_slot(ctx, lua, &slot) {
+            error!("could not init menus for slot {:?} {:?}", slot, e)
         }
     }
     let now = Utc::now();
@@ -1201,7 +976,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         Err(e) => error!("error updating jtac target positions {:?}", e),
         Ok(dead) => {
             for id in dead {
-                if let Err(e) = unit_killed(lua, ctx, id.clone()) {
+                if let Err(e) = unit_killed(lua, ctx, id.clone(), now) {
                     error!("unit killed failed {:?} {:?}", id, e)
                 }
             }
@@ -1209,13 +984,17 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.jtac_target_positions, now);
     let now = Utc::now();
-    ctx.db.ephemeral.msgs().process(&net, &act);
+    let max_rate = ctx.db.ephemeral.cfg.max_msgs_per_second;
+    ctx.db.ephemeral.msgs().process(max_rate, &net, &act);
     record_perf(&mut perf.process_messages, now);
     if let Err(e) = run_logistics_events(lua, ctx, perf, ts) {
-        error!("error running logistics events {:?}", e)
+        error!("error running logistics events {e:?}")
     }
     if let Err(e) = run_admin_commands(ctx, lua) {
-        error!("failed to run admin commands {:?}", e)
+        error!("failed to run admin commands {e:?}")
+    }
+    if let Err(e) = run_action_commands(ctx, lua) {
+        error!("failed to run action commands {e:?}")
     }
     record_perf(&mut perf.timed_events, ts);
     ctx.log_perf(now);
@@ -1290,9 +1069,13 @@ fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
 }
 
 fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
+    info!("onPlayerDisconnect({id})");
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
+        ctx.id_by_name.remove(&ifo.name);
+        ctx.id_by_ucid.remove(&ifo.ucid);
+        info!("deslotting disconnected player {}", ifo.ucid);
         ctx.db.player_disconnected(&ifo.ucid)
     }
     record_perf(

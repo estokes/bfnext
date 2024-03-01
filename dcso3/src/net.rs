@@ -13,11 +13,12 @@ FITNESS FOR A PARTICULAR PURPOSE.
 
 use super::{as_tbl, coalition::Side, cvt_err, String};
 use crate::{
-    env::miz::UnitId, lua_err, simple_enum, wrapped_prim, wrapped_table, LuaEnv, Sequence,
+    env::miz::UnitId, err, lua_err, simple_enum, wrapped_prim, wrapped_table, LuaEnv, Sequence,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use compact_str::format_compact;
 use core::fmt;
+use fixedstr::str48;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{ops::Deref, str::FromStr};
@@ -99,6 +100,12 @@ impl<'lua> FromLua<'lua> for SlotId {
     }
 }
 
+impl fmt::Display for SlotId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", Into::<String>::into(*self))
+    }
+}
+
 impl<'lua> IntoLua<'lua> for SlotId {
     fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
         match self {
@@ -108,7 +115,7 @@ impl<'lua> IntoLua<'lua> for SlotId {
                 }
                 Ok(Value::Integer(i))
             }
-            Self::Spectator => Ok(Value::Integer(0)),
+            Self::Spectator => Ok(Value::String(lua.create_string("")?)),
             Self::ArtilleryCommander(s, n) => {
                 if n < 1 {
                     return Err(lua_err("invalid ca slot number"));
@@ -277,17 +284,73 @@ impl SlotId {
     }
 }
 
-wrapped_prim!(Ucid, String, Hash);
-
-impl From<&str> for Ucid {
-    fn from(value: &str) -> Self {
-        Self(String::from(value))
-    }
-}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "str48", into = "str48")]
+pub struct Ucid([u8; 16]);
 
 impl fmt::Display for Ucid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.0)
+        write!(f, "{}", Into::<str48>::into(*self))
+    }
+}
+
+impl fmt::Debug for Ucid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self}")
+    }
+}
+
+impl TryFrom<str48> for Ucid {
+    type Error = anyhow::Error;
+
+    fn try_from(s: str48) -> Result<Self> {
+        s.parse()
+    }
+}
+
+impl FromStr for Ucid {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        if s.len() != 32 {
+            bail!("expected a 32 character string got \"{s}\"")
+        }
+        let mut a = [0; 16];
+        for i in 0..16 {
+            let j = i << 1;
+            a[i] = u8::from_str_radix(&s[j..j + 2], 16)?;
+        }
+        Ok(Self(a))
+    }
+}
+
+impl Into<str48> for Ucid {
+    fn into(self) -> str48 {
+        use std::fmt::Write;
+        let mut s = str48::new();
+        for i in 0..16 {
+            write!(s, "{:02x}", self.0[i]).unwrap()
+        }
+        s
+    }
+}
+
+impl<'lua> FromLua<'lua> for Ucid {
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
+        match value {
+            Value::String(s) => s
+                .to_str()?
+                .parse()
+                .map_err(|e| err(&format_compact!("decoding ucid {}", e))),
+            _ => Err(err("expected ucid to be a string")),
+        }
+    }
+}
+
+impl<'lua> IntoLua<'lua> for Ucid {
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+        let s: str48 = self.into();
+        Ok(Value::String(lua.create_string(s.as_str())?))
     }
 }
 
@@ -365,7 +428,7 @@ impl<'lua> Net<'lua> {
             .call_function("send_chat_to", (message, player, from_id))?)
     }
 
-    pub fn get_player_list(&self) -> Result<Sequence<PlayerId>> {
+    pub fn get_player_list(&self) -> Result<Sequence<'lua, PlayerId>> {
         Ok(self.t.call_function("get_player_list", ())?)
     }
 

@@ -184,6 +184,10 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
         if !t.is_exist()? {
             bail!("{} is an invalid unit", id.id)
         }
+        // work around DCS bug that results in isExist => true for dead units
+        if t.get_life()? <= 0 {
+            bail!("{} is dead", id.id)
+        }
         Ok(t)
     }
 
@@ -202,6 +206,10 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
         if !self.is_exist()? {
             bail!("{} is an invalid unit", id.id)
         }
+        // work around DCS bug that results in isExist => true for dead units
+        if self.get_life()? <= 0 {
+            bail!("{} is dead", id.id)
+        }
         Ok(self)
     }
 
@@ -210,6 +218,10 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
         self.t.raw_set("id_", id.id)?;
         if !self.is_exist()? {
             bail!("{} is an invalid unit", id.id)
+        }
+        // work around DCS bug that results in isExist => true for dead units
+        if self.get_life()? <= 0 {
+            bail!("{} is dead", id.id)
         }
         Ok(self)
     }

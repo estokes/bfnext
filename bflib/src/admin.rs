@@ -17,7 +17,11 @@ for more details.
 use crate::{
     bg::Task,
     cfg::Cfg,
-    db::{group::{DeployKind, GroupId}, objective::ObjectiveId, Set},
+    db::{
+        group::{DeployKind, GroupId},
+        objective::ObjectiveId,
+        Db, Set,
+    },
     msgq::MsgTyp,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -38,6 +42,7 @@ use dcso3::{
     world::World,
     MizLua, String, Vector2,
 };
+use enumflags2::BitFlags;
 use fxhash::FxHashMap;
 use log::{error, warn};
 use mlua::Value;
@@ -130,6 +135,7 @@ pub enum AdminCommand {
     Delete {
         group: GroupId,
     },
+    Deslot { player: String },
     Shutdown,
 }
 
@@ -158,6 +164,7 @@ impl AdminCommand {
             "balance <player>: show <player>'s point balance",
             "set-points <n> <player>: set <player>'s point balance to <n>",
             "delete <groupid>: delete deployed group, now with 100% less mess",
+            "deslot <player>: force <player> to spectators",
             "shutdown: shutdown the server"
         ]
     }
@@ -167,9 +174,6 @@ impl FromStr for AdminCommand {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let s = s
-            .strip_prefix("-admin ")
-            .ok_or_else(|| anyhow!("not an admin command {s}"))?;
         if s.trim() == "help" {
             Ok(Self::Help)
         } else if let Some(s) = s.strip_prefix("reduce ") {
@@ -282,6 +286,8 @@ impl FromStr for AdminCommand {
             }
         } else if let Some(s) = s.strip_prefix("delete ") {
             Ok(Self::Delete { group: s.parse()? })
+        } else if let Some(s) = s.strip_prefix("deslot ") {
+            Ok(Self::Deslot { player: s.into() })
         } else {
             bail!("unknown command {s}")
         }
@@ -348,7 +354,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
             let pos = Vector2::new(mk.pos.x, mk.pos.z);
             let loc = SpawnLoc::AtPos {
                 pos,
-                offset_direction: pointing_towards2(heading, pos),
+                offset_direction: pointing_towards2(heading),
                 group_heading: heading,
             };
             match kind {
@@ -367,6 +373,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         .clone();
                     let origin = DeployKind::Troop {
                         player: ifo.ucid.clone(),
+                        moved_by: None,
                         spec: spec.clone(),
                     };
                     ctx.db
@@ -377,6 +384,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                             loc,
                             &spec.template,
                             origin,
+                            BitFlags::empty(),
                             None,
                         )
                         .context("adding group")?;
@@ -403,6 +411,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         None => {
                             let origin = DeployKind::Deployed {
                                 player: ifo.ucid.clone(),
+                                moved_by: None,
                                 spec: spec.clone(),
                             };
                             ctx.db
@@ -413,6 +422,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                                     loc,
                                     &spec.template,
                                     origin,
+                                    BitFlags::empty(),
                                     None,
                                 )
                                 .context("adding group")?;
@@ -434,13 +444,9 @@ pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
             return Ok(ifo.ucid.clone());
         }
     }
-    let ucid = Ucid::from(key);
-    if ctx.db.player(&ucid).is_some() {
-        return Ok(ucid);
-    }
-    if let Some(id) = ctx.id_by_name.get(key) {
-        if let Some(ifo) = ctx.info_by_player_id.get(&id) {
-            return Ok(ifo.ucid.clone());
+    if let Ok(ucid) = key.parse::<Ucid>() {
+        if ctx.db.player(&ucid).is_some() {
+            return Ok(ucid);
         }
     }
     enum Matcher<'a> {
@@ -460,28 +466,18 @@ pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
         Err(_) => Matcher::Exact(key),
     };
     let mut candidates: SmallVec<[(&Ucid, &String); 32]> = {
-        let connected: SmallVec<[(&Ucid, &String); 32]> = ctx
-            .id_by_name
-            .iter()
-            .filter(|(name, _)| expr.is_match(name.as_str()))
-            .filter_map(|(name, id)| ctx.info_by_player_id.get(id).map(|ifo| (&ifo.ucid, name)))
-            .collect();
-        if connected.len() > 0 {
-            connected
-        } else {
-            ctx.db
-                .persisted
-                .players()
-                .into_iter()
-                .filter(|(_, player)| {
-                    player
-                        .alts
-                        .into_iter()
-                        .any(|alt| expr.is_match(alt.as_str()))
-                })
-                .map(|(ucid, player)| (ucid, &player.name))
-                .collect()
-        }
+        ctx.db
+            .persisted
+            .players()
+            .into_iter()
+            .filter(|(_, player)| {
+                player
+                    .alts
+                    .into_iter()
+                    .any(|alt| expr.is_match(alt.as_str()))
+            })
+            .map(|(ucid, player)| (ucid, &player.name))
+            .collect()
     };
     if candidates.len() == 1 {
         return Ok(candidates.pop().unwrap().0.clone());
@@ -491,8 +487,8 @@ pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
     bail!("no player found for alias, player id, or ucid \"{}\"", key)
 }
 
-fn get_airbase(ctx: &Context, name: &str) -> Result<ObjectiveId> {
-    for (oid, obj) in ctx.db.objectives() {
+pub fn get_airbase(db: &Db, name: &str) -> Result<ObjectiveId> {
+    for (oid, obj) in db.objectives() {
         if obj.name.as_str() == name {
             return Ok(*oid);
         }
@@ -502,7 +498,7 @@ fn get_airbase(ctx: &Context, name: &str) -> Result<ObjectiveId> {
         .build()
         .context("building regex")?;
     let mut candidates: SmallVec<[(ObjectiveId, String); 32]> = smallvec![];
-    for (oid, obj) in ctx.db.objectives() {
+    for (oid, obj) in db.objectives() {
         if re.is_match(obj.name.as_str()) {
             candidates.push((*oid, obj.name.clone()));
         }
@@ -688,13 +684,19 @@ fn remove_admin(ctx: &mut Context, player: &String) -> Result<()> {
 
 fn balance(ctx: &Context, player: &String) -> Result<i32> {
     let ucid = get_player_ucid(ctx, player)?;
-    let player = ctx.db.player(&ucid).ok_or_else(|| anyhow!("no such player {player}"))?;
+    let player = ctx
+        .db
+        .player(&ucid)
+        .ok_or_else(|| anyhow!("no such player {player}"))?;
     Ok(player.points)
 }
 
 fn set_points(ctx: &mut Context, player: &String, amount: i32) -> Result<()> {
     let ucid = get_player_ucid(ctx, player)?;
-    let player = ctx.db.player_mut(&ucid).ok_or_else(|| anyhow!("no such player {player}"))?;
+    let player = ctx
+        .db
+        .player_mut(&ucid)
+        .ok_or_else(|| anyhow!("no such player {player}"))?;
     player.points = amount;
     ctx.db.ephemeral.dirty();
     Ok(())
@@ -703,10 +705,17 @@ fn set_points(ctx: &mut Context, player: &String, amount: i32) -> Result<()> {
 fn delete(ctx: &mut Context, id: &GroupId) -> Result<()> {
     match &ctx.db.group(id)?.origin {
         DeployKind::Objective => bail!("you can't delete objective groups"),
-        DeployKind::Crate { .. } | DeployKind::Deployed { .. } | DeployKind::Troop { .. } => {
-            ctx.db.delete_group(id)
-        }
+        DeployKind::Crate { .. }
+        | DeployKind::Deployed { .. }
+        | DeployKind::Troop { .. }
+        | DeployKind::Action { .. } => ctx.db.delete_group(id),
     }
+}
+
+fn deslot(ctx: &mut Context, player: &String) -> Result<()> {
+    let ucid = get_player_ucid(ctx, player)?;
+    ctx.db.ephemeral.force_player_to_spectators(&ucid);
+    Ok(())
 }
 
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
@@ -720,7 +729,7 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
         }
         macro_rules! airbase {
             ($name:expr) => {
-                match get_airbase(ctx, $name) {
+                match get_airbase(&ctx.db, $name) {
                     Ok(oid) => oid,
                     Err(e) => {
                         reply!("{e:?}");
@@ -879,15 +888,19 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
             },
             AdminCommand::Balance { player } => match balance(ctx, &player) {
                 Ok(b) => reply!("{player}'s balance is {b}"),
-                Err(e) => reply!("could not get {player}'s balance {e:?}")
-            }
+                Err(e) => reply!("could not get {player}'s balance {e:?}"),
+            },
             AdminCommand::SetPoints { amount, player } => match set_points(ctx, &player, amount) {
                 Ok(()) => reply!("{player}'s points set to {amount}"),
-                Err(e) => reply!("could not set {player}'s points {e:?}")
-            }
+                Err(e) => reply!("could not set {player}'s points {e:?}"),
+            },
             AdminCommand::Delete { group } => match delete(ctx, &group) {
                 Ok(()) => reply!("{group} deleted"),
-                Err(e) => reply!("could not delete group {e:?}")
+                Err(e) => reply!("could not delete group {e:?}"),
+            },
+            AdminCommand::Deslot { player } => match deslot(ctx, &player) {
+                Ok(()) => reply!("{player} deslotted"),
+                Err(e) => reply!("could not deslot {player} {e:?}")
             }
         }
     }

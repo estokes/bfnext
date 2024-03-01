@@ -17,10 +17,11 @@ for more details.
 use std::collections::hash_map::Entry;
 
 /// Lets not bicker and argue about oo killed oo
-use crate::db::Db;
+use crate::db::{group::GroupId, Db};
 use anyhow::Result;
 use chrono::{prelude::*, Duration};
 use dcso3::{
+    coalition::Side,
     event::Shot as ShotEvent,
     net::Ucid,
     object::{DcsObject, DcsOid},
@@ -35,6 +36,8 @@ use smallvec::SmallVec;
 pub struct Dead {
     pub victim: DcsOid<ClassUnit>,
     pub victim_ucid: Option<Ucid>,
+    pub victim_side: Side,
+    pub victim_gid: Option<GroupId>,
     pub time: DateTime<Utc>,
     pub shots: Vec<Shot>,
 }
@@ -45,8 +48,11 @@ pub struct Shot {
     pub weapon: Option<DcsOid<ClassWeapon>>,
     pub shooter: DcsOid<ClassUnit>,
     pub shooter_ucid: Ucid,
+    pub shooter_gid: Option<GroupId>,
     pub target: DcsOid<ClassUnit>,
+    pub target_side: Side,
     pub target_ucid: Option<Ucid>,
+    pub target_gid: Option<GroupId>,
     pub target_typ: String,
     pub time: DateTime<Utc>,
     pub hit: bool,
@@ -78,6 +84,26 @@ macro_rules! some {
     };
 }
 
+fn side_and_gid(db: &Db, target: &DcsOid<ClassUnit>) -> (Side, Option<GroupId>) {
+    match db.ephemeral.get_uid_by_object_id(target) {
+        Some(uid) => db.unit(uid).ok().map(|u| (u.side, Some(u.group))).unwrap_or((Side::Neutral, None)),
+        None => db
+            .ephemeral
+            .get_slot_by_object_id(target)
+            .and_then(|sl| db.ephemeral.player_in_slot(sl))
+            .and_then(|ucid| db.player(ucid))
+            .map(|p| (p.side, None))
+            .unwrap_or((Side::Neutral, None)),
+    }
+}
+
+fn gid_by_oid(db: &Db, oid: &DcsOid<ClassUnit>) -> Option<GroupId> {
+    db.ephemeral
+        .get_uid_by_object_id(oid)
+        .and_then(|uid| db.unit(uid).ok())
+        .map(|u| u.group)
+}
+
 impl ShotDb {
     pub fn dead(&mut self, target: DcsOid<ClassUnit>, time: DateTime<Utc>) {
         if let Entry::Vacant(e) = self.dead.entry(target) {
@@ -86,14 +112,17 @@ impl ShotDb {
     }
 
     pub fn shot(&mut self, db: &Db, now: DateTime<Utc>, e: ShotEvent) -> Result<()> {
-        let shooter = e.initiator.object_id()?;
-        let shooter_ucid = some!(db.player_in_unit(true, &shooter));
         let target = ok!(some!(e.weapon.get_target()?).as_unit());
-        let target_typ = target.get_type_name()?;
-        let target = target.object_id()?;
-        if self.dead.contains_key(&target) || self.recently_dead.contains_key(&target) {
+        let target_oid = target.object_id()?;
+        if self.dead.contains_key(&target_oid) || self.recently_dead.contains_key(&target_oid) {
             return Ok(());
         }
+        let shooter = e.initiator.object_id()?;
+        let shooter_ucid = some!(db.player_in_unit(true, &shooter));
+        let shooter_gid = gid_by_oid(db, &shooter);
+        let target_typ = target.get_type_name()?;
+        let (target_side, target_gid) = side_and_gid(db, &target_oid);
+        let target = target_oid;
         self.by_target
             .entry(target.clone())
             .or_default()
@@ -102,9 +131,12 @@ impl ShotDb {
                 weapon: Some(e.weapon.object_id()?),
                 shooter: shooter.clone(),
                 shooter_ucid,
+                shooter_gid,
                 target_ucid: db.player_in_unit(false, &target),
+                target_gid,
                 target,
                 target_typ,
+                target_side,
                 time: now,
                 hit: false,
             });
@@ -120,13 +152,15 @@ impl ShotDb {
         shooter: &Unit,
         weapon_name: String,
     ) -> Result<()> {
-        let shooter = shooter.object_id()?;
-        let shooter_ucid = some!(db.player_in_unit(true, &shooter));
         let target_oid = target.object_id()?;
-        let target_typ = target.get_type_name()?;
         if self.dead.contains_key(&target_oid) || self.recently_dead.contains_key(&target_oid) {
             return Ok(());
         }
+        let target_typ = target.get_type_name()?;
+        let shooter = shooter.object_id()?;
+        let shooter_ucid = some!(db.player_in_unit(true, &shooter));
+        let shooter_gid = gid_by_oid(db, &shooter);
+        let (target_side, target_gid) = side_and_gid(db, &target_oid);
         let target = target_oid;
         self.by_target
             .entry(target.clone())
@@ -136,9 +170,12 @@ impl ShotDb {
                 weapon: None,
                 shooter: shooter.clone(),
                 shooter_ucid,
+                shooter_gid,
                 target: target.clone(),
                 target_ucid: db.player_in_unit(false, &target),
+                target_gid,
                 target_typ,
+                target_side,
                 time: now,
                 hit: true,
             });
@@ -154,6 +191,8 @@ impl ShotDb {
             dead.push(Dead {
                 victim: target.clone(),
                 victim_ucid: None,
+                victim_side: Side::Neutral,
+                victim_gid: None,
                 time,
                 shots: vec![],
             });
@@ -165,6 +204,8 @@ impl ShotDb {
                             kill.victim_ucid = Some(ucid);
                         }
                     }
+                    kill.victim_side = shot.target_side;
+                    kill.victim_gid = shot.target_gid;
                     kill.shots.push(shot);
                 }
             }

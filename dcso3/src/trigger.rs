@@ -90,6 +90,18 @@ simple_enum!(SideFilter, i8, [
     Blue => 2
 ]);
 
+impl SideFilter {
+    pub fn is_match(&self, side: &Side) -> bool {
+        match (self, side) {
+            (Self::All, _) => true,
+            (Self::Neutral, Side::Neutral) => true,
+            (Self::Blue, Side::Blue) => true,
+            (Self::Red, Side::Red) => true,
+            (_, _) => false
+        }
+    }
+}
+
 impl From<Side> for SideFilter {
     fn from(value: Side) -> Self {
         match value {

@@ -1,7 +1,21 @@
+## 0.1.5
+
+- work around a DCS bug that causes isExist to return true on dead
+  groups
+- make ucid copy
+
+## 0.1.4
+
+- implement DcsObject for StaticObject
+- fix ComboTask, thank you Hoggit
+
 ## 0.1.3
 
 - weapon dcsoid implementation
 - some common object methods on weapon
+- fix a bunch of sequence lifetimes to 'lua
+- map route points to MissionPoint
+- route
 
 ## 0.1.2
 

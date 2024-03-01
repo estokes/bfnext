@@ -40,6 +40,7 @@ use dcso3::{
     trigger::Trigger,
     LuaVec2, MizLua, Position3, String, Vector2,
 };
+use enumflags2::BitFlags;
 use fxhash::FxHashMap;
 use log::{debug, error};
 use serde_derive::{Deserialize, Serialize};
@@ -132,7 +133,7 @@ pub struct SlotStats {
 
 impl SlotStats {
     pub fn get(db: &Db, lua: MizLua, slot: &SlotId) -> Result<Self> {
-        let ucid = maybe!(db.ephemeral.players_by_slot, slot, "no such player")?.clone();
+        let ucid = maybe!(db.ephemeral.players_by_slot, *slot, "no such player")?.clone();
         let side = maybe!(db.persisted.players, ucid, "no player for ucid")?.side;
         let unit = db.ephemeral.slot_instance_unit(lua, slot)?;
         let in_air = unit.in_air()?;
@@ -239,11 +240,19 @@ impl Db {
             .and_then(|d| self.persisted.players.get(&st.ucid).map(|p| (d, p)))
         {
             if player.points < dep.cost as i32 {
-                bail!(
-                    "you have {} points, and this deployable costs {} points",
-                    player.points,
-                    dep.cost
-                )
+                if let Some(oid) = self.persisted.objectives_by_slot.get(slot) {
+                    let obj = objective!(self, oid)?;
+                    if let Some(si) = obj.slots.get(slot) {
+                        let msg = format_compact!(
+                            "WARNING: you have {} points, and this deployable costs {} points",
+                            player.points,
+                            dep.cost
+                        );
+                        self.ephemeral
+                            .msgs()
+                            .panel_to_group(10, false, si.miz_gid, msg);
+                    }
+                }
             }
         }
         let template = self
@@ -273,6 +282,7 @@ impl Db {
             spawnpos,
             &template,
             dk,
+            BitFlags::empty(),
             None,
         )?;
         Ok(st)
@@ -292,7 +302,10 @@ impl Db {
                     spec: crt,
                     ..
                 } => (oid, crt),
-                DeployKind::Deployed { .. } | DeployKind::Troop { .. } | DeployKind::Objective => {
+                DeployKind::Deployed { .. }
+                | DeployKind::Troop { .. }
+                | DeployKind::Objective
+                | DeployKind::Action { .. } => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
             };
@@ -578,7 +591,8 @@ impl Db {
                             DeployKind::Deployed { .. }
                             | DeployKind::Crate { .. }
                             | DeployKind::Objective
-                            | DeployKind::Troop { .. } => (),
+                            | DeployKind::Troop { .. }
+                            | DeployKind::Action { .. } => (),
                         }
                     }
                     if let Some(gid) = group_to_repair {
@@ -765,7 +779,7 @@ impl Db {
                     self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_repair) {
-                        self.adjust_points(&st.ucid, amount as i32);
+                        self.adjust_points(&st.ucid, amount as i32, "for logistics repair");
                     }
                     let obj = objective!(self, oid)?;
                     return Ok(Unpakistan::RepairedBase(obj.name.clone(), obj.logi()));
@@ -790,7 +804,7 @@ impl Db {
                     self.transfer_supplies(lua, from, to)?;
                     self.delete_group(&gid)?;
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_transfer) {
-                        self.adjust_points(&st.ucid, amount as i32);
+                        self.adjust_points(&st.ucid, amount as i32, "for supply transfer");
                     }
                     return Ok(Unpakistan::TransferedSupplies(
                         objective!(self, from)?.name.clone(),
@@ -828,7 +842,7 @@ impl Db {
                                 }
                                 let oid =
                                     self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
-                                self.adjust_points(&st.ucid, - (spec.cost as i32));
+                                self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name, oid));
                             }
@@ -838,6 +852,7 @@ impl Db {
                                     compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
                                 let origin = DeployKind::Deployed {
                                     player: st.ucid.clone(),
+                                    moved_by: None,
                                     spec: spec.clone(),
                                 };
                                 let gid = self.add_and_queue_group(
@@ -847,12 +862,17 @@ impl Db {
                                     spawnloc,
                                     &*spec.template,
                                     origin,
+                                    BitFlags::empty(),
                                     None,
                                 )?;
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                self.adjust_points(&st.ucid, - (spec.cost as i32));
+                                self.adjust_points(
+                                    &st.ucid,
+                                    -(spec.cost as i32),
+                                    &format_compact!("for {dep} unpack"),
+                                );
                                 return Ok(Unpakistan::Unpacked(dep, gid));
                             }
                         },
@@ -944,9 +964,16 @@ impl Db {
             spec: crate_cfg.clone(),
         };
         let spctx = SpawnCtx::new(lua)?;
-        if let Err(e) =
-            self.add_and_queue_group(&spctx, idx, st.side, spawnpos, &template, dk, None)
-        {
+        if let Err(e) = self.add_and_queue_group(
+            &spctx,
+            idx,
+            st.side,
+            spawnpos,
+            &template,
+            dk,
+            BitFlags::empty(),
+            None,
+        ) {
             self.ephemeral
                 .cargo
                 .get_mut(slot)
@@ -1042,7 +1069,6 @@ impl Db {
                         troop_cfg.cost
                     )
                 }
-                self.adjust_points(&ucid, - (troop_cfg.cost as i32));
             }
         }
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
@@ -1052,10 +1078,15 @@ impl Db {
             bail!("you already have a full load onboard")
         }
         let weight = cargo.weight();
-        cargo.troops.push((ucid, troop_cfg.clone()));
+        cargo.troops.push((ucid.clone(), troop_cfg.clone()));
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, weight as i64)?;
+        self.adjust_points(
+            &ucid,
+            -(troop_cfg.cost as i32),
+            &format_compact!("for {name} troop"),
+        );
         Ok(troop_cfg)
     }
 
@@ -1106,15 +1137,23 @@ impl Db {
         };
         let dk = DeployKind::Troop {
             player: ucid.clone(),
+            moved_by: None,
             spec: troop_cfg.clone(),
         };
         let spctx = SpawnCtx::new(lua)?;
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
         }
-        if let Err(e) =
-            self.add_and_queue_group(&spctx, idx, side, spawnpos, &*troop_cfg.template, dk, None)
-        {
+        if let Err(e) = self.add_and_queue_group(
+            &spctx,
+            idx,
+            side,
+            spawnpos,
+            &*troop_cfg.template,
+            dk,
+            BitFlags::empty(),
+            None,
+        ) {
             self.ephemeral
                 .cargo
                 .get_mut(slot)
@@ -1147,7 +1186,7 @@ impl Db {
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
-        self.adjust_points(&ucid, troop_cfg.cost as i32);
+        self.adjust_points(&ucid, troop_cfg.cost as i32, "for troop return");
         Ok(troop_cfg)
     }
 
@@ -1162,7 +1201,12 @@ impl Db {
                 .into_iter()
                 .filter_map(|gid| self.persisted.groups.get(gid).map(|g| (*gid, g)))
                 .find_map(|(gid, g)| {
-                    if let DeployKind::Troop { spec, player } = &g.origin {
+                    if let DeployKind::Troop {
+                        spec,
+                        player,
+                        moved_by: _,
+                    } = &g.origin
+                    {
                         if g.side == side {
                             let in_range = g
                                 .units

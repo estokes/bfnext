@@ -873,6 +873,9 @@ impl Db {
         from: ObjectiveId,
         to: ObjectiveId,
     ) -> Result<()> {
+        if from == to {
+            bail!("you can't transfer supplies to the same objective")
+        }
         let whcfg = match self.ephemeral.cfg.warehouse.as_ref() {
             Some(whcfg) => whcfg,
             None => return Ok(()),

@@ -19,13 +19,7 @@ use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
-    backtrace::Backtrace,
-    borrow::Borrow,
-    collections::hash_map::Entry,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Deref, DerefMut, Sub},
-    panic::{self, AssertUnwindSafe},
+    backtrace::Backtrace, borrow::Borrow, collections::hash_map::Entry, f64, fmt::Debug, marker::PhantomData, ops::{Add, AddAssign, Deref, DerefMut, Sub}, panic::{self, AssertUnwindSafe}
 };
 
 pub mod airbase;
@@ -507,7 +501,7 @@ macro_rules! string_enum {
      $repr:ident,
      [$($case:ident => $str:literal),+],
      [$($altcase:ident => $altstr:literal),*]) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
         #[allow(non_camel_case_types)]
         #[repr($repr)]
         pub enum $name {
@@ -1263,20 +1257,16 @@ pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
     }
 }
 
-/// return a unit vector starting at the specified origin pointing in the
-/// specified direction heading is in radians
-pub fn pointing_towards2(angle: f64, origin: Vector2) -> Vector2 {
-    let mut point = Vector2::new(origin.x, origin.y + 1.);
+/// return a unit vector pointing in the specified direction. angle is in radians
+pub fn pointing_towards2(angle: f64) -> Vector2 {
     let sin = angle.sin();
     let cos = angle.cos();
-    point -= origin;
-    let x = point.x;
-    let y = point.y;
-    point.x = x * cos - y * sin;
-    point.y = x * sin + y * cos;
-    point += origin;
-    point.normalize_mut();
-    point
+    // dcs coords are reversed x is north/south y is east/west
+    Vector2::new(cos, sin).normalize()
+}
+
+pub fn normal2(v: Vector2) -> Vector2 {
+    Vector2::new(v.y, -v.x)
 }
 
 /// Same as rotate2d, but construct and return a vec containing the rotated points
@@ -1293,6 +1283,25 @@ pub fn radians_to_degrees(radians: f64) -> f64 {
 
 pub fn degrees_to_radians(degrees: f64) -> f64 {
     degrees * (std::f64::consts::PI / 180.)
+}
+
+/// change the heading (in radians) by the specified amount, adjusting if it rotates through 0/2 pi.
+/// e.g. `change_heading(3/2 pi, pi) -> pi / 2 not 5 / 2 pi`
+pub fn change_heading(heading: f64, change: f64) -> f64 {
+    const PI2: f64 = f64::consts::PI * 2.;
+    let change = if change.abs() > PI2 {
+        change % PI2
+    } else {
+        change
+    };
+    let res = heading + change;
+    if res > PI2 {
+        res - PI2
+    } else if res < 0. {
+        res + PI2
+    } else {
+        res
+    }
 }
 
 pub fn azumith2d(v: Vector2) -> f64 {

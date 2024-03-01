@@ -18,18 +18,26 @@ use anyhow::{anyhow, Context, Result};
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side, Static},
-    env::miz::{GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
-    group::GroupCategory,
+    env::miz::{self, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
+    group::{Group, GroupCategory},
     land::Land,
+    object::ObjectCategory,
     world::{SearchVolume, World},
     DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use log::info;
+use mlua::Value;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpawnLoc {
+    /// only for air units, obviously
+    InAir {
+        pos: Vector2,
+        heading: f64,
+        altitude: f64,
+    },
     AtPos {
         /// the position of the player. the group will be offset in the
         /// direction offset_direction from this point by the group radius + 10 meters
@@ -63,6 +71,16 @@ pub enum SpawnLoc {
     },
 }
 
+impl Default for SpawnLoc {
+    fn default() -> Self {
+        Self::AtPos {
+            pos: Vector2::new(0., 0.),
+            offset_direction: Vector2::new(0., 0.),
+            group_heading: 0.,
+        }
+    }
+}
+
 pub struct SpawnCtx<'lua> {
     coalition: Coalition<'lua>,
     miz: Miz<'lua>,
@@ -73,6 +91,12 @@ pub struct SpawnCtx<'lua> {
 pub enum Despawn {
     Group(String),
     Static(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum Spawned<'lua> {
+    Group(Group<'lua>),
+    Static(Static<'lua>),
 }
 
 impl<'lua> SpawnCtx<'lua> {
@@ -94,7 +118,7 @@ impl<'lua> SpawnCtx<'lua> {
         kind: GroupKind,
         side: Side,
         template_name: &str,
-    ) -> Result<GroupInfo> {
+    ) -> Result<GroupInfo<'lua>> {
         let mut template = self
             .miz
             .get_group_by_name(idx, kind, side, template_name)?
@@ -129,7 +153,7 @@ impl<'lua> SpawnCtx<'lua> {
         side: Side,
         pad_template: &str,
         pos: Vector2,
-    ) -> Result<()> {
+    ) -> Result<Spawned<'lua>> {
         let pad = {
             let pad = self
                 .get_template(idx, GroupKind::Any, side, &pad_template)
@@ -148,31 +172,33 @@ impl<'lua> SpawnCtx<'lua> {
         self.spawn(pad).context("moving the pad")
     }
 
-    pub fn spawn(&self, template: GroupInfo) -> Result<()> {
+    pub fn spawn(&self, template: GroupInfo<'lua>) -> Result<Spawned<'lua>> {
         match GroupCategory::from_kind(template.category) {
-            Some(category) => {
+            Some(category) => Ok(Spawned::Group(
                 self.coalition
                     .add_group(template.country, category, template.group.clone())
                     .with_context(|| {
                         format_compact!("spawning group from template {:?}", template)
-                    })?;
-            }
+                    })?,
+            )),
             None => {
                 // static objects are not fed to addStaticObject as groups
-                let unit = template
+                let unit: miz::Unit<'lua> = template
                     .group
                     .units()
                     .context("getting static group units")?
                     .first()
-                    .context("getting first unit in static group")?;
-                self.coalition
-                    .add_static_object(template.country, unit)
-                    .with_context(|| {
-                        format_compact!("spawning static object from template {:?}", template)
-                    })?;
+                    .context("getting first unit in static group")?
+                    .clone();
+                Ok(Spawned::Static(
+                    self.coalition
+                        .add_static_object(template.country, unit)
+                        .with_context(|| {
+                            format_compact!("spawning static object from template {:?}", template)
+                        })?,
+                ))
             }
         }
-        Ok(())
     }
 
     pub fn despawn(&self, name: Despawn) -> Result<()> {
@@ -200,6 +226,22 @@ impl<'lua> SpawnCtx<'lua> {
         let point = LuaVec3(Vector3::new(point.x, alt, point.y));
         let vol = SearchVolume::Sphere { point, radius };
         World::singleton(self.lua)?.remove_junk(vol)?;
+        Ok(())
+    }
+
+    pub fn remove_scenery(&self, point: Vector2, radius: f64) -> Result<()> {
+        let alt = Land::singleton(self.lua)?.get_height(LuaVec2(point))?;
+        let point = LuaVec3(Vector3::new(point.x, alt, point.y));
+        let vol = SearchVolume::Sphere { point, radius };
+        World::singleton(self.lua)?.search_objects(
+            ObjectCategory::Scenery,
+            vol,
+            Value::Nil,
+            |_, o, _| {
+                o.destroy()?;
+                Ok(true)
+            },
+        )?;
         Ok(())
     }
 }

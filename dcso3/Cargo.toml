@@ -1,6 +1,6 @@
 [package]
 name = "dcso3"
-version = "0.1.3"
+version = "0.1.5"
 edition = "2021"
 authors = ["Eric Stokes <eestokes@pm.me>"]
 license = "MIT"
@@ -24,3 +24,4 @@ nalgebra = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }
 anyhow = { workspace = true }
+fixedstr = { workspace = true }

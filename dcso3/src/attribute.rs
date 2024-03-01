@@ -15,7 +15,7 @@ use super::{as_tbl, String};
 use crate::{wrapped_table, string_enum};
 use anyhow::Result;
 use mlua::{prelude::*, Value};
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use std::ops::Deref;
 
 string_enum!(Attribute, u8, [

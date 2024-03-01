@@ -41,12 +41,13 @@ use dcso3::{
     warehouse::LiquidType,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
+use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{cmp::max, str::FromStr};
+use std::{str::FromStr, cmp::max};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectiveKind {
@@ -226,7 +227,7 @@ atomic_id!(ObjectiveId);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
-    pub(super) id: ObjectiveId,
+    pub id: ObjectiveId,
     pub name: String,
     pub(super) pos: Vector2,
     pub(super) radius: f64,
@@ -249,6 +250,8 @@ pub struct Objective {
     pub(super) spawned: bool,
     #[serde(skip)]
     pub(super) last_cull: DateTime<Utc>,
+    #[serde(skip)]
+    pub(super) threat_pos3: Vector3,
 }
 
 impl Objective {
@@ -274,6 +277,20 @@ impl Objective {
 
     pub fn owner(&self) -> Side {
         self.owner
+    }
+
+    pub fn is_farp(&self) -> bool {
+        match &self.kind {
+            ObjectiveKind::Farp { .. } => true,
+            ObjectiveKind::Airbase | ObjectiveKind::Fob | ObjectiveKind::Logistics => false,
+        }
+    }
+
+    pub fn is_airbase(&self) -> bool {
+        match &self.kind {
+            ObjectiveKind::Airbase => true,
+            ObjectiveKind::Farp { .. } | ObjectiveKind::Fob | ObjectiveKind::Logistics => false,
+        }
     }
 
     pub fn get_equipment(&self, name: &str) -> Inventory {
@@ -308,21 +325,28 @@ impl Db {
         maybe!(obj.slots, slot, "objective slot")
     }
 
+    /// returns the closest objective that matches the critera to the specified point
     /// (distance, heading from objective to point, objective)
-    pub fn objective_near_point(&self, pos: Vector2) -> (f64, f64, &Objective) {
-        let (dist, obj) = self.persisted.objectives.into_iter().fold(
-            (f64::MAX, None),
-            |(cur_dist, cur_obj), (_, obj)| {
-                let dist = na::distance_squared(&pos.into(), &obj.pos.into());
-                if dist < cur_dist {
-                    (dist, Some(obj))
-                } else {
-                    (cur_dist, cur_obj)
-                }
-            },
-        );
-        let obj = obj.unwrap();
-        (dist.sqrt(), azumith2d_to(obj.pos, pos), obj)
+    pub fn objective_near_point<P: Fn(&Objective) -> bool>(
+        obj: &Map<ObjectiveId, Objective>,
+        pos: Vector2,
+        p: P,
+    ) -> Option<(f64, f64, &Objective)> {
+        let (dist, obj) =
+            obj.into_iter()
+                .fold((f64::MAX, None), |(cur_dist, cur_obj), (_, obj)| {
+                    if !p(obj) {
+                        (cur_dist, cur_obj)
+                    } else {
+                        let dist = na::distance_squared(&pos.into(), &obj.pos.into());
+                        if dist < cur_dist {
+                            (dist, Some(obj))
+                        } else {
+                            (cur_dist, cur_obj)
+                        }
+                    }
+                });
+        obj.map(|obj| (dist.sqrt(), azumith2d_to(obj.pos, pos), obj))
     }
 
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
@@ -404,6 +428,7 @@ impl Db {
         parts: &DeployableLogistics,
     ) -> Result<ObjectiveId> {
         let now = Utc::now();
+        let land = Land::singleton(spctx.lua())?;
         let DeployableLogistics {
             pad_templates: _,
             ammo_template,
@@ -454,6 +479,7 @@ impl Db {
                 location.clone(),
                 &name,
                 DeployKind::Objective,
+                BitFlags::empty(),
                 Some(now + Duration::seconds(60)),
             )?);
         }
@@ -470,6 +496,10 @@ impl Db {
                     n += 1
                 }
             }
+        };
+        let threat_pos3 = {
+            let alt = land.get_height(LuaVec2(pos))?;
+            Vector3::new(pos.x, alt, pos.y)
         };
         let mut obj = Objective {
             id: ObjectiveId::new(),
@@ -493,6 +523,7 @@ impl Db {
             last_threatened_ts: now,
             last_change_ts: now,
             last_cull: DateTime::<Utc>::default(),
+            threat_pos3
         };
         let oid = obj.id;
         obj.warehouse.supplier = self.compute_supplier(&obj)?;
@@ -644,10 +675,25 @@ impl Db {
             for uid in &self.ephemeral.units_potentially_close_to_enemies {
                 let unit = unit!(self, uid)?;
                 if obj.owner != unit.side {
+                    let air = unit.tags.0.contains(UnitTag::Aircraft)
+                        || unit.tags.0.contains(UnitTag::Helicopter);
+                    let cull_dist = if air {
+                        cull_distance
+                    } else {
+                        ground_cull_distance
+                    };
                     let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
-                    if dist <= ground_cull_distance {
+                    if dist <= cull_dist {
                         *spawn = true;
-                        *threat = true;
+                        if air {
+                            let threat_dist =
+                                (cfg.threatened_distance[unit.typ.as_str()] as f64).powi(2);
+                            if dist <= threat_dist {
+                                *threat = true
+                            }
+                        } else {
+                            *threat = true;
+                        }
                         is_close_to_enemies.insert(*uid);
                     }
                 }
@@ -685,12 +731,9 @@ impl Db {
             Ok::<_, anyhow::Error>(())
         };
         for (oid, obj) in &self.persisted.objectives {
-            let pos3 = {
-                let alt = land.get_height(LuaVec2(obj.pos))? + 50.;
-                LuaVec3(Vector3::new(obj.pos.x, alt, obj.pos.y))
-            };
             let mut spawn = false;
             let mut is_threatened = false;
+            let pos3 = LuaVec3(obj.threat_pos3);
             if let Err(e) = check_close_players(obj, pos3, &mut spawn, &mut is_threatened) {
                 error!("failed to check for close players {} {e}", obj.id)
             }
@@ -828,29 +871,26 @@ impl Db {
         oid: ObjectiveId,
     ) -> Result<()> {
         let obj = objective_mut!(self, oid)?;
-        let mut to_repair = None;
-        let current_logi = obj.logi as f64 / 100.;
+        let mut total_logi = 0;
+        for gid in maybe!(&obj.groups, &side, "side group")? {
+            let group = group!(self, gid)?;
+            if group.class.is_logi() {
+                total_logi = max(total_logi, group.units.len());
+            }
+        }
+        let mut to_repair = 1 + (total_logi >> 1);
         for gid in maybe!(&obj.groups, &side, "side group")? {
             let group = group_mut!(self, gid)?;
             if group.class.is_logi() {
-                if to_repair.is_none() {
-                    let len = group.units.len();
-                    let cur = (current_logi * len as f64).ceil() as usize;
-                    to_repair = Some(cur + max(1, len >> 1));
+                for uid in &group.units {
+                    let unit = unit_mut!(self, uid)?;
+                    if unit.dead && to_repair > 0 {
+                        to_repair -= 1;
+                        unit.dead = false;
+                    }
                 }
-                if let Some(to_repair) = to_repair.as_mut() {
-                    for uid in &group.units {
-                        let unit = unit_mut!(self, uid)?;
-                        if *to_repair > 0 {
-                            *to_repair -= 1;
-                            unit.dead = false;
-                        } else {
-                            unit.dead = true;
-                        }
-                    }
-                    if obj.spawned {
-                        self.ephemeral.push_spawn(*gid);
-                    }
+                if obj.spawned {
+                    self.ephemeral.push_spawn(*gid);
                 }
             }
         }
@@ -905,7 +945,11 @@ impl Db {
                 for gid in &self.persisted.troops {
                     let group = group!(self, gid)?;
                     match &group.origin {
-                        DeployKind::Troop { spec, player } if spec.can_capture => {
+                        DeployKind::Troop {
+                            spec,
+                            player,
+                            moved_by: _,
+                        } if spec.can_capture => {
                             let in_range = group
                                 .units
                                 .into_iter()
@@ -924,6 +968,7 @@ impl Db {
                         DeployKind::Crate { .. }
                         | DeployKind::Deployed { .. }
                         | DeployKind::Objective
+                        | DeployKind::Action { .. }
                         | DeployKind::Troop { .. } => (),
                     }
                 }
@@ -934,6 +979,7 @@ impl Db {
             let (side, _, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
             if gids.iter().all(|(s, _, _)| side == s) {
                 let obj = objective_mut!(self, oid)?;
+                let name = obj.name.clone();
                 obj.spawned = false;
                 obj.threatened = true;
                 obj.last_threatened_ts = now;
@@ -988,7 +1034,7 @@ impl Db {
                 if let Some(points) = self.ephemeral.cfg.points.as_ref() {
                     let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
                     for ucid in ucids {
-                        self.adjust_points(&ucid, ppp);
+                        self.adjust_points(&ucid, ppp, &format!("for capturing {name}"));
                     }
                 }
                 let obj = objective!(self, oid)?;

@@ -91,7 +91,7 @@ impl<'lua> Airbase<'lua> {
         Ok(self.t.call_method("getParking", available)?)
     }
 
-    pub fn get_runways(&self) -> Result<Sequence<Runway<'lua>>> {
+    pub fn get_runways(&self) -> Result<Sequence<'lua, Runway<'lua>>> {
         Ok(self.t.call_method("getRunways", ())?)
     }
 

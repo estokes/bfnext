@@ -15,13 +15,11 @@ for more details.
 */
 
 extern crate nalgebra as na;
-use self::{
-    group::{DeployKind, SpawnedGroup},
-    persisted::Persisted,
-};
+use self::{group::DeployKind, persisted::Persisted};
 use crate::{
-    cfg::{Cfg, Deployable, DeployableEwr, DeployableJtac, Troop},
+    cfg::{Action, ActionKind, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg, Troop},
     db::ephemeral::Ephemeral,
+    jtac::JtId,
 };
 use anyhow::{anyhow, Result};
 use dcso3::{
@@ -32,10 +30,12 @@ use dcso3::{
 };
 use std::{fs::File, path::Path};
 
+pub mod actions;
 pub mod cargo;
 pub mod ephemeral;
 pub mod group;
 pub mod logistics;
+pub mod markup;
 pub mod mizinit;
 pub mod objective;
 pub mod persisted;
@@ -43,6 +43,14 @@ pub mod player;
 
 pub type Map<K, V> = immutable_chunkmap::map::Map<K, V, 256>;
 pub type Set<K> = immutable_chunkmap::set::Set<K, 256>;
+
+pub struct JtDesc {
+    pub pos: Vector3,
+    pub id: JtId,
+    pub side: Side,
+    pub spec: DeployableJtac,
+    pub air: bool,
+}
 
 #[macro_export]
 macro_rules! maybe {
@@ -175,7 +183,10 @@ impl Db {
         self.persisted.ewrs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
             match &group.origin {
-                DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
+                DeployKind::Crate { .. }
+                | DeployKind::Objective
+                | DeployKind::Troop { .. }
+                | DeployKind::Action { .. } => None,
                 DeployKind::Deployed { spec, .. } => {
                     let ewr = spec.ewr.as_ref()?;
                     let pos = centroid3d(
@@ -190,36 +201,90 @@ impl Db {
         })
     }
 
-    pub fn jtacs(&self) -> impl Iterator<Item = (Vector3, &SpawnedGroup, &DeployableJtac)> {
-        self.persisted.jtacs.into_iter().filter_map(|gid| {
-            let group = self.persisted.groups.get(gid)?;
-            match &group.origin {
-                DeployKind::Troop {
-                    spec: Troop {
-                        jtac: Some(jtac), ..
+    pub fn jtacs<'a>(&'a self) -> impl Iterator<Item = JtDesc> + 'a {
+        self.persisted
+            .jtacs
+            .into_iter()
+            .filter_map(|gid| {
+                let group = self.persisted.groups.get(gid)?;
+                let pos = centroid3d(
+                    group
+                        .units
+                        .into_iter()
+                        .filter_map(|u| self.persisted.units.get(u).map(|u| u.position.p.0)),
+                );
+                match &group.origin {
+                    DeployKind::Troop {
+                        spec:
+                            Troop {
+                                jtac: Some(jtac), ..
+                            },
+                        ..
+                    }
+                    | DeployKind::Deployed {
+                        spec:
+                            Deployable {
+                                jtac: Some(jtac), ..
+                            },
+                        ..
+                    } => Some(JtDesc {
+                        pos,
+                        id: JtId::Group(*gid),
+                        side: group.side,
+                        spec: *jtac,
+                        air: false,
+                    }),
+                    DeployKind::Action {
+                        spec:
+                            Action {
+                                kind: ActionKind::Drone(DroneCfg { jtac, .. }),
+                                ..
+                            },
+                        ..
+                    } => Some(JtDesc {
+                        pos,
+                        id: JtId::Group(*gid),
+                        side: group.side,
+                        spec: *jtac,
+                        air: true,
+                    }),
+                    DeployKind::Crate { .. }
+                    | DeployKind::Action { .. }
+                    | DeployKind::Objective
+                    | DeployKind::Troop { .. }
+                    | DeployKind::Deployed { .. } => None,
+                }
+            })
+            .chain(self.instanced_players().filter_map(|(_, p, inst)| {
+                let slot = p.current_slot.as_ref().unwrap().0;
+                let pos = inst.position.p.0;
+                let id = JtId::Slot(slot);
+                match self.ephemeral.cfg.airborne_jtacs.get(&inst.typ) {
+                    Some(jt) => Some(JtDesc {
+                        pos,
+                        id,
+                        side: p.side,
+                        spec: *jt,
+                        air: true,
+                    }),
+                    None => match self.ephemeral.cargo.get(&slot) {
+                        None => None,
+                        Some(cargo) => {
+                            for (_, tr) in &cargo.troops {
+                                if let Some(jt) = &tr.jtac {
+                                    return Some(JtDesc {
+                                        pos,
+                                        id,
+                                        side: p.side,
+                                        spec: *jt,
+                                        air: false,
+                                    });
+                                }
+                            }
+                            None
+                        }
                     },
-                    ..
                 }
-                | DeployKind::Deployed {
-                    spec:
-                        Deployable {
-                            jtac: Some(jtac), ..
-                        },
-                    ..
-                } => {
-                    let pos = centroid3d(
-                        group
-                            .units
-                            .into_iter()
-                            .map(|u| self.persisted.units[u].position.p.0),
-                    );
-                    Some((pos, group, jtac))
-                }
-                DeployKind::Crate { .. }
-                | DeployKind::Objective
-                | DeployKind::Troop { .. }
-                | DeployKind::Deployed { .. } => None,
-            }
-        })
+            }))
     }
 }

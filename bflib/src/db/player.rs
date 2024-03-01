@@ -38,6 +38,7 @@ use dcso3::{
 use log::{debug, error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
+use std::cmp::max;
 
 #[derive(Debug, Clone)]
 pub enum SlotAuth {
@@ -86,17 +87,17 @@ pub struct Player {
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
     #[serde(skip)]
-    pub changing_slots: Option<SlotId>,
+    pub changing_slots: bool,
     #[serde(skip)]
     pub jtac_or_spectators: bool,
 }
 
 impl Db {
-    pub fn player_deslot(&mut self, ucid: &Ucid, kick: bool) {
+    pub fn player_deslot(&mut self, ucid: &Ucid) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             player.airborne = None;
             if let Some((slot, _)) = player.current_slot.take() {
-                let _ = self.ephemeral.player_deslot(&slot, kick);
+                let _ = self.ephemeral.player_deslot(&self.persisted, &slot);
             }
         }
     }
@@ -104,20 +105,37 @@ impl Db {
     pub fn player(&self, ucid: &Ucid) -> Option<&Player> {
         self.persisted.players.get(ucid)
     }
-    
+
     pub fn player_mut(&mut self, ucid: &Ucid) -> Option<&mut Player> {
         self.persisted.players.get_mut_cow(ucid)
     }
 
     pub fn transfer_points(&mut self, source: &Ucid, target: &Ucid, amount: u32) -> Result<()> {
-        let sp = self.persisted.players.get_mut_cow(source).ok_or_else(|| anyhow!("source player not found"))?;
+        let sp = self
+            .persisted
+            .players
+            .get_mut_cow(source)
+            .ok_or_else(|| anyhow!("source player not found"))?;
         if sp.points < amount as i32 {
-            bail!("insufficient balance, you have {}, you requested {}", sp.points, amount)
+            bail!(
+                "insufficient balance, you have {}, you requested {}",
+                sp.points,
+                amount
+            )
         }
         sp.points -= amount as i32;
+        let sp_name = sp.name.clone();
         match self.persisted.players.get_mut_cow(target) {
             Some(tp) => {
                 tp.points += amount as i32;
+                let msg = format_compact!(
+                    "{}(+{}) you received points from {}",
+                    tp.points,
+                    amount,
+                    sp_name
+                );
+                self.ephemeral
+                    .panel_to_player(&self.persisted, 10, target, msg);
                 self.ephemeral.dirty();
                 Ok(())
             }
@@ -136,12 +154,13 @@ impl Db {
 
     pub fn instanced_players(&self) -> impl Iterator<Item = (&Ucid, &Player, &InstancedPlayer)> {
         self.ephemeral.players_by_slot.values().filter_map(|ucid| {
-            let player = &self.persisted.players[ucid];
-            player
-                .current_slot
-                .as_ref()
-                .and_then(|(_, inst)| inst.as_ref())
-                .map(|inst| (ucid, player, inst))
+            self.persisted.players.get(ucid).and_then(|player| {
+                player
+                    .current_slot
+                    .as_ref()
+                    .and_then(|(_, inst)| inst.as_ref())
+                    .map(|inst| (ucid, player, inst))
+            })
         })
     }
 
@@ -162,8 +181,17 @@ impl Db {
                         .and_then(|uid| self.persisted.units.get(uid))
                         .and_then(|unit| self.persisted.groups.get(&unit.group))
                         .and_then(|group| match &group.origin {
-                            DeployKind::Deployed { player, spec: _ } => Some(player.clone()),
-                            DeployKind::Troop { player, spec: _ } => Some(player.clone()),
+                            DeployKind::Deployed {
+                                player,
+                                spec: _,
+                                moved_by: _,
+                            } => Some(player.clone()),
+                            DeployKind::Troop {
+                                player,
+                                spec: _,
+                                moved_by: _,
+                            } => Some(player.clone()),
+                            DeployKind::Action { player, .. } => player.clone(),
                             DeployKind::Crate { .. } | DeployKind::Objective => None,
                         })
                 }
@@ -214,7 +242,7 @@ impl Db {
         if is_on_owned_objective {
             // paranoia
             if *player_lives == 0 {
-               return Ok(TakeoffRes::OutOfLives) 
+                return Ok(TakeoffRes::OutOfLives);
             } else {
                 player.airborne = Some(life_type);
                 *player_lives -= 1;
@@ -333,14 +361,17 @@ impl Db {
             SlotId::ArtilleryCommander(_, _)
             | SlotId::ForwardObserver(_, _)
             | SlotId::Observer(_, _) => {
-                player.jtac_or_spectators = true;
-                // CR estokes: add permissions for game master
-                SlotAuth::Yes
+                if self.ephemeral.cfg.rules.ca.check(ucid) {
+                    player.jtac_or_spectators = true;
+                    SlotAuth::Yes
+                } else {
+                    SlotAuth::Denied
+                }
             }
             SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
                 let oid = match self.persisted.objectives_by_slot.get(&slot) {
                     None => {
-                        player.changing_slots = Some(slot.clone());
+                        player.changing_slots = true;
                         player.jtac_or_spectators = false;
                         return SlotAuth::Yes; // it's a multicrew slot
                     }
@@ -367,7 +398,7 @@ impl Db {
                         self.ephemeral
                             .players_by_slot
                             .insert(slot.clone(), ucid.clone());
-                        player.changing_slots = Some(slot);
+                        player.changing_slots = true; 
                         player.jtac_or_spectators = false;
                         break SlotAuth::Yes;
                     };
@@ -386,9 +417,8 @@ impl Db {
                                 self.ephemeral.dirty();
                             } else if n == 0 {
                                 break SlotAuth::NoLives(life_type);
-                            } else {
-                                yes!();
-                            }
+                            } 
+                            yes!();
                         }
                     }
                 }
@@ -428,7 +458,7 @@ impl Db {
                             .map(|p| p.new_player_join as i32)
                             .unwrap_or(0),
                         current_slot: None,
-                        changing_slots: None,
+                        changing_slots: false,
                         jtac_or_spectators: true,
                     },
                 );
@@ -470,37 +500,48 @@ impl Db {
         }
     }
 
-    pub fn update_player_positions(&mut self, lua: MizLua) -> Result<Vec<DcsOid<ClassUnit>>> {
+    pub fn update_player_positions_incremental(
+        &mut self,
+        lua: MizLua,
+        mut i: usize,
+    ) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
         let mut unit: Option<Unit> = None;
-        for (slot, id) in &self.ephemeral.object_id_by_slot {
-            if let Some(ucid) = self.ephemeral.players_by_slot.get(slot) {
+        let total = self.ephemeral.players_by_slot.len();
+        if i < total {
+            let stop = i + max(1, total / 10);
+            while i < total && i < stop {
+                let (slot, ucid) = self.ephemeral.players_by_slot.get_index(i).unwrap();
                 if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
-                    let instance = match unit.take() {
-                        Some(unit) => unit.change_instance(id),
-                        None => Unit::get_instance(lua, id),
-                    };
-                    match instance {
-                        Err(e) => {
-                            warn!(
-                                "updating player positions, skipping invalid unit {:?}, {:?}, player {:?}",
-                                player, id, e
-                            );
-                            dead.push(id.clone())
-                        }
-                        Ok(instance) => {
-                            if let Some((_, Some(inst))) = &mut player.current_slot {
-                                inst.position = instance.get_position()?;
-                                inst.velocity = instance.get_velocity()?.0;
-                                inst.in_air = instance.in_air()?;
+                    if let Some(id) = self.ephemeral.object_id_by_slot.get(slot) {
+                        let instance = match unit.take() {
+                            Some(unit) => unit.change_instance(id),
+                            None => Unit::get_instance(lua, id),
+                        };
+                        match instance {
+                            Err(e) => {
+                                warn!(
+                                    "updating player positions, skipping invalid unit {ucid:?}, {id:?}, player {e:?}",
+                                );
+                                dead.push(id.clone())
                             }
-                            unit = Some(instance);
+                            Ok(instance) => {
+                                if let Some((_, Some(inst))) = &mut player.current_slot {
+                                    inst.position = instance.get_position()?;
+                                    inst.velocity = instance.get_velocity()?.0;
+                                    inst.in_air = instance.in_air()?;
+                                }
+                                unit = Some(instance);
+                            }
                         }
                     }
                 }
+                i += 1;
             }
+            Ok((i, dead))
+        } else {
+            Ok((0, vec![]))
         }
-        Ok(dead)
     }
 
     pub fn player_entered_slot(
@@ -588,9 +629,7 @@ impl Db {
                         landed_at_objective,
                     }),
                 ));
-                if let Some(_) = player.changing_slots.take() {
-                    self.ephemeral.cancel_force_to_spectators(&ucid);
-                }
+                player.changing_slots = false;
             }
         }
         Ok(())
@@ -612,7 +651,6 @@ impl Db {
             if let Some(ucid) = self.ephemeral.player_in_slot(slot) {
                 let ucid = ucid.clone();
                 let player = maybe_mut!(self.persisted.players, ucid, "player")?;
-                let kick = !player.jtac_or_spectators;
                 if let Some((_, Some(inst))) = player.current_slot.as_mut() {
                     let typ = inst.typ.clone();
                     let ppos = inst.position.p.0;
@@ -650,7 +688,7 @@ impl Db {
                         }
                     }
                 }
-                self.player_deslot(&ucid, kick)
+                self.player_deslot(&ucid)
             }
         }
         Ok(dead)
@@ -667,22 +705,31 @@ impl Db {
                 self.ephemeral.push_sync_warehouse(oid, inst.typ.clone());
             }
         }
-        self.player_deslot(ucid, false);
+        self.player_deslot(ucid);
     }
 
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
-        let mut hit_by: SmallVec<[Ucid; 4]> = smallvec![];
-        for shot in &dead.shots {
-            if shot.hit {
-                if !hit_by.contains(&shot.shooter_ucid) {
-                    hit_by.push(shot.shooter_ucid.clone())
-                }
+        let mut hit_by: SmallVec<[&Ucid; 16]> = smallvec![];
+        let non_self_shots = || {
+            dead.shots.iter().filter(|shot| {
+                (shot.target_gid.is_none() || shot.target_gid != shot.shooter_gid)
+                    && match dead.victim_ucid.as_ref() {
+                        None => true,
+                        Some(victim) => victim != &shot.shooter_ucid,
+                    }
+            })
+        };
+        for shot in non_self_shots() {
+            if shot.hit && !hit_by.contains(&&shot.shooter_ucid) {
+                hit_by.push(&shot.shooter_ucid);
             }
         }
         if hit_by.is_empty() {
-            for shot in &dead.shots {
-                if dead.time - shot.time <= Duration::minutes(3) {
-                    hit_by.push(shot.shooter_ucid.clone())
+            for shot in non_self_shots() {
+                if dead.time - shot.time <= Duration::minutes(3)
+                    && !hit_by.contains(&&shot.shooter_ucid)
+                {
+                    hit_by.push(&shot.shooter_ucid);
                 }
             }
         }
@@ -693,11 +740,15 @@ impl Db {
                 (&dead.shots)
                     .into_iter()
                     .find(|s| s.target_typ.trim() != "")
-                    .map(|s| s.target_typ.clone())
-                    .and_then(|typ| self.ephemeral.cfg.unit_classification.get(&Vehicle(typ)))
+                    .map(|s| &s.target_typ)
+                    .and_then(|typ| self.ephemeral.cfg.unit_classification.get(typ.as_str()))
                     .map(|tags| {
                         if tags.contains(UnitTag::LR | UnitTag::TrackRadar | UnitTag::SAM) {
                             cfg.ground_kill + cfg.lr_sam_bonus
+                        } else if tags.contains(UnitTag::Aircraft)
+                            || tags.contains(UnitTag::Helicopter)
+                        {
+                            cfg.air_kill
                         } else {
                             cfg.ground_kill
                         }
@@ -705,33 +756,71 @@ impl Db {
                     .unwrap_or(cfg.ground_kill)
             };
             let pps = (total_points as f32 / hit_by.len() as f32).ceil() as i32;
+            let victim_info = dead
+                .victim_ucid
+                .as_ref()
+                .and_then(|i| self.persisted.players.get(i))
+                .map(|p| (p.name.clone(), p.airborne));
             for ucid in hit_by {
-                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
-                    player.points += pps;
-                    let tp = player.points;
-                    let msg = match dead
-                        .victim_ucid
-                        .as_ref()
-                        .and_then(|i| self.persisted.players.get(i))
-                    {
-                        None => format_compact!("{tp}(+{pps}) points"),
-                        Some(victim) => {
-                            format_compact!("{tp}(+{pps}) points, killed {}", victim.name)
+                if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
+                    let msg = if player.side != dead.victim_side {
+                        player.points += pps;
+                        let tp = player.points;
+                        match &victim_info {
+                            None => format_compact!("{tp}(+{pps}) points"),
+                            Some((victim, _)) => {
+                                format_compact!("{tp}(+{pps}) points, killed {}", victim)
+                            }
+                        }
+                    } else {
+                        match &victim_info {
+                            None => {
+                                player.points -= total_points as i32;
+                                let tp = player.points;
+                                format_compact!(
+                                    "{tp}(-{total_points}) points, you have killed a friendly unit"
+                                )
+                            }
+                            Some((victim, Some(life_type))) => {
+                                let (_, player_lives) =
+                                    player.lives.get_or_insert_cow(*life_type, || {
+                                        (Utc::now(), self.ephemeral.cfg.default_lives[&life_type].0)
+                                    });
+                                let mut lost = false;
+                                if *player_lives > 0 {
+                                    lost = true;
+                                    *player_lives -= 1;
+                                }
+                                player.points -= total_points as i32;
+                                let tp = player.points;
+                                self.ephemeral.dirty();
+                                let lost = if lost {
+                                    format_compact!("\nYou have lost a {life_type} life")
+                                } else {
+                                    format_compact!("")
+                                };
+                                format_compact!("{tp}(-{total_points}) points, you have team killed {victim}.{}", lost)
+                            }
+                            Some((victim, None)) => {
+                                format_compact!("you have team killed {victim} on the ground")
+                            }
                         }
                     };
-                    self.ephemeral.panel_to_player(&self.persisted, &ucid, msg)
+                    debug!("{ucid} kill message: {msg}");
+                    self.ephemeral
+                        .panel_to_player(&self.persisted, 10, &ucid, msg)
                 }
             }
         }
     }
 
-    pub fn adjust_points(&mut self, ucid: &Ucid, amount: i32) {
+    pub fn adjust_points(&mut self, ucid: &Ucid, amount: i32, why: &str) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             player.points += amount;
             let pp = player.points;
             if amount != 0 {
-                let m = format_compact!("{}({}) points", pp, amount);
-                self.ephemeral.panel_to_player(&self.persisted, ucid, m);
+                let m = format_compact!("{}({}) points {}", pp, amount, why);
+                self.ephemeral.panel_to_player(&self.persisted, 10, ucid, m);
                 self.ephemeral.dirty();
             }
         }

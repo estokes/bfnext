@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -14,12 +14,18 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use crate::db::{Db, player::{InstancedPlayer, Player}};
+use crate::{
+    db::{
+        player::{InstancedPlayer, Player},
+        Db,
+    },
+    landcache::LandCache,
+};
 use anyhow::Result;
 use chrono::prelude::*;
 use dcso3::{
-    azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid, radians_to_degrees, LuaVec3,
-    MizLua, Position3, Vector2, Vector3,
+    azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid, radians_to_degrees, MizLua,
+    Position3, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use smallvec::{smallvec, SmallVec};
@@ -126,7 +132,13 @@ pub struct Ewr {
 }
 
 impl Ewr {
-    pub fn update_tracks(&mut self, lua: MizLua, db: &Db, now: DateTime<Utc>) -> Result<()> {
+    pub fn update_tracks(
+        &mut self,
+        lua: MizLua,
+        landcache: &mut LandCache,
+        db: &Db,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
         let land = Land::singleton(lua)?;
         let players: SmallVec<[_; 64]> = db
             .instanced_players()
@@ -137,14 +149,16 @@ impl Ewr {
             let tracks = self.tracks.entry(side).or_default();
             ewr_pos.y += 10.; // factor in antenna height
             for (ucid, player, inst) in &players {
-                let track = tracks.entry((*ucid).clone()).or_default();
+                let track = tracks.entry(**ucid).or_default();
                 if track.last != now {
                     let dist = na::distance_squared(&ewr_pos.into(), &inst.position.p.0.into());
-                    if dist <= range && land.is_visible(LuaVec3(ewr_pos), inst.position.p)? {
-                        track.pos = inst.position;
-                        track.velocity = inst.velocity;
-                        track.last = now;
-                        track.side = player.side;
+                    if dist <= range {
+                        if landcache.is_visible(&land, dist.sqrt(), ewr_pos, inst.position.p.0)? {
+                            track.pos = inst.position;
+                            track.velocity = inst.velocity;
+                            track.last = now;
+                            track.side = player.side;
+                        }
                     }
                 }
             }

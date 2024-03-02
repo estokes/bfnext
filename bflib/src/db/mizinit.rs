@@ -26,7 +26,7 @@ use crate::{
         objective::{Objective, ObjectiveId, ObjectiveKind},
     },
     group, objective_mut,
-    spawnctx::{SpawnCtx, SpawnLoc},
+    spawnctx::{SpawnCtx, SpawnLoc}, landcache::LandCache,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -309,7 +309,7 @@ impl Db {
         Ok(t)
     }
 
-    pub fn respawn_after_load(&mut self, idx: &MizIndex, spctx: &SpawnCtx) -> Result<()> {
+    pub fn respawn_after_load(&mut self, idx: &MizIndex, landcache: &mut LandCache, spctx: &SpawnCtx) -> Result<()> {
         let mut spawn_deployed_and_logistics = || -> Result<()> {
             let land = Land::singleton(spctx.lua())?;
             for gid in &self.persisted.deployed {
@@ -416,7 +416,7 @@ impl Db {
             }
         }
         queue_check_close_enemies().context("queuing unit pos checks")?;
-        self.cull_or_respawn_objectives(spctx.lua(), Utc::now())
+        self.cull_or_respawn_objectives(spctx.lua(), landcache, Utc::now())
             .context("initial cull or respawn")?;
         Ok(())
     }

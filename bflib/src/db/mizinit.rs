@@ -25,8 +25,10 @@ use crate::{
         logistics::Warehouse,
         objective::{Objective, ObjectiveId, ObjectiveKind},
     },
-    group, objective_mut,
-    spawnctx::{SpawnCtx, SpawnLoc}, landcache::LandCache,
+    group,
+    landcache::LandCache,
+    objective_mut,
+    spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -35,7 +37,8 @@ use dcso3::{
     coalition::Side,
     controller::PointType,
     env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
-    MizLua, String, Vector2, LuaVec2, Vector3, land::Land,
+    land::Land,
+    LuaVec2, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
@@ -112,7 +115,7 @@ impl Db {
             warehouse: Warehouse::default(),
             last_cull: DateTime::<Utc>::default(),
             // initialized by load
-            threat_pos3: Vector3::default()
+            threat_pos3: Vector3::default(),
         };
         if let ObjectiveKind::Logistics = obj.kind {
             self.persisted.logistics_hubs.insert_cow(id);
@@ -309,7 +312,17 @@ impl Db {
         Ok(t)
     }
 
-    pub fn respawn_after_load(&mut self, idx: &MizIndex, landcache: &mut LandCache, spctx: &SpawnCtx) -> Result<()> {
+    pub fn respawn_after_load(
+        &mut self,
+        idx: &MizIndex,
+        landcache: &mut LandCache,
+        spctx: &SpawnCtx,
+    ) -> Result<()> {
+        for name in &cfg.extra_fixed_wing_objectives {
+            if !self.persisted.objectives_by_name.get(name).is_some() {
+                bail!("extra_fixed_wing_objectives {name} does not match any objective")
+            }
+        }
         let mut spawn_deployed_and_logistics = || -> Result<()> {
             let land = Land::singleton(spctx.lua())?;
             for gid in &self.persisted.deployed {

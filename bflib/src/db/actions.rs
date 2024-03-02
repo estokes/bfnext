@@ -976,7 +976,14 @@ impl Db {
             o.owner == side
                 && match args.cfg.kind {
                     AiPlaneKind::Helicopter => true,
-                    AiPlaneKind::FixedWing => o.is_airbase(),
+                    AiPlaneKind::FixedWing => {
+                        o.is_airbase()
+                            || self
+                                .ephemeral
+                                .cfg
+                                .extra_fixed_wing_objectives
+                                .contains(&o.name)
+                    }
                 }
                 && o.pos != args.pos
         })

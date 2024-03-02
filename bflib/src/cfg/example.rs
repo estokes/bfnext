@@ -1736,6 +1736,7 @@ impl Default for Cfg {
                 ("MB-339A".into(), DeployableJtac { range: 16000 }),
             ]),
             jtac_priority: default_jtac_priority(),
+            extra_fixed_wing_objectives: FxHashSet::default(),
         }
     }
 }

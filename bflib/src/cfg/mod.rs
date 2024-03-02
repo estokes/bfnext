@@ -19,7 +19,7 @@ use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{coalition::Side, controller::AltType, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use serde_derive::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
@@ -597,6 +597,12 @@ pub struct Cfg {
     pub airborne_jtacs: FxHashMap<Vehicle, DeployableJtac>,
     /// The jtac target priority list
     pub jtac_priority: Vec<UnitTags>,
+    /// Objectives that can host fixed wing even though they aren't
+    /// airbases. Used by actions to choose a spawn point. E.G. You
+    /// want to make an airbase a logistics hub because it's close to
+    /// a port.
+    #[serde(default)]
+    pub extra_fixed_wing_objectives: FxHashSet<String>,
 }
 
 impl Cfg {

@@ -43,7 +43,7 @@
     }
   },
   "warehouse": {
-    "hub_max": 20,
+    "hub_max": 15,
     "airbase_max": 5,
     "tick": 10,
     "ticks_per_delivery": 12,

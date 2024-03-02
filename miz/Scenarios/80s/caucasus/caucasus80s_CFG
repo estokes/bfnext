@@ -13,7 +13,7 @@
     "jtac": "AlwaysAllowed",
     "ca": "AlwaysAllowed"
   },
-  "shutdown": 5,
+  "shutdown": 12,
   "points": {
     "new_player_join": 10,
     "air_kill": 25,
@@ -43,10 +43,10 @@
     }
   },
   "warehouse": {
-    "hub_max": 25,
+    "hub_max": 15,
     "airbase_max": 5,
     "tick": 10,
-    "ticks_per_delivery": 6,
+    "ticks_per_delivery": 12,
     "supply_transfer_crate": {
       "Red": {
         "name": "Supply Transfer",

@@ -87,7 +87,7 @@ function kill_dcs() {
     PID=$(ps auxwww \
               | grep "DCS_server.exe -w $NAME" \
               | grep -v grep \
-              | awk '{print $2}')
+              | awk '{print $1}')
     echo "killing DCS with $PID"
     if ! test -z $PID; then
         kill -9 $PID

@@ -209,7 +209,7 @@
             "template": "RTANKER",
             "altitude": 10000.0,
             "altitude_typ": "BARO",
-            "speed": 180.0
+            "speed": 220.0
           }
         },
         "cost": 50,
@@ -450,7 +450,7 @@
             "template": "BBASKETTANKER",
             "altitude": 10000.0,
             "altitude_typ": "BARO",
-            "speed": 180.0
+            "speed": 220.0
           }
         },
         "cost": 50,
@@ -578,7 +578,7 @@
             "template": "BBOOMTANKER",
             "altitude": 10000.0,
             "altitude_typ": "BARO",
-            "speed": 180.0
+            "speed": 220.0
           }
         },
         "cost": 50,

@@ -72,7 +72,7 @@ impl LandCache {
             h: IndexMap::with_capacity_and_hasher(max_size, FxBuildHasher::default()),
             added: 0,
             max_size,
-            debug: true,
+            debug: false,
             stats: Stats {
                 calls: 0,
                 hits: 0,

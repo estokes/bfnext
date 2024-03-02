@@ -13,7 +13,7 @@
     "jtac": "AlwaysAllowed",
     "ca": "AlwaysAllowed"
   },
-  "shutdown": 12,
+  "shutdown": 5,
   "points": {
     "new_player_join": 10,
     "air_kill": 25,

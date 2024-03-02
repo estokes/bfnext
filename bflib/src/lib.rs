@@ -195,7 +195,8 @@ impl Context {
     fn log_perf(&mut self, now: DateTime<Utc>) {
         if now - self.last_perf_log > Duration::seconds(60) {
             self.last_perf_log = now;
-            self.do_bg_task(bg::Task::LogPerf(Arc::clone(unsafe { Perf::get_mut() })))
+            self.do_bg_task(bg::Task::LogPerf(Arc::clone(unsafe { Perf::get_mut() })));
+            info!("landcache {}", self.landcache.stats())
         }
     }
 }

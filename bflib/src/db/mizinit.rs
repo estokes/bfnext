@@ -318,7 +318,7 @@ impl Db {
         landcache: &mut LandCache,
         spctx: &SpawnCtx,
     ) -> Result<()> {
-        for name in &cfg.extra_fixed_wing_objectives {
+        for name in &self.ephemeral.cfg.extra_fixed_wing_objectives {
             if !self.persisted.objectives_by_name.get(name).is_some() {
                 bail!("extra_fixed_wing_objectives {name} does not match any objective")
             }

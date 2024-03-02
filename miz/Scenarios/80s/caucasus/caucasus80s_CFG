@@ -2121,6 +2121,10 @@
       "range": 16000
     }
   },
+  "extra_fixed_wing_objectives": [
+    "Sukhumi",
+    "Batumi"
+  ],
   "jtac_priority": [
     [
       "SAM",

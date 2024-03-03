@@ -107,8 +107,8 @@ impl ObjectiveMarkup {
     }
 
     pub(super) fn update(&mut self, msgq: &mut MsgQ, force: bool, obj: &Objective) {
-        if obj.owner != self.side || force {
-            let new_owner = obj.owner != self.side;
+        let new_owner = obj.owner != self.side;
+        if new_owner || force {
             let text_color = |a| text_color(obj.owner, a);
             self.side = obj.owner;
             msgq.set_markup_color(self.name, text_color(0.75));

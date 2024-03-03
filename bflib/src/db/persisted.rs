@@ -21,14 +21,15 @@ use super::{
     Map, Set,
 };
 use anyhow::{anyhow, Result};
+use chrono::{prelude::*, Duration};
 use compact_str::CompactString;
 use dcso3::{
     coalition::Side,
     net::{SlotId, Ucid},
     String,
 };
-use chrono::{prelude::*, Duration};
 use fxhash::FxHashMap;
+use log::error;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::smallvec;
 use std::{
@@ -78,24 +79,59 @@ impl Persisted {
                 write!(backup, "{}", now.timestamp()).unwrap();
                 with_ts.set_file_name(backup);
                 fs::rename(path, with_ts)?;
-                let dir = path.parent().ok_or_else(|| anyhow!("path has no parent dir"))?;
-                let mut by_age: FxHashMap<Duration, Vec<PathBuf>> = FxHashMap::default();
+                let dir = path
+                    .parent()
+                    .ok_or_else(|| anyhow!("path has no parent dir"))?;
+                let mut by_age: FxHashMap<i64, Vec<(i64, PathBuf)>> = FxHashMap::default();
                 for file in fs::read_dir(dir)? {
                     let file = file?;
                     let fname = match file.file_name().to_str() {
                         Some(s) => s,
                         None => continue,
                     };
+                    let now = now.timestamp();
+                    let onemin = 60;
+                    let tenmin = 600;
+                    let hour = 3600;
+                    let day = 86400;
+                    let week = day * 7;
                     if file.file_type()?.is_file() {
                         if let Some(ts) = fname.strip_prefix(name) {
                             if let Ok(ts) = ts.parse::<i64>() {
-                                if let Some(ts) = DateTime::<Utc>::from_timestamp(ts, 0) {
-                                    if now - ts > Duration::weeks(1) {
-                                        to_delete.push(PathBuf::from(file.path()));
-                                    }
+                                let age = now - ts;
+                                let file = PathBuf::from(file.path());
+                                if age > week {
+                                    by_age.entry(week).or_default().push((ts, file));
+                                } else if age > day {
+                                    by_age
+                                        .entry((age % day) * day)
+                                        .or_default()
+                                        .push((ts, file));
+                                } else if age > hour {
+                                    by_age
+                                        .entry((age % hour) * hour)
+                                        .or_default()
+                                        .push((ts, file));
+                                } else if age > tenmin {
+                                    by_age
+                                        .entry((age % tenmin) * tenmin)
+                                        .or_default()
+                                        .push((ts, file));
+                                } else if age > onemin {
+                                    by_age
+                                        .entry((age % onemin) * onemin)
+                                        .or_default()
+                                        .push((ts, file));
                                 }
                             }
                         }
+                    }
+                }
+                for (_, mut paths) in by_age {
+                    paths.sort_by_key(|(ts, _)| ts);
+                    paths.reverse();
+                    while paths.len() > 1 {
+                        fs::remove_file(paths.pop().unwrap().1)?;
                     }
                 }
             }
@@ -110,6 +146,9 @@ impl Persisted {
             .open(&tmp)?;
         let file = zstd::stream::Encoder::new(file, 9)?.auto_finish();
         serde_json::to_writer(file, &self)?;
+        if let Err(e) = rotate(path) {
+            error!("failed to rotate backup files {e:?}")
+        }
         fs::rename(tmp, path)?;
         Ok(())
     }

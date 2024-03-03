@@ -20,6 +20,7 @@ use chrono::prelude::*;
 use compact_str::format_compact;
 use log::error;
 use once_cell::sync::OnceCell;
+use parking_lot::{Condvar, Mutex};
 use simplelog::{LevelFilter, WriteLogger};
 use std::{cell::RefCell, env, fs, io, path::PathBuf, sync::Arc, thread};
 use tokio::{
@@ -28,7 +29,6 @@ use tokio::{
     runtime::Builder,
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
 };
-use parking_lot::{Condvar, Mutex};
 
 struct LogHandle(UnboundedSender<Task>);
 
@@ -56,10 +56,11 @@ impl io::Write for LogHandle {
 #[derive(Debug)]
 pub(super) enum Task {
     SaveState(PathBuf, Persisted),
+    ResetState(PathBuf),
     SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
     LogPerf(Arc<Perf>),
-    Sync(Arc<(Mutex<bool>, Condvar)>)
+    Sync(Arc<(Mutex<bool>, Condvar)>),
 }
 
 async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
@@ -87,11 +88,15 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
         match msg {
             Task::SaveState(path, db) => match db.save(&path) {
                 Ok(()) => (),
-                Err(e) => error!("failed to save state to {:?}, {:?}", path, e),
+                Err(e) => error!("failed to save state to {path:?}, {e:?}"),
+            },
+            Task::ResetState(path) => match fs::remove_file(&path) {
+                Ok(()) => (),
+                Err(e) => error!("failed to reset state {path:?}, {e:?}"),
             },
             Task::SaveConfig(path, cfg) => match cfg.save(&path) {
                 Ok(()) => (),
-                Err(e) => error!("failed to save config {:?}", e),
+                Err(e) => error!("failed to save config {e:?}"),
             },
             Task::WriteLog(mut buf) => log_file.write_all_buf(&mut buf).await.unwrap(),
             Task::LogPerf(perf) => perf.log(),

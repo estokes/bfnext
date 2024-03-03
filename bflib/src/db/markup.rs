@@ -106,8 +106,8 @@ impl ObjectiveMarkup {
         }
     }
 
-    pub(super) fn update(&mut self, msgq: &mut MsgQ, obj: &Objective) {
-        if obj.owner != self.side {
+    pub(super) fn update(&mut self, msgq: &mut MsgQ, force: bool, obj: &Objective) {
+        if obj.owner != self.side || force {
             let text_color = |a| text_color(obj.owner, a);
             self.side = obj.owner;
             msgq.set_markup_color(self.name, text_color(0.75));
@@ -120,7 +120,7 @@ impl ObjectiveMarkup {
                 msgq.delete_mark(id);
             }
         }
-        if obj.threatened != self.threatened {
+        if obj.threatened != self.threatened || force {
             self.threatened = obj.threatened;
             msgq.set_markup_color(
                 self.threatened_ring,
@@ -141,11 +141,11 @@ impl ObjectiveMarkup {
                 }
             };
         }
-        if self.health != obj.health {
+        if self.health != obj.health || force {
             self.health = obj.health;
             update_bar!(healthbar, health);
         }
-        if self.logi != obj.logi {
+        if self.logi != obj.logi || force {
             self.logi = obj.logi;
             msgq.set_markup_color(
                 self.capturable_ring,
@@ -153,13 +153,19 @@ impl ObjectiveMarkup {
             );
             update_bar!(logibar, logi);
         }
-        if self.supply != obj.supply {
+        if self.supply != obj.supply || force {
             self.supply = obj.supply;
             update_bar!(supplybar, supply);
         }
-        if self.fuel != obj.fuel {
+        if self.fuel != obj.fuel || force {
             self.fuel = obj.fuel;
             update_bar!(fuelbar, fuel);
+        }
+        if force {
+            for id in &self.supply_connections {
+                msgq.set_markup_color(*id, Color::gray(0.5));
+                msgq.set_markup_fill_color(*id, Color::gray(0.5));
+            }
         }
     }
 

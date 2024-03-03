@@ -1059,7 +1059,7 @@ impl Db {
             .collect::<SmallVec<[_; 64]>>();
         for oid in objectives {
             let obj = objective!(self, oid)?;
-            self.ephemeral.update_objective_markup(obj)
+            self.ephemeral.update_objective_markup(false, obj)
         }
         Ok(())
     }

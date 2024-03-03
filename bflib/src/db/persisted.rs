@@ -1,4 +1,4 @@
-/* 
+/*
 Copyright 2024 Eric Stokes.
 
 This file is part of bflib.
@@ -20,12 +20,17 @@ use super::{
     player::Player,
     Map, Set,
 };
+use anyhow::{anyhow, Result};
+use compact_str::CompactString;
 use dcso3::{
     coalition::Side,
     net::{SlotId, Ucid},
-    String
+    String,
 };
+use chrono::{prelude::*, Duration};
+use fxhash::FxHashMap;
 use serde_derive::{Deserialize, Serialize};
+use smallvec::smallvec;
 use std::{
     fs::{self, File},
     path::{Path, PathBuf},
@@ -59,7 +64,43 @@ pub struct Persisted {
 }
 
 impl Persisted {
-    pub fn save(&self, path: &Path) -> anyhow::Result<()> {
+    pub fn save(&self, path: &Path) -> Result<()> {
+        fn rotate(path: &Path) -> Result<()> {
+            if path.exists() {
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or_else(|| anyhow!("save file with no name"))?;
+                use std::fmt::Write;
+                let now = Utc::now();
+                let mut with_ts = PathBuf::from(path);
+                let mut backup = CompactString::from(name);
+                write!(backup, "{}", now.timestamp()).unwrap();
+                with_ts.set_file_name(backup);
+                fs::rename(path, with_ts)?;
+                let dir = path.parent().ok_or_else(|| anyhow!("path has no parent dir"))?;
+                let mut by_age: FxHashMap<Duration, Vec<PathBuf>> = FxHashMap::default();
+                for file in fs::read_dir(dir)? {
+                    let file = file?;
+                    let fname = match file.file_name().to_str() {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    if file.file_type()?.is_file() {
+                        if let Some(ts) = fname.strip_prefix(name) {
+                            if let Ok(ts) = ts.parse::<i64>() {
+                                if let Some(ts) = DateTime::<Utc>::from_timestamp(ts, 0) {
+                                    if now - ts > Duration::weeks(1) {
+                                        to_delete.push(PathBuf::from(file.path()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
         let mut tmp = PathBuf::from(path);
         tmp.set_extension("tmp");
         let file = File::options()

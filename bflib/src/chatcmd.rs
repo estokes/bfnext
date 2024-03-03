@@ -441,7 +441,7 @@ pub(super) fn process(
     } else if msg.starts_with("-") {
         ctx.db.ephemeral.msgs().send(
             MsgTyp::Chat(Some(id)),
-            format_compact!("{msg} is not a valid command. Valid commands follow."),
+            format_compact!(" {msg} is not a valid command. Valid commands follow."),
         );
         help_command(ctx, id);
         Ok("".into())

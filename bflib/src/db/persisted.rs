@@ -21,7 +21,7 @@ use super::{
     Map, Set,
 };
 use anyhow::{anyhow, Result};
-use chrono::{prelude::*, Duration};
+use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
     coalition::Side,
@@ -31,7 +31,6 @@ use dcso3::{
 use fxhash::FxHashMap;
 use log::error;
 use serde_derive::{Deserialize, Serialize};
-use smallvec::smallvec;
 use std::{
     fs::{self, File},
     path::{Path, PathBuf},
@@ -85,7 +84,8 @@ impl Persisted {
                 let mut by_age: FxHashMap<i64, Vec<(i64, PathBuf)>> = FxHashMap::default();
                 for file in fs::read_dir(dir)? {
                     let file = file?;
-                    let fname = match file.file_name().to_str() {
+                    let fname = file.file_name();
+                    let fname = match fname.to_str() {
                         Some(s) => s,
                         None => continue,
                     };
@@ -128,7 +128,7 @@ impl Persisted {
                     }
                 }
                 for (_, mut paths) in by_age {
-                    paths.sort_by_key(|(ts, _)| ts);
+                    paths.sort_by_key(|(ts, _)| *ts);
                     paths.reverse();
                     while paths.len() > 1 {
                         fs::remove_file(paths.pop().unwrap().1)?;

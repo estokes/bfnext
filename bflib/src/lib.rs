@@ -771,7 +771,7 @@ fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) {
                 .panel_to_all(60, true, "The server will restart in one minute")
         }
         if now > asd.when {
-            let _ = admin::admin_shutdown(ctx, lua);
+            let _ = admin::admin_shutdown(ctx, lua, false);
         }
     }
 }

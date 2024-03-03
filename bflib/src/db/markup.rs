@@ -108,6 +108,7 @@ impl ObjectiveMarkup {
 
     pub(super) fn update(&mut self, msgq: &mut MsgQ, force: bool, obj: &Objective) {
         if obj.owner != self.side || force {
+            let new_owner = obj.owner != self.side;
             let text_color = |a| text_color(obj.owner, a);
             self.side = obj.owner;
             msgq.set_markup_color(self.name, text_color(0.75));
@@ -116,8 +117,10 @@ impl ObjectiveMarkup {
             msgq.set_markup_color(self.logi_label, text_color(0.75));
             msgq.set_markup_color(self.supply_label, text_color(0.75));
             msgq.set_markup_color(self.fuel_label, text_color(0.75));
-            for id in self.supply_connections.drain(..) {
-                msgq.delete_mark(id);
+            if new_owner {
+                for id in self.supply_connections.drain(..) {
+                    msgq.delete_mark(id);
+                }
             }
         }
         if obj.threatened != self.threatened || force {
@@ -311,7 +314,11 @@ impl ObjectiveMarkup {
                     let rdir = (pos - dobj.pos).normalize();
                     let dpos = dobj.pos + rdir * dobj.radius * 1.1;
                     msgq.arrow_to(
-                        if dobj.is_farp() { dobj.owner.into() } else { all_spec },
+                        if dobj.is_farp() {
+                            dobj.owner.into()
+                        } else {
+                            all_spec
+                        },
                         id,
                         ArrowSpec {
                             start: LuaVec3(Vector3::new(dpos.x, 0., dpos.y)),

@@ -5,7 +5,7 @@ cfg =
     ["listStartIndex"] = 1,
     ["advanced"] = 
     {
-        ["allow_change_tailno"] = false,
+        ["allow_change_tailno"] = true,
         ["disable_events"] = false,
         ["allow_ownship_export"] = true,
         ["allow_object_export"] = false,
@@ -44,5 +44,5 @@ cfg =
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,
     ["require_pure_models"] = true,
-    ["maxPlayers"] = "51",
+    ["maxPlayers"] = "40",
 } -- end of cfg

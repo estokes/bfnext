@@ -37,6 +37,7 @@ pub enum SpawnLoc {
         pos: Vector2,
         heading: f64,
         altitude: f64,
+        speed: f64,
     },
     AtPos {
         /// the position of the player. the group will be offset in the

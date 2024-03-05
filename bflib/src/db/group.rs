@@ -417,6 +417,7 @@ impl Db {
                     pos,
                     heading,
                     altitude,
+                    speed: _
                 } => {
                     let group_center = centroid2d(positions.iter().map(|p| *p));
                     for p in positions.iter_mut() {

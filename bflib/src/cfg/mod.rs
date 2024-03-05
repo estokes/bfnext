@@ -151,6 +151,7 @@ pub enum UnitTag {
     Unarmed,
     Invincible,
     Driveable,
+    AWACS,
 }
 
 #[derive(

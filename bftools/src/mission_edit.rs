@@ -358,8 +358,14 @@ impl VehicleTemplates {
         })
     }
 
-    fn apply(&self, lua: &Lua, objectives: &mut Vec<TriggerZone>, base: &mut LoadedMiz) -> Result<()> {
+    fn apply(
+        &self,
+        lua: &Lua,
+        objectives: &mut Vec<TriggerZone>,
+        base: &mut LoadedMiz,
+    ) -> Result<()> {
         let mut replace_count: HashMap<String, isize> = HashMap::new();
+        let mut stn = 0u64;
         //apply weapon/APA templates to mission table in self
         info!("replacing slots with template payloads");
         for coa in base
@@ -383,16 +389,29 @@ impl VehicleTemplates {
                         let unit = unit.context("getting unit")?.1;
                         // skip ai aircraft
                         if unit.raw_get::<_, String>("skill")?.as_str() != "Client" {
-                            continue
+                            continue;
                         }
                         let unit_type: String = unit.raw_get("type")?;
                         match self.payload.get(&unit_type) {
                             Some(w) => unit.set("payload", w.deep_clone(lua)?)?,
                             None => warn!("no payload table for {unit_type}"),
                         }
-                        if let Some(w) = self.prop_aircraft.get(&unit_type) {
-                            unit.set("AddPropAircraft", w.deep_clone(lua)?)?
-                        }
+                        let stn_string = match self.prop_aircraft.get(&unit_type) {
+                            None => String::new(),
+                            Some(tmpl) => {
+                                let tmpl = tmpl.deep_clone(lua)?;
+                                let stn = if tmpl.contains_key("STN_L16")? {
+                                    tmpl.raw_set("STN_L16", format!("{:005o}", stn))?;
+                                    let s = format!(" STN#{:005o}", stn);
+                                    stn += 1;
+                                    s
+                                } else {
+                                    String::new()
+                                };
+                                unit.set("AddPropAircraft", tmpl)?;
+                                stn
+                            }
+                        };
                         if let Some(w) = self.radio.get(&unit_type) {
                             unit.set("Radio", w.deep_clone(lua)?)?
                         }
@@ -404,8 +423,8 @@ impl VehicleTemplates {
                                 let count =
                                     increment_key(&mut trigger_zone.spawn_count, &unit_type);
                                 let new_name = format!(
-                                    "{} {} {}",
-                                    trigger_zone.objective_name, &unit_type, count
+                                    "{} {} {}{}",
+                                    trigger_zone.objective_name, &unit_type, count, stn_string
                                 );
                                 unit.set("name", new_name.clone())?;
                                 group.set("name", new_name)?;

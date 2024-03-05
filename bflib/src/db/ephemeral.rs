@@ -24,7 +24,7 @@ use super::{
 use crate::{
     cfg::{
         ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
-        DeployableLogistics, DroneCfg, Troop, Vehicle, WarehouseConfig,
+        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
     },
     maybe,
     msgq::MsgQ,
@@ -51,6 +51,7 @@ use dcso3::{
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::{IndexMap, IndexSet};
 use log::info;
+use mlua::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use std::{
     cmp::max,
@@ -81,7 +82,7 @@ pub(super) struct Production {
     pub(super) liquids: FxHashMap<LiquidType, u32>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Ephemeral {
     pub(super) dirty: bool,
     pub cfg: Arc<Cfg>,
@@ -104,10 +105,44 @@ pub struct Ephemeral {
     pub(super) production_by_side: FxHashMap<Side, Arc<Production>>,
     pub(super) actions_taken: FxHashMap<Side, FxHashMap<String, u32>>,
     pub(super) delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
+    pub(super) awacs_stn: u32,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<(GroupId, Despawn)>,
     sync_warehouse: Vec<(ObjectiveId, Vehicle)>,
     pub(super) msgs: MsgQ,
+}
+
+impl Default for Ephemeral {
+    fn default() -> Self {
+        Self {
+            dirty: false,
+            cfg: Arc::new(Cfg::default()),
+            players_by_slot: IndexMap::default(),
+            cargo: FxHashMap::default(),
+            deployable_idx: FxHashMap::default(),
+            group_marks: FxHashMap::default(),
+            objective_markup: FxHashMap::default(),
+            object_id_by_uid: FxHashMap::default(),
+            uid_by_object_id: FxHashMap::default(),
+            object_id_by_slot: FxHashMap::default(),
+            slot_by_object_id: FxHashMap::default(),
+            uid_by_static: FxHashMap::default(),
+            airbase_by_oid: FxHashMap::default(),
+            used_pad_templates: FxHashSet::default(),
+            force_to_spectators: BTreeMap::default(),
+            units_able_to_move: IndexSet::default(),
+            groups_with_move_missions: FxHashMap::default(),
+            units_potentially_close_to_enemies: FxHashSet::default(),
+            production_by_side: FxHashMap::default(),
+            actions_taken: FxHashMap::default(),
+            delayspawnq: BTreeMap::default(),
+            awacs_stn: 0o77777,
+            spawnq: VecDeque::default(),
+            despawnq: VecDeque::default(),
+            sync_warehouse: Vec::default(),
+            msgs: MsgQ::default(),
+        }
+    }
 }
 
 impl Ephemeral {
@@ -209,7 +244,7 @@ impl Ephemeral {
             for _ in 0..max(1, slen >> 4) {
                 if let Some(gid) = self.spawnq.pop_front() {
                     let group = maybe!(persisted.groups, gid, "group")?;
-                    spawn_group(persisted, idx, spctx, group)?;
+                    self.spawn_group(persisted, idx, spctx, group)?;
                 }
             }
         }
@@ -458,7 +493,11 @@ impl Ephemeral {
         None
     }
 
-    pub(super) fn unit_dead(&mut self, per: &Persisted, id: &DcsOid<ClassUnit>) -> Option<(UnitId, Option<Ucid>)> {
+    pub(super) fn unit_dead(
+        &mut self,
+        per: &Persisted,
+        id: &DcsOid<ClassUnit>,
+    ) -> Option<(UnitId, Option<Ucid>)> {
         let (uid, ucid) = match self.slot_by_object_id.remove(id) {
             Some(slot) => match self.player_deslot(per, &slot) {
                 Some((uid, ucid)) => (uid, Some(ucid)),
@@ -637,114 +676,122 @@ impl Ephemeral {
         self.cfg = Arc::new(cfg);
         Ok(())
     }
-}
 
-pub(super) fn spawn_group<'lua>(
-    persisted: &Persisted,
-    idx: &MizIndex,
-    spctx: &SpawnCtx<'lua>,
-    group: &SpawnedGroup,
-) -> Result<Option<Spawned<'lua>>> {
-    let template = spctx
-        .get_template(
-            idx,
-            GroupKind::Any,
-            group.side,
-            group.template_name.as_str(),
-        )
-        .with_context(|| format_compact!("getting template {}", group.template_name))?;
-    template.group.set("lateActivation", false)?;
-    template.group.set("hidden", false)?;
-    template.group.set_name(group.name.clone())?;
-    if let DeployKind::Action { loc, .. } = &group.origin {
-        match loc {
-            SpawnLoc::AtPos { .. }
-            | SpawnLoc::AtPosWithCenter { .. }
-            | SpawnLoc::AtPosWithComponents { .. }
-            | SpawnLoc::AtTrigger { .. } => (),
-            SpawnLoc::InAir {
-                pos,
-                heading,
-                altitude,
-            } => {
-                let dst = pos + pointing_towards2(*heading) * 10_000.;
-                let route = template.group.route()?;
-                macro_rules! pt {
-                    ($pos:expr) => {
-                        MissionPoint {
-                            action: None,
-                            typ: PointType::TurningPoint,
-                            airdrome_id: None,
-                            time_re_fu_ar: None,
-                            helipad: None,
-                            link_unit: None,
-                            pos: LuaVec2($pos),
-                            alt: *altitude,
-                            alt_typ: None,
-                            speed: 200.,
-                            speed_locked: None,
-                            eta: None,
-                            eta_locked: None,
-                            name: None,
-                            task: Box::new(Task::ComboTask(vec![])),
-                        }
-                    };
+    pub(super) fn spawn_group<'lua>(
+        &mut self,
+        persisted: &Persisted,
+        idx: &MizIndex,
+        spctx: &SpawnCtx<'lua>,
+        group: &SpawnedGroup,
+    ) -> Result<Option<Spawned<'lua>>> {
+        let template = spctx
+            .get_template(
+                idx,
+                GroupKind::Any,
+                group.side,
+                group.template_name.as_str(),
+            )
+            .with_context(|| format_compact!("getting template {}", group.template_name))?;
+        template.group.set("lateActivation", false)?;
+        template.group.set("hidden", false)?;
+        template.group.set_name(group.name.clone())?;
+        if let DeployKind::Action { loc, .. } = &group.origin {
+            match loc {
+                SpawnLoc::AtPos { .. }
+                | SpawnLoc::AtPosWithCenter { .. }
+                | SpawnLoc::AtPosWithComponents { .. }
+                | SpawnLoc::AtTrigger { .. } => (),
+                SpawnLoc::InAir {
+                    pos,
+                    heading,
+                    altitude,
+                    speed,
+                } => {
+                    let dst = pos + pointing_towards2(*heading) * 10_000.;
+                    let route = template.group.route()?;
+                    macro_rules! pt {
+                        ($pos:expr) => {
+                            MissionPoint {
+                                action: None,
+                                typ: PointType::TurningPoint,
+                                airdrome_id: None,
+                                time_re_fu_ar: None,
+                                helipad: None,
+                                link_unit: None,
+                                pos: LuaVec2($pos),
+                                alt: *altitude,
+                                alt_typ: None,
+                                speed: *speed,
+                                speed_locked: None,
+                                eta: None,
+                                eta_locked: None,
+                                name: None,
+                                task: Box::new(Task::ComboTask(vec![])),
+                            }
+                        };
+                    }
+                    route.set_points(vec![pt!(*pos), pt!(dst)])?;
+                    template.group.set_route(route)?;
+                    template.group.set("heading", *heading)?;
                 }
-                route.set_points(vec![pt!(*pos), pt!(dst)])?;
-                template.group.set_route(route)?;
-                template.group.set("heading", *heading)?;
             }
         }
-    }
-    let mut points: SmallVec<[Vector2; 16]> = smallvec![];
-    let by_tname: FxHashMap<&str, &SpawnedUnit> = group
-        .units
-        .into_iter()
-        .filter_map(|uid| {
-            persisted.units.get(uid).and_then(|u| {
-                points.push(u.pos);
-                if u.dead {
-                    None
-                } else {
-                    Some((u.template_name.as_str(), u))
-                }
+        let mut points: SmallVec<[Vector2; 16]> = smallvec![];
+        let by_tname: FxHashMap<&str, &SpawnedUnit> = group
+            .units
+            .into_iter()
+            .filter_map(|uid| {
+                persisted.units.get(uid).and_then(|u| {
+                    points.push(u.pos);
+                    if u.dead {
+                        None
+                    } else {
+                        Some((u.template_name.as_str(), u))
+                    }
+                })
             })
-        })
-        .collect();
-    let alive = {
-        let units = template.group.units()?;
-        let mut i = 1;
-        while i as usize <= units.len() {
-            let unit = units.get(i)?;
-            match by_tname.get(unit.name()?.as_str()) {
-                None => units.remove(i)?,
-                Some(su) => {
-                    unit.raw_remove("unitId")?;
-                    unit.set_pos(su.pos)?;
-                    unit.set_alt(su.position.p.y)?;
-                    unit.set_heading(su.heading)?;
-                    unit.set_name(su.name.clone())?;
-                    i += 1;
+            .collect();
+        let alive = {
+            let units = template.group.units()?;
+            let mut i = 1;
+            while i as usize <= units.len() {
+                let unit = units.get(i)?;
+                match by_tname.get(unit.name()?.as_str()) {
+                    None => units.remove(i)?,
+                    Some(su) => {
+                        if su.tags.contains(UnitTag::AWACS) {
+                            let stn = String::from(format_compact!("{:005o}", self.awacs_stn));
+                            self.awacs_stn -= 1;
+                            let props = unit.raw_get::<_, LuaTable>("AddPropAircraft")?;
+                            props.raw_set("STN_L16", stn)?;
+                        }
+                        unit.raw_remove("unitId")?;
+                        unit.set_pos(su.pos)?;
+                        unit.set_alt(su.position.p.y)?;
+                        unit.set_heading(su.heading)?;
+                        unit.set_name(su.name.clone())?;
+                        i += 1;
+                    }
                 }
             }
+            units.len() > 0
+        };
+        if alive {
+            let point = centroid2d(points.iter().map(|p| *p));
+            template.group.set_pos(point)?;
+            let radius = points
+                .iter()
+                .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
+                .fold(0., |acc, d| if d > acc { d } else { acc });
+            let radius = radius.sqrt();
+            spctx.remove_junk(point, radius * 1.10).with_context(|| {
+                format_compact!("removing junk before spawn of {}", group.template_name)
+            })?;
+            Ok(Some(spctx.spawn(template).with_context(|| {
+                format_compact!("spawning template {}", group.template_name)
+            })?))
+        } else {
+            Ok(None)
         }
-        units.len() > 0
-    };
-    if alive {
-        let point = centroid2d(points.iter().map(|p| *p));
-        template.group.set_pos(point)?;
-        let radius = points
-            .iter()
-            .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
-            .fold(0., |acc, d| if d > acc { d } else { acc });
-        let radius = radius.sqrt();
-        spctx.remove_junk(point, radius * 1.10).with_context(|| {
-            format_compact!("removing junk before spawn of {}", group.template_name)
-        })?;
-        Ok(Some(spctx.spawn(template).with_context(|| {
-            format_compact!("spawning template {}", group.template_name)
-        })?))
-    } else {
-        Ok(None)
     }
 }

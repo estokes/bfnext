@@ -9,7 +9,7 @@ use crate::{
         Action, ActionKind, AiPlaneCfg, AiPlaneKind, BomberCfg, DeployableCfg, DroneCfg,
         LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
-    db::{cargo::Oldest, ephemeral, group::DeployKind},
+    db::{cargo::Oldest, group::DeployKind},
     group, group_mut,
     jtac::{JtId, Jtacs},
     objective,
@@ -412,23 +412,28 @@ impl Db {
                     cfg: (),
                 };
                 if let ActionKind::Awacs(_) = &spec.kind {
-                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    self.ephemeral
+                        .spawn_group(&self.persisted, idx, spctx, group)?;
                     return self.move_awacs(spctx, side, player.clone(), args);
                 }
                 if let ActionKind::Tanker(_) = &spec.kind {
-                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    self.ephemeral
+                        .spawn_group(&self.persisted, idx, spctx, group)?;
                     return self.move_tanker(spctx, side, player.clone(), args);
                 }
                 if let ActionKind::Drone(_) = &spec.kind {
-                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    self.ephemeral
+                        .spawn_group(&self.persisted, idx, spctx, group)?;
                     return self.move_drone(spctx, side, player.clone(), args);
                 }
                 if let ActionKind::Fighters(_) = &spec.kind {
-                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    self.ephemeral
+                        .spawn_group(&self.persisted, idx, spctx, group)?;
                     return self.move_ai_fighters(spctx, side, player.clone(), args);
                 }
                 if let ActionKind::Attackers(_) = &spec.kind {
-                    ephemeral::spawn_group(&self.persisted, idx, spctx, group)?;
+                    self.ephemeral
+                        .spawn_group(&self.persisted, idx, spctx, group)?;
                     return self.move_ai_attackers(spctx, side, player.clone(), args);
                 }
             }
@@ -471,6 +476,7 @@ impl Db {
                 cfg: args.cfg.plane,
             },
             None,
+            BitFlags::empty(),
         )?;
         self.move_drone(
             spctx,
@@ -517,8 +523,18 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        let gid =
-            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &args,
+            None,
+            BitFlags::empty(),
+        )?;
         self.move_ai_fighters(
             spctx,
             side,
@@ -567,8 +583,18 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        let gid =
-            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &args,
+            None,
+            BitFlags::empty(),
+        )?;
         self.move_ai_attackers(
             spctx,
             side,
@@ -724,8 +750,18 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        let gid =
-            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &args,
+            None,
+            BitFlags::empty(),
+        )?;
         self.move_tanker(
             spctx,
             side,
@@ -761,6 +797,7 @@ impl Db {
                 pos: args.pos,
             },
             Some(args.pos),
+            BitFlags::empty(),
         )?;
         self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
@@ -801,6 +838,7 @@ impl Db {
                 pos: from,
             },
             Some(to),
+            BitFlags::empty(),
         )?;
         self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
@@ -829,6 +867,7 @@ impl Db {
                 cfg: args.cfg.clone(),
             },
             Some(pos),
+            BitFlags::empty(),
         )?;
         self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
@@ -856,6 +895,7 @@ impl Db {
                 pos: args.pos,
             },
             Some(args.pos),
+            BitFlags::empty(),
         )?;
         self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
@@ -956,6 +996,7 @@ impl Db {
                 pos: tgt,
             },
             Some(tgt),
+            BitFlags::empty(),
         )?;
         self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
     }
@@ -971,6 +1012,7 @@ impl Db {
         heading: f64,
         args: &WithPos<AiPlaneCfg>,
         destination: Option<Vector2>,
+        tags: BitFlags<UnitTag>,
     ) -> Result<GroupId> {
         let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, args.pos, |o| {
             o.owner == side
@@ -993,6 +1035,7 @@ impl Db {
             pos,
             heading,
             altitude: args.cfg.altitude,
+            speed: args.cfg.speed,
         };
         let origin = DeployKind::Action {
             marks: FxHashSet::default(),
@@ -1012,10 +1055,11 @@ impl Db {
                 sloc,
                 &args.cfg.template,
                 origin,
-                UnitTag::Driveable.into(),
+                tags | UnitTag::Driveable,
             )
             .context("creating group")?;
-        ephemeral::spawn_group(&self.persisted, idx, spctx, group!(self, gid)?)
+        self.ephemeral
+            .spawn_group(&self.persisted, idx, spctx, group!(self, gid)?)
             .context("spawning group")?;
         Ok(gid)
     }
@@ -1042,8 +1086,18 @@ impl Db {
         action: Action,
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
-        let gid =
-            self.add_and_spawn_ai_air(spctx, idx, side, &ucid, name, action, 0., &args, None)?;
+        let gid = self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &args,
+            None,
+            UnitTag::AWACS.into(),
+        )?;
         self.move_awacs(
             spctx,
             side,

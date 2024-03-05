@@ -30,6 +30,10 @@ use log::info;
 use mlua::Value;
 use serde_derive::{Deserialize, Serialize};
 
+fn default_speed() -> f64 {
+    220.
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SpawnLoc {
     /// only for air units, obviously
@@ -37,6 +41,7 @@ pub enum SpawnLoc {
         pos: Vector2,
         heading: f64,
         altitude: f64,
+        #[serde(default = "default_speed")]
         speed: f64,
     },
     AtPos {

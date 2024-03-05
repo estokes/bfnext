@@ -780,8 +780,8 @@ impl Db {
                 }
             }
             if !obj.spawned && spawn {
-                let radius2 = obj.radius.powi(2);
                 obj.spawned = true;
+                let radius2 = obj.radius.powi(2);
                 for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                     let group = group!(self, gid)?;
                     let farp = obj.kind.is_farp();
@@ -825,7 +825,7 @@ impl Db {
                         }
                     }
                 }
-            } else if (!spawn && obj.enabled) || (spawn && !obj.enabled) {
+            } else if spawn != obj.enabled {
                 obj.enabled = spawn;
                 for gid in maybe!(&obj.groups, obj.owner, "side group")? {
                     if let Some(oid) = self.ephemeral.object_id_by_gid.get(gid) {
@@ -840,7 +840,7 @@ impl Db {
                             .get_controller()
                             .context("get controller")?
                             .set_on_off(spawn)
-                            .context("disable ai")?
+                            .context("enable/disable ai")?
                     }
                 }
             }

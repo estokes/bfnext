@@ -509,6 +509,10 @@ fn default_msgs_per_second() -> usize {
     10 
 }
 
+fn default_cull_after() -> u32 {
+    1800
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {
@@ -549,6 +553,7 @@ pub struct Cfg {
     /// within this distance (Meters)
     pub ground_vehicle_cull_distance: u32,
     /// If a base has been inactive for this long then cull it's units (Seconds)
+    #[serde(default = "default_cull_after")]
     pub cull_after: u32,
     /// how often to do more expensive checks such as unit culling and
     /// updating unit positions (Seconds)

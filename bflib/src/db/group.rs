@@ -19,10 +19,7 @@ use super::{
     Db, Set,
 };
 use crate::{
-    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags},
-    group, group_by_name,
-    spawnctx::{Despawn, SpawnCtx, SpawnLoc},
-    unit, unit_by_name, unit_mut, group_mut,
+    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags}, group, group_by_name, group_health, group_mut, spawnctx::{Despawn, SpawnCtx, SpawnLoc}, unit, unit_by_name, unit_mut
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -227,9 +224,11 @@ impl Db {
                             Some(pos_mark)
                         } else {
                             let dst_msg = format_compact!("{name} {gid} destination");
-                            marks.insert(self.ephemeral
-                                .msgs
-                                .mark_to_side(group.side, *dst, true, dst_msg));
+                            marks.insert(
+                                self.ephemeral
+                                    .msgs
+                                    .mark_to_side(group.side, *dst, true, dst_msg),
+                            );
                             Some(pos_mark)
                         }
                     }
@@ -238,10 +237,11 @@ impl Db {
             DeployKind::Crate { player, spec, .. } => {
                 let name = self.persisted.players[player].name.clone();
                 let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
-                Some(self
-                    .ephemeral
-                    .msgs
-                    .mark_to_side(group.side, group_center, true, msg))
+                Some(
+                    self.ephemeral
+                        .msgs
+                        .mark_to_side(group.side, group_center, true, msg),
+                )
             }
             DeployKind::Deployed {
                 spec,
@@ -260,10 +260,11 @@ impl Db {
                     "{} {gid} deployed by {name}{resp}",
                     spec.path.last().unwrap()
                 );
-                Some(self
-                    .ephemeral
-                    .msgs
-                    .mark_to_side(group.side, group_center, true, msg))
+                Some(
+                    self.ephemeral
+                        .msgs
+                        .mark_to_side(group.side, group_center, true, msg),
+                )
             }
             DeployKind::Troop {
                 player,
@@ -279,10 +280,11 @@ impl Db {
                     })
                     .unwrap_or(CompactString::from(""));
                 let msg = format_compact!("{} {gid} deployed by {name}{resp}", spec.name);
-                Some(self
-                    .ephemeral
-                    .msgs
-                    .mark_to_side(group.side, group_center, true, msg))
+                Some(
+                    self.ephemeral
+                        .msgs
+                        .mark_to_side(group.side, group_center, true, msg),
+                )
             }
         };
         if let Some(id) = id {
@@ -359,8 +361,10 @@ impl Db {
             }
             Some(_) => {
                 // it's a normal group
-                self.ephemeral
-                    .push_despawn(*gid, Despawn::Group(group.name.clone()));
+                if let Some(oid) = self.ephemeral.object_id_by_gid.get(gid) {
+                    self.ephemeral
+                        .push_despawn(*gid, Despawn::Group(oid.clone()));
+                }
             }
         }
         Ok(())
@@ -417,7 +421,7 @@ impl Db {
                     pos,
                     heading,
                     altitude,
-                    speed: _
+                    speed: _,
                 } => {
                     let group_center = centroid2d(positions.iter().map(|p| *p));
                     for p in positions.iter_mut() {
@@ -841,15 +845,8 @@ impl Db {
     }
 
     pub fn group_health(&self, gid: &GroupId) -> Result<(usize, usize)> {
-        let group = group!(self, gid)?;
-        let mut alive = 0;
-        for uid in &group.units {
-            if !unit!(self, uid)?.dead {
-                alive += 1;
-            }
-        }
-        Ok((alive, group.units.len()))
-    }
+        group_health!(self, gid)
+    } 
 
     pub fn artillery_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
         let range2 = (self.ephemeral.cfg.artillery_mission_range as f64).powi(2);

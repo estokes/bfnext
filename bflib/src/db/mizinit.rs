@@ -98,6 +98,7 @@ impl Db {
         let obj = Objective {
             id,
             spawned: false,
+            enabled: false,
             threatened: false,
             pos,
             radius,
@@ -113,7 +114,7 @@ impl Db {
             last_change_ts: Utc::now(),
             last_threatened_ts: Utc::now(),
             warehouse: Warehouse::default(),
-            last_cull: DateTime::<Utc>::default(),
+            last_activate: DateTime::<Utc>::default(),
             // initialized by load
             threat_pos3: Vector3::default(),
         };

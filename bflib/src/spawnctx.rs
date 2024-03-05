@@ -19,9 +19,9 @@ use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side, Static},
     env::miz::{self, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
-    group::{Group, GroupCategory},
+    group::{ClassGroup, Group, GroupCategory},
     land::Land,
-    object::ObjectCategory,
+    object::{DcsObject, DcsOid, ObjectCategory},
     world::{SearchVolume, World},
     DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
@@ -90,7 +90,7 @@ pub struct SpawnCtx<'lua> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Despawn {
-    Group(String),
+    Group(DcsOid<ClassGroup>),
     Static(String),
 }
 
@@ -204,10 +204,10 @@ impl<'lua> SpawnCtx<'lua> {
 
     pub fn despawn(&self, name: Despawn) -> Result<()> {
         match name {
-            Despawn::Group(name) => {
-                match dcso3::group::Group::get_by_name(self.lua, &*name) {
+            Despawn::Group(oid) => {
+                match dcso3::group::Group::get_instance(self.lua, &oid) {
                     Ok(group) => group.destroy()?,
-                    Err(e) => info!("attempt to despawn unknown group {} {}", name, e),
+                    Err(e) => info!("attempt to despawn invalid group {e:?}"),
                 }
                 Ok(())
             }

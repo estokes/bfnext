@@ -150,6 +150,20 @@ macro_rules! objective_mut {
     };
 }
 
+#[macro_export]
+macro_rules! group_health {
+    ($t:expr, $gid:expr) => {{
+        let group = group!($t, $gid)?;
+        let mut alive = 0;
+        for uid in &group.units {
+            if !unit!($t, uid)?.dead {
+                alive += 1;
+            }
+        }
+        Ok::<_, anyhow::Error>((alive, group.units.len()))
+    }}
+}
+
 #[derive(Debug, Default)]
 pub struct Db {
     pub persisted: Persisted,

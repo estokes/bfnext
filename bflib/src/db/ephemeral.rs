@@ -39,6 +39,7 @@ use dcso3::{
     coalition::Side,
     controller::{MissionPoint, PointType, Task},
     env::miz::{GroupKind, Miz, MizIndex},
+    group::ClassGroup,
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
     pointing_towards2,
@@ -95,6 +96,8 @@ pub struct Ephemeral {
     pub(super) uid_by_object_id: FxHashMap<DcsOid<ClassUnit>, UnitId>,
     pub(super) object_id_by_slot: FxHashMap<SlotId, DcsOid<ClassUnit>>,
     pub(super) slot_by_object_id: FxHashMap<DcsOid<ClassUnit>, SlotId>,
+    pub(super) object_id_by_gid: FxHashMap<GroupId, DcsOid<ClassGroup>>,
+    pub(super) gid_by_object_id: FxHashMap<DcsOid<ClassGroup>, GroupId>,
     pub(super) uid_by_static: FxHashMap<DcsOid<ClassStatic>, UnitId>,
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
     used_pad_templates: FxHashSet<String>,
@@ -126,6 +129,8 @@ impl Default for Ephemeral {
             uid_by_object_id: FxHashMap::default(),
             object_id_by_slot: FxHashMap::default(),
             slot_by_object_id: FxHashMap::default(),
+            object_id_by_gid: FxHashMap::default(),
+            gid_by_object_id: FxHashMap::default(),
             uid_by_static: FxHashMap::default(),
             airbase_by_oid: FxHashMap::default(),
             used_pad_templates: FxHashSet::default(),
@@ -227,8 +232,11 @@ impl Ephemeral {
         let slen = self.spawnq.len();
         if dlen > 0 {
             for _ in 0..max(1, dlen >> 4) {
-                if let Some((gid, name)) = self.despawnq.pop_front() {
+                if let Some((gid, despawn)) = self.despawnq.pop_front() {
                     if let Some(group) = persisted.groups.get(&gid) {
+                        if let Some(id) = self.object_id_by_gid.remove(&gid) {
+                            self.gid_by_object_id.remove(&id);
+                        }
                         for uid in &group.units {
                             self.units_able_to_move.swap_remove(uid);
                             self.units_potentially_close_to_enemies.remove(uid);
@@ -237,7 +245,7 @@ impl Ephemeral {
                             }
                         }
                     }
-                    spctx.despawn(name)?
+                    spctx.despawn(despawn)?
                 }
             }
         } else if slen > 0 {
@@ -776,7 +784,9 @@ impl Ephemeral {
             }
             units.len() > 0
         };
-        if alive {
+        if !alive {
+            Ok(None)
+        } else {
             let point = centroid2d(points.iter().map(|p| *p));
             template.group.set_pos(point)?;
             let radius = points
@@ -787,11 +797,18 @@ impl Ephemeral {
             spctx.remove_junk(point, radius * 1.10).with_context(|| {
                 format_compact!("removing junk before spawn of {}", group.template_name)
             })?;
-            Ok(Some(spctx.spawn(template).with_context(|| {
-                format_compact!("spawning template {}", group.template_name)
-            })?))
-        } else {
-            Ok(None)
+            let spawned = spctx
+                .spawn(template)
+                .with_context(|| format_compact!("spawning template {}", group.template_name))?;
+            match &spawned {
+                Spawned::Static(_) => (),
+                Spawned::Group(g) => {
+                    let oid = g.object_id()?;
+                    self.object_id_by_gid.insert(group.id, oid.clone());
+                    self.gid_by_object_id.insert(oid, group.id);
+                }
+            }
+            Ok(Some(spawned))
         }
     }
 }

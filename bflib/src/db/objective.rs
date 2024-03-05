@@ -15,13 +15,13 @@ for more details.
 */
 
 use super::{
-    group::{DeployKind, GroupId, UnitId},
+    group::{DeployKind, GroupId, SpawnedUnit, UnitId},
     logistics::{Inventory, Warehouse},
     Db, Map, Set,
 };
 use crate::{
     cfg::{Deployable, DeployableLogistics, UnitTag, Vehicle},
-    group, group_mut,
+    group, group_health, group_mut,
     landcache::LandCache,
     maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
@@ -37,6 +37,7 @@ use dcso3::{
     coord::Coord,
     cvt_err,
     env::miz::{self, GroupKind, MizIndex},
+    group::Group,
     land::Land,
     net::{SlotId, Ucid},
     object::DcsObject,
@@ -45,11 +46,11 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
-use log::{debug, error};
+use log::{debug, error, warn};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{cmp::max, str::FromStr};
+use std::{cmp::max, str::FromStr, sync::Arc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectiveKind {
@@ -251,7 +252,9 @@ pub struct Objective {
     #[serde(skip)]
     pub(super) spawned: bool,
     #[serde(skip)]
-    pub(super) last_cull: DateTime<Utc>,
+    pub(super) enabled: bool,
+    #[serde(skip)]
+    pub(super) last_activate: DateTime<Utc>,
     #[serde(skip)]
     pub(super) threat_pos3: Vector3,
 }
@@ -520,11 +523,12 @@ impl Db {
             supply: 0,
             fuel: 0,
             spawned: true,
+            enabled: true,
             threatened: true,
             warehouse: Warehouse::default(),
             last_threatened_ts: now,
             last_change_ts: now,
-            last_cull: DateTime::<Utc>::default(),
+            last_activate: DateTime::<Utc>::default(),
             threat_pos3,
         };
         let oid = obj.id;
@@ -666,17 +670,19 @@ impl Db {
                     .map(|inst| (side, inst.position.p, inst.velocity, inst.typ.clone()))
             })
             .collect::<SmallVec<[_; 64]>>();
-        let cfg = &self.ephemeral.cfg;
+        let cfg = Arc::clone(&self.ephemeral.cfg);
         let cull_distance = (cfg.unit_cull_distance as f64).powi(2);
         let ground_cull_distance = (cfg.ground_vehicle_cull_distance as f64).powi(2);
-        let mut to_spawn: SmallVec<[ObjectiveId; 8]> = smallvec![];
-        let mut to_cull: SmallVec<[ObjectiveId; 8]> = smallvec![];
-        let mut threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
-        let mut not_threatened: SmallVec<[ObjectiveId; 16]> = smallvec![];
         let mut is_close_to_enemies: FxHashSet<UnitId> = FxHashSet::default();
-        let mut check_close_units = |obj: &Objective, spawn: &mut bool, threat: &mut bool| {
-            for uid in &self.ephemeral.units_potentially_close_to_enemies {
-                let unit = unit!(self, uid)?;
+        let mut check_close_units = |units: &Map<UnitId, SpawnedUnit>,
+                                     close_units: &FxHashSet<UnitId>,
+                                     obj: &Objective,
+                                     spawn: &mut bool,
+                                     threat: &mut bool| {
+            for uid in close_units {
+                let unit = units
+                    .get(uid)
+                    .ok_or_else(|| anyhow!("unknown unit {uid}"))?;
                 if obj.owner != unit.side {
                     let air = unit.tags.0.contains(UnitTag::Aircraft)
                         || unit.tags.0.contains(UnitTag::Helicopter);
@@ -735,101 +741,113 @@ impl Db {
             }
             Ok::<_, anyhow::Error>(())
         };
-        for (oid, obj) in &self.persisted.objectives {
+        let mut became_threatened: SmallVec<[ObjectiveId; 4]> = smallvec![];
+        let mut became_clear: SmallVec<[ObjectiveId; 4]> = smallvec![];
+        let cooldown = Duration::seconds(self.ephemeral.cfg.threatened_cooldown as i64);
+        for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
             let mut spawn = false;
             let mut is_threatened = false;
             let pos3 = obj.threat_pos3;
             if let Err(e) = check_close_players(obj, pos3, &mut spawn, &mut is_threatened) {
                 error!("failed to check for close players {} {e}", obj.id)
             }
-            if let Err(e) = check_close_units(obj, &mut spawn, &mut is_threatened) {
+            if let Err(e) = check_close_units(
+                &self.persisted.units,
+                &self.ephemeral.units_potentially_close_to_enemies,
+                obj,
+                &mut spawn,
+                &mut is_threatened,
+            ) {
                 error!("failed to check close units {} {e}", obj.id)
             }
+            if spawn {
+                obj.last_activate = now;
+            }
             if is_threatened {
-                threatened.push(*oid);
+                if !obj.threatened {
+                    became_threatened.push(*oid);
+                }
+                obj.threatened = true;
+                obj.last_threatened_ts = now;
+                self.ephemeral.dirty = true;
             } else {
-                not_threatened.push(*oid);
+                if now - obj.last_threatened_ts >= cooldown {
+                    if obj.threatened {
+                        became_clear.push(*oid);
+                    }
+                    obj.threatened = false;
+                    self.ephemeral.dirty = true;
+                }
             }
             if !obj.spawned && spawn {
-                to_spawn.push(*oid);
+                let radius2 = obj.radius.powi(2);
+                obj.spawned = true;
+                for gid in maybe!(&obj.groups, obj.owner, "side group")? {
+                    let group = group!(self, gid)?;
+                    let farp = obj.kind.is_farp();
+                    let services = group.class.is_services() && !obj.kind.is_airbase();
+                    if !farp && !services {
+                        for uid in &group.units {
+                            let unit = unit_mut!(self, uid)?;
+                            if na::distance_squared(&unit.pos.into(), &obj.pos.into()) > radius2 {
+                                unit.pos = unit.spawn_pos;
+                                unit.position = unit.spawn_position;
+                            }
+                        }
+                        self.ephemeral.push_spawn(*gid);
+                    }
+                }
             } else if obj.spawned
                 && !spawn
                 && !obj.threatened
-                && now - obj.last_cull >= Duration::seconds(300)
+                && now - obj.last_activate >= Duration::seconds(cfg.cull_after as i64)
             {
-                to_cull.push(*oid);
+                obj.spawned = false;
+                for gid in maybe!(&obj.groups, obj.owner, "side group")? {
+                    let group = group!(self, gid)?;
+                    let farp = obj.kind.is_farp();
+                    let services = group.class.is_services() && !obj.kind.is_airbase();
+                    if !farp && !services && group_health!(self, gid)?.0 > 0 {
+                        match group.kind {
+                            Some(_) => {
+                                if let Some(oid) = self.ephemeral.object_id_by_gid.get(gid) {
+                                    self.ephemeral
+                                        .push_despawn(*gid, Despawn::Group(oid.clone()))
+                                }
+                            }
+                            None => {
+                                for uid in &group.units {
+                                    let unit = unit!(self, uid)?;
+                                    self.ephemeral
+                                        .push_despawn(*gid, Despawn::Static(unit.name.clone()))
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (!spawn && obj.enabled) || (spawn && !obj.enabled) {
+                obj.enabled = spawn;
+                for gid in maybe!(&obj.groups, obj.owner, "side group")? {
+                    if let Some(oid) = self.ephemeral.object_id_by_gid.get(gid) {
+                        let group = match Group::get_instance(lua, oid) {
+                            Ok(group) => group,
+                            Err(e) => {
+                                warn!("could not get group {gid} {e:?}");
+                                continue
+                            },
+                        };
+                        group
+                            .get_controller()
+                            .context("get controller")?
+                            .set_on_off(spawn)
+                            .context("disable ai")?
+                    }
+                }
             }
         }
         self.ephemeral
             .units_potentially_close_to_enemies
             .retain(|uid| is_close_to_enemies.contains(uid));
-        let mut became_threatened: SmallVec<[ObjectiveId; 4]> = smallvec![];
-        let mut became_clear: SmallVec<[ObjectiveId; 4]> = smallvec![];
-        for oid in &threatened {
-            let obj = objective_mut!(self, oid)?;
-            if !obj.threatened {
-                became_threatened.push(*oid);
-            }
-            obj.threatened = true;
-            obj.last_threatened_ts = now;
-            self.ephemeral.dirty();
-        }
-        let cooldown = Duration::seconds(self.ephemeral.cfg.threatened_cooldown as i64);
-        for oid in &not_threatened {
-            let obj = objective_mut!(self, oid)?;
-            if now - obj.last_threatened_ts >= cooldown {
-                if obj.threatened {
-                    became_clear.push(*oid);
-                }
-                obj.threatened = false;
-                self.ephemeral.dirty()
-            }
-        }
-        for oid in to_spawn {
-            let obj = objective_mut!(self, oid)?;
-            let radius2 = obj.radius.powi(2);
-            obj.spawned = true;
-            for gid in maybe!(&obj.groups, obj.owner, "side group")? {
-                let group = group!(self, gid)?;
-                let farp = obj.kind.is_farp();
-                let services = group.class.is_services() && !obj.kind.is_airbase();
-                if !farp && !services {
-                    for uid in &group.units {
-                        let unit = unit_mut!(self, uid)?;
-                        if na::distance_squared(&unit.pos.into(), &obj.pos.into()) > radius2 {
-                            unit.pos = unit.spawn_pos;
-                            unit.position = unit.spawn_position;
-                        }
-                    }
-                    self.ephemeral.push_spawn(*gid);
-                }
-            }
-        }
-        for oid in to_cull {
-            let obj = objective_mut!(self, oid)?;
-            obj.spawned = false;
-            obj.last_cull = now;
-            let obj = objective!(self, oid)?;
-            for gid in maybe!(&obj.groups, obj.owner, "side group")? {
-                let group = group!(self, gid)?;
-                let farp = obj.kind.is_farp();
-                let services = group.class.is_services() && !obj.kind.is_airbase();
-                if !farp && !services && self.group_health(gid)?.0 > 0 {
-                    match group.kind {
-                        Some(_) => self
-                            .ephemeral
-                            .push_despawn(*gid, Despawn::Group(group.name.clone())),
-                        None => {
-                            for uid in &group.units {
-                                let unit = unit!(self, uid)?;
-                                self.ephemeral
-                                    .push_despawn(*gid, Despawn::Static(unit.name.clone()))
-                            }
-                        }
-                    }
-                }
-            }
-        }
         Ok((became_threatened, became_clear))
     }
 
@@ -846,8 +864,10 @@ impl Db {
                 for gid in groups {
                     if let Some(group) = self.persisted.groups.get(gid) {
                         if group.class.is_services() {
-                            self.ephemeral
-                                .push_despawn(*gid, Despawn::Group(group.name.clone()))
+                            if let Some(oid) = self.ephemeral.object_id_by_gid.get(gid) {
+                                self.ephemeral
+                                    .push_despawn(*gid, Despawn::Group(oid.clone()))
+                            }
                         }
                     }
                 }
@@ -988,7 +1008,7 @@ impl Db {
                 obj.spawned = false;
                 obj.threatened = true;
                 obj.last_threatened_ts = now;
-                obj.last_cull = now;
+                obj.last_activate = now;
                 obj.owner = *side;
                 actually_captured.push((*side, oid));
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {

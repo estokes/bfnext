@@ -365,7 +365,7 @@ impl VehicleTemplates {
         base: &mut LoadedMiz,
     ) -> Result<()> {
         let mut replace_count: HashMap<String, isize> = HashMap::new();
-        let mut stn = 0u64;
+        let mut stn = 1u64;
         //apply weapon/APA templates to mission table in self
         info!("replacing slots with template payloads");
         for coa in base

@@ -913,7 +913,7 @@ impl Jtacs {
                 if let Some(target) = &jt.target {
                     let unit = db.unit(&target.uid)?;
                     let contact = jt.contacts.get_mut(&target.uid).unwrap();
-                    if (contact.pos - unit.position.p.0).magnitude() > 2. {
+                    if (contact.pos - unit.position.p.0).magnitude_squared() > 2. {
                         let v = db
                             .ephemeral
                             .get_object_id_by_uid(&target.uid)

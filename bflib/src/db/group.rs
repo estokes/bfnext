@@ -923,7 +923,7 @@ impl Db {
             let point = Vector2::new(pos.p.x, pos.p.z);
             let heading = azumith3d(pos.x.0);
             let spunit = unit_mut!(self, uid)?;
-            if spunit.position != pos {
+            if (spunit.position.p.0 - pos.p.0).magnitude_squared() > 1.0 {
                 moved.push(spunit.group);
                 spunit.position = pos;
                 spunit.pos = point;

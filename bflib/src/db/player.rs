@@ -398,7 +398,7 @@ impl Db {
                         self.ephemeral
                             .players_by_slot
                             .insert(slot.clone(), ucid.clone());
-                        player.changing_slots = true; 
+                        player.changing_slots = true;
                         player.jtac_or_spectators = false;
                         break SlotAuth::Yes;
                     };
@@ -417,7 +417,7 @@ impl Db {
                                 self.ephemeral.dirty();
                             } else if n == 0 {
                                 break SlotAuth::NoLives(life_type);
-                            } 
+                            }
                             yes!();
                         }
                     }

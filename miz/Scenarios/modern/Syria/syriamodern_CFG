@@ -1143,7 +1143,7 @@
           "Tanker": {
             "kind": "FixedWing",
             "duration": 8,
-            "template": "RBASKETTANKER",
+            "template": "RBOOMTANKER",
             "altitude": 9000.0,
             "altitude_typ": "BARO",
             "speed": 220.0

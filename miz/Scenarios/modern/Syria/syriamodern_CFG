@@ -1123,12 +1123,27 @@
         "penalty": null,
         "limit": null
       },
-      "tanker": {
+      "basket-tanker": {
         "kind": {
           "Tanker": {
             "kind": "FixedWing",
             "duration": 8,
             "template": "RTANKER",
+            "altitude": 9000.0,
+            "altitude_typ": "BARO",
+            "speed": 220.0
+          }
+        },
+        "cost": 50,
+        "penalty": 50,
+        "limit": null
+      },
+      "boom-tanker": {
+        "kind": {
+          "Tanker": {
+            "kind": "FixedWing",
+            "duration": 8,
+            "template": "RBASKETTANKER",
             "altitude": 9000.0,
             "altitude_typ": "BARO",
             "speed": 220.0

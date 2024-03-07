@@ -364,6 +364,7 @@ impl VehicleTemplates {
         objectives: &mut Vec<TriggerZone>,
         base: &mut LoadedMiz,
     ) -> Result<()> {
+        let mut slots: HashMap<String, HashMap<String, usize>> = HashMap::default();
         let mut replace_count: HashMap<String, isize> = HashMap::new();
         let mut stn = 1u64;
         //apply weapon/APA templates to mission table in self
@@ -428,6 +429,17 @@ impl VehicleTemplates {
                                 );
                                 unit.set("name", new_name.clone())?;
                                 group.set("name", new_name)?;
+                                if let Some(cnt) = slots
+                                    .entry(trigger_zone.objective_name.clone())
+                                    .or_insert_with(|| {
+                                        HashMap::from_iter(
+                                            self.payload.keys().map(|typ| (typ.clone(), 0)),
+                                        )
+                                    })
+                                    .get_mut(&unit_type)
+                                {
+                                    *cnt += 1;
+                                }
                                 break;
                             }
                         }
@@ -437,6 +449,14 @@ impl VehicleTemplates {
         }
         for (unit_type, amount) in replace_count {
             info!("replaced {amount} radio/payloads for {unit_type}");
+        }
+        for (obj, slots) in slots {
+            info!("objective {obj} slots:");
+            let mut slots = Vec::from_iter(slots);
+            slots.sort_by(|(_, c0), (_, c1)| c0.cmp(c1));
+            for (typ, cnt) in slots {
+                info!("    {typ}: {cnt}")
+            }
         }
         Ok(())
     }

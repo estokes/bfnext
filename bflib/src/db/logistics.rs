@@ -632,8 +632,10 @@ impl Db {
             let obj = objective_mut!(self, oid)?;
             obj.warehouse.supplier = supplier;
             if let Some(id) = supplier {
-                let logi = objective_mut!(self, id)?;
-                logi.warehouse.destination.insert_cow(oid);
+                objective_mut!(self, id)?
+                    .warehouse
+                    .destination
+                    .insert_cow(oid);
             }
         }
         for (oid, current) in current {

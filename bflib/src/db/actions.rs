@@ -1016,6 +1016,7 @@ impl Db {
     ) -> Result<GroupId> {
         let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, args.pos, |o| {
             o.owner == side
+                && na::distance_squared(&args.pos.into(), &o.pos.into()) > 100_000_000.
                 && match args.cfg.kind {
                     AiPlaneKind::Helicopter => true,
                     AiPlaneKind::FixedWing => {

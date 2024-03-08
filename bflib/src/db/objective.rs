@@ -563,7 +563,7 @@ impl Db {
         self.deliver_supplies_from_logistics_hubs()
             .context("distributing supplies")?;
         self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
-            objectives: smallvec![oid],
+            objectives: self.persisted.objectives.into_iter().map(|(oid, _)| *oid).collect(),
         };
         self.ephemeral
             .create_objective_markup(objective!(self, oid)?, &self.persisted);
@@ -1073,7 +1073,7 @@ impl Db {
         }
         if actually_captured.len() > 0 {
             self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
-                objectives: actually_captured.iter().map(|(_, oid)| *oid).collect(),
+                objectives: self.persisted.objectives.into_iter().map(|(oid, _)| *oid).collect()
             };
         }
         Ok(actually_captured)

@@ -1016,7 +1016,7 @@ impl Db {
     ) -> Result<GroupId> {
         let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, args.pos, |o| {
             o.owner == side
-                && na::distance_squared(&args.pos.into(), &o.pos.into()) > 100_000_000.
+                && !o.captureable()
                 && match args.cfg.kind {
                     AiPlaneKind::Helicopter => true,
                     AiPlaneKind::FixedWing => {
@@ -1028,7 +1028,7 @@ impl Db {
                                 .contains(&o.name)
                     }
                 }
-                && o.pos != args.pos
+                && na::distance_squared(&args.pos.into(), &o.pos.into()) > 100_000_000.
         })
         .ok_or_else(|| anyhow!("no objectives available for the ai mission"))?;
         let pos = obj.pos;

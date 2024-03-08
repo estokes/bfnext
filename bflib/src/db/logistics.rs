@@ -62,7 +62,7 @@ impl Inventory {
         } else {
             let stored: f32 = self.stored as f32;
             let capacity: f32 = self.capacity as f32;
-            Some(max(100, ((stored / capacity) * 100.) as u32) as u8)
+            Some(min(100, ((stored / capacity) * 100.) as u32) as u8)
         }
     }
 

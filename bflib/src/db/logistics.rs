@@ -15,7 +15,7 @@ for more details.
 */
 
 use super::{
-    ephemeral::{Equipment, LogiStage},
+    ephemeral::{Equipment, LogiStage, Production},
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
 };
@@ -543,45 +543,44 @@ impl Db {
             None => return Ok(()),
         };
         let obj = objective_mut!(self, oid)?;
+        let other_production = match self.ephemeral.production_by_side.get(&obj.owner.opposite()) {
+            Some(q) => Arc::clone(q),
+            None => Arc::new(Production::default()),
+        };
         let production = match self.ephemeral.production_by_side.get(&obj.owner) {
             Some(q) => Arc::clone(q),
             None => return Ok(()),
-        };
-        let w = match self.ephemeral.airbase_by_oid.get(&oid) {
-            None => bail!("airbase has no warehouse"),
-            Some(aid) => Airbase::get_instance(lua, aid)
-                .context("getting airbase")?
-                .get_warehouse()
-                .context("getting warehouse")?,
         };
         let map = warehouse::Warehouse::get_resource_map(lua).context("getting resource map")?;
         let hub = obj.kind.is_hub();
         map.for_each(|name, _| {
             match production.equipment.get(&name) {
+                Some(equip) => {
+                    let inv = obj.warehouse.equipment.get_or_default_cow(name);
+                    inv.capacity = whcfg.capacity(hub, equip.production);
+                }
                 None => {
-                    if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&name) {
+                    if let Some(_) = other_production.equipment.get(&name) {
+                        let inv = obj.warehouse.equipment.get_or_default_cow(name);
                         inv.stored = 0;
                         inv.capacity = 0;
                     }
-                }
-                Some(equip) => {
-                    let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
-                    inv.capacity = whcfg.capacity(hub, equip.production);
                 }
             }
             Ok(())
         })?;
         for name in LiquidType::ALL {
             match production.liquids.get(&name) {
-                None => {
-                    if let Some(inv) = obj.warehouse.liquids.get_mut_cow(&name) {
-                        inv.stored = 0;
-                        inv.capacity = 0;
-                    }
-                }
                 Some(qty) => {
                     let inv = obj.warehouse.liquids.get_or_default_cow(name);
                     inv.capacity = whcfg.capacity(hub, *qty);
+                }
+                None => {
+                    if let Some(_) = other_production.liquids.get(&name) {
+                        let inv = obj.warehouse.liquids.get_or_default_cow(name);
+                        inv.stored = 0;
+                        inv.capacity = 0;
+                    }
                 }
             }
         }

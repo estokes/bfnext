@@ -101,25 +101,28 @@ impl Persisted {
                                 let age = now - ts;
                                 let file = PathBuf::from(file.path());
                                 if age > week {
-                                    by_age.entry(week).or_default().push((ts, file));
+                                    by_age
+                                        .entry((age / week) * week)
+                                        .or_default()
+                                        .push((ts, file));
                                 } else if age > day {
                                     by_age
-                                        .entry((age % day) * day)
+                                        .entry((age / day) * day)
                                         .or_default()
                                         .push((ts, file));
                                 } else if age > hour {
                                     by_age
-                                        .entry((age % hour) * hour)
+                                        .entry((age / hour) * hour)
                                         .or_default()
                                         .push((ts, file));
                                 } else if age > tenmin {
                                     by_age
-                                        .entry((age % tenmin) * tenmin)
+                                        .entry((age / tenmin) * tenmin)
                                         .or_default()
                                         .push((ts, file));
                                 } else if age > onemin {
                                     by_age
-                                        .entry((age % onemin) * onemin)
+                                        .entry((age / onemin) * onemin)
                                         .or_default()
                                         .push((ts, file));
                                 }

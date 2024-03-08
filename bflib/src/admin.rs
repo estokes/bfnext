@@ -744,7 +744,7 @@ fn remark(ctx: &mut Context, objective: &String) -> Result<()> {
         .objectives
         .get(&oid)
         .ok_or_else(|| anyhow!("no such objective {oid}"))?;
-    ctx.db.ephemeral.update_objective_markup(true, obj);
+    ctx.db.ephemeral.create_objective_markup(obj, &ctx.db.persisted);
     Ok(())
 }
 

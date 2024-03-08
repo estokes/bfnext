@@ -183,9 +183,9 @@ impl Ephemeral {
         );
     }
 
-    pub fn update_objective_markup(&mut self, force: bool, obj: &Objective) {
+    pub fn update_objective_markup(&mut self, obj: &Objective) {
         if let Some(mk) = self.objective_markup.get_mut(&obj.id) {
-            mk.update(&mut self.msgs, force, obj)
+            mk.update(&mut self.msgs, obj)
         }
     }
 

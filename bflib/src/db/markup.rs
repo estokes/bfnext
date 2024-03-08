@@ -106,9 +106,8 @@ impl ObjectiveMarkup {
         }
     }
 
-    pub(super) fn update(&mut self, msgq: &mut MsgQ, force: bool, obj: &Objective) {
-        let new_owner = obj.owner != self.side;
-        if new_owner || force {
+    pub(super) fn update(&mut self, msgq: &mut MsgQ, obj: &Objective) {
+        if obj.owner != self.side {
             let text_color = |a| text_color(obj.owner, a);
             self.side = obj.owner;
             msgq.set_markup_color(self.name, text_color(0.75));
@@ -117,13 +116,11 @@ impl ObjectiveMarkup {
             msgq.set_markup_color(self.logi_label, text_color(0.75));
             msgq.set_markup_color(self.supply_label, text_color(0.75));
             msgq.set_markup_color(self.fuel_label, text_color(0.75));
-            if new_owner {
                 for id in self.supply_connections.drain(..) {
                     msgq.delete_mark(id);
                 }
-            }
         }
-        if obj.threatened != self.threatened || force {
+        if obj.threatened != self.threatened {
             self.threatened = obj.threatened;
             msgq.set_markup_color(
                 self.threatened_ring,
@@ -144,11 +141,11 @@ impl ObjectiveMarkup {
                 }
             };
         }
-        if self.health != obj.health || force {
+        if self.health != obj.health {
             self.health = obj.health;
             update_bar!(healthbar, health);
         }
-        if self.logi != obj.logi || force {
+        if self.logi != obj.logi {
             self.logi = obj.logi;
             msgq.set_markup_color(
                 self.capturable_ring,
@@ -156,19 +153,13 @@ impl ObjectiveMarkup {
             );
             update_bar!(logibar, logi);
         }
-        if self.supply != obj.supply || force {
+        if self.supply != obj.supply {
             self.supply = obj.supply;
             update_bar!(supplybar, supply);
         }
-        if self.fuel != obj.fuel || force {
+        if self.fuel != obj.fuel {
             self.fuel = obj.fuel;
             update_bar!(fuelbar, fuel);
-        }
-        if force {
-            for id in &self.supply_connections {
-                msgq.set_markup_color(*id, Color::gray(0.5));
-                msgq.set_markup_fill_color(*id, Color::gray(0.5));
-            }
         }
     }
 

@@ -1071,9 +1071,11 @@ impl Db {
                 self.ephemeral.dirty();
             }
         }
-        self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
-            objectives: actually_captured.iter().map(|(_, oid)| *oid).collect(),
-        };
+        if actually_captured.len() > 0 {
+            self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
+                objectives: actually_captured.iter().map(|(_, oid)| *oid).collect(),
+            };
+        }
         Ok(actually_captured)
     }
 

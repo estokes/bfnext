@@ -29,7 +29,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use chrono::{prelude::*, Duration};
-use compact_str::{format_compact, CompactString};
+use compact_str::format_compact;
 use dcso3::{
     coalition::Side,
     degrees_to_radians,
@@ -44,7 +44,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
-use log::{error, warn};
+use log::warn;
 use mlua::Value;
 use parking_lot::{Condvar, Mutex};
 use regex::{Regex, RegexBuilder};
@@ -749,7 +749,6 @@ fn remark(ctx: &mut Context, objective: &String) -> Result<()> {
 }
 
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
-    use std::fmt::Write;
     let mut cmds = mem::take(&mut ctx.admin_commands);
     for (id, cmd) in cmds.drain(..) {
         macro_rules! reply {
@@ -788,38 +787,12 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 }
             }
             AdminCommand::LogisticsTickNow => {
-                let mut msg = CompactString::new("");
-                if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
-                    write!(msg, "failed to sync objectives from warehouses {:?} ", e)?
-                }
-                if let Err(e) = ctx.db.deliver_supplies_from_logistics_hubs() {
-                    write!(msg, "failed to deliver supplies from hubs {:?} ", e)?
-                }
-                if let Err(e) = ctx.db.sync_warehouses_from_objectives(lua) {
-                    write!(msg, "failed to sync warehouses from objectives {:?}", e)?
-                }
-                if msg.is_empty() {
-                    reply!("tick complete")
-                } else {
-                    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg)
-                }
+                ctx.db.admin_tick_now();
+                reply!("tick scheduled")
             }
             AdminCommand::LogisticsDeliverNow => {
-                let mut msg = CompactString::new("");
-                if let Err(e) = ctx.db.sync_objectives_from_warehouses(lua) {
-                    write!(msg, "failed to sync objectives from warehouses {:?} ", e)?
-                }
-                if let Err(e) = ctx.db.deliver_production() {
-                    error!("failed to deliver production {:?}", e)
-                }
-                if let Err(e) = ctx.db.sync_warehouses_from_objectives(lua) {
-                    write!(msg, "failed to sync warehouses from objectives {:?}", e)?
-                }
-                if msg.is_empty() {
-                    reply!("deliver complete")
-                } else {
-                    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg)
-                }
+                ctx.db.admin_deliver_now();
+                reply!("delivery scheduled")
             }
             AdminCommand::Repair { airbase } => {
                 match ctx.db.repair_objective(airbase!(&airbase), Utc::now()) {

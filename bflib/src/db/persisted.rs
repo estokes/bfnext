@@ -61,6 +61,8 @@ pub struct Persisted {
     pub logistics_hubs: Set<ObjectiveId>,
     #[serde(default)]
     pub nukes_used: u32,
+    #[serde(default)]
+    pub logistics_ticks_since_delivery: u32,
 }
 
 impl Persisted {

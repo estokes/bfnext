@@ -61,6 +61,26 @@ use std::{
     sync::Arc,
 };
 
+#[derive(Debug, Clone)]
+pub enum LogiStage {
+    Complete {
+        last_tick: DateTime<Utc>,
+    },
+    SyncFromWarehouses {
+        objectives: SmallVec<[ObjectiveId; 128]>,
+    },
+    SyncToWarehouses {
+        objectives: SmallVec<[ObjectiveId; 128]>,
+    },
+    Init,
+}
+
+impl Default for LogiStage {
+    fn default() -> Self {
+        Self::Init
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub(super) struct DeployableIndex {
     pub(super) deployables_by_name: FxHashMap<String, Deployable>,
@@ -109,6 +129,7 @@ pub struct Ephemeral {
     pub(super) actions_taken: FxHashMap<Side, FxHashMap<String, u32>>,
     pub(super) delayspawnq: BTreeMap<DateTime<Utc>, SmallVec<[GroupId; 8]>>,
     pub(super) awacs_stn: u32,
+    pub(super) logistics_stage: LogiStage,
     spawnq: VecDeque<GroupId>,
     despawnq: VecDeque<(GroupId, Despawn)>,
     sync_warehouse: Vec<(ObjectiveId, Vehicle)>,
@@ -146,6 +167,7 @@ impl Default for Ephemeral {
             despawnq: VecDeque::default(),
             sync_warehouse: Vec::default(),
             msgs: MsgQ::default(),
+            logistics_stage: LogiStage::default(),
         }
     }
 }

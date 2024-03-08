@@ -70,26 +70,6 @@ use spawnctx::SpawnCtx;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
-#[derive(Debug, Clone)]
-enum LogiStage {
-    Complete {
-        last_tick: DateTime<Utc>,
-    },
-    SyncFromWarehouses {
-        objectives: SmallVec<[ObjectiveId; 128]>,
-    },
-    SyncToWarehouses {
-        objectives: SmallVec<[ObjectiveId; 128]>,
-    },
-    Init,
-}
-
-impl Default for LogiStage {
-    fn default() -> Self {
-        Self::Init
-    }
-}
-
 #[derive(Debug)]
 struct PlayerInfo {
     name: String,
@@ -134,8 +114,6 @@ struct Context {
     shots_out: ShotDb,
     menu_init_queue: IndexSet<SlotId, FxBuildHasher>,
     last_slow_timed_events: DateTime<Utc>,
-    logistics_stage: LogiStage,
-    logistics_ticks_since_delivery: u32,
     last_unit_position: usize,
     last_player_position: usize,
     subscribed_jtac_menus: FxHashMap<SlotId, FxHashSet<ObjectiveId>>,
@@ -688,69 +666,6 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
     Ok(())
 }
 
-fn run_logistics_events(
-    lua: MizLua,
-    ctx: &mut Context,
-    perf: &mut Perf,
-    ts: DateTime<Utc>,
-) -> Result<()> {
-    if let Some(wcfg) = ctx.db.ephemeral.cfg.warehouse.as_ref() {
-        let freq = Duration::minutes(wcfg.tick as i64);
-        let ticks_per_delivery = wcfg.ticks_per_delivery;
-        let start_ts = Utc::now();
-        match &mut ctx.logistics_stage {
-            LogiStage::Init => {
-                let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
-                ctx.logistics_stage = LogiStage::SyncToWarehouses { objectives }
-            }
-            LogiStage::Complete { last_tick } if ts - *last_tick >= freq => {
-                let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
-                ctx.logistics_stage = LogiStage::SyncFromWarehouses { objectives };
-            }
-            LogiStage::Complete { last_tick: _ } => (),
-            LogiStage::SyncFromWarehouses { objectives } => match objectives.pop() {
-                Some(oid) => {
-                    let start_ts = Utc::now();
-                    if let Err(e) = ctx.db.sync_warehouse_to_objective(lua, oid) {
-                        error!("failed to sync objective {oid} from warehouse {:?}", e)
-                    }
-                    record_perf(&mut perf.logistics_sync_from, start_ts);
-                }
-                None => {
-                    let sts = Utc::now();
-                    if ctx.logistics_ticks_since_delivery >= ticks_per_delivery {
-                        ctx.logistics_ticks_since_delivery = 0;
-                        if let Err(e) = ctx.db.deliver_production() {
-                            error!("failed to deliver production {:?}", e)
-                        }
-                        record_perf(&mut perf.logistics_deliver, sts);
-                    } else {
-                        ctx.logistics_ticks_since_delivery += 1;
-                        if let Err(e) = ctx.db.deliver_supplies_from_logistics_hubs() {
-                            error!("failed to deliver supplies from hubs {:?}", e)
-                        }
-                        record_perf(&mut perf.logistics_distribute, sts);
-                    }
-                    let objectives = ctx.db.objectives().map(|(id, _)| *id).collect();
-                    ctx.logistics_stage = LogiStage::SyncToWarehouses { objectives }
-                }
-            },
-            LogiStage::SyncToWarehouses { objectives } => match objectives.pop() {
-                None => ctx.logistics_stage = LogiStage::Complete { last_tick: ts },
-                Some(oid) => {
-                    let start_ts = Utc::now();
-                    if let Err(e) = ctx.db.sync_objective_to_warehouse(lua, oid) {
-                        error!("failed to sync objective {oid} to warehouse {:?}", e)
-                    }
-                    record_perf(&mut perf.logistics_sync_to, start_ts);
-                }
-            },
-        }
-        record_perf(&mut perf.logistics, start_ts);
-    }
-    Ok(())
-}
-
 fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) {
     if let Some(asd) = ctx.shutdown.as_mut() {
         if asd.when - now <= Duration::minutes(30) && !asd.thirty_minute_warning {
@@ -1009,7 +924,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let max_rate = ctx.db.ephemeral.cfg.max_msgs_per_second;
     ctx.db.ephemeral.msgs().process(max_rate, &net, &act);
     record_perf(&mut perf.process_messages, now);
-    if let Err(e) = run_logistics_events(lua, ctx, perf, ts) {
+    if let Err(e) = ctx.db.logistics_step(lua, perf, ts) {
         error!("error running logistics events {e:?}")
     }
     if let Err(e) = run_admin_commands(ctx, lua) {

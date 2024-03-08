@@ -15,15 +15,19 @@ for more details.
 */
 
 use super::{
-    ephemeral::Equipment,
+    ephemeral::{Equipment, LogiStage},
     objective::{Objective, ObjectiveId},
     Db, Map, Set,
 };
 use crate::{
-    admin::WarehouseKind, cfg::Vehicle, db::objective::ObjectiveKind, maybe, objective,
-    objective_mut,
+    admin::WarehouseKind,
+    cfg::Vehicle,
+    db::objective::ObjectiveKind,
+    maybe, objective, objective_mut,
+    perf::{record_perf, Perf},
 };
 use anyhow::{anyhow, bail, Context, Result};
+use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     airbase::Airbase,
@@ -34,7 +38,7 @@ use dcso3::{
     MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
-use log::warn;
+use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -434,7 +438,102 @@ impl Db {
         }
         self.update_supply_status()
             .context("updating supply status")?;
-        self.setup_supply_lines().context("setting up supply lines")?;
+        self.setup_supply_lines()
+            .context("setting up supply lines")?;
+        Ok(())
+    }
+
+    pub fn admin_tick_now(&mut self) {
+        match &mut self.ephemeral.logistics_stage {
+            LogiStage::Init
+            | LogiStage::SyncFromWarehouses { .. }
+            | LogiStage::SyncToWarehouses { .. } => (),
+            LogiStage::Complete { last_tick } => {
+                *last_tick = DateTime::<Utc>::MIN_UTC;
+            }
+        }
+    }
+
+    pub fn admin_deliver_now(&mut self) {
+        self.admin_tick_now();
+        self.persisted.logistics_ticks_since_delivery = u32::MAX;
+    }
+
+    pub fn logistics_step(
+        &mut self,
+        lua: MizLua,
+        perf: &mut Perf,
+        ts: DateTime<Utc>,
+    ) -> Result<()> {
+        if let Some(wcfg) = self.ephemeral.cfg.warehouse.as_ref() {
+            let freq = Duration::minutes(wcfg.tick as i64);
+            let ticks_per_delivery = wcfg.ticks_per_delivery;
+            let start_ts = Utc::now();
+            match &mut self.ephemeral.logistics_stage {
+                LogiStage::Init => {
+                    let objectives = self
+                        .persisted
+                        .objectives
+                        .into_iter()
+                        .map(|(id, _)| *id)
+                        .collect();
+                    self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses { objectives }
+                }
+                LogiStage::Complete { last_tick } if ts - *last_tick >= freq => {
+                    let objectives = self
+                        .persisted
+                        .objectives
+                        .into_iter()
+                        .map(|(id, _)| *id)
+                        .collect();
+                    self.ephemeral.logistics_stage = LogiStage::SyncFromWarehouses { objectives };
+                }
+                LogiStage::Complete { last_tick: _ } => (),
+                LogiStage::SyncFromWarehouses { objectives } => match objectives.pop() {
+                    Some(oid) => {
+                        let start_ts = Utc::now();
+                        if let Err(e) = self.sync_warehouse_to_objective(lua, oid) {
+                            error!("failed to sync objective {oid} from warehouse {:?}", e)
+                        }
+                        record_perf(&mut perf.logistics_sync_from, start_ts);
+                    }
+                    None => {
+                        let sts = Utc::now();
+                        if self.persisted.logistics_ticks_since_delivery >= ticks_per_delivery {
+                            self.persisted.logistics_ticks_since_delivery = 0;
+                            if let Err(e) = self.deliver_production() {
+                                error!("failed to deliver production {:?}", e)
+                            }
+                            record_perf(&mut perf.logistics_deliver, sts);
+                        } else {
+                            self.persisted.logistics_ticks_since_delivery += 1;
+                            if let Err(e) = self.deliver_supplies_from_logistics_hubs() {
+                                error!("failed to deliver supplies from hubs {:?}", e)
+                            }
+                            record_perf(&mut perf.logistics_distribute, sts);
+                        }
+                        let objectives = self
+                            .persisted
+                            .objectives
+                            .into_iter()
+                            .map(|(id, _)| *id)
+                            .collect();
+                        self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses { objectives }
+                    }
+                },
+                LogiStage::SyncToWarehouses { objectives } => match objectives.pop() {
+                    None => self.ephemeral.logistics_stage = LogiStage::Complete { last_tick: ts },
+                    Some(oid) => {
+                        let start_ts = Utc::now();
+                        if let Err(e) = self.sync_objective_to_warehouse(lua, oid) {
+                            error!("failed to sync objective {oid} to warehouse {:?}", e)
+                        }
+                        record_perf(&mut perf.logistics_sync_to, start_ts);
+                    }
+                },
+            }
+            record_perf(&mut perf.logistics, start_ts);
+        }
         Ok(())
     }
 
@@ -469,12 +568,6 @@ impl Db {
                 Some(equip) => {
                     let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
                     inv.capacity = whcfg.capacity(hub, equip.production);
-                    inv.stored = w.get_item_count(name.clone()).context("getting item")?;
-                    if hub {
-                        inv.stored = max(inv.stored, equip.production * whcfg.airbase_max);
-                        w.set_item(name.clone(), inv.stored)
-                            .context("setting item")?;
-                    }
                 }
             }
             Ok(())
@@ -491,7 +584,6 @@ impl Db {
                 Some(qty) => {
                     let inv = obj.warehouse.liquids.get_or_default_cow(name);
                     inv.capacity = whcfg.capacity(hub, *qty);
-                    inv.stored = w.get_liquid_amount(name).context("getting liquid")?;
                 }
             }
         }
@@ -587,33 +679,6 @@ impl Db {
         self.ephemeral.dirty();
         self.deliver_supplies_from_logistics_hubs()
             .context("delivering supplies from logistics hubs")?;
-        Ok(())
-    }
-
-    pub fn sync_objectives_from_warehouses(&mut self, lua: MizLua) -> Result<()> {
-        for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
-            let airbase = &maybe!(self.ephemeral.airbase_by_oid, oid, "objective airbase")?;
-            let warehouse = Airbase::get_instance(lua, airbase)
-                .context("getting airbase")?
-                .get_warehouse()
-                .context("getting warehouse")?;
-            sync_warehouse_to_obj(obj, &warehouse).context("syncing warehouse to objective")?
-        }
-        self.ephemeral.dirty();
-        Ok(())
-    }
-
-    pub fn sync_warehouses_from_objectives(&mut self, lua: MizLua) -> Result<()> {
-        for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
-            let airbase = maybe!(self.ephemeral.airbase_by_oid, oid, "objective airbase")
-                .with_context(|| format_compact!("getting airbase for objective {}", obj.name))?;
-            let warehouse = Airbase::get_instance(lua, airbase)
-                .context("getting airbase")?
-                .get_warehouse()
-                .context("getting warehouse")?;
-            sync_obj_to_warehouse(obj, &warehouse).context("syncing warehouse from objective")?
-        }
-        self.ephemeral.dirty();
         Ok(())
     }
 

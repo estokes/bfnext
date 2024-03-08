@@ -15,6 +15,7 @@ for more details.
 */
 
 use super::{
+    ephemeral::LogiStage,
     group::{DeployKind, GroupId, SpawnedUnit, UnitId},
     logistics::{Inventory, Warehouse},
     Db, Map, Set,
@@ -553,12 +554,11 @@ impl Db {
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.init_farp_warehouse(&oid)
             .context("initializing farp warehouse")?;
-        self.sync_objectives_from_warehouses(spctx.lua())
-            .context("syncing objectives from warehouses")?;
         self.deliver_supplies_from_logistics_hubs()
             .context("distributing supplies")?;
-        self.sync_warehouses_from_objectives(spctx.lua())
-            .context("syncing warehouses from objectibes")?;
+        self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
+            objectives: smallvec![oid],
+        };
         self.ephemeral
             .create_objective_markup(objective!(self, oid)?, &self.persisted);
         if let Some(lid) = objective!(self, oid)?.warehouse.supplier {
@@ -833,8 +833,8 @@ impl Db {
                             Ok(group) => group,
                             Err(e) => {
                                 warn!("could not get group {gid} {e:?}");
-                                continue
-                            },
+                                continue;
+                            }
                         };
                         group
                             .get_controller()
@@ -1041,13 +1041,11 @@ impl Db {
                     .context("repairing captured airbase logi")?;
                 self.repair_services(*side, now, oid)
                     .context("repairing captured airbase services")?;
-                self.sync_objectives_from_warehouses(lua)
-                    .context("syncing objectives from warehouse")?;
                 self.capture_warehouse(lua, oid)
                     .context("capturing warehouse")?;
-                self.deliver_production().context("delivering production")?;
-                self.sync_warehouses_from_objectives(lua)
-                    .context("syncing warehouses from objectives")?;
+                self.setup_supply_lines().context("setup supply lines")?;
+                self.deliver_supplies_from_logistics_hubs()
+                    .context("delivering supplies")?;
                 let mut ucids: SmallVec<[Ucid; 4]> = smallvec![];
                 for (_, ucid, gid) in gids {
                     self.delete_group(&gid)
@@ -1067,6 +1065,9 @@ impl Db {
                 self.ephemeral.dirty();
             }
         }
+        self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
+            objectives: actually_captured.iter().map(|(_, oid)| *oid).collect(),
+        };
         Ok(actually_captured)
     }
 

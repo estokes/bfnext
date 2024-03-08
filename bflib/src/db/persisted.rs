@@ -95,12 +95,18 @@ impl Persisted {
                     let hour = 3600;
                     let day = 86400;
                     let week = day * 7;
+                    let month = week * 4;
                     if file.file_type()?.is_file() {
                         if let Some(ts) = fname.strip_prefix(name) {
                             if let Ok(ts) = ts.parse::<i64>() {
                                 let age = now - ts;
                                 let file = PathBuf::from(file.path());
-                                if age > week {
+                                if age > month {
+                                    by_age
+                                        .entry((age / month) * month)
+                                        .or_default()
+                                        .push((ts, file));
+                                } else if age > week {
                                     by_age
                                         .entry((age / week) * week)
                                         .or_default()

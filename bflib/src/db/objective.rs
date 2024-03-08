@@ -314,6 +314,12 @@ impl Objective {
             .map(|i| *i)
             .unwrap_or_default()
     }
+
+    pub fn has_slot_typ(&self, typ: &str) -> bool {
+        self.slots
+            .into_iter()
+            .any(|(_, v)| v.typ.as_str() == typ)
+    }
 }
 
 impl Db {

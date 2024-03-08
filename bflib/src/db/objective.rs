@@ -513,7 +513,7 @@ impl Db {
             let alt = land.get_height(LuaVec2(pos))?;
             Vector3::new(pos.x, alt, pos.y)
         };
-        let mut obj = Objective {
+        let obj = Objective {
             id: ObjectiveId::new(),
             name: name.clone(),
             groups: Map::from_iter([(side, groups)]),
@@ -539,11 +539,6 @@ impl Db {
             threat_pos3,
         };
         let oid = obj.id;
-        obj.warehouse.supplier = self.compute_supplier(&obj)?;
-        if let Some(lid) = obj.warehouse.supplier {
-            let logi = objective_mut!(self, lid)?;
-            logi.warehouse.destination.insert_cow(oid);
-        }
         let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
             .with_context(|| format_compact!("getting airbase {pad_template}"))?;
         airbase.set_coalition(side)?;
@@ -560,6 +555,7 @@ impl Db {
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.init_farp_warehouse(&oid)
             .context("initializing farp warehouse")?;
+        self.setup_supply_lines().context("setup supply lines")?;
         self.deliver_supplies_from_logistics_hubs()
             .context("distributing supplies")?;
         self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
@@ -567,10 +563,6 @@ impl Db {
         };
         self.ephemeral
             .create_objective_markup(objective!(self, oid)?, &self.persisted);
-        if let Some(lid) = objective!(self, oid)?.warehouse.supplier {
-            self.ephemeral
-                .create_objective_markup(objective!(self, lid)?, &self.persisted);
-        }
         self.ephemeral.dirty();
         Ok(oid)
     }

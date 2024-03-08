@@ -559,7 +559,6 @@ impl Db {
         map.for_each(|name, _| {
             match production.equipment.get(&name) {
                 None => {
-                    w.set_item(name.clone(), 0).context("clearing item")?;
                     if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&name) {
                         inv.stored = 0;
                         inv.capacity = 0;
@@ -575,7 +574,6 @@ impl Db {
         for name in LiquidType::ALL {
             match production.liquids.get(&name) {
                 None => {
-                    w.set_liquid_amount(name, 0).context("setting liquid")?;
                     if let Some(inv) = obj.warehouse.liquids.get_mut_cow(&name) {
                         inv.stored = 0;
                         inv.capacity = 0;

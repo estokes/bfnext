@@ -655,7 +655,7 @@ impl Jtac {
     pub fn toggle_auto_shift(&mut self, db: &Db, lua: MizLua) -> Result<()> {
         self.autoshift = !self.autoshift;
         if self.autoshift {
-            self.shift(db, lua)?;
+            self.set_target(db, lua, 0)?;
         } else {
             self.remove_target(db, lua)?
         }

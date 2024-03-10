@@ -738,7 +738,7 @@ impl Ephemeral {
                     speed,
                 } => {
                     let dst = pos + pointing_towards2(*heading) * 10_000.;
-                    let route = template.group.route()?;
+                    let route = template.group.route().context("getting route")?;
                     macro_rules! pt {
                         ($pos:expr) => {
                             MissionPoint {
@@ -761,7 +761,7 @@ impl Ephemeral {
                         };
                     }
                     route.set_points(vec![pt!(*pos), pt!(dst)])?;
-                    template.group.set_route(route)?;
+                    template.group.set_route(route).context("setting route")?;
                     template.group.set("heading", *heading)?;
                 }
             }
@@ -782,7 +782,7 @@ impl Ephemeral {
             })
             .collect();
         let alive = {
-            let units = template.group.units()?;
+            let units = template.group.units().context("getting units")?;
             let mut i = 1;
             while i as usize <= units.len() {
                 let unit = units.get(i)?;

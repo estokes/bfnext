@@ -760,7 +760,9 @@ impl Ephemeral {
                             }
                         };
                     }
-                    route.set_points(vec![pt!(*pos), pt!(dst)])?;
+                    route
+                        .set_points(vec![pt!(*pos), pt!(dst)])
+                        .context("setting points")?;
                     template.group.set_route(route).context("setting route")?;
                     template.group.set("heading", *heading)?;
                 }
@@ -791,9 +793,10 @@ impl Ephemeral {
                     Some(su) => {
                         if su.tags.contains(UnitTag::AWACS) {
                             let stn = String::from(format_compact!("{:005o}", self.awacs_stn));
-                            self.awacs_stn -= 1;
-                            let props = unit.raw_get::<_, LuaTable>("AddPropAircraft")?;
-                            props.raw_set("STN_L16", stn)?;
+                            if let Ok(props) = unit.raw_get::<_, LuaTable>("AddPropAircraft") {
+                                self.awacs_stn -= 1;
+                                props.raw_set("STN_L16", stn)?;
+                            }
                         }
                         unit.raw_remove("unitId")?;
                         unit.set_pos(su.pos)?;

@@ -11,7 +11,7 @@ local SRSAuto = {}
 
 SRSAuto.SERVER_SRS_HOST_AUTO = false -- if set to true SRS will set the SERVER_SRS_HOST for you!
 SRSAuto.SERVER_SRS_PORT = "5003" --  SRS Server default is 5002 TCP & UDP
-SRSAuto.SERVER_SRS_HOST = "178.63.75.189" -- overridden if SRS_HOST_AUTO is true -- set to your PUBLIC ipv4 address or domain srs.example.com
+SRSAuto.SERVER_SRS_HOST = "135.181.77.146" -- overridden if SRS_HOST_AUTO is true -- set to your PUBLIC ipv4 address or domain srs.example.com
 SRSAuto.SERVER_SEND_AUTO_CONNECT = true -- set to false to disable auto connect or just remove this file 
 
 ---- SRS CHAT COMMANDS ----

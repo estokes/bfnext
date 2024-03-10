@@ -2,6 +2,10 @@
 
 DCS_PORT0=10308
 DCS_PORT1=10309
+DCS_PORT2=10310
+DCS_PORT3=10311
+SRS_PORT0=5002
+SRS_PORT1=5003
 WAN=enp1s0f0
 PATH=/sbin:${PATH}
 
@@ -17,6 +21,16 @@ function start() {
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT0 -j ACCEPT
     iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT1 -j ACCEPT
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT1 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT2 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT2 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT3 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT3 -j ACCEPT
+
+    # SRS Server
+    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT0 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT0 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT1 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT1 -j ACCEPT
 
     # SSH
     iptables -A INPUT -i $WAN -p tcp --dport 22 -j ACCEPT

@@ -123,7 +123,7 @@ function run_dcs() {
     while true; do
 	update_from_git
 	cd "$DCS"
-        wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
+        WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
         sleep 10
     done
 }

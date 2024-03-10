@@ -75,7 +75,7 @@ function update_from_git {
     mkdir -p "${DATA}/Missions"
     git pull
     cp miz/bflib.dll "${DATA}/Scripts"
-    cp bflib/lua/hools.lua "${DATA}/Scripts/Hooks"
+    cp bflib/lua/hooks.lua "${DATA}/Scripts/Hooks"
     cp "${GIT_PATH}/DCS-SRS-AutoConnectGameGUI.lua" "${DATA}/Scripts/Hooks"
     cp "${GIT_PATH}/${GIT_MIZ}" "$INSTALLED_MIZ"
     cp "${GIT_PATH}/serverSettings.lua" "${DATA}/Config"

@@ -73,12 +73,18 @@ function update_from_git {
     git pull
     cp miz/bflib.dll "${DATA}/Scripts"
     cp "${GIT_PATH}/${GIT_MIZ}" "$INSTALLED_MIZ"
+    cp "${GIT_PATH}/serverSettings.lua" "${DATA}/Config"
+    cp "${GIT_PATH}/autoexec.cfg" "${DATA}/Config"
     # merge git config changes with the local admin, banned, and rules lists
-    jq --slurpfile ic "$INSTALLED_CFG" \
-       '($ic[0] | { admins, rules, banned }) as $s | del(.[$s | keys[]]) + $s' \
-       "$GIT_CFG" \
-       >"${INSTALLED_CFG}.tmp"
-    mv "${INSTALLED_CFG}.tmp" "$INSTALLED_CFG"
+    if test -f "$INSTALLED_CFG"; then
+        jq --slurpfile ic "$INSTALLED_CFG" \
+           '($ic[0] | { admins, rules, banned }) as $s | del(.[$s | keys[]]) + $s' \
+           "$GIT_CFG" \
+           >"${INSTALLED_CFG}.tmp"
+        mv "${INSTALLED_CFG}.tmp" "$INSTALLED_CFG"
+    else
+        cp "$GIT_CFG" "$INSTALLED_CFG"
+    fi
 }
 
 function kill_dcs() {

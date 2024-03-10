@@ -34,7 +34,7 @@ fi
 
 NAME="$1"
 SRS="${HOME}/.wine/drive_c/Program Files/srs_${NAME}"
-DCS="${HOME}/.wine/drive_c/Program Files/Eagle Dynamics/DCS World OpenBeta Server"
+DCS="${HOME}/.wine/drive_c/Program Files/Eagle Dynamics/DCS World Server"
 DATA="${HOME}/.wine/drive_c/users/dcs/Saved Games/$NAME"
 BFLOG="${DATA}/Logs/bfnext.txt"
 INSTALLED_MIZ="${DATA}/Missions/$(ls "${DATA}"/Missions)"

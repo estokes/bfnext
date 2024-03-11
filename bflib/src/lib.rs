@@ -93,13 +93,57 @@ impl AutoShutdown {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum LoadState {
+    Init,
+    MissionLoaded { time: DateTime<Utc> },
+    Running,
+}
+
+impl Default for LoadState {
+    fn default() -> Self {
+        Self::Init
+    }
+}
+
+impl LoadState {
+    fn login_ok(&self) -> Option<String> {
+        match self {
+            Self::Running => None,
+            Self::Init => Some(String::from("The server is not finished loading the mission")),
+            Self::MissionLoaded { time } => {
+                let remains = (Duration::seconds(62) - (Utc::now() - time)).num_seconds();
+                Some(format_compact!("The server is initializing ETA {remains}s").into())
+            },
+        }
+    }
+
+    fn init_ok(&self) -> bool {
+        match self {
+            Self::Init => false,
+            Self::MissionLoaded { time: _ } | Self::Running => true,
+        }
+    }
+
+    fn step(&mut self) {
+        match self {
+            Self::Running | Self::Init => (),
+            Self::MissionLoaded { time } => {
+                if Utc::now() - *time >= Duration::minutes(1) {
+                    *self = Self::Running;
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct Context {
     sortie: String,
     miz_state_path: PathBuf,
     shutdown: Option<AutoShutdown>,
     last_perf_log: DateTime<Utc>,
-    loaded: bool,
+    load_state: LoadState,
     idx: env::miz::MizIndex,
     db: Db,
     admin_commands: Vec<(PlayerId, AdminCommand)>,
@@ -216,8 +260,8 @@ fn on_player_try_connect(
         addr, name, ucid, id
     );
     let ctx = unsafe { Context::get_mut() };
-    if !ctx.loaded {
-        return Ok(Some("the mission is still loading".into()));
+    if let Some(msg) = ctx.load_state.login_ok() {
+        return Ok(Some(msg));
     }
     if let Some((until, _)) = ctx.db.ephemeral.cfg.banned.get(&ucid) {
         match until {
@@ -933,6 +977,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = run_action_commands(ctx, lua) {
         error!("failed to run action commands {e:?}")
     }
+    ctx.load_state.step();
     record_perf(&mut perf.timed_events, ts);
     ctx.log_perf(now);
     Ok(())
@@ -1000,7 +1045,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
 }
 
 fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
-    unsafe { Context::get_mut().loaded = true };
+    unsafe { Context::get_mut().load_state = LoadState::MissionLoaded { time: Utc::now() } };
     info!("mission loaded");
     Ok(())
 }
@@ -1040,7 +1085,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
     let when = timer.get_time()? + 1.;
     timer.schedule_function(when, mlua::Value::Nil, move |lua, _, now| {
         let ctx = unsafe { Context::get_mut() };
-        if ctx.loaded {
+        if ctx.load_state.init_ok() {
             if let Err(e) = delayed_init_miz(lua) {
                 error!("THE MISSION CANNOT START: {:?}", e);
                 let timer = Timer::singleton(lua)?;

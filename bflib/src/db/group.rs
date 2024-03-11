@@ -19,7 +19,10 @@ use super::{
     Db, Set,
 };
 use crate::{
-    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags}, group, group_by_name, group_health, group_mut, spawnctx::{Despawn, SpawnCtx, SpawnLoc}, unit, unit_by_name, unit_mut
+    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags},
+    group, group_by_name, group_health, group_mut,
+    spawnctx::{Despawn, SpawnCtx, SpawnLoc},
+    unit, unit_by_name, unit_mut,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -846,7 +849,7 @@ impl Db {
 
     pub fn group_health(&self, gid: &GroupId) -> Result<(usize, usize)> {
         group_health!(self, gid)
-    } 
+    }
 
     pub fn artillery_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
         let range2 = (self.ephemeral.cfg.artillery_mission_range as f64).powi(2);

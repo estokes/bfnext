@@ -738,7 +738,7 @@ impl Ephemeral {
                     speed,
                 } => {
                     let dst = pos + pointing_towards2(*heading) * 10_000.;
-                    let route = template.group.route()?;
+                    let route = template.group.route().context("getting route")?;
                     macro_rules! pt {
                         ($pos:expr) => {
                             MissionPoint {
@@ -760,8 +760,10 @@ impl Ephemeral {
                             }
                         };
                     }
-                    route.set_points(vec![pt!(*pos), pt!(dst)])?;
-                    template.group.set_route(route)?;
+                    route
+                        .set_points(vec![pt!(*pos), pt!(dst)])
+                        .context("setting points")?;
+                    template.group.set_route(route).context("setting route")?;
                     template.group.set("heading", *heading)?;
                 }
             }
@@ -782,7 +784,7 @@ impl Ephemeral {
             })
             .collect();
         let alive = {
-            let units = template.group.units()?;
+            let units = template.group.units().context("getting units")?;
             let mut i = 1;
             while i as usize <= units.len() {
                 let unit = units.get(i)?;
@@ -791,9 +793,10 @@ impl Ephemeral {
                     Some(su) => {
                         if su.tags.contains(UnitTag::AWACS) {
                             let stn = String::from(format_compact!("{:005o}", self.awacs_stn));
-                            self.awacs_stn -= 1;
-                            let props = unit.raw_get::<_, LuaTable>("AddPropAircraft")?;
-                            props.raw_set("STN_L16", stn)?;
+                            if let Ok(props) = unit.raw_get::<_, LuaTable>("AddPropAircraft") {
+                                self.awacs_stn -= 1;
+                                props.raw_set("STN_L16", stn)?;
+                            }
                         }
                         unit.raw_remove("unitId")?;
                         unit.set_pos(su.pos)?;

@@ -161,9 +161,14 @@ pub(super) fn add_troops_menu_for_group(
         )?;
         let root = mc.add_submenu_for_group(group, "Squads".into(), Some(root))?;
         for sq in squads {
+            let item = if sq.cost > 0 {
+                format_compact!("Load {} squad ({} pts)", sq.name, sq.cost)
+            } else {
+                format_compact!("Load {} squad", sq.name)
+            };
             mc.add_command_for_group(
                 group,
-                format_compact!("Load {} squad", sq.name).into(),
+                item.into(),
                 Some(root.clone()),
                 load_troops,
                 ArgTuple {

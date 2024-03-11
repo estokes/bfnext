@@ -87,7 +87,7 @@ impl<'lua> IntoLua<'lua> for SearchVolume {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MarkPanel<'lua> {
     pub id: MarkId,
     pub time: Time,

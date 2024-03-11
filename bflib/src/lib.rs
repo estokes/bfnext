@@ -110,11 +110,13 @@ impl LoadState {
     fn login_ok(&self) -> Option<String> {
         match self {
             Self::Running => None,
-            Self::Init => Some(String::from("The server is not finished loading the mission")),
+            Self::Init => Some(String::from(
+                "The server is not finished loading the mission",
+            )),
             Self::MissionLoaded { time } => {
                 let remains = (Duration::seconds(62) - (Utc::now() - time)).num_seconds();
                 Some(format_compact!("The server is initializing ETA {remains}s").into())
-            },
+            }
         }
     }
 
@@ -161,6 +163,7 @@ struct Context {
     last_unit_position: usize,
     last_player_position: usize,
     subscribed_jtac_menus: FxHashMap<SlotId, FxHashSet<ObjectiveId>>,
+    subscribed_action_menus: FxHashSet<SlotId>,
     landcache: LandCache,
     ewr: Ewr,
     jtac: Jtacs,
@@ -439,7 +442,11 @@ fn unit_killed(
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
     match &ev {
-        Event::MarkAdded(e) | Event::MarkChange(e) | Event::MarkRemoved(e) if e.initiator.is_none() => (),
+        Event::MarkAdded(e) | Event::MarkChange(e) | Event::MarkRemoved(e)
+            if e.initiator.is_none() =>
+        {
+            ()
+        }
         ev => info!("onEvent: {:?}", ev),
     }
     let ctx = unsafe { Context::get_mut() };

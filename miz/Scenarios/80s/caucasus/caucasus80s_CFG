@@ -377,7 +377,7 @@
         "kind": {
           "Fighters": {
             "kind": "FixedWing",
-            "duration": 2,
+            "duration": 5,
             "template": "RFIGHTERS",
             "altitude": 10000.0,
             "altitude_typ": "BARO",
@@ -385,7 +385,7 @@
           }
         },
         "cost": 100,
-        "penalty": 100,
+        "penalty": 25,
         "limit": null
       },
       "awacs": {
@@ -601,7 +601,7 @@
         "kind": {
           "Fighters": {
             "kind": "FixedWing",
-            "duration": 2,
+            "duration": 5,
             "template": "BFIGHTERS",
             "altitude": 10000.0,
             "altitude_typ": "BARO",
@@ -609,7 +609,7 @@
           }
         },
         "cost": 100,
-        "penalty": 100,
+        "penalty": 25,
         "limit": null
       },
       "awacs": {

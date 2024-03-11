@@ -507,7 +507,7 @@ impl Db {
                     Attribute::Helicopters,
                     Attribute::AttackHelicopters,
                 ],
-                max_dist: Some(50_000.),
+                max_dist: Some(30_000.),
                 priority: None,
             }
         })

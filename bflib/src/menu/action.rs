@@ -1,6 +1,7 @@
 use super::ArgTuple;
 use crate::Context;
 use anyhow::{anyhow, Context as ErrContext, Result};
+use compact_str::format_compact;
 use dcso3::{
     env::miz::GroupId,
     mission_commands::{GroupCommandItem, GroupSubMenu, MissionCommands},
@@ -51,7 +52,15 @@ fn add_action_menu(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
         }
     }
     marks.retain(|_, mk| mk.count == 1);
-    for (name, action) in actions {}
+    for (name, action) in actions {
+        let name = if action.cost > 0 {
+            String::from(format_compact!("{name}({} pts)", action.cost))
+        } else {
+            name.clone()
+        };
+        let root = mc.add_submenu_for_group(arg.snd, name, Some(root.clone()))?;
+
+    }
     unimplemented!()
 }
 

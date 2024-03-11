@@ -11,10 +11,13 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.
 */
 
+use crate::{coalition::Side, env::miz::GroupId, err, trigger::MarkId, LuaVec3};
+
 use super::{
     as_tbl, as_tbl_ref, lua_err, object::Object, unit::Unit, weapon::Weapon, String, Time,
 };
 use anyhow::{bail, Result};
+use compact_str::format_compact;
 use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -164,7 +167,7 @@ impl<'lua> FromLua<'lua> for AtPlace<'lua> {
 pub struct WeaponAdd<'lua> {
     pub time: Time,
     pub initiator: Object<'lua>,
-    pub weapon_name: String
+    pub weapon_name: String,
 }
 
 impl<'lua> FromLua<'lua> for WeaponAdd<'lua> {
@@ -174,6 +177,41 @@ impl<'lua> FromLua<'lua> for WeaponAdd<'lua> {
             time: tbl.raw_get("time")?,
             initiator: tbl.raw_get("initiator")?,
             weapon_name: tbl.raw_get("weapon_name")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MarkEvent<'lua> {
+    pub id: MarkId,
+    pub time: Time,
+    pub initiator: Option<Unit<'lua>>,
+    pub coalition: Option<Side>,
+    pub group: Option<GroupId>,
+    pub text: String,
+    pub pos: LuaVec3,
+}
+
+impl<'lua> FromLua<'lua> for MarkEvent<'lua> {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl: LuaTable = FromLua::from_lua(value, lua)?;
+        Ok(Self {
+            id: tbl.raw_get("idx")?,
+            time: tbl.raw_get("time")?,
+            initiator: tbl.raw_get("initiator")?,
+            coalition: match tbl.raw_get::<_, i8>("coalition")? {
+                -1 => None,
+                0 => Some(Side::Neutral),
+                1 => Some(Side::Red),
+                2 => Some(Side::Blue),
+                n => return Err(err(&format_compact!("invalid side {n}"))),
+            },
+            group: match tbl.raw_get::<_, i64>("groupID")? {
+                -1 => None,
+                n => Some(GroupId::from(n)),
+            },
+            text: tbl.raw_get("text")?,
+            pos: tbl.raw_get("pos")?,
         })
     }
 }
@@ -206,9 +244,9 @@ pub enum Event<'lua> {
     PlayerComment,
     ShootingStart(WeaponUse<'lua>),
     ShootingEnd(ShootingEnd<'lua>),
-    MarkAdded,
-    MarkChange,
-    MarkRemoved,
+    MarkAdded(MarkEvent<'lua>),
+    MarkChange(MarkEvent<'lua>),
+    MarkRemoved(MarkEvent<'lua>),
     Kill(WeaponUse<'lua>),
     Score(UnitEvent<'lua>),
     UnitLost(UnitEvent<'lua>),
@@ -268,9 +306,9 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> Resul
         22 => Event::PlayerComment,
         23 => Event::ShootingStart(WeaponUse::from_lua(value, lua)?),
         24 => Event::ShootingEnd(ShootingEnd::from_lua(value, lua)?),
-        25 => Event::MarkAdded,
-        26 => Event::MarkChange,
-        27 => Event::MarkRemoved,
+        25 => Event::MarkAdded(MarkEvent::from_lua(value, lua)?),
+        26 => Event::MarkChange(MarkEvent::from_lua(value, lua)?),
+        27 => Event::MarkRemoved(MarkEvent::from_lua(value, lua)?),
         28 => Event::Kill(WeaponUse::from_lua(value, lua)?),
         29 => Event::Score(UnitEvent::from_lua(value, lua)?),
         30 => Event::UnitLost(UnitEvent::from_lua(value, lua)?),

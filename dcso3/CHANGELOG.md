@@ -3,6 +3,7 @@
 - work around a DCS bug that causes isExist to return true on dead
   groups
 - make ucid copy
+- flesh out mark events
 
 ## 0.1.4
 

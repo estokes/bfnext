@@ -32,8 +32,8 @@ use compact_str::format_compact;
 use dcso3::{
     coalition::Side,
     env::miz::GroupId,
-    mission_commands::{GroupSubMenu, MissionCommands},
-    net::Ucid,
+    mission_commands::{GroupCommandItem, GroupSubMenu, MissionCommands},
+    net::{SlotId, Ucid},
     MizLua, String,
 };
 use enumflags2::{BitFlag, BitFlags};
@@ -650,7 +650,7 @@ fn add_jtacs_by_location(
         let mc = MissionCommands::singleton(lua)?;
         let name = ctx.db.objective(&arg.trd)?.name.clone();
         let mut cmd: Vec<String> = arg.fth.clone().into();
-        cmd.push(name.clone());
+        cmd.push(format_compact!("{name}>>").into());
         mc.remove_command_for_group(arg.snd, cmd.into())?;
         let root = mc.add_submenu_for_group(arg.snd, name, Some(arg.fth))?;
         for jtac in ctx.jtac.jtacs() {
@@ -678,12 +678,12 @@ fn jtac_refresh_locations(lua: MizLua, arg: Ucid) -> Result<()> {
         .ok_or_else(|| anyhow!("missing player"))?;
     if let Some((slot, _)) = player.current_slot.as_ref() {
         let slot = *slot;
-        super::init_jtac_menu_for_slot(ctx, lua, &slot)?
+        init_jtac_menu_for_slot(ctx, lua, &slot)?
     }
     Ok(())
 }
 
-pub(super) fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
+fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let mc = MissionCommands::singleton(lua)?;
     let player = ctx
@@ -691,7 +691,7 @@ pub(super) fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> R
         .player(&arg.fst)
         .ok_or_else(|| anyhow!("missing player"))?;
     let mut roots: SmallVec<[String; 16]> = smallvec![];
-    mc.remove_command_for_group(arg.snd, vec!["JTAC".into()].into())?;
+    mc.remove_command_for_group(arg.snd, vec!["JTAC>>".into()].into())?;
     let mut root = mc.add_submenu_for_group(arg.snd, "JTAC".into(), None)?;
     mc.add_command_for_group(
         arg.snd,
@@ -725,7 +725,7 @@ pub(super) fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> R
                 n += 1;
                 mc.add_command_for_group(
                     arg.snd,
-                    near,
+                    format_compact!("{near}>>").into(),
                     Some(root.clone()),
                     add_jtacs_by_location,
                     ArgQuad {
@@ -738,5 +738,28 @@ pub(super) fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> R
             }
         }
     }
+    Ok(())
+}
+
+pub(crate) fn init_jtac_menu_for_slot(ctx: &mut Context, lua: MizLua, slot: &SlotId) -> Result<()> {
+    let ucid = match ctx.db.ephemeral.player_in_slot(slot) {
+        Some(ucid) => ucid,
+        None => return Ok(()),
+    };
+    let mc = MissionCommands::singleton(lua)?;
+    let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
+    ctx.subscribed_jtac_menus.remove(slot);
+    mc.remove_command_for_group(si.miz_gid, GroupCommandItem::from(vec!["JTAC>>".into()]))?;
+    mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;
+    mc.add_command_for_group(
+        si.miz_gid,
+        "JTAC>>".into(),
+        None,
+        add_jtac_locations,
+        ArgTuple {
+            fst: *ucid,
+            snd: si.miz_gid,
+        },
+    )?;
     Ok(())
 }

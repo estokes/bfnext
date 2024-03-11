@@ -44,7 +44,7 @@ use dcso3::{
         miz::{Miz, UnitId},
         Env,
     },
-    event::Event,
+    event::{Event, MarkEvent},
     hooks::UserHooks,
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
@@ -439,7 +439,7 @@ fn unit_killed(
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
     match &ev {
-        Event::MarkAdded | Event::MarkChange | Event::MarkRemoved => (),
+        Event::MarkAdded(e) | Event::MarkChange(e) | Event::MarkRemoved(e) if e.initiator.is_none() => (),
         ev => info!("onEvent: {:?}", ev),
     }
     let ctx = unsafe { Context::get_mut() };
@@ -794,7 +794,7 @@ fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
                 }
             }
             for slot in dirty_slots {
-                if let Err(e) = menu::init_jtac_menu_for_slot(ctx, lua, &slot) {
+                if let Err(e) = menu::jtac::init_jtac_menu_for_slot(ctx, lua, &slot) {
                     error!("could not init jtac menu for slot {slot}, {e:?}")
                 }
             }

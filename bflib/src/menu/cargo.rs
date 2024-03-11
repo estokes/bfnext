@@ -14,8 +14,6 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use std::collections::hash_map::Entry;
-
 use super::{player_name, slot_for_group, ArgTuple};
 use crate::{
     cfg::{Cfg, LimitEnforceTyp},
@@ -35,6 +33,7 @@ use dcso3::{
     MizLua, String,
 };
 use fxhash::FxHashMap;
+use std::collections::hash_map::Entry;
 
 fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
@@ -334,6 +333,7 @@ pub(super) fn add_cargo_menu_for_group(
     }
     let mut created_menus: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
     for dep in cfg.deployables.get(side).unwrap_or(&vec![]) {
+        let name = dep.path.last().unwrap();
         let root = dep
             .path
             .iter()
@@ -341,9 +341,15 @@ pub(super) fn add_cargo_menu_for_group(
                 let root = root?;
                 match created_menus.entry(p.clone()) {
                     Entry::Occupied(e) => Ok(e.get().clone()),
-                    Entry::Vacant(e) => Ok(e
-                        .insert(mc.add_submenu_for_group(group, p.clone(), Some(root))?)
-                        .clone()),
+                    Entry::Vacant(e) => {
+                        let item = if p == name && dep.cost > 0 {
+                            String::from(format_compact!("{p}({} pts)", dep.cost))
+                        } else {
+                            p.clone()
+                        };
+                        let menu = mc.add_submenu_for_group(group, item, Some(root))?;
+                        Ok(e.insert(menu).clone())
+                    }
                 }
             })?;
         for cr in dep.crates.iter().chain(dep.repair_crate.iter()) {

@@ -7,6 +7,7 @@ Type=simple
 User=dcs
 Environment="DISPLAY=:1"
 ExecStart=/home/dcs/bin/dcs syria_modern miz/Scenarios/modern/Syria Syria.miz true
+CPUAffinity=0-15
 
 [Install]
 WantedBy=multi-user.target

@@ -1155,7 +1155,7 @@ pub enum Command {
     DeactivateICLS,
     EPLRS {
         enable: bool,
-        group: GroupId,
+        group: Option<GroupId>,
     },
     Start,
     TransmitMessage {
@@ -1281,7 +1281,9 @@ impl<'lua> IntoLua<'lua> for Command {
             Self::EPLRS { enable, group } => {
                 root.raw_set("id", "EPLRS")?;
                 params.raw_set("value", enable)?;
-                params.raw_set("groupId", group)?;
+                if let Some(group) = group { 
+                    params.raw_set("groupId", group)?;
+                }
             }
             Self::Start => root.raw_set("id", "Start")?,
             Self::TransmitMessage {

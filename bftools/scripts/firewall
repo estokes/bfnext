@@ -6,7 +6,7 @@ DCS_PORT2=10310
 DCS_PORT3=10311
 SRS_PORT0=5002
 SRS_PORT1=5003
-WAN=enp1s0f0
+WAN=eno1
 PATH=/sbin:${PATH}
 
 function start() {

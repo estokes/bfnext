@@ -135,14 +135,14 @@ function dcs_port() {
 }
 
 function block_incoming() {
-    sudo iptables -D INPUT -p tcp --dport $1 -j ACCEPT
-    sudo iptables -D INPUT -p udp --dport $1 -j ACCEPT
+    sudo iptables -D INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
+    sudo iptables -D INPUT -i eno1 -p udp --dport $1 -j ACCEPT
 }
 
 function unblock_incoming() {
     sleep 120 
-    sudo iptables -I INPUT -p tcp --dport $1 -j ACCEPT
-    sudo iptables -I INPUT -p udp --dport $1 -j ACCEPT
+    sudo iptables -I INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
+    sudo iptables -I INPUT -i eno1 -p udp --dport $1 -j ACCEPT
 }
 
 function run_dcs() {
@@ -150,9 +150,8 @@ function run_dcs() {
         update_from_git
         PORT=$(dcs_port)
         cd "$DCS"
-        # possibly not required
-        # block_incoming $PORT
-        # unblock_incoming $PORT &
+        block_incoming $PORT
+        unblock_incoming $PORT &
         WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
         sleep 10
     done

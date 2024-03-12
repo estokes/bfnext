@@ -1,5 +1,12 @@
-use super::ArgTuple;
-use crate::Context;
+use super::{ArgQuad, ArgTriple, ArgTuple};
+use crate::{
+    cfg::ActionKind,
+    db::{
+        group::{DeployKind, GroupId as DbGid},
+        objective::ObjectiveId, Db,
+    },
+    Context,
+};
 use anyhow::{anyhow, Context as ErrContext, Result};
 use compact_str::format_compact;
 use dcso3::{
@@ -8,9 +15,21 @@ use dcso3::{
     net::{SlotId, Ucid},
     object::DcsObject,
     world::World,
-    MizLua, String, Vector3,
+    LuaVec3, MizLua, String, Vector3,
 };
 use fxhash::FxHashMap;
+
+fn run_pos_action(lua: MizLua, arg: ArgTriple<Ucid, String, LuaVec3>) -> Result<()> {
+    unimplemented!()
+}
+
+fn run_pos_group_action(lua: MizLua, arg: ArgQuad<Ucid, String, LuaVec3, DbGid>) -> Result<()> {
+    unimplemented!()
+}
+
+fn run_objective_action(lua: MizLua, arg: ArgTriple<Ucid, String, ObjectiveId>) -> Result<()> {
+    unimplemented!()
+}
 
 fn add_action_menu(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
@@ -39,7 +58,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
         if let Some(unit) = mk.initiator.as_ref() {
             let id = unit.object_id()?;
             if let Some(ucid) = ctx.db.player_in_unit(false, &id) {
-                if ucid == arg.fst {
+                if ucid == arg.fst && mk.text.len() <= 24 {
                     marks
                         .entry(mk.text.clone())
                         .or_insert_with(|| Mk {
@@ -52,6 +71,56 @@ fn add_action_menu(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
         }
     }
     marks.retain(|_, mk| mk.count == 1);
+    let add_pos = |root: GroupSubMenu, name: String| -> Result<()> {
+        for (name, mk) in &marks {
+            mc.add_command_for_group(
+                arg.snd,
+                name.clone(),
+                Some(root.clone()),
+                run_pos_action,
+                ArgTriple {
+                    fst: arg.fst,
+                    snd: name.clone(),
+                    trd: LuaVec3(mk.pos),
+                },
+            )?;
+        }
+        Ok(())
+    };
+    let add_pos_group = |root: GroupSubMenu, name: String| -> Result<()> {
+        for gid in &ctx.db.persisted.actions {
+            let group = ctx.db.group(gid)?;
+            match &group.origin {
+                DeployKind::Action { name: aname, .. } if aname == &name => {
+                    let root = mc.add_submenu_for_group(
+                        arg.snd,
+                        format_compact!("{gid}").into(),
+                        Some(root.clone()),
+                    )?;
+                    for (name, mk) in &marks {
+                        mc.add_command_for_group(
+                            arg.snd,
+                            name.clone(),
+                            Some(root.clone()),
+                            run_pos_group_action,
+                            ArgQuad {
+                                fst: arg.fst,
+                                snd: name.clone(),
+                                trd: LuaVec3(mk.pos),
+                                fth: *gid,
+                            },
+                        )?;
+                    }
+                }
+                DeployKind::Action { .. }
+                | DeployKind::Crate { .. }
+                | DeployKind::Deployed { .. }
+                | DeployKind::Objective
+                | DeployKind::Troop { .. } => (),
+            }
+        }
+        Ok(())
+    };
     for (name, action) in actions {
         let name = if action.cost > 0 {
             String::from(format_compact!("{name}({} pts)", action.cost))
@@ -59,7 +128,23 @@ fn add_action_menu(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
             name.clone()
         };
         let root = mc.add_submenu_for_group(arg.snd, name, Some(root.clone()))?;
-
+        match &action.kind {
+            ActionKind::Bomber(_) | ActionKind::LogisticsTransfer(_) | ActionKind::Move(_) => (),
+            ActionKind::AttackersWaypoint
+            | ActionKind::AwacsWaypoint
+            | ActionKind::FighersWaypoint
+            | ActionKind::TankerWaypoint 
+            | ActionKind::DroneWaypoint => add_pos_group(root.clone(), name.clone())?,
+            ActionKind::Attackers(_)
+            | ActionKind::Awacs(_)
+            | ActionKind::Deployable(_)
+            | ActionKind::Drone(_) 
+            | ActionKind::Fighters(_)
+            | ActionKind::Tanker(_)
+            | ActionKind::Paratrooper(_)
+            | ActionKind::Nuke(_)
+            => add_pos(root.clone(), name.clone())?,
+        }
     }
     unimplemented!()
 }

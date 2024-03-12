@@ -313,8 +313,8 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
     let ctx = unsafe { Context::get_mut() };
     let mc = MissionCommands::singleton(lua)?;
     let world = World::singleton(lua)?;
-    mc.remove_command_for_group(arg.snd, vec!["Action>>".into()].into())?;
-    let root = mc.add_submenu_for_group(arg.snd, "Action".into(), None)?;
+    mc.remove_command_for_group(arg.snd, vec!["Actions>>".into()].into())?;
+    let root = mc.add_submenu_for_group(arg.snd, "Actions".into(), None)?;
     let player = ctx
         .db
         .player(&arg.fst)

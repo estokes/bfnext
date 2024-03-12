@@ -20,7 +20,7 @@
     "ground_kill": 2,
     "lr_sam_bonus": 5,
     "logistics_repair": 50,
-    "logistics_transfer": 50,
+    "logistics_transfer": 5,
     "capture": 50 
   },
   "repair_time": 1800,

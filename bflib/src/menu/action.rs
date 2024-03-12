@@ -3,7 +3,7 @@ use crate::{
     cfg::ActionKind,
     db::{
         group::{DeployKind, GroupId as DbGid},
-        objective::ObjectiveId, Db,
+        objective::ObjectiveId,
     },
     Context,
 };
@@ -31,7 +31,7 @@ fn run_objective_action(lua: MizLua, arg: ArgTriple<Ucid, String, ObjectiveId>) 
     unimplemented!()
 }
 
-fn add_action_menu(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
+fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let mc = MissionCommands::singleton(lua)?;
     let world = World::singleton(lua)?;
@@ -72,10 +72,10 @@ fn add_action_menu(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
     }
     marks.retain(|_, mk| mk.count == 1);
     let add_pos = |root: GroupSubMenu, name: String| -> Result<()> {
-        for (name, mk) in &marks {
+        for (text, mk) in &marks {
             mc.add_command_for_group(
                 arg.snd,
-                name.clone(),
+                text.clone(),
                 Some(root.clone()),
                 run_pos_action,
                 ArgTriple {
@@ -121,32 +121,51 @@ fn add_action_menu(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
         }
         Ok(())
     };
+    let add_objective = |root: GroupSubMenu, name: String| -> Result<()> {
+        for (oid, obj) in ctx.db.objectives() {
+            if obj.owner == player.side {
+                mc.add_command_for_group(
+                    arg.snd,
+                    obj.name.clone(),
+                    Some(root.clone()),
+                    run_objective_action,
+                    ArgTriple {
+                        fst: arg.fst,
+                        snd: name.clone(),
+                        trd: *oid,
+                    },
+                )?;
+            }
+        }
+        Ok(())
+    };
     for (name, action) in actions {
         let name = if action.cost > 0 {
             String::from(format_compact!("{name}({} pts)", action.cost))
         } else {
             name.clone()
         };
-        let root = mc.add_submenu_for_group(arg.snd, name, Some(root.clone()))?;
+        let root = mc.add_submenu_for_group(arg.snd, name.clone(), Some(root.clone()))?;
         match &action.kind {
             ActionKind::Bomber(_) | ActionKind::LogisticsTransfer(_) | ActionKind::Move(_) => (),
             ActionKind::AttackersWaypoint
             | ActionKind::AwacsWaypoint
             | ActionKind::FighersWaypoint
-            | ActionKind::TankerWaypoint 
-            | ActionKind::DroneWaypoint => add_pos_group(root.clone(), name.clone())?,
+            | ActionKind::TankerWaypoint
+            | ActionKind::DroneWaypoint => add_pos_group(root.clone(), name)?,
             ActionKind::Attackers(_)
             | ActionKind::Awacs(_)
             | ActionKind::Deployable(_)
-            | ActionKind::Drone(_) 
+            | ActionKind::Drone(_)
             | ActionKind::Fighters(_)
             | ActionKind::Tanker(_)
             | ActionKind::Paratrooper(_)
-            | ActionKind::Nuke(_)
-            => add_pos(root.clone(), name.clone())?,
+            | ActionKind::Nuke(_) => add_pos(root.clone(), name)?,
+            ActionKind::LogisticsRepair(_) => add_objective(root.clone(), name)?,
         }
     }
-    unimplemented!()
+    ctx.subscribed_action_menus.insert(arg.trd);
+    Ok(())
 }
 
 pub(super) fn init_action_menu_for_slot(
@@ -165,9 +184,10 @@ pub(super) fn init_action_menu_for_slot(
         "Actions>>".into(),
         None,
         add_action_menu,
-        ArgTuple {
+        ArgTriple {
             fst: *ucid,
             snd: si.miz_gid,
+            trd: *slot
         },
     )?;
     Ok(())

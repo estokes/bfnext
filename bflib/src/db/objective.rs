@@ -235,7 +235,7 @@ pub struct Objective {
     pub name: String,
     pub(super) pos: Vector2,
     pub(super) radius: f64,
-    pub(super) owner: Side,
+    pub owner: Side,
     pub(super) kind: ObjectiveKind,
     pub(super) slots: Map<SlotId, SlotInfo>,
     pub(super) groups: Map<Side, Set<GroupId>>,

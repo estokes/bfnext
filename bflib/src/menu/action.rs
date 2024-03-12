@@ -450,7 +450,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
     Ok(())
 }
 
-pub fn init_action_menu_for_slot(
+pub(crate) fn init_action_menu_for_slot(
     ctx: &mut Context,
     lua: MizLua,
     slot: &SlotId,

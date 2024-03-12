@@ -314,7 +314,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
     let mc = MissionCommands::singleton(lua)?;
     let world = World::singleton(lua)?;
     mc.remove_command_for_group(arg.snd, vec!["Actions>>".into()].into())?;
-    let root = mc.add_submenu_for_group(arg.snd, "Actions".into(), None)?;
+    let mut root = mc.add_submenu_for_group(arg.snd, "Actions".into(), None)?;
     let player = ctx
         .db
         .player(&arg.fst)
@@ -421,20 +421,27 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         }
         Ok(())
     };
+    let mut n = 0;
     for (name, action) in actions {
+        if n > 9 {
+            root = mc.add_submenu_for_group(arg.snd, "Next>>".into(), Some(root))?;
+            n = 0;
+        }
         let name = if action.cost > 0 {
             String::from(format_compact!("{name}({} pts)", action.cost))
         } else {
             name.clone()
         };
-        let root = mc.add_submenu_for_group(arg.snd, name.clone(), Some(root.clone()))?;
         match &action.kind {
             ActionKind::Bomber(_) | ActionKind::LogisticsTransfer(_) | ActionKind::Move(_) => (),
             ActionKind::AttackersWaypoint
             | ActionKind::AwacsWaypoint
             | ActionKind::FighersWaypoint
             | ActionKind::TankerWaypoint
-            | ActionKind::DroneWaypoint => add_pos_group(root.clone(), name)?,
+            | ActionKind::DroneWaypoint => {
+                let root = mc.add_submenu_for_group(arg.snd, name.clone(), Some(root.clone()))?;
+                add_pos_group(root.clone(), name)?
+            },
             ActionKind::Attackers(_)
             | ActionKind::Awacs(_)
             | ActionKind::Deployable(_)
@@ -442,8 +449,14 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             | ActionKind::Fighters(_)
             | ActionKind::Tanker(_)
             | ActionKind::Paratrooper(_)
-            | ActionKind::Nuke(_) => add_pos(root.clone(), name)?,
-            ActionKind::LogisticsRepair(_) => add_objective(root.clone(), name)?,
+            | ActionKind::Nuke(_) => {
+                let root = mc.add_submenu_for_group(arg.snd, name.clone(), Some(root.clone()))?;
+                add_pos(root.clone(), name)?
+            },
+            ActionKind::LogisticsRepair(_) => {
+                let root = mc.add_submenu_for_group(arg.snd, name.clone(), Some(root.clone()))?;
+                add_objective(root.clone(), name)?
+            },
         }
     }
     ctx.subscribed_action_menus.insert(arg.trd);

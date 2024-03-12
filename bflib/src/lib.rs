@@ -44,7 +44,7 @@ use dcso3::{
         miz::{Miz, UnitId},
         Env,
     },
-    event::{Event, MarkEvent},
+    event::Event,
     hooks::UserHooks,
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},

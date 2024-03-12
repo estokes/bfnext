@@ -140,7 +140,7 @@ function block_incoming() {
 }
 
 function unblock_incoming() {
-    sleep 60
+    sleep 120 
     sudo iptables -I INPUT -i enp1s0f0 -p tcp --dport $1 -j ACCEPT
     sudo iptables -I INPUT -i enp1s0f0 -p udp --dport $1 -j ACCEPT
 }

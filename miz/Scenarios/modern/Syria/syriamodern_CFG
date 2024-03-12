@@ -574,7 +574,7 @@
         ],
         "template": "DEPRAMMO",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -926,7 +926,7 @@
         ],
         "template": "DEPBAMMO",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {

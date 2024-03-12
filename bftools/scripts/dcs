@@ -131,7 +131,7 @@ function run_srs() {
 }
 
 function dcs_port() {
-    grep -F '["port"]' "${DATA}/Config/serverSettings.lua" | sed -e 's/.*= *"\([0-9]*\)" *,/\1/'
+   grep -F '["port"]' "${DATA}/Config/serverSettings.lua" | sed -e 's/.*= *//' | sed -e 's/[",]//g'
 }
 
 function block_incoming() {

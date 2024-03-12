@@ -32,6 +32,7 @@ else
     exit 5
 fi
 
+BLOCK=120
 NAME="$1"
 SRS="${HOME}/.wine/drive_c/Program Files/srs_${NAME}"
 DCS="${HOME}/.wine/drive_c/Program Files/Eagle Dynamics/DCS World Server"
@@ -140,7 +141,7 @@ function block_incoming() {
 }
 
 function unblock_incoming() {
-    sleep 120 
+    sleep $BLOCK
     sudo iptables -I INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
     sudo iptables -I INPUT -i eno1 -p udp --dport $1 -j ACCEPT
 }
@@ -152,7 +153,14 @@ function run_dcs() {
         cd "$DCS"
         block_incoming $PORT
         unblock_incoming $PORT &
+        PID=$!
+        ST=$(date +%s)
         WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
+        EN=$(date +%s)
+        if test $((EN - ST)) -lte $((BLOCK + 10)); then
+            # it crashed quickly, cancel the unblock
+            kill $PID
+        fi
         sleep 10
     done
 }

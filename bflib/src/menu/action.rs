@@ -458,6 +458,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                 add_objective(root.clone(), name)?
             },
         }
+        n += 1;
     }
     ctx.subscribed_action_menus.insert(arg.trd);
     Ok(())

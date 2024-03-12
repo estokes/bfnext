@@ -52,7 +52,7 @@ use dcso3::{
     timer::Timer,
     trigger::Trigger,
     unit::{ClassUnit, Unit},
-    world::World,
+    world::{World, MarkPanel},
     HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use ewr::Ewr;
@@ -543,7 +543,6 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.object_id()?;
                 let slot = unit.slot()?;
-                let ctx = unsafe { Context::get_mut() };
                 if ctx.airborne.insert(id.clone()) && ctx.recently_landed.remove(&id).is_none() {
                     let pos = unit.get_point()?;
                     match ctx
@@ -570,12 +569,25 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Land(e) | Event::PostponedLand(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.object_id()?;
-                let ctx = unsafe { Context::get_mut() };
                 if ctx.airborne.remove(&id) {
                     ctx.recently_landed.insert(id, Utc::now());
                 }
             }
         }
+        Event::MarkAdded(MarkPanel { initiator: Some(unit), .. }) => {
+            let oid = unit.object_id()?;
+            if let Some(slot) = ctx.db.ephemeral.get_slot_by_object_id(&oid) {
+                let slot = *slot;
+                if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
+                    let ucid = *ucid;
+                    if ctx.subscribed_action_menus.contains(&slot) {
+                        if let Err(e) = menu::action::init_action_menu_for_slot(ctx, lua, &slot, &ucid) {
+                            error!("failed to init action menu for {ucid} {slot} {e:?}")
+                        }
+                    }
+                }
+            }
+        },
         Event::MissionEnd => unsafe {
             Context::reset();
             Context::get_mut().init_async_bg(lua.inner())?;

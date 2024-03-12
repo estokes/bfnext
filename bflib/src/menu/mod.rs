@@ -18,7 +18,7 @@ pub mod cargo;
 mod ewr;
 pub mod jtac;
 mod troop;
-mod action;
+pub mod action;
 
 use std::sync::Arc;
 

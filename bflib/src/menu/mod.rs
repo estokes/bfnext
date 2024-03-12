@@ -151,6 +151,54 @@ where
     }
 }
 
+#[derive(Debug)]
+struct ArgPent<T, U, V, W, X> {
+    fst: T,
+    snd: U,
+    trd: V,
+    fth: W,
+    pnt: X,
+}
+
+impl<'lua, T, U, V, W, X> IntoLua<'lua> for ArgPent<T, U, V, W, X>
+where
+    T: IntoLua<'lua>,
+    U: IntoLua<'lua>,
+    V: IntoLua<'lua>,
+    W: IntoLua<'lua>,
+    X: IntoLua<'lua>,
+{
+    fn into_lua(self, lua: &'lua Lua) -> LuaResult<LuaValue<'lua>> {
+        let tbl = lua.create_table()?;
+        tbl.raw_set(1, self.fst)?;
+        tbl.raw_set(2, self.snd)?;
+        tbl.raw_set(3, self.trd)?;
+        tbl.raw_set(4, self.fth)?;
+        tbl.raw_set(5, self.pnt)?;
+        Ok(Value::Table(tbl))
+    }
+}
+
+impl<'lua, T, U, V, W, X> FromLua<'lua> for ArgPent<T, U, V, W, X>
+where
+    T: FromLua<'lua>,
+    U: FromLua<'lua>,
+    V: FromLua<'lua>,
+    W: FromLua<'lua>,
+    X: FromLua<'lua>,
+{
+    fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("ArgPnt", None, value).map_err(lua_err)?;
+        Ok(Self {
+            fst: tbl.raw_get(1)?,
+            snd: tbl.raw_get(2)?,
+            trd: tbl.raw_get(3)?,
+            fth: tbl.raw_get(4)?,
+            pnt: tbl.raw_get(5)?,
+        })
+    }
+}
+
 fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, SlotId)> {
     let miz = Miz::singleton(lua)?;
     let group = miz

@@ -1,34 +1,312 @@
-use super::{ArgQuad, ArgTriple, ArgTuple};
+use super::{ArgPent, ArgQuad, ArgTriple};
 use crate::{
-    cfg::ActionKind,
+    cfg::{Action, ActionKind},
     db::{
+        actions::{ActionArgs, ActionCmd, WithObj, WithPos, WithPosAndGroup},
         group::{DeployKind, GroupId as DbGid},
         objective::ObjectiveId,
     },
+    spawnctx::SpawnCtx,
     Context,
 };
-use anyhow::{anyhow, Context as ErrContext, Result};
+use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use compact_str::format_compact;
 use dcso3::{
+    coalition::Side,
     env::miz::GroupId,
     mission_commands::{GroupCommandItem, GroupSubMenu, MissionCommands},
     net::{SlotId, Ucid},
     object::DcsObject,
+    trigger::MarkId,
     world::World,
-    LuaVec3, MizLua, String, Vector3,
+    LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 
-fn run_pos_action(lua: MizLua, arg: ArgTriple<Ucid, String, LuaVec3>) -> Result<()> {
-    unimplemented!()
+fn run_action(
+    ctx: &mut Context,
+    lua: MizLua,
+    side: Side,
+    slot: SlotId,
+    ucid: Ucid,
+    mark: Option<MarkId>,
+    cmd: ActionCmd,
+) -> Result<()> {
+    let spctx = SpawnCtx::new(lua)?;
+    ctx.db
+        .start_action(&spctx, &ctx.idx, &ctx.jtac, side, Some(ucid), cmd)?;
+    if let Some(mark) = mark {
+        ctx.db.ephemeral.msgs().delete_mark(mark);
+    }
+    init_action_menu_for_slot(ctx, lua, &slot, &ucid)
 }
 
-fn run_pos_group_action(lua: MizLua, arg: ArgQuad<Ucid, String, LuaVec3, DbGid>) -> Result<()> {
-    unimplemented!()
+fn do_pos_action(
+    ctx: &mut Context,
+    lua: MizLua,
+    side: Side,
+    slot: SlotId,
+    ucid: Ucid,
+    name: String,
+    pos: LuaVec3,
+    mark: MarkId,
+    action: Action,
+) -> Result<()> {
+    let pos = Vector2::new(pos.0.x, pos.0.z);
+    let args = match &action.kind {
+        ActionKind::Attackers(cfg) => ActionArgs::Attackers(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
+        ActionKind::Awacs(cfg) => ActionArgs::Awacs(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
+        ActionKind::Deployable(cfg) => ActionArgs::Deployable(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
+        ActionKind::Drone(cfg) => ActionArgs::Drone(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
+        ActionKind::Fighters(cfg) => ActionArgs::Fighters(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
+        ActionKind::Tanker(cfg) => ActionArgs::Tanker(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
+        ActionKind::Paratrooper(cfg) => ActionArgs::Paratrooper(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
+        ActionKind::Nuke(cfg) => ActionArgs::Nuke(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
+        ActionKind::Bomber(_)
+        | ActionKind::LogisticsTransfer(_)
+        | ActionKind::LogisticsRepair(_)
+        | ActionKind::Move(_)
+        | ActionKind::TankerWaypoint
+        | ActionKind::AwacsWaypoint
+        | ActionKind::FighersWaypoint
+        | ActionKind::DroneWaypoint
+        | ActionKind::AttackersWaypoint => bail!("invalid action type for this menu item"),
+    };
+    let cmd = ActionCmd { name, action, args };
+    run_action(ctx, lua, side, slot, ucid, Some(mark), cmd)
+}
+
+fn side_slot_action(ctx: &mut Context, ucid: &Ucid, name: &str) -> Result<(Side, SlotId, Action)> {
+    let player = ctx
+        .db
+        .player(ucid)
+        .ok_or_else(|| anyhow!("no such player"))?;
+    let side = player.side;
+    let slot = player
+        .current_slot
+        .as_ref()
+        .map(|(slot, _)| *slot)
+        .ok_or_else(|| anyhow!("missing slot"))?;
+    let action = ctx
+        .db
+        .ephemeral
+        .cfg
+        .actions
+        .get(&side)
+        .ok_or_else(|| anyhow!("missions actions for {side}"))?
+        .get(name)
+        .ok_or_else(|| anyhow!("missing action {}", name))?
+        .clone();
+    Ok((side, slot, action))
+}
+
+fn run_pos_action(lua: MizLua, arg: ArgQuad<Ucid, String, LuaVec3, MarkId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (side, slot, action) = side_slot_action(ctx, &arg.fst, &arg.snd)?;
+    match do_pos_action(
+        ctx,
+        lua,
+        side,
+        slot,
+        arg.fst,
+        arg.snd.clone(),
+        arg.trd,
+        arg.fth,
+        action,
+    ) {
+        Ok(()) => ctx.db.ephemeral.panel_to_player(
+            &ctx.db.persisted,
+            10,
+            &arg.fst,
+            format_compact!("action {} started", arg.snd),
+        ),
+        Err(e) => ctx.db.ephemeral.panel_to_player(
+            &ctx.db.persisted,
+            10,
+            &arg.fst,
+            format_compact!("could not start {}, {e:?}", arg.snd),
+        ),
+    }
+    Ok(())
+}
+
+fn do_pos_group_action(
+    ctx: &mut Context,
+    lua: MizLua,
+    side: Side,
+    slot: SlotId,
+    ucid: Ucid,
+    name: String,
+    pos: LuaVec3,
+    group: DbGid,
+    mark: MarkId,
+    action: Action,
+) -> Result<()> {
+    let pos = Vector2::new(pos.0.x, pos.0.z);
+    let args = match &action.kind {
+        ActionKind::TankerWaypoint => ActionArgs::TankerWaypoint(WithPosAndGroup {
+            cfg: (),
+            pos,
+            group,
+        }),
+        ActionKind::AwacsWaypoint => ActionArgs::AwacsWaypoint(WithPosAndGroup {
+            cfg: (),
+            pos,
+            group,
+        }),
+        ActionKind::FighersWaypoint => ActionArgs::FightersWaypoint(WithPosAndGroup {
+            cfg: (),
+            pos,
+            group,
+        }),
+        ActionKind::DroneWaypoint => ActionArgs::DroneWaypoint(WithPosAndGroup {
+            cfg: (),
+            pos,
+            group,
+        }),
+        ActionKind::AttackersWaypoint => ActionArgs::AttackersWaypoint(WithPosAndGroup {
+            cfg: (),
+            pos,
+            group,
+        }),
+        ActionKind::Attackers(_)
+        | ActionKind::Awacs(_)
+        | ActionKind::Deployable(_)
+        | ActionKind::Drone(_)
+        | ActionKind::Fighters(_)
+        | ActionKind::Tanker(_)
+        | ActionKind::Paratrooper(_)
+        | ActionKind::Nuke(_)
+        | ActionKind::Bomber(_)
+        | ActionKind::LogisticsTransfer(_)
+        | ActionKind::LogisticsRepair(_)
+        | ActionKind::Move(_) => bail!("invalid action type for this menu item"),
+    };
+    let cmd = ActionCmd { name, action, args };
+    run_action(ctx, lua, side, slot, ucid, Some(mark), cmd)
+}
+
+fn run_pos_group_action(
+    lua: MizLua,
+    arg: ArgPent<Ucid, String, LuaVec3, DbGid, MarkId>,
+) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let (side, slot, action) = side_slot_action(ctx, &arg.fst, &arg.snd)?;
+    match do_pos_group_action(
+        ctx,
+        lua,
+        side,
+        slot,
+        arg.fst,
+        arg.snd.clone(),
+        arg.trd,
+        arg.fth,
+        arg.pnt,
+        action,
+    ) {
+        Ok(()) => ctx.db.ephemeral.panel_to_player(
+            &ctx.db.persisted,
+            10,
+            &arg.fst,
+            format_compact!("action {} started for {}", arg.snd, arg.fth),
+        ),
+        Err(e) => ctx.db.ephemeral.panel_to_player(
+            &ctx.db.persisted,
+            10,
+            &arg.fst,
+            format_compact!("could not start {} for {}, {e:?}", arg.snd, arg.fth),
+        ),
+    }
+    Ok(())
+}
+
+fn do_objective_action(
+    ctx: &mut Context,
+    lua: MizLua,
+    side: Side,
+    slot: SlotId,
+    ucid: Ucid,
+    name: String,
+    oid: ObjectiveId,
+    action: Action,
+) -> Result<()> {
+    let args = match &action.kind {
+        ActionKind::LogisticsRepair(cfg) => ActionArgs::LogisticsRepair(WithObj {
+            cfg: cfg.clone(),
+            oid,
+        }),
+        ActionKind::TankerWaypoint
+        | ActionKind::AwacsWaypoint
+        | ActionKind::FighersWaypoint
+        | ActionKind::DroneWaypoint
+        | ActionKind::AttackersWaypoint
+        | ActionKind::Attackers(_)
+        | ActionKind::Awacs(_)
+        | ActionKind::Deployable(_)
+        | ActionKind::Drone(_)
+        | ActionKind::Fighters(_)
+        | ActionKind::Tanker(_)
+        | ActionKind::Paratrooper(_)
+        | ActionKind::Nuke(_)
+        | ActionKind::Bomber(_)
+        | ActionKind::LogisticsTransfer(_)
+        | ActionKind::Move(_) => bail!("invalid action type for this menu item"),
+    };
+    let cmd = ActionCmd { name, action, args };
+    run_action(ctx, lua, side, slot, ucid, None, cmd)
 }
 
 fn run_objective_action(lua: MizLua, arg: ArgTriple<Ucid, String, ObjectiveId>) -> Result<()> {
-    unimplemented!()
+    let ctx = unsafe { Context::get_mut() };
+    let (side, slot, action) = side_slot_action(ctx, &arg.fst, &arg.snd)?;
+    match do_objective_action(
+        ctx,
+        lua,
+        side,
+        slot,
+        arg.fst,
+        arg.snd.clone(),
+        arg.trd,
+        action,
+    ) {
+        Ok(()) => ctx.db.ephemeral.panel_to_player(
+            &ctx.db.persisted,
+            10,
+            &arg.fst,
+            format_compact!("action {} started", arg.snd),
+        ),
+        Err(e) => ctx.db.ephemeral.panel_to_player(
+            &ctx.db.persisted,
+            10,
+            &arg.fst,
+            format_compact!("could not start {}, {e:?}", arg.snd),
+        ),
+    }
+    Ok(())
 }
 
 fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result<()> {
@@ -49,6 +327,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         .get(&player.side)
         .ok_or_else(|| anyhow!("no actions for {}", player.side))?;
     struct Mk {
+        id: MarkId,
         pos: Vector3,
         count: usize,
     }
@@ -62,6 +341,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                     marks
                         .entry(mk.text.clone())
                         .or_insert_with(|| Mk {
+                            id: mk.id,
                             pos: mk.pos.0,
                             count: 0,
                         })
@@ -78,10 +358,11 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                 text.clone(),
                 Some(root.clone()),
                 run_pos_action,
-                ArgTriple {
+                ArgQuad {
                     fst: arg.fst,
                     snd: name.clone(),
                     trd: LuaVec3(mk.pos),
+                    fth: mk.id,
                 },
             )?;
         }
@@ -103,11 +384,12 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                             name.clone(),
                             Some(root.clone()),
                             run_pos_group_action,
-                            ArgQuad {
+                            ArgPent {
                                 fst: arg.fst,
                                 snd: name.clone(),
                                 trd: LuaVec3(mk.pos),
                                 fth: *gid,
+                                pnt: mk.id,
                             },
                         )?;
                     }
@@ -168,7 +450,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
     Ok(())
 }
 
-pub(super) fn init_action_menu_for_slot(
+pub fn init_action_menu_for_slot(
     ctx: &mut Context,
     lua: MizLua,
     slot: &SlotId,
@@ -176,7 +458,7 @@ pub(super) fn init_action_menu_for_slot(
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
     let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
-    ctx.subscribed_jtac_menus.remove(slot);
+    ctx.subscribed_action_menus.remove(slot);
     mc.remove_command_for_group(si.miz_gid, GroupCommandItem::from(vec!["Actions>>".into()]))?;
     mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Actions".into()]))?;
     mc.add_command_for_group(
@@ -187,7 +469,7 @@ pub(super) fn init_action_menu_for_slot(
         ArgTriple {
             fst: *ucid,
             snd: si.miz_gid,
-            trd: *slot
+            trd: *slot,
         },
     )?;
     Ok(())

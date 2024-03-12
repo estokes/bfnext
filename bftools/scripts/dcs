@@ -135,14 +135,14 @@ function dcs_port() {
 }
 
 function block_incoming() {
-    sudo iptables -D INPUT -i enp1s0f0 -p tcp --dport $1 -j ACCEPT
-    sudo iptables -D INPUT -i enp1s0f0 -p udp --dport $1 -j ACCEPT
+    sudo iptables -D INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
+    sudo iptables -D INPUT -i eno1 -p udp --dport $1 -j ACCEPT
 }
 
 function unblock_incoming() {
     sleep 120 
-    sudo iptables -I INPUT -i enp1s0f0 -p tcp --dport $1 -j ACCEPT
-    sudo iptables -I INPUT -i enp1s0f0 -p udp --dport $1 -j ACCEPT
+    sudo iptables -I INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
+    sudo iptables -I INPUT -i eno1 -p udp --dport $1 -j ACCEPT
 }
 
 function run_dcs() {

@@ -152,7 +152,7 @@ function run_dcs() {
         cd "$DCS"
         block_incoming $PORT
         unblock_incoming $PORT &
-        WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
+        wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
         sleep 10
     done
 }

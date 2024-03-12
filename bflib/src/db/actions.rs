@@ -498,24 +498,18 @@ impl Db {
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
         self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::Circle, || {
-            Task::ComboTask(vec![
-                Task::EngageTargets {
-                    target_types: vec![
-                        Attribute::Fighters,
-                        Attribute::MultiroleFighters,
-                        Attribute::BattleAirplanes,
-                        Attribute::Battleplanes,
-                        Attribute::Helicopters,
-                        Attribute::AttackHelicopters,
-                    ],
-                    max_dist: Some(30_000.),
-                    priority: None,
-                },
-                Task::WrappedCommand(Command::EPLRS {
-                    enable: true,
-                    group: None,
-                }),
-            ])
+            Task::EngageTargets {
+                target_types: vec![
+                    Attribute::Fighters,
+                    Attribute::MultiroleFighters,
+                    Attribute::BattleAirplanes,
+                    Attribute::Battleplanes,
+                    Attribute::Helicopters,
+                    Attribute::AttackHelicopters,
+                ],
+                max_dist: Some(30_000.),
+                priority: None,
+            }
         })
     }
 

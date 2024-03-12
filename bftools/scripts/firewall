@@ -11,7 +11,7 @@ PATH=/sbin:${PATH}
 
 function start() {
     # setup traffic control
-    tc qdisc add dev $WAN root cake bandwidth 250mbit
+    tc qdisc add dev $WAN root cake bandwidth 1000mbit
 
     # accept packets related to existing connections
     iptables -A INPUT -i $WAN -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT

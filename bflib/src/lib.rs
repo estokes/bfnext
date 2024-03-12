@@ -123,7 +123,8 @@ impl LoadState {
     fn init_ok(&self) -> bool {
         match self {
             Self::Init => false,
-            Self::MissionLoaded { time: _ } | Self::Running => true,
+            Self::MissionLoaded { time } => Utc::now() - *time > Duration::seconds(30),
+            Self::Running => true,
         }
     }
 

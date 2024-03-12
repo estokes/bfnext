@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::{
     admin::{self, AdminCommand},
     cfg::{Action, ActionKind},
@@ -23,6 +22,7 @@ use dcso3::{
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use log::{error, info};
+use std::sync::Arc;
 
 fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     let ifo = get_player_info(

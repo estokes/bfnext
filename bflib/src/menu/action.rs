@@ -427,7 +427,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             root = mc.add_submenu_for_group(arg.snd, "Next>>".into(), Some(root))?;
             n = 0;
         }
-        let name = if action.cost > 0 {
+        let title = if action.cost > 0 {
             String::from(format_compact!("{name}({} pts)", action.cost))
         } else {
             name.clone()
@@ -439,9 +439,9 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             | ActionKind::FighersWaypoint
             | ActionKind::TankerWaypoint
             | ActionKind::DroneWaypoint => {
-                let root = mc.add_submenu_for_group(arg.snd, name.clone(), Some(root.clone()))?;
-                add_pos_group(root.clone(), name)?
-            },
+                let root = mc.add_submenu_for_group(arg.snd, title, Some(root.clone()))?;
+                add_pos_group(root.clone(), name.clone())?
+            }
             ActionKind::Attackers(_)
             | ActionKind::Awacs(_)
             | ActionKind::Deployable(_)
@@ -450,13 +450,13 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             | ActionKind::Tanker(_)
             | ActionKind::Paratrooper(_)
             | ActionKind::Nuke(_) => {
-                let root = mc.add_submenu_for_group(arg.snd, name.clone(), Some(root.clone()))?;
-                add_pos(root.clone(), name)?
-            },
+                let root = mc.add_submenu_for_group(arg.snd, title, Some(root.clone()))?;
+                add_pos(root.clone(), name.clone())?
+            }
             ActionKind::LogisticsRepair(_) => {
-                let root = mc.add_submenu_for_group(arg.snd, name.clone(), Some(root.clone()))?;
-                add_objective(root.clone(), name)?
-            },
+                let root = mc.add_submenu_for_group(arg.snd, title, Some(root.clone()))?;
+                add_objective(root.clone(), name.clone())?
+            }
         }
         n += 1;
     }

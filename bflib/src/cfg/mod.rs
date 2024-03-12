@@ -19,7 +19,8 @@ use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{coalition::Side, controller::AltType, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
+use indexmap::IndexMap;
 use serde_derive::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
@@ -586,7 +587,7 @@ pub struct Cfg {
     pub default_lives: FxHashMap<LifeType, (u8, u32)>,
     /// Available actions per side
     #[serde(default)]
-    pub actions: FxHashMap<Side, FxHashMap<String, Action>>,
+    pub actions: FxHashMap<Side, IndexMap<String, Action, FxBuildHasher>>,
     /// vehicle cargo configuration
     #[serde(default)]
     pub cargo: FxHashMap<Vehicle, CargoConfig>,

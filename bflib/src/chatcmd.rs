@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::{
     admin::{self, AdminCommand},
     cfg::{Action, ActionKind},
@@ -21,7 +20,8 @@ use dcso3::{
     net::{Net, PlayerId},
     HooksLua, MizLua, String,
 };
-use fxhash::FxHashMap;
+use fxhash::FxBuildHasher;
+use indexmap::IndexMap;
 use log::{error, info};
 
 fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
@@ -270,7 +270,7 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
     }
 }
 
-fn action_help(ctx: &mut Context, actions: &FxHashMap<String, Action>, id: PlayerId) {
+fn action_help(ctx: &mut Context, actions: &IndexMap<String, Action, FxBuildHasher>, id: PlayerId) {
     for (name, action) in actions {
         let msg = match &action.kind {
             ActionKind::Attackers(_) => Some(format_compact!("{name}: <key> | Spawn ai attackers. cost {}", action.cost)),

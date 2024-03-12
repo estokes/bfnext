@@ -1142,8 +1142,8 @@ fn default_supply_transfer_crate() -> FxHashMap<Side, Crate> {
     ])
 }
 
-fn default_red_actions() -> FxHashMap<String, Action> {
-    FxHashMap::from_iter([
+fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
+    IndexMap::from_iter([
         (
             "awacs".into(),
             Action {
@@ -1390,8 +1390,8 @@ fn default_red_actions() -> FxHashMap<String, Action> {
     ])
 }
 
-fn default_blue_actions() -> FxHashMap<String, Action> {
-    FxHashMap::from_iter([
+fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
+    IndexMap::from_iter([
         (
             "awacs".into(),
             Action {

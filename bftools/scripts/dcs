@@ -150,8 +150,9 @@ function run_dcs() {
         update_from_git
         PORT=$(dcs_port)
         cd "$DCS"
-        block_incoming $PORT
-        unblock_incoming $PORT &
+        # possibly not required
+        # block_incoming $PORT
+        # unblock_incoming $PORT &
         WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
         sleep 10
     done

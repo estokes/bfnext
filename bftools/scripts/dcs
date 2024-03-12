@@ -125,15 +125,33 @@ function watchdog() {
 function run_srs() {
     while true; do
         cd "$SRS"
-	wine ./SR-Server.exe
-	sleep 10
+        wine ./SR-Server.exe
+        sleep 10
     done
+}
+
+function dcs_port() {
+    grep -F '["port"]' "${DATA}/Config/serverSettings.lua" | sed -e 's/.*= *"\([0-9]*\)" *,/\1/'
+}
+
+function block_incoming() {
+    sudo iptables -D INPUT -i enp1s0f0 -p tcp --dport $1 -j ACCEPT
+    sudo iptables -D INPUT -i enp1s0f0 -p udp --dport $1 -j ACCEPT
+}
+
+function unblock_incoming() {
+    sleep 60
+    sudo iptables -A INPUT -i enp1s0f0 -p tcp --dport $1 -j ACCEPT
+    sudo iptables -A INPUT -i enp1s0f0 -p udp --dport $1 -j ACCEPT
 }
 
 function run_dcs() {
     while true; do
-	update_from_git
-	cd "$DCS"
+        update_from_git
+        PORT=$(dcs_port)
+        cd "$DCS"
+        block_incoming $PORT
+        unblock_incoming $PORT &
         WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
         sleep 10
     done

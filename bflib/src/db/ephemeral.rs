@@ -580,7 +580,10 @@ impl Ephemeral {
         }
     }
 
-    pub(super) fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, cfg: Cfg) -> Result<()> {
+    pub(super) fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, mut cfg: Cfg) -> Result<()> {
+        for (_, actions) in &mut cfg.actions {
+            actions.sort_by(|name0, _, name1, _| name0.cmp(name1));
+        }
         let check_unit_classification = || -> Result<()> {
             let mut not_classified = FxHashSet::default();
             for side in Side::ALL {

@@ -153,6 +153,7 @@ pub enum UnitTag {
     Invincible,
     Driveable,
     AWACS,
+    Link16
 }
 
 #[derive(

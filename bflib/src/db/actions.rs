@@ -1072,7 +1072,8 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::RaceTrack, || {
+        let group = self.group(&args.group)?;
+        let task = if group.tags.contains(UnitTag::Link16) {
             Task::ComboTask(vec![
                 Task::AWACS,
                 Task::WrappedCommand(Command::EPLRS {
@@ -1080,7 +1081,17 @@ impl Db {
                     group: None,
                 }),
             ])
-        })
+        } else {
+            Task::AWACS
+        };
+        self.move_ai_loiter_point(
+            spctx,
+            side,
+            ucid,
+            args,
+            OrbitPattern::RaceTrack,
+            move || task.clone(),
+        )
     }
 
     fn awacs(

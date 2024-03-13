@@ -380,11 +380,14 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         };
         let mut n = 0;
         for gid in iter {
-            if n >= 9 {
+            if n >= 8 {
                 root = mc.add_submenu_for_group(arg.snd, "Next>>".into(), Some(root))?;
                 n = 0;
             }
             let group = ctx.db.group(gid)?;
+            if group.side != player.side {
+                continue
+            }
             let key = match &group.origin {
                 DeployKind::Action { name, .. } => {
                     if action {
@@ -455,7 +458,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
     };
     let mut n = 0;
     for (name, action) in actions {
-        if n > 9 {
+        if n >= 8 {
             root = mc.add_submenu_for_group(arg.snd, "Next>>".into(), Some(root))?;
             n = 0;
         }

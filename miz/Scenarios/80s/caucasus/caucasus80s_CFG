@@ -264,7 +264,7 @@
           }
         },
         "cost": 50,
-        "penalty": 100,
+        "penalty": 50,
         "limit": null
       },
       "fighters-waypoint": {
@@ -291,7 +291,7 @@
           }
         },
         "cost": 100,
-        "penalty": 100,
+        "penalty": 25,
         "limit": null
       },
       "deploy-ewr": {
@@ -309,7 +309,7 @@
           }
         },
         "cost": 50,
-        "penalty": 100,
+        "penalty": 50,
         "limit": null
       },
       "repair": {
@@ -324,7 +324,7 @@
           }
         },
         "cost": 100,
-        "penalty": 100,
+        "penalty": 50,
         "limit": null
       },
       "transfer": {
@@ -339,7 +339,7 @@
           }
         },
         "cost": 100,
-        "penalty": 100,
+        "penalty": 50,
         "limit": null
       },
       "drone": {
@@ -370,7 +370,7 @@
           }
         },
         "cost": 10,
-        "penalty": 25,
+        "penalty": 10,
         "limit": null
       },
       "fighters": {
@@ -473,7 +473,7 @@
           }
         },
         "cost": 50,
-        "penalty": 100,
+        "penalty": 50,
         "limit": null
       },
       "fighters-waypoint": {
@@ -500,7 +500,7 @@
           }
         },
         "cost": 100,
-        "penalty": 100,
+        "penalty": 25,
         "limit": null
       },
       "deploy-ewr": {
@@ -518,7 +518,7 @@
           }
         },
         "cost": 50,
-        "penalty": 100,
+        "penalty": 50,
         "limit": null
       },
       "repair": {
@@ -533,7 +533,7 @@
           }
         },
         "cost": 100,
-        "penalty": 100,
+        "penalty": 50,
         "limit": null
       },
       "transfer": {
@@ -548,7 +548,7 @@
           }
         },
         "cost": 100,
-        "penalty": 100,
+        "penalty": 50,
         "limit": null
       },
       "drone": {
@@ -594,7 +594,7 @@
           }
         },
         "cost": 10,
-        "penalty": 25,
+        "penalty": 10,
         "limit": null
       },
       "fighters": {

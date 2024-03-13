@@ -32,10 +32,12 @@ else
     exit 5
 fi
 
+BLOCK=120
 NAME="$1"
-SRS="${HOME}/.wine/drive_c/Program Files/srs_${NAME}"
-DCS="${HOME}/.wine/drive_c/Program Files/Eagle Dynamics/DCS World Server"
-DATA="${HOME}/.wine/drive_c/users/dcs/Saved Games/$NAME"
+PFX="${HOME}/.wine_${NAME}/drive_c"
+SRS="${HOME}/.wine_srs_${NAME}/drive_c/Program Files/srs_${NAME}"
+DCS="${PFX}/Program Files/Eagle Dynamics/DCS World Server"
+DATA="${PFX}/users/dcs/Saved Games/$NAME"
 BFLOG="${DATA}/Logs/bfnext.txt"
 INSTALLED_MIZ="${DATA}/Missions/$(ls "${DATA}"/Missions)"
 INSTALLED_CFG="$(ls "${DATA}"/*_CFG)"
@@ -125,7 +127,7 @@ function watchdog() {
 function run_srs() {
     while true; do
         cd "$SRS"
-        wine ./SR-Server.exe
+        WINEPREFIX="${HOME}/.wine_srs_${NAME}" wine ./SR-Server.exe
         sleep 10
     done
 }
@@ -135,14 +137,18 @@ function dcs_port() {
 }
 
 function block_incoming() {
-    sudo iptables -D INPUT -p tcp --dport $1 -j ACCEPT
-    sudo iptables -D INPUT -p udp --dport $1 -j ACCEPT
+    sudo iptables -D INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
+    sudo iptables -D INPUT -i eno1 -p udp --dport $1 -j ACCEPT
 }
 
 function unblock_incoming() {
-    sleep 120 
-    sudo iptables -I INPUT -p tcp --dport $1 -j ACCEPT
-    sudo iptables -I INPUT -p udp --dport $1 -j ACCEPT
+    sleep $BLOCK
+    if ! sudo iptables -C INPUT -i eno1 -p tcp --dport $1 -j ACCEPT 2>/dev/null; then
+        sudo iptables -I INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
+    fi
+    if ! sudo iptables -C INPUT -i eno1 -p udp --dport $1 -j ACCEPT 2>/dev/null; then
+        sudo iptables -I INPUT -i eno1 -p udp --dport $1 -j ACCEPT
+    fi
 }
 
 function run_dcs() {
@@ -150,10 +156,9 @@ function run_dcs() {
         update_from_git
         PORT=$(dcs_port)
         cd "$DCS"
-        # possibly not required
-        # block_incoming $PORT
-        # unblock_incoming $PORT &
-        WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
+        block_incoming $PORT
+        unblock_incoming $PORT &
+        WINEPREFIX="${HOME}/.wine_${NAME}" WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
         sleep 10
     done
 }

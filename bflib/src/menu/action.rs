@@ -368,11 +368,11 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         }
         Ok(())
     };
-    let add_pos_group = |root: GroupSubMenu, name: String| -> Result<()> {
+    let add_pos_group = |root: GroupSubMenu| -> Result<()> {
         for gid in &ctx.db.persisted.actions {
             let group = ctx.db.group(gid)?;
             match &group.origin {
-                DeployKind::Action { name: aname, .. } if aname == &name => {
+                DeployKind::Action { .. } => {
                     let root = mc.add_submenu_for_group(
                         arg.snd,
                         format_compact!("{gid}").into(),
@@ -394,8 +394,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                         )?;
                     }
                 }
-                DeployKind::Action { .. }
-                | DeployKind::Crate { .. }
+                DeployKind::Crate { .. }
                 | DeployKind::Deployed { .. }
                 | DeployKind::Objective
                 | DeployKind::Troop { .. } => (),
@@ -440,7 +439,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             | ActionKind::TankerWaypoint
             | ActionKind::DroneWaypoint => {
                 let root = mc.add_submenu_for_group(arg.snd, title, Some(root.clone()))?;
-                add_pos_group(root.clone(), name.clone())?
+                add_pos_group(root.clone())?
             }
             ActionKind::Attackers(_)
             | ActionKind::Awacs(_)

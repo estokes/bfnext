@@ -296,6 +296,10 @@ impl Ephemeral {
         self.used_pad_templates.remove(pad);
     }
 
+    pub fn set_pad_template_used(&mut self, pad: String) {
+        self.used_pad_templates.insert(pad);
+    }
+
     pub fn msgs(&mut self) -> &mut MsgQ {
         &mut self.msgs
     }

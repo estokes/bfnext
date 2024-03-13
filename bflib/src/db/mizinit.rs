@@ -353,6 +353,7 @@ impl Db {
                     spctx
                         .move_farp_pad(idx, obj.owner, &pad_template, obj.pos)
                         .context("moving farp pad")?;
+                    self.ephemeral.set_pad_template_used(pad_template.clone());
                 }
                 if let Some(groups) = obj.groups.get(&obj.owner) {
                     for gid in groups {

@@ -127,7 +127,7 @@ function watchdog() {
 function run_srs() {
     while true; do
         cd "$SRS"
-        wine ./SR-Server.exe
+        WINEPREFIX="${HOME}/.wine_srs_${NAME}" wine ./SR-Server.exe
         sleep 10
     done
 }

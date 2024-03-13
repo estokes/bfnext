@@ -380,7 +380,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         };
         let mut n = 0;
         for gid in iter {
-            if n > 9 {
+            if n >= 9 {
                 root = mc.add_submenu_for_group(arg.snd, "Next>>".into(), Some(root))?;
                 n = 0;
             }

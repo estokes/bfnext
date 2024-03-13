@@ -372,13 +372,18 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         }
         Ok(())
     };
-    let add_pos_group = |root: GroupSubMenu, name: String, action: bool| -> Result<()> {
+    let add_pos_group = |mut root: GroupSubMenu, name: String, action: bool| -> Result<()> {
         let iter = if action {
             ctx.db.persisted.actions.into_iter()
         } else {
             ctx.db.persisted.deployed.into_iter()
         };
+        let mut n = 0;
         for gid in iter {
+            if n > 9 {
+                root = mc.add_submenu_for_group(arg.snd, "Next>>".into(), Some(root))?;
+                n = 0;
+            }
             let group = ctx.db.group(gid)?;
             let key = match &group.origin {
                 DeployKind::Action { name, .. } => {
@@ -426,6 +431,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                     )?;
                 }
             }
+            n += 1;
         }
         Ok(())
     };

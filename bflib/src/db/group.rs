@@ -813,8 +813,8 @@ impl Db {
                                     &format_compact!("for the loss of action group {gid}"),
                                 )
                             }
+                            self.delete_group(&gid)?
                         }
-                        self.delete_group(&gid)?
                     }
                 }
             }

@@ -448,9 +448,18 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::Circle, || {
-            Task::ComboTask(vec![])
-        })
+        self.move_ai_loiter_point(
+            spctx,
+            side,
+            ucid,
+            args,
+            OrbitPattern::Circle,
+            |k| match k {
+                ActionKind::Drone(_) => true,
+                _ => false,
+            },
+            || Task::ComboTask(vec![]),
+        )
     }
 
     fn drone(
@@ -497,8 +506,17 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::Circle, || {
-            Task::EngageTargets {
+        self.move_ai_loiter_point(
+            spctx,
+            side,
+            ucid,
+            args,
+            OrbitPattern::Circle,
+            |k| match k {
+                ActionKind::Fighters(_) => true,
+                _ => false,
+            },
+            || Task::EngageTargets {
                 target_types: vec![
                     Attribute::Fighters,
                     Attribute::MultiroleFighters,
@@ -509,8 +527,8 @@ impl Db {
                 ],
                 max_dist: Some(30_000.),
                 priority: None,
-            }
-        })
+            },
+        )
     }
 
     fn ai_fighters(
@@ -554,8 +572,17 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::Circle, || {
-            Task::EngageTargets {
+        self.move_ai_loiter_point(
+            spctx,
+            side,
+            ucid,
+            args,
+            OrbitPattern::Circle,
+            |k| match k {
+                ActionKind::Attackers(_) => true,
+                _ => false,
+            },
+            || Task::EngageTargets {
                 target_types: vec![
                     Attribute::Fighters,
                     Attribute::MultiroleFighters,
@@ -569,8 +596,8 @@ impl Db {
                 ],
                 max_dist: Some(20_000.),
                 priority: None,
-            }
-        })
+            },
+        )
     }
 
     fn ai_attackers(
@@ -735,9 +762,18 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        self.move_ai_loiter_point(spctx, side, ucid, args, OrbitPattern::RaceTrack, || {
-            Task::Tanker
-        })
+        self.move_ai_loiter_point(
+            spctx,
+            side,
+            ucid,
+            args,
+            OrbitPattern::RaceTrack,
+            |k| match k {
+                ActionKind::Tanker(_) => true,
+                _ => false,
+            },
+            || Task::Tanker,
+        )
     }
 
     fn tanker(
@@ -1090,6 +1126,10 @@ impl Db {
             ucid,
             args,
             OrbitPattern::RaceTrack,
+            |k| match k {
+                ActionKind::Awacs(_) => true,
+                _ => false,
+            },
             move || task.clone(),
         )
     }
@@ -1137,6 +1177,7 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
         pattern: OrbitPattern,
+        validator: impl Fn(&ActionKind) -> bool,
         task: impl Fn() -> Task<'a> + 'static,
     ) -> Result<()> {
         let pos = args.pos;
@@ -1160,58 +1201,65 @@ impl Db {
                 loc,
                 player,
                 ..
-            } => match &mut spec.kind {
-                ActionKind::Awacs(a)
-                | ActionKind::Tanker(a)
-                | ActionKind::Drone(DroneCfg { plane: a, .. })
-                | ActionKind::Fighters(a)
-                | ActionKind::Attackers(a) => {
-                    match loc {
-                        SpawnLoc::InAir { pos: oldpos, .. } => {
-                            let dir = *oldpos - pos;
-                            let step = dir.magnitude() / 4.;
-                            let dir = dir.normalize();
-                            let (old_dist, _) = racetrack_dist_and_heading(
-                                &self.persisted.objectives,
-                                *oldpos,
-                                enemy,
-                            );
-                            for i in 1..4 {
-                                let pos = *oldpos + dir * (step * i as f64);
-                                let (dist, _) = racetrack_dist_and_heading(
+            } => {
+                if !validator(&spec.kind) {
+                    bail!("this move action is not compatible with the selected group")
+                }
+                match &mut spec.kind {
+                    ActionKind::Awacs(a)
+                    | ActionKind::Tanker(a)
+                    | ActionKind::Drone(DroneCfg { plane: a, .. })
+                    | ActionKind::Fighters(a)
+                    | ActionKind::Attackers(a) => {
+                        match loc {
+                            SpawnLoc::InAir { pos: oldpos, .. } => {
+                                let dir = *oldpos - pos;
+                                let step = dir.magnitude() / 4.;
+                                let dir = dir.normalize();
+                                let (old_dist, _) = racetrack_dist_and_heading(
                                     &self.persisted.objectives,
-                                    pos,
+                                    *oldpos,
                                     enemy,
                                 );
-                                if old_dist < dist && dist - old_dist >= 500. {
-                                    *player = ucid.clone();
+                                for i in 1..4 {
+                                    let pos = *oldpos + dir * (step * i as f64);
+                                    let (dist, _) = racetrack_dist_and_heading(
+                                        &self.persisted.objectives,
+                                        pos,
+                                        enemy,
+                                    );
+                                    if old_dist < dist && dist - old_dist >= 500. {
+                                        *player = ucid.clone();
+                                    }
+                                }
+                                *oldpos = pos;
+                                for id in marks.drain() {
+                                    self.ephemeral.msgs().delete_mark(id)
                                 }
                             }
-                            *oldpos = pos;
-                            for id in marks.drain() {
-                                self.ephemeral.msgs().delete_mark(id)
+                            SpawnLoc::AtPos { .. }
+                            | SpawnLoc::AtPosWithCenter { .. }
+                            | SpawnLoc::AtPosWithComponents { .. }
+                            | SpawnLoc::AtTrigger { .. } => {
+                                bail!("race tracker not spawning in air")
                             }
                         }
-                        SpawnLoc::AtPos { .. }
-                        | SpawnLoc::AtPosWithCenter { .. }
-                        | SpawnLoc::AtPosWithComponents { .. }
-                        | SpawnLoc::AtTrigger { .. } => bail!("race tracker not spawning in air"),
+                        (a.altitude, a.altitude_typ.clone(), a.speed, marks, player)
                     }
-                    (a.altitude, a.altitude_typ.clone(), a.speed, marks, player)
+                    ActionKind::AttackersWaypoint
+                    | ActionKind::AwacsWaypoint
+                    | ActionKind::DroneWaypoint
+                    | ActionKind::TankerWaypoint
+                    | ActionKind::FighersWaypoint
+                    | ActionKind::Move(_)
+                    | ActionKind::Deployable(_)
+                    | ActionKind::Paratrooper(_)
+                    | ActionKind::Bomber(_)
+                    | ActionKind::Nuke(_)
+                    | ActionKind::LogisticsRepair(_)
+                    | ActionKind::LogisticsTransfer(_) => bail!("not a race tracker"),
                 }
-                ActionKind::AttackersWaypoint
-                | ActionKind::AwacsWaypoint
-                | ActionKind::DroneWaypoint
-                | ActionKind::TankerWaypoint
-                | ActionKind::FighersWaypoint
-                | ActionKind::Move(_)
-                | ActionKind::Deployable(_)
-                | ActionKind::Paratrooper(_)
-                | ActionKind::Bomber(_)
-                | ActionKind::Nuke(_)
-                | ActionKind::LogisticsRepair(_)
-                | ActionKind::LogisticsTransfer(_) => bail!("not a race tracker"),
-            },
+            }
             DeployKind::Crate { .. }
             | DeployKind::Deployed { .. }
             | DeployKind::Objective

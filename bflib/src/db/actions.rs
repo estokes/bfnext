@@ -458,7 +458,7 @@ impl Db {
                 ActionKind::Drone(_) => true,
                 _ => false,
             },
-            || Task::ComboTask(vec![]),
+            || vec![],
         )
     }
 
@@ -516,17 +516,19 @@ impl Db {
                 ActionKind::Fighters(_) => true,
                 _ => false,
             },
-            || Task::EngageTargets {
-                target_types: vec![
-                    Attribute::Fighters,
-                    Attribute::MultiroleFighters,
-                    Attribute::BattleAirplanes,
-                    Attribute::Battleplanes,
-                    Attribute::Helicopters,
-                    Attribute::AttackHelicopters,
-                ],
-                max_dist: Some(30_000.),
-                priority: None,
+            || {
+                vec![Task::EngageTargets {
+                    target_types: vec![
+                        Attribute::Fighters,
+                        Attribute::MultiroleFighters,
+                        Attribute::BattleAirplanes,
+                        Attribute::Battleplanes,
+                        Attribute::Helicopters,
+                        Attribute::AttackHelicopters,
+                    ],
+                    max_dist: Some(30_000.),
+                    priority: None,
+                }]
             },
         )
     }
@@ -582,20 +584,22 @@ impl Db {
                 ActionKind::Attackers(_) => true,
                 _ => false,
             },
-            || Task::EngageTargets {
-                target_types: vec![
-                    Attribute::Fighters,
-                    Attribute::MultiroleFighters,
-                    Attribute::BattleAirplanes,
-                    Attribute::Battleplanes,
-                    Attribute::Helicopters,
-                    Attribute::AttackHelicopters,
-                    Attribute::GroundUnits,
-                    Attribute::GroundVehicles,
-                    Attribute::ArmedGroundUnits,
-                ],
-                max_dist: Some(20_000.),
-                priority: None,
+            || {
+                vec![Task::EngageTargets {
+                    target_types: vec![
+                        Attribute::Fighters,
+                        Attribute::MultiroleFighters,
+                        Attribute::BattleAirplanes,
+                        Attribute::Battleplanes,
+                        Attribute::Helicopters,
+                        Attribute::AttackHelicopters,
+                        Attribute::GroundUnits,
+                        Attribute::GroundVehicles,
+                        Attribute::ArmedGroundUnits,
+                    ],
+                    max_dist: Some(20_000.),
+                    priority: None,
+                }]
             },
         )
     }
@@ -772,7 +776,7 @@ impl Db {
                 ActionKind::Tanker(_) => true,
                 _ => false,
             },
-            || Task::Tanker,
+            || vec![Task::Tanker],
         )
     }
 
@@ -1110,15 +1114,15 @@ impl Db {
     ) -> Result<()> {
         let group = self.group(&args.group)?;
         let task = if group.tags.contains(UnitTag::Link16) {
-            Task::ComboTask(vec![
-                Task::AWACS,
+            vec![
                 Task::WrappedCommand(Command::EPLRS {
                     enable: true,
                     group: None,
                 }),
-            ])
+                Task::AWACS,
+            ]
         } else {
-            Task::AWACS
+            vec![Task::AWACS]
         };
         self.move_ai_loiter_point(
             spctx,
@@ -1178,7 +1182,7 @@ impl Db {
         args: WithPosAndGroup<()>,
         pattern: OrbitPattern,
         validator: impl Fn(&ActionKind) -> bool,
-        task: impl Fn() -> Task<'a> + 'static,
+        task: impl Fn() -> Vec<Task<'a>> + 'static,
     ) -> Result<()> {
         let pos = args.pos;
         let enemy = side.opposite();
@@ -1342,51 +1346,47 @@ impl Db {
             }
             con.set_command(Command::SetUnlimitedFuel(true))?;
             match &pattern {
-                OrbitPattern::Circle => con
-                    .set_task(Task::Mission {
+                OrbitPattern::Circle => {
+                    let mut tlist = vec![Task::Orbit {
+                        pattern: OrbitPattern::Circle,
+                        point: Some(LuaVec2(point1)),
+                        point2: None,
+                        speed: Some(speed),
+                        altitude: Some(altitude),
+                    }];
+                    for t in task() {
+                        tlist.push(t);
+                    }
+                    con.set_task(Task::Mission {
                         airborne: Some(true),
                         route: vec![
-                            wpt!("ip", pos, task()),
-                            wpt!(
-                                "orbit",
-                                point1,
-                                Task::ComboTask(vec![
-                                    Task::Orbit {
-                                        pattern: OrbitPattern::Circle,
-                                        point: Some(LuaVec2(point1)),
-                                        point2: None,
-                                        speed: Some(speed),
-                                        altitude: Some(altitude)
-                                    },
-                                    task(),
-                                ])
-                            ),
+                            wpt!("ip", pos, Task::ComboTask(task())),
+                            wpt!("orbit", point1, Task::ComboTask(tlist)),
                         ],
                     })
-                    .context("setup orbit")?,
-                OrbitPattern::RaceTrack => con
-                    .set_task(Task::Mission {
+                    .context("setup orbit")?
+                }
+                OrbitPattern::RaceTrack => {
+                    let mut tlist = vec![Task::Orbit {
+                        pattern: OrbitPattern::RaceTrack,
+                        point: Some(LuaVec2(point1)),
+                        point2: Some(LuaVec2(point2.unwrap())),
+                        speed: Some(speed),
+                        altitude: Some(altitude),
+                    }];
+                    for t in task() {
+                        tlist.push(t);
+                    }
+                    con.set_task(Task::Mission {
                         airborne: Some(true),
                         route: vec![
-                            wpt!("ip", pos, task()),
-                            wpt!(
-                                "point1",
-                                point1,
-                                Task::ComboTask(vec![
-                                    Task::Orbit {
-                                        pattern: OrbitPattern::RaceTrack,
-                                        point: Some(LuaVec2(point1)),
-                                        point2: Some(LuaVec2(point2.unwrap())),
-                                        speed: Some(speed),
-                                        altitude: Some(altitude),
-                                    },
-                                    task(),
-                                ])
-                            ),
-                            wpt!("point2", point2.unwrap(), task()),
+                            wpt!("ip", pos, Task::ComboTask(task())),
+                            wpt!("point1", point1, Task::ComboTask(tlist)),
+                            wpt!("point2", point2.unwrap(), Task::ComboTask(task())),
                         ],
                     })
-                    .context("setup racetrack")?,
+                    .context("setup racetrack")?
+                }
                 OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}"),
             }
             Ok(None)

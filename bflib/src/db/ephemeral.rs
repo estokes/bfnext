@@ -274,7 +274,7 @@ impl Ephemeral {
             for _ in 0..max(1, slen >> 4) {
                 if let Some(gid) = self.spawnq.pop_front() {
                     let group = maybe!(persisted.groups, gid, "group")?;
-                    self.spawn_group(persisted, idx, spctx, group)?;
+                    self.spawn_group(persisted, idx, spctx, group, vec![])?;
                 }
             }
         }
@@ -713,13 +713,59 @@ impl Ephemeral {
         self.cfg = Arc::new(cfg);
         Ok(())
     }
+    /*
+            if let DeployKind::Action { loc, .. } = &group.origin {
+                match loc {
+                    SpawnLoc::AtPos { .. }
+                    | SpawnLoc::AtPosWithCenter { .. }
+                    | SpawnLoc::AtPosWithComponents { .. }
+                    | SpawnLoc::AtTrigger { .. } => (),
+                    SpawnLoc::InAir {
+                        pos,
+                        heading,
+                        altitude,
+                        speed,
+                    } => {
+                        let dst = pos + pointing_towards2(*heading) * 10_000.;
+                        let route = template.group.route().context("getting route")?;
+                        macro_rules! pt {
+                            ($pos:expr) => {
+                                MissionPoint {
+                                    action: None,
+                                    typ: PointType::TurningPoint,
+                                    airdrome_id: None,
+                                    time_re_fu_ar: None,
+                                    helipad: None,
+                                    link_unit: None,
+                                    pos: LuaVec2($pos),
+                                    alt: *altitude,
+                                    alt_typ: None,
+                                    speed: *speed,
+                                    speed_locked: None,
+                                    eta: None,
+                                    eta_locked: None,
+                                    name: None,
+                                    task: Box::new(Task::ComboTask(vec![])),
+                                }
+                            };
+                        }
+                        route
+                            .set_points(vec![pt!(*pos), pt!(dst)])
+                            .context("setting points")?;
+                        template.group.set_route(route).context("setting route")?;
+                        template.group.set("heading", *heading)?;
+                    }
+                }
+            }
 
+    */
     pub(super) fn spawn_group<'lua>(
         &mut self,
         persisted: &Persisted,
         idx: &MizIndex,
         spctx: &SpawnCtx<'lua>,
         group: &SpawnedGroup,
+        mission: Vec<MissionPoint<'lua>>,
     ) -> Result<Option<Spawned<'lua>>> {
         let template = spctx
             .get_template(
@@ -732,48 +778,13 @@ impl Ephemeral {
         template.group.set("lateActivation", false)?;
         template.group.set("hidden", false)?;
         template.group.set_name(group.name.clone())?;
-        if let DeployKind::Action { loc, .. } = &group.origin {
-            match loc {
-                SpawnLoc::AtPos { .. }
-                | SpawnLoc::AtPosWithCenter { .. }
-                | SpawnLoc::AtPosWithComponents { .. }
-                | SpawnLoc::AtTrigger { .. } => (),
-                SpawnLoc::InAir {
-                    pos,
-                    heading,
-                    altitude,
-                    speed,
-                } => {
-                    let dst = pos + pointing_towards2(*heading) * 10_000.;
-                    let route = template.group.route().context("getting route")?;
-                    macro_rules! pt {
-                        ($pos:expr) => {
-                            MissionPoint {
-                                action: None,
-                                typ: PointType::TurningPoint,
-                                airdrome_id: None,
-                                time_re_fu_ar: None,
-                                helipad: None,
-                                link_unit: None,
-                                pos: LuaVec2($pos),
-                                alt: *altitude,
-                                alt_typ: None,
-                                speed: *speed,
-                                speed_locked: None,
-                                eta: None,
-                                eta_locked: None,
-                                name: None,
-                                task: Box::new(Task::ComboTask(vec![])),
-                            }
-                        };
-                    }
-                    route
-                        .set_points(vec![pt!(*pos), pt!(dst)])
-                        .context("setting points")?;
-                    template.group.set_route(route).context("setting route")?;
-                    template.group.set("heading", *heading)?;
-                }
-            }
+        if mission.len() > 0 {
+            template
+                .group
+                .route()
+                .context("getting route")?
+                .set_points(mission)
+                .context("setting points")?;
         }
         let mut points: SmallVec<[Vector2; 16]> = smallvec![];
         let by_tname: FxHashMap<&str, &SpawnedUnit> = group

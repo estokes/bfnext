@@ -376,11 +376,13 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         let iter: Box<dyn Iterator<Item = &DbGid>> = if action {
             Box::new(ctx.db.persisted.actions.into_iter())
         } else {
-            Box::new(ctx.db
-                .persisted
-                .deployed
-                .into_iter()
-                .chain(ctx.db.persisted.troops.into_iter()))
+            Box::new(
+                ctx.db
+                    .persisted
+                    .deployed
+                    .into_iter()
+                    .chain(ctx.db.persisted.troops.into_iter()),
+            )
         };
         let mut n = 0;
         for gid in iter {
@@ -442,9 +444,14 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         }
         Ok(())
     };
-    let add_objective = |root: GroupSubMenu, name: String| -> Result<()> {
+    let add_objective = |mut root: GroupSubMenu, name: String| -> Result<()> {
+        let mut n = 0;
         for (oid, obj) in ctx.db.objectives() {
             if obj.owner == player.side {
+                if n >= 8 {
+                    root = mc.add_submenu_for_group(arg.snd, "Next>>".into(), Some(root))?;
+                    n = 0;
+                }
                 mc.add_command_for_group(
                     arg.snd,
                     obj.name.clone(),
@@ -456,6 +463,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                         trd: *oid,
                     },
                 )?;
+                n += 1;
             }
         }
         Ok(())

@@ -458,6 +458,7 @@ impl Db {
                 ActionKind::Drone(_) => true,
                 _ => false,
             },
+            || Task::ComboTask(vec![]),
             || vec![],
         )
     }
@@ -506,6 +507,19 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
+        let init_task = Task::EngageTargets {
+            target_types: vec![
+                Attribute::Fighters,
+                Attribute::MultiroleFighters,
+                Attribute::BattleAirplanes,
+                Attribute::Battleplanes,
+                Attribute::Helicopters,
+                Attribute::AttackHelicopters,
+            ],
+            max_dist: Some(30_000.),
+            priority: None,
+        };
+        let main_task = init_task.clone();
         self.move_ai_loiter_point(
             spctx,
             side,
@@ -516,20 +530,8 @@ impl Db {
                 ActionKind::Fighters(_) => true,
                 _ => false,
             },
-            || {
-                vec![Task::EngageTargets {
-                    target_types: vec![
-                        Attribute::Fighters,
-                        Attribute::MultiroleFighters,
-                        Attribute::BattleAirplanes,
-                        Attribute::Battleplanes,
-                        Attribute::Helicopters,
-                        Attribute::AttackHelicopters,
-                    ],
-                    max_dist: Some(30_000.),
-                    priority: None,
-                }]
-            },
+            move || init_task.clone(),
+            move || vec![main_task.clone()],
         )
     }
 
@@ -574,6 +576,22 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
+        let init_task = Task::EngageTargets {
+            target_types: vec![
+                Attribute::Fighters,
+                Attribute::MultiroleFighters,
+                Attribute::BattleAirplanes,
+                Attribute::Battleplanes,
+                Attribute::Helicopters,
+                Attribute::AttackHelicopters,
+                Attribute::GroundUnits,
+                Attribute::GroundVehicles,
+                Attribute::ArmedGroundUnits,
+            ],
+            max_dist: Some(15_000.),
+            priority: None,
+        };
+        let main_task = init_task.clone();
         self.move_ai_loiter_point(
             spctx,
             side,
@@ -584,23 +602,8 @@ impl Db {
                 ActionKind::Attackers(_) => true,
                 _ => false,
             },
-            || {
-                vec![Task::EngageTargets {
-                    target_types: vec![
-                        Attribute::Fighters,
-                        Attribute::MultiroleFighters,
-                        Attribute::BattleAirplanes,
-                        Attribute::Battleplanes,
-                        Attribute::Helicopters,
-                        Attribute::AttackHelicopters,
-                        Attribute::GroundUnits,
-                        Attribute::GroundVehicles,
-                        Attribute::ArmedGroundUnits,
-                    ],
-                    max_dist: Some(20_000.),
-                    priority: None,
-                }]
-            },
+            move || init_task.clone(),
+            move || vec![main_task.clone()],
         )
     }
 
@@ -776,6 +779,7 @@ impl Db {
                 ActionKind::Tanker(_) => true,
                 _ => false,
             },
+            || Task::Tanker,
             || vec![Task::Tanker],
         )
     }
@@ -1112,17 +1116,17 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        let group = self.group(&args.group)?;
-        let task = if group.tags.contains(UnitTag::Link16) {
-            vec![
+        let group = group!(self, args.group)?;
+        let init_task = if group.tags.contains(UnitTag::Link16) {
+            Task::ComboTask(vec![
+                Task::AWACS,
                 Task::WrappedCommand(Command::EPLRS {
                     enable: true,
                     group: None,
                 }),
-                Task::AWACS,
-            ]
+            ])
         } else {
-            vec![Task::AWACS]
+            Task::AWACS
         };
         self.move_ai_loiter_point(
             spctx,
@@ -1134,7 +1138,8 @@ impl Db {
                 ActionKind::Awacs(_) => true,
                 _ => false,
             },
-            move || task.clone(),
+            move || init_task.clone(),
+            || vec![Task::AWACS],
         )
     }
 
@@ -1182,7 +1187,8 @@ impl Db {
         args: WithPosAndGroup<()>,
         pattern: OrbitPattern,
         validator: impl Fn(&ActionKind) -> bool,
-        task: impl Fn() -> Vec<Task<'a>> + 'static,
+        init_task: impl Fn() -> Task<'a> + 'static,
+        main_task: impl Fn() -> Vec<Task<'a>> + 'static,
     ) -> Result<()> {
         let pos = args.pos;
         let enemy = side.opposite();
@@ -1354,13 +1360,13 @@ impl Db {
                         speed: Some(speed),
                         altitude: Some(altitude),
                     }];
-                    for t in task() {
+                    for t in main_task() {
                         tlist.push(t);
                     }
                     con.set_task(Task::Mission {
                         airborne: Some(true),
                         route: vec![
-                            wpt!("ip", pos, Task::ComboTask(task())),
+                            wpt!("ip", pos, init_task()),
                             wpt!("orbit", point1, Task::ComboTask(tlist)),
                         ],
                     })
@@ -1374,15 +1380,15 @@ impl Db {
                         speed: Some(speed),
                         altitude: Some(altitude),
                     }];
-                    for t in task() {
+                    for t in main_task() {
                         tlist.push(t);
                     }
                     con.set_task(Task::Mission {
                         airborne: Some(true),
                         route: vec![
-                            wpt!("ip", pos, Task::ComboTask(task())),
+                            wpt!("ip", pos, init_task()),
                             wpt!("point1", point1, Task::ComboTask(tlist)),
-                            wpt!("point2", point2.unwrap(), Task::ComboTask(task())),
+                            wpt!("point2", point2.unwrap(), init_task()),
                         ],
                     })
                     .context("setup racetrack")?

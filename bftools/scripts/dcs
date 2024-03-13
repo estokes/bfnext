@@ -142,8 +142,12 @@ function block_incoming() {
 
 function unblock_incoming() {
     sleep $BLOCK
-    sudo iptables -I INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
-    sudo iptables -I INPUT -i eno1 -p udp --dport $1 -j ACCEPT
+    if ! sudo iptables -C INPUT -i eno1 -p tcp --dport $1 -j ACCEPT 2>/dev/null; then
+        sudo iptables -I INPUT -i eno1 -p tcp --dport $1 -j ACCEPT
+    fi
+    if ! sudo iptables -C INPUT -i eno1 -p udp --dport $1 -j ACCEPT 2>/dev/null; then
+        sudo iptables -I INPUT -i eno1 -p udp --dport $1 -j ACCEPT
+    fi
 }
 
 function run_dcs() {
@@ -153,14 +157,7 @@ function run_dcs() {
         cd "$DCS"
         block_incoming $PORT
         unblock_incoming $PORT &
-        PID=$!
-        ST=$(date +%s)
         WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
-        EN=$(date +%s)
-        if test $((EN - ST)) -lte $((BLOCK + 10)); then
-            # it crashed quickly, cancel the unblock
-            kill $PID
-        fi
         sleep 10
     done
 }

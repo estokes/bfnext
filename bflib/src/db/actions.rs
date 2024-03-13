@@ -32,7 +32,6 @@ use dcso3::{
     land::Land,
     net::Ucid,
     pointing_towards2,
-    timer::Timer,
     trigger::{MarkId, Trigger},
     world::World,
     LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3,
@@ -40,7 +39,6 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
 use log::error;
-use mlua::Value;
 use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, f64, vec};
@@ -412,41 +410,51 @@ impl Db {
                     cfg: (),
                 };
                 if let ActionKind::Awacs(_) = &spec.kind {
+                    let player = *player;
                     let mission = self
-                        .awacs_mission(spctx, side, *player, args)
+                        .awacs_mission(side, player, args)
                         .context("generating awacs mission")?;
+                    let group = group!(self, gid)?;
                     self.ephemeral
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
                 }
                 if let ActionKind::Tanker(_) = &spec.kind {
+                    let player = *player;
                     let mission = self
-                        .tanker_mission(spctx, side, *player, args)
+                        .tanker_mission(side, player, args)
                         .context("generate tanker mission")?;
+                    let group = group!(self, gid)?;
                     self.ephemeral
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
                 }
                 if let ActionKind::Drone(_) = &spec.kind {
+                    let player = *player;
                     let mission = self
-                        .drone_mission(spctx, side, *player, args)
+                        .drone_mission(side, player, args)
                         .context("generate drone mission")?;
+                    let group = group!(self, gid)?;
                     self.ephemeral
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
                 }
                 if let ActionKind::Fighters(_) = &spec.kind {
+                    let player = *player;
                     let mission = self
-                        .ai_fighters_mission(spctx, side, *player, args)
+                        .ai_fighters_mission(side, player, args)
                         .context("generate fighters mission")?;
+                    let group = group!(self, gid)?;
                     self.ephemeral
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
                 }
                 if let ActionKind::Attackers(_) = &spec.kind {
+                    let player = *player;
                     let mission = self
-                        .ai_attackers_mission(spctx, side, *player, args)
+                        .ai_attackers_mission(side, player, args)
                         .context("generate ai attackers mission")?;
+                    let group = group!(self, gid)?;
                     self.ephemeral
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
@@ -458,13 +466,11 @@ impl Db {
 
     fn drone_mission<'lua>(
         &mut self,
-        spctx: &SpawnCtx<'lua>,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         self.ai_loiter_point_mission(
-            spctx,
             side,
             ucid,
             args,
@@ -485,10 +491,11 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
+        let group = args.group;
         let mission = self
-            .drone_mission(spctx, side, ucid, args)
+            .drone_mission(side, ucid, args)
             .context("generate drone mission")?;
-        self.set_ai_mission(spctx, args.group, mission)
+        self.set_ai_mission(spctx, group, mission)
             .context("setting ai mission")
     }
 
@@ -516,9 +523,8 @@ impl Db {
             },
             None,
             BitFlags::empty(),
-            move |db, spctx, gid| {
+            move |db, gid| {
                 db.drone_mission(
-                    spctx,
                     side,
                     ucid,
                     WithPosAndGroup {
@@ -534,7 +540,6 @@ impl Db {
 
     fn ai_fighters_mission<'lua>(
         &mut self,
-        spctx: &SpawnCtx<'lua>,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
@@ -556,7 +561,6 @@ impl Db {
             main_task.clone(),
         ]);
         self.ai_loiter_point_mission(
-            spctx,
             side,
             ucid,
             args,
@@ -577,10 +581,11 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
+        let group = args.group;
         let mission = self
-            .ai_fighters_mission(spctx, side, ucid, args)
+            .ai_fighters_mission(side, ucid, args)
             .context("generate fighters mission")?;
-        self.set_ai_mission(spctx, args.group, mission)
+        self.set_ai_mission(spctx, group, mission)
             .context("setting fighters mission")
     }
 
@@ -605,9 +610,8 @@ impl Db {
             &args,
             None,
             BitFlags::empty(),
-            move |db, spctx, gid| {
+            move |db, gid| {
                 db.ai_fighters_mission(
-                    spctx,
                     side,
                     ucid,
                     WithPosAndGroup {
@@ -623,7 +627,6 @@ impl Db {
 
     fn ai_attackers_mission<'lua>(
         &mut self,
-        spctx: &SpawnCtx<'lua>,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
@@ -648,7 +651,6 @@ impl Db {
             main_task.clone(),
         ]);
         self.ai_loiter_point_mission(
-            spctx,
             side,
             ucid,
             args,
@@ -669,10 +671,11 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
+        let group = args.group;
         let mission = self
-            .ai_attackers_mission(spctx, side, ucid, args)
+            .ai_attackers_mission(side, ucid, args)
             .context("generate attackers mission")?;
-        self.set_ai_mission(spctx, gid, mission)
+        self.set_ai_mission(spctx, group, mission)
             .context("setting ai mission")
     }
 
@@ -697,9 +700,8 @@ impl Db {
             &args,
             None,
             BitFlags::empty(),
-            move |db, spctx, group| {
+            move |db, group| {
                 db.ai_attackers_mission(
-                    spctx,
                     side,
                     ucid,
                     WithPosAndGroup {
@@ -836,13 +838,11 @@ impl Db {
 
     fn tanker_mission<'lua>(
         &mut self,
-        spctx: &SpawnCtx<'lua>,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         self.ai_loiter_point_mission(
-            spctx,
             side,
             ucid,
             args,
@@ -868,10 +868,11 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
+        let group = args.group;
         let mission = self
-            .tanker_mission(spctx, side, ucid, args)
+            .tanker_mission(side, ucid, args)
             .context("generate tanker mission")?;
-        self.set_ai_mission(spctx, args.group, mission)
+        self.set_ai_mission(spctx, group, mission)
     }
 
     fn tanker(
@@ -895,9 +896,8 @@ impl Db {
             &args,
             None,
             BitFlags::empty(),
-            move |db, spctx, gid| {
+            move |db, gid| {
                 db.tanker_mission(
-                    spctx,
                     side,
                     ucid,
                     WithPosAndGroup {
@@ -921,7 +921,7 @@ impl Db {
         action: Action,
         args: WithPos<DeployableCfg>,
     ) -> Result<()> {
-        let gid = self.add_and_spawn_ai_air(
+        self.add_and_spawn_ai_air(
             spctx,
             idx,
             side,
@@ -935,8 +935,9 @@ impl Db {
             },
             Some(args.pos),
             BitFlags::empty(),
+            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
-        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
+        Ok(())
     }
 
     fn nuke(&mut self, spctx: &SpawnCtx, args: WithPos<NukeCfg>) -> Result<()> {
@@ -962,7 +963,7 @@ impl Db {
     ) -> Result<()> {
         let from = objective!(self, args.from)?.pos;
         let to = objective!(self, args.to)?.pos;
-        let gid = self.add_and_spawn_ai_air(
+        self.add_and_spawn_ai_air(
             spctx,
             idx,
             side,
@@ -976,8 +977,9 @@ impl Db {
             },
             Some(to),
             BitFlags::empty(),
+            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
-        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
+        Ok(())
     }
 
     fn ai_logistics_repair(
@@ -991,7 +993,7 @@ impl Db {
         args: WithObj<AiPlaneCfg>,
     ) -> Result<()> {
         let pos = objective!(self, args.oid)?.pos;
-        let gid = self.add_and_spawn_ai_air(
+        self.add_and_spawn_ai_air(
             spctx,
             idx,
             side,
@@ -1005,8 +1007,9 @@ impl Db {
             },
             Some(pos),
             BitFlags::empty(),
+            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
-        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
+        Ok(())
     }
 
     fn ai_deploy(
@@ -1019,7 +1022,7 @@ impl Db {
         action: Action,
         args: WithPos<DeployableCfg>,
     ) -> Result<()> {
-        let gid = self.add_and_spawn_ai_air(
+        self.add_and_spawn_ai_air(
             spctx,
             idx,
             side,
@@ -1033,18 +1036,17 @@ impl Db {
             },
             Some(args.pos),
             BitFlags::empty(),
+            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
-        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
+        Ok(())
     }
 
-    fn ai_point_to_point_mission<'a>(
+    fn ai_point_to_point_mission<'lua>(
         &mut self,
-        spctx: &SpawnCtx,
         gid: GroupId,
-        task: impl Fn() -> Task<'a> + 'static,
-    ) -> Result<()> {
+        task: impl Fn() -> Task<'lua> + 'static,
+    ) -> Result<Vec<MissionPoint<'lua>>> {
         let group = group!(self, gid)?;
-        let name = group.name.clone();
         let (src, tgt, alt, alt_typ, speed) = match &group.origin {
             DeployKind::Action {
                 spec,
@@ -1069,38 +1071,28 @@ impl Db {
             },
             _ => bail!("expected action group with rtb and destination"),
         };
-        let tm = Timer::singleton(spctx.lua())?;
-        tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
-            let group = Group::get_by_name(lua, &name)?;
-            let con = group.get_controller()?;
-            macro_rules! wpt {
-                ($name:expr, $pos:expr) => {
-                    MissionPoint {
-                        action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
-                        typ: PointType::TurningPoint,
-                        airdrome_id: None,
-                        helipad: None,
-                        time_re_fu_ar: None,
-                        link_unit: None,
-                        pos: LuaVec2($pos),
-                        alt,
-                        alt_typ: Some(alt_typ.clone()),
-                        speed,
-                        eta: None,
-                        speed_locked: None,
-                        eta_locked: None,
-                        name: Some($name.into()),
-                        task: Box::new(task()),
-                    }
-                };
-            }
-            con.set_task(Task::Mission {
-                airborne: None,
-                route: vec![wpt!("ip", src), wpt!("tgt", tgt), wpt!("rtb", src)],
-            })?;
-            Ok(None)
-        })?;
-        Ok(())
+        macro_rules! wpt {
+            ($name:expr, $pos:expr) => {
+                MissionPoint {
+                    action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                    typ: PointType::TurningPoint,
+                    airdrome_id: None,
+                    helipad: None,
+                    time_re_fu_ar: None,
+                    link_unit: None,
+                    pos: LuaVec2($pos),
+                    alt,
+                    alt_typ: Some(alt_typ.clone()),
+                    speed,
+                    eta: None,
+                    speed_locked: None,
+                    eta_locked: None,
+                    name: Some($name.into()),
+                    task: Box::new(task()),
+                }
+            };
+        }
+        Ok(vec![wpt!("ip", src), wpt!("tgt", tgt), wpt!("rtb", src)])
     }
 
     fn bomber_strike(
@@ -1120,7 +1112,7 @@ impl Db {
             .as_ref()
             .map(|t| Vector2::new(t.pos.x, t.pos.z))
             .unwrap_or(jt.location().pos);
-        let gid = self.add_and_spawn_ai_air(
+        self.add_and_spawn_ai_air(
             spctx,
             idx,
             side,
@@ -1134,8 +1126,9 @@ impl Db {
             },
             Some(tgt),
             BitFlags::empty(),
+            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
-        self.ai_point_to_point_mission(spctx, gid, || Task::ComboTask(vec![]))
+        Ok(())
     }
 
     fn add_and_spawn_ai_air<'lua>(
@@ -1150,8 +1143,7 @@ impl Db {
         args: &WithPos<AiPlaneCfg>,
         destination: Option<Vector2>,
         tags: BitFlags<UnitTag>,
-        gen_mission: impl FnOnce(&mut Db, &SpawnCtx<'lua>, GroupId) -> Result<Vec<MissionPoint<'lua>>>
-            + 'static,
+        gen_mission: impl FnOnce(&mut Db, GroupId) -> Result<Vec<MissionPoint<'lua>>> + 'static,
     ) -> Result<GroupId> {
         let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, args.pos, |o| {
             o.owner == side
@@ -1198,7 +1190,7 @@ impl Db {
                 tags | UnitTag::Driveable,
             )
             .context("creating group")?;
-        let mission = gen_mission(self, spctx, gid).context("generating mission for new unit")?;
+        let mission = gen_mission(self, gid).context("generating mission for new unit")?;
         self.ephemeral
             .spawn_group(&self.persisted, idx, spctx, group!(self, gid)?, mission)
             .context("spawning group")?;
@@ -1207,7 +1199,6 @@ impl Db {
 
     fn awacs_mission<'lua>(
         &mut self,
-        spctx: &SpawnCtx<'lua>,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
@@ -1229,7 +1220,6 @@ impl Db {
             ])
         };
         self.ai_loiter_point_mission(
-            spctx,
             side,
             ucid,
             args,
@@ -1250,10 +1240,11 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
+        let group = args.group;
         let mission = self
-            .awacs_mission(spctx, side, ucid, args)
+            .awacs_mission(side, ucid, args)
             .context("generating awacs mission")?;
-        self.set_ai_mission(spctx, args.group, mission)
+        self.set_ai_mission(spctx, group, mission)
             .context("setting ai mission")
     }
 
@@ -1278,9 +1269,8 @@ impl Db {
             &args,
             None,
             UnitTag::AWACS.into(),
-            move |db, spctx, gid| {
+            move |db, gid| {
                 db.awacs_mission(
-                    spctx,
                     side,
                     ucid,
                     WithPosAndGroup {
@@ -1296,7 +1286,6 @@ impl Db {
 
     fn ai_loiter_point_mission<'lua>(
         &mut self,
-        spctx: &SpawnCtx<'lua>,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
@@ -1318,7 +1307,6 @@ impl Db {
         if group.side != side {
             bail!("can't move the other team's awacs")
         }
-        let name = group.name.clone();
         let (altitude, alt_typ, speed, marks, player) = match &mut group.origin {
             DeployKind::Action {
                 marks,

@@ -16,7 +16,7 @@ for more details.
 
 use super::{
     cargo::Cargo,
-    group::{DeployKind, GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
     markup::ObjectiveMarkup,
     objective::{Objective, ObjectiveId},
     persisted::Persisted,
@@ -28,7 +28,7 @@ use crate::{
     },
     maybe,
     msgq::MsgQ,
-    spawnctx::{Despawn, SpawnCtx, SpawnLoc, Spawned},
+    spawnctx::{Despawn, SpawnCtx, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -37,17 +37,16 @@ use dcso3::{
     airbase::ClassAirbase,
     centroid2d,
     coalition::Side,
-    controller::{MissionPoint, PointType, Task},
+    controller::MissionPoint,
     env::miz::{GroupKind, Miz, MizIndex},
     group::ClassGroup,
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
-    pointing_towards2,
     static_object::ClassStatic,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
     warehouse::{LiquidType, WSCategory},
-    LuaVec2, MizLua, Position3, String, Vector2,
+    MizLua, Position3, String, Vector2,
 };
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::{IndexMap, IndexSet};

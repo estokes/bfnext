@@ -193,6 +193,11 @@ fn do_pos_group_action(
             pos,
             group,
         }),
+        ActionKind::Move(cfg) => ActionArgs::Move(WithPosAndGroup {
+            cfg: cfg.clone(),
+            pos,
+            group,
+        }),
         ActionKind::Attackers(_)
         | ActionKind::Awacs(_)
         | ActionKind::Deployable(_)
@@ -203,8 +208,7 @@ fn do_pos_group_action(
         | ActionKind::Nuke(_)
         | ActionKind::Bomber(_)
         | ActionKind::LogisticsTransfer(_)
-        | ActionKind::LogisticsRepair(_)
-        | ActionKind::Move(_) => bail!("invalid action type for this menu item"),
+        | ActionKind::LogisticsRepair(_) => bail!("invalid action type for this menu item"),
     };
     let cmd = ActionCmd { name, action, args };
     run_action(ctx, lua, side, slot, ucid, Some(mark), cmd)
@@ -368,36 +372,54 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         }
         Ok(())
     };
-    let add_pos_group = |root: GroupSubMenu| -> Result<()> {
+    let add_pos_group = |root: GroupSubMenu, name: String, action: bool| -> Result<()> {
         for gid in &ctx.db.persisted.actions {
             let group = ctx.db.group(gid)?;
-            match &group.origin {
-                DeployKind::Action { .. } => {
-                    let root = mc.add_submenu_for_group(
-                        arg.snd,
-                        format_compact!("{gid}").into(),
-                        Some(root.clone()),
-                    )?;
-                    for (name, mk) in &marks {
-                        mc.add_command_for_group(
-                            arg.snd,
-                            name.clone(),
-                            Some(root.clone()),
-                            run_pos_group_action,
-                            ArgPent {
-                                fst: arg.fst,
-                                snd: name.clone(),
-                                trd: LuaVec3(mk.pos),
-                                fth: *gid,
-                                pnt: mk.id,
-                            },
-                        )?;
+            let key = match &group.origin {
+                DeployKind::Action { name, .. } => {
+                    if action {
+                        Some(name.clone())
+                    } else {
+                        None
                     }
                 }
-                DeployKind::Crate { .. }
-                | DeployKind::Deployed { .. }
-                | DeployKind::Objective
-                | DeployKind::Troop { .. } => (),
+                DeployKind::Deployed { spec, .. } => {
+                    if !action {
+                        Some(spec.path.last().unwrap().clone())
+                    } else {
+                        None
+                    }
+                }
+                DeployKind::Troop { spec, .. } => {
+                    if !action {
+                        Some(format_compact!("{} Troop", spec.name).into())
+                    } else {
+                        None
+                    }
+                }
+                DeployKind::Crate { .. } | DeployKind::Objective => None,
+            };
+            if let Some(key) = key {
+                let root = mc.add_submenu_for_group(
+                    arg.snd,
+                    format_compact!("{gid}({key})").into(),
+                    Some(root.clone()),
+                )?;
+                for (text, mk) in &marks {
+                    mc.add_command_for_group(
+                        arg.snd,
+                        text.clone(),
+                        Some(root.clone()),
+                        run_pos_group_action,
+                        ArgPent {
+                            fst: arg.fst,
+                            snd: name.clone(),
+                            trd: LuaVec3(mk.pos),
+                            fth: *gid,
+                            pnt: mk.id,
+                        },
+                    )?;
+                }
             }
         }
         Ok(())
@@ -432,14 +454,18 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             name.clone()
         };
         match &action.kind {
-            ActionKind::Bomber(_) | ActionKind::LogisticsTransfer(_) | ActionKind::Move(_) => (),
+            ActionKind::Bomber(_) | ActionKind::LogisticsTransfer(_) => (),
             ActionKind::AttackersWaypoint
             | ActionKind::AwacsWaypoint
             | ActionKind::FighersWaypoint
             | ActionKind::TankerWaypoint
             | ActionKind::DroneWaypoint => {
                 let root = mc.add_submenu_for_group(arg.snd, title, Some(root.clone()))?;
-                add_pos_group(root.clone())?
+                add_pos_group(root.clone(), name.clone(), true)?
+            }
+            ActionKind::Move(_) => {
+                let root = mc.add_submenu_for_group(arg.snd, title, Some(root.clone()))?;
+                add_pos_group(root.clone(), name.clone(), false)?
             }
             ActionKind::Attackers(_)
             | ActionKind::Awacs(_)

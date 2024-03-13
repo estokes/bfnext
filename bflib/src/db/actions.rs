@@ -239,6 +239,15 @@ fn racetrack_dist_and_heading(
     }
 }
 
+fn group_position(lua: MizLua, name: &str) -> Result<Vector2> {
+    let pos = Group::get_by_name(lua, name)
+        .context("getting group")?
+        .get_unit(1)
+        .context("getting unit")?
+        .get_point()?;
+    Ok(Vector2::new(pos.x, pos.z))
+}
+
 impl Db {
     pub fn start_action(
         &mut self,
@@ -397,6 +406,7 @@ impl Db {
         idx: &MizIndex,
         gid: GroupId,
     ) -> Result<()> {
+        let spawn_pos = self.group_center(&gid)?;
         let group = group!(self, gid)?;
         let side = group.side;
         if let DeployKind::Action {
@@ -412,7 +422,7 @@ impl Db {
                 if let ActionKind::Awacs(_) = &spec.kind {
                     let player = *player;
                     let mission = self
-                        .awacs_mission(side, player, args)
+                        .awacs_mission(side, player, spawn_pos, args)
                         .context("generating awacs mission")?;
                     let group = group!(self, gid)?;
                     self.ephemeral
@@ -422,7 +432,7 @@ impl Db {
                 if let ActionKind::Tanker(_) = &spec.kind {
                     let player = *player;
                     let mission = self
-                        .tanker_mission(side, player, args)
+                        .tanker_mission(side, player, spawn_pos, args)
                         .context("generate tanker mission")?;
                     let group = group!(self, gid)?;
                     self.ephemeral
@@ -432,7 +442,7 @@ impl Db {
                 if let ActionKind::Drone(_) = &spec.kind {
                     let player = *player;
                     let mission = self
-                        .drone_mission(side, player, args)
+                        .drone_mission(side, player, spawn_pos, args)
                         .context("generate drone mission")?;
                     let group = group!(self, gid)?;
                     self.ephemeral
@@ -442,7 +452,7 @@ impl Db {
                 if let ActionKind::Fighters(_) = &spec.kind {
                     let player = *player;
                     let mission = self
-                        .ai_fighters_mission(side, player, args)
+                        .ai_fighters_mission(side, player, spawn_pos, args)
                         .context("generate fighters mission")?;
                     let group = group!(self, gid)?;
                     self.ephemeral
@@ -452,7 +462,7 @@ impl Db {
                 if let ActionKind::Attackers(_) = &spec.kind {
                     let player = *player;
                     let mission = self
-                        .ai_attackers_mission(side, player, args)
+                        .ai_attackers_mission(side, player, spawn_pos, args)
                         .context("generate ai attackers mission")?;
                     let group = group!(self, gid)?;
                     self.ephemeral
@@ -468,6 +478,7 @@ impl Db {
         &mut self,
         side: Side,
         ucid: Option<Ucid>,
+        spawn_point: Vector2,
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         self.ai_loiter_point_mission(
@@ -475,6 +486,7 @@ impl Db {
             ucid,
             args,
             OrbitPattern::Circle,
+            spawn_point,
             |k| match k {
                 ActionKind::Drone(_) => true,
                 _ => false,
@@ -491,11 +503,13 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        let group = args.group;
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name).context("getting pos")?;
         let mission = self
-            .drone_mission(side, ucid, args)
+            .drone_mission(side, ucid, pos, args)
             .context("generate drone mission")?;
-        self.set_ai_mission(spctx, group, mission)
+        self.set_ai_mission(spctx, gid, mission)
             .context("setting ai mission")
     }
 
@@ -523,10 +537,11 @@ impl Db {
             },
             None,
             BitFlags::empty(),
-            move |db, gid| {
+            move |db, gid, pos| {
                 db.drone_mission(
                     side,
                     ucid,
+                    pos,
                     WithPosAndGroup {
                         group: gid,
                         pos: args.pos,
@@ -542,6 +557,7 @@ impl Db {
         &mut self,
         side: Side,
         ucid: Option<Ucid>,
+        spawn_pos: Vector2,
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         let main_task = Task::EngageTargets {
@@ -565,6 +581,7 @@ impl Db {
             ucid,
             args,
             OrbitPattern::Circle,
+            spawn_pos,
             |k| match k {
                 ActionKind::Fighters(_) => true,
                 _ => false,
@@ -581,11 +598,13 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        let group = args.group;
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
-            .ai_fighters_mission(side, ucid, args)
+            .ai_fighters_mission(side, ucid, pos, args)
             .context("generate fighters mission")?;
-        self.set_ai_mission(spctx, group, mission)
+        self.set_ai_mission(spctx, gid, mission)
             .context("setting fighters mission")
     }
 
@@ -610,10 +629,11 @@ impl Db {
             &args,
             None,
             BitFlags::empty(),
-            move |db, gid| {
+            move |db, gid, pos| {
                 db.ai_fighters_mission(
                     side,
                     ucid,
+                    pos,
                     WithPosAndGroup {
                         cfg: (),
                         pos: args.pos,
@@ -629,6 +649,7 @@ impl Db {
         &mut self,
         side: Side,
         ucid: Option<Ucid>,
+        spawn_pos: Vector2,
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         let main_task = Task::EngageTargets {
@@ -655,6 +676,7 @@ impl Db {
             ucid,
             args,
             OrbitPattern::Circle,
+            spawn_pos,
             |k| match k {
                 ActionKind::Attackers(_) => true,
                 _ => false,
@@ -671,11 +693,13 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        let group = args.group;
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
-            .ai_attackers_mission(side, ucid, args)
+            .ai_attackers_mission(side, ucid, pos, args)
             .context("generate attackers mission")?;
-        self.set_ai_mission(spctx, group, mission)
+        self.set_ai_mission(spctx, gid, mission)
             .context("setting ai mission")
     }
 
@@ -700,10 +724,11 @@ impl Db {
             &args,
             None,
             BitFlags::empty(),
-            move |db, group| {
+            move |db, group, pos| {
                 db.ai_attackers_mission(
                     side,
                     ucid,
+                    pos,
                     WithPosAndGroup {
                         cfg: (),
                         pos: args.pos,
@@ -840,6 +865,7 @@ impl Db {
         &mut self,
         side: Side,
         ucid: Option<Ucid>,
+        spawn_pos: Vector2,
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         self.ai_loiter_point_mission(
@@ -847,6 +873,7 @@ impl Db {
             ucid,
             args,
             OrbitPattern::RaceTrack,
+            spawn_pos,
             |k| match k {
                 ActionKind::Tanker(_) => true,
                 _ => false,
@@ -868,11 +895,13 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        let group = args.group;
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
-            .tanker_mission(side, ucid, args)
+            .tanker_mission(side, ucid, pos, args)
             .context("generate tanker mission")?;
-        self.set_ai_mission(spctx, group, mission)
+        self.set_ai_mission(spctx, gid, mission)
     }
 
     fn tanker(
@@ -896,10 +925,11 @@ impl Db {
             &args,
             None,
             BitFlags::empty(),
-            move |db, gid| {
+            move |db, gid, pos| {
                 db.tanker_mission(
                     side,
                     ucid,
+                    pos,
                     WithPosAndGroup {
                         cfg: (),
                         pos: args.pos,
@@ -935,7 +965,7 @@ impl Db {
             },
             Some(args.pos),
             BitFlags::empty(),
-            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
+            |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
         Ok(())
     }
@@ -977,7 +1007,7 @@ impl Db {
             },
             Some(to),
             BitFlags::empty(),
-            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
+            |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
         Ok(())
     }
@@ -1007,7 +1037,7 @@ impl Db {
             },
             Some(pos),
             BitFlags::empty(),
-            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
+            |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
         Ok(())
     }
@@ -1036,7 +1066,7 @@ impl Db {
             },
             Some(args.pos),
             BitFlags::empty(),
-            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
+            |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
         Ok(())
     }
@@ -1126,7 +1156,7 @@ impl Db {
             },
             Some(tgt),
             BitFlags::empty(),
-            |db, gid| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
+            |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
         )?;
         Ok(())
     }
@@ -1143,7 +1173,7 @@ impl Db {
         args: &WithPos<AiPlaneCfg>,
         destination: Option<Vector2>,
         tags: BitFlags<UnitTag>,
-        gen_mission: impl FnOnce(&mut Db, GroupId) -> Result<Vec<MissionPoint<'lua>>> + 'static,
+        gen_mission: impl FnOnce(&mut Db, GroupId, Vector2) -> Result<Vec<MissionPoint<'lua>>> + 'static,
     ) -> Result<GroupId> {
         let (_, _, obj) = Self::objective_near_point(&self.persisted.objectives, args.pos, |o| {
             o.owner == side
@@ -1190,7 +1220,7 @@ impl Db {
                 tags | UnitTag::Driveable,
             )
             .context("creating group")?;
-        let mission = gen_mission(self, gid).context("generating mission for new unit")?;
+        let mission = gen_mission(self, gid, pos).context("generating mission for new unit")?;
         self.ephemeral
             .spawn_group(&self.persisted, idx, spctx, group!(self, gid)?, mission)
             .context("spawning group")?;
@@ -1201,6 +1231,7 @@ impl Db {
         &mut self,
         side: Side,
         ucid: Option<Ucid>,
+        spawn_pos: Vector2,
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         let group = group!(self, args.group)?;
@@ -1224,6 +1255,7 @@ impl Db {
             ucid,
             args,
             OrbitPattern::RaceTrack,
+            spawn_pos,
             |k| match k {
                 ActionKind::Awacs(_) => true,
                 _ => false,
@@ -1240,11 +1272,13 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
     ) -> Result<()> {
-        let group = args.group;
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
-            .awacs_mission(side, ucid, args)
+            .awacs_mission(side, ucid, pos, args)
             .context("generating awacs mission")?;
-        self.set_ai_mission(spctx, group, mission)
+        self.set_ai_mission(spctx, gid, mission)
             .context("setting ai mission")
     }
 
@@ -1269,10 +1303,11 @@ impl Db {
             &args,
             None,
             UnitTag::AWACS.into(),
-            move |db, gid| {
+            move |db, gid, pos| {
                 db.awacs_mission(
                     side,
                     ucid,
+                    pos,
                     WithPosAndGroup {
                         cfg: (),
                         pos: args.pos,
@@ -1290,16 +1325,16 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
         pattern: OrbitPattern,
+        spawn_point: Vector2,
         validator: impl Fn(&ActionKind) -> bool,
         init_task: impl Fn() -> Task<'lua> + 'static,
         main_task: impl Fn() -> Vec<Task<'lua>> + 'static,
     ) -> Result<Vec<MissionPoint<'lua>>> {
-        let pos = args.pos;
         let enemy = side.opposite();
         let heading = match pattern {
             OrbitPattern::Circle => 0.,
             OrbitPattern::RaceTrack => {
-                racetrack_dist_and_heading(&self.persisted.objectives, pos, enemy).1
+                racetrack_dist_and_heading(&self.persisted.objectives, args.pos, enemy).1
             }
             OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}"),
         };
@@ -1326,7 +1361,7 @@ impl Db {
                     | ActionKind::Attackers(a) => {
                         match loc {
                             SpawnLoc::InAir { pos: oldpos, .. } => {
-                                let dir = *oldpos - pos;
+                                let dir = *oldpos - args.pos;
                                 let step = dir.magnitude() / 4.;
                                 let dir = dir.normalize();
                                 let (old_dist, _) = racetrack_dist_and_heading(
@@ -1345,7 +1380,7 @@ impl Db {
                                         *player = ucid.clone();
                                     }
                                 }
-                                *oldpos = pos;
+                                *oldpos = args.pos;
                                 for id in marks.drain() {
                                     self.ephemeral.msgs().delete_mark(id)
                                 }
@@ -1387,7 +1422,7 @@ impl Db {
             OrbitPattern::Circle => {
                 marks.insert(self.ephemeral.msgs().mark_to_side(
                     side,
-                    pos,
+                    args.pos,
                     true,
                     format_compact!(
                         "{} orbit point 1\nresponsible party: {}",
@@ -1395,12 +1430,12 @@ impl Db {
                         responsible
                     ),
                 ));
-                (pos, None)
+                (args.pos, None)
             }
             OrbitPattern::RaceTrack => {
-                let point1 =
-                    pos + pointing_towards2(change_heading(heading, -f64::consts::PI)) * 30_000.;
-                let point2 = pos + pointing_towards2(heading) * 30_000.;
+                let point1 = args.pos
+                    + pointing_towards2(change_heading(heading, -f64::consts::PI)) * 30_000.;
+                let point2 = args.pos + pointing_towards2(heading) * 30_000.;
                 marks.insert(self.ephemeral.msgs().mark_to_side(
                     side,
                     point1,
@@ -1460,7 +1495,7 @@ impl Db {
                     tlist.push(t);
                 }
                 Ok(vec![
-                    wpt!("ip", pos, init_task()),
+                    wpt!("ip", spawn_point, init_task()),
                     wpt!("orbit", point1, Task::ComboTask(tlist)),
                 ])
             }
@@ -1476,9 +1511,9 @@ impl Db {
                     tlist.push(t);
                 }
                 Ok(vec![
-                    wpt!("ip", pos, init_task()),
-                    wpt!("point1", point1, Task::ComboTask(tlist)),
-                    wpt!("point2", point2.unwrap(), init_task()),
+                    wpt!("ip", spawn_point, init_task()),
+                    wpt!("point1", point1, Task::ComboTask(tlist.clone())),
+                    wpt!("point2", point2.unwrap(), Task::ComboTask(tlist)),
                 ])
             }
             OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}"),

@@ -712,52 +712,7 @@ impl Ephemeral {
         self.cfg = Arc::new(cfg);
         Ok(())
     }
-    /*
-            if let DeployKind::Action { loc, .. } = &group.origin {
-                match loc {
-                    SpawnLoc::AtPos { .. }
-                    | SpawnLoc::AtPosWithCenter { .. }
-                    | SpawnLoc::AtPosWithComponents { .. }
-                    | SpawnLoc::AtTrigger { .. } => (),
-                    SpawnLoc::InAir {
-                        pos,
-                        heading,
-                        altitude,
-                        speed,
-                    } => {
-                        let dst = pos + pointing_towards2(*heading) * 10_000.;
-                        let route = template.group.route().context("getting route")?;
-                        macro_rules! pt {
-                            ($pos:expr) => {
-                                MissionPoint {
-                                    action: None,
-                                    typ: PointType::TurningPoint,
-                                    airdrome_id: None,
-                                    time_re_fu_ar: None,
-                                    helipad: None,
-                                    link_unit: None,
-                                    pos: LuaVec2($pos),
-                                    alt: *altitude,
-                                    alt_typ: None,
-                                    speed: *speed,
-                                    speed_locked: None,
-                                    eta: None,
-                                    eta_locked: None,
-                                    name: None,
-                                    task: Box::new(Task::ComboTask(vec![])),
-                                }
-                            };
-                        }
-                        route
-                            .set_points(vec![pt!(*pos), pt!(dst)])
-                            .context("setting points")?;
-                        template.group.set_route(route).context("setting route")?;
-                        template.group.set("heading", *heading)?;
-                    }
-                }
-            }
-
-    */
+    
     pub(super) fn spawn_group<'lua>(
         &mut self,
         persisted: &Persisted,

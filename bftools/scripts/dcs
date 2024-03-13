@@ -35,7 +35,7 @@ fi
 BLOCK=120
 NAME="$1"
 PFX="${HOME}/.wine_${NAME}/drive_c"
-SRS="${PFX}/Program Files/srs_${NAME}"
+SRS="${HOME}/.wine_srs_${NAME}/drive_c/Program Files/srs_${NAME}"
 DCS="${PFX}/Program Files/Eagle Dynamics/DCS World Server"
 DATA="${PFX}/users/dcs/Saved Games/$NAME"
 BFLOG="${DATA}/Logs/bfnext.txt"

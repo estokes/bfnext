@@ -158,7 +158,14 @@ function run_dcs() {
         cd "$DCS"
         block_incoming $PORT
         unblock_incoming $PORT &
+        PID=$!
+        ST=$(date +%s)
         WINEPREFIX="${HOME}/.wine_${NAME}" WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
+        EN=$(date +%s)
+        if test $((EN - ST)) -lte $((BLOCK + 10)); then
+            # cancel unblock if DCS dies before it runs
+            kill $PID
+        fi
         sleep 10
     done
 }

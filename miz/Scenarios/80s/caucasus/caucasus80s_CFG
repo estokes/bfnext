@@ -2090,13 +2090,16 @@
       "Aircraft"
     ],
     "A-50": [
-      "Aircraft"
+      "Aircraft",
+      "AWACS"
     ],
     "MQ-9 Reaper": [
       "Aircraft"
     ],
     "E-3A": [
-      "Aircraft"
+      "Aircraft",
+      "AWACS",
+      "Link16"
     ],
     "IL-78M": [
       "Aircraft"

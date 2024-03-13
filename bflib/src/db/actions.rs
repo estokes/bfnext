@@ -1314,7 +1314,7 @@ impl Db {
         };
         self.ephemeral.dirty();
         let tm = Timer::singleton(spctx.lua())?;
-        tm.schedule_function(tm.get_time()? + 1., Value::Nil, move |lua, _, _| {
+        tm.schedule_function(tm.get_time()? + 10., Value::Nil, move |lua, _, _| {
             let group = Group::get_by_name(lua, &name)?;
             let pos = group.get_unit(1)?.get_point()?;
             let pos = Vector2::new(pos.x, pos.z);

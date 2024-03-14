@@ -491,7 +491,7 @@ impl Db {
                 ActionKind::Drone(_) => true,
                 _ => false,
             },
-            || Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
+            || Task::ComboTask(vec![]),
             || vec![],
         )
     }

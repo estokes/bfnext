@@ -15,14 +15,22 @@ for more details.
 */
 
 use crate::{cfg::Cfg, db::persisted::Persisted, Perf};
-use bytes::{Bytes, BytesMut};
+use anyhow::{anyhow, Result};
+use bytes::{BufMut, Bytes, BytesMut};
 use chrono::prelude::*;
-use compact_str::format_compact;
+use compact_str::{format_compact, CompactString};
+use fxhash::FxHashMap;
 use log::error;
 use once_cell::sync::OnceCell;
 use parking_lot::{Condvar, Mutex};
 use simplelog::{LevelFilter, WriteLogger};
-use std::{cell::RefCell, env, fs, io, path::PathBuf, sync::Arc, thread};
+use std::{
+    cell::RefCell,
+    env, fs, io,
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread,
+};
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
@@ -34,6 +42,118 @@ struct LogHandle(UnboundedSender<Task>);
 
 thread_local! {
     static LOGBUF: RefCell<BytesMut> = RefCell::new(BytesMut::new());
+}
+
+fn encode(db: &Persisted) -> Result<Bytes> {
+    thread_local! {
+        static BUF: RefCell<BytesMut> = RefCell::new(BytesMut::new());
+    }
+    BUF.with(|buf| {
+        let mut buf = buf.borrow_mut();
+        serde_json::to_writer((&mut *buf).writer(), db)?;
+        Ok(buf.split().freeze())
+    })
+}
+
+fn rotate(path: &Path) -> Result<()> {
+    if path.exists() {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| anyhow!("save file with no name"))?;
+        use std::fmt::Write;
+        let now = Utc::now();
+        let mut with_ts = PathBuf::from(path);
+        let mut backup = CompactString::from(name);
+        write!(backup, "{}", now.timestamp()).unwrap();
+        with_ts.set_file_name(backup);
+        fs::rename(path, with_ts)?;
+        let dir = path
+            .parent()
+            .ok_or_else(|| anyhow!("path has no parent dir"))?;
+        let mut by_age: FxHashMap<i64, Vec<(i64, PathBuf)>> = FxHashMap::default();
+        for file in fs::read_dir(dir)? {
+            let file = file?;
+            let fname = file.file_name();
+            let fname = match fname.to_str() {
+                Some(s) => s,
+                None => continue,
+            };
+            let now = now.timestamp();
+            let onemin = 60;
+            let tenmin = 600;
+            let hour = 3600;
+            let day = 86400;
+            let week = day * 7;
+            let month = week * 4;
+            if file.file_type()?.is_file() {
+                if let Some(ts) = fname.strip_prefix(name) {
+                    if let Ok(ts) = ts.parse::<i64>() {
+                        let age = now - ts;
+                        let file = PathBuf::from(file.path());
+                        if age > month {
+                            by_age
+                                .entry((age / month) * month)
+                                .or_default()
+                                .push((ts, file));
+                        } else if age > week {
+                            by_age
+                                .entry((age / week) * week)
+                                .or_default()
+                                .push((ts, file));
+                        } else if age > day {
+                            by_age
+                                .entry((age / day) * day)
+                                .or_default()
+                                .push((ts, file));
+                        } else if age > hour {
+                            by_age
+                                .entry((age / hour) * hour)
+                                .or_default()
+                                .push((ts, file));
+                        } else if age > tenmin {
+                            by_age
+                                .entry((age / tenmin) * tenmin)
+                                .or_default()
+                                .push((ts, file));
+                        } else if age > onemin {
+                            by_age
+                                .entry((age / onemin) * onemin)
+                                .or_default()
+                                .push((ts, file));
+                        }
+                    }
+                }
+            }
+        }
+        for (_, mut paths) in by_age {
+            paths.sort_by_key(|(ts, _)| *ts);
+            paths.reverse();
+            while paths.len() > 1 {
+                fs::remove_file(paths.pop().unwrap().1)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn save(path: &Path, encoded: Bytes) -> Result<()> {
+    use std::fs::File;
+    let mut tmp = PathBuf::from(path);
+    tmp.set_extension("tmp");
+    let file = File::options()
+        .write(true)
+        .truncate(true)
+        .create(true)
+        .open(&tmp)?;
+    let mut file = zstd::stream::Encoder::new(file, 9)?.auto_finish();
+    io::copy(&mut &*encoded, &mut file)?;
+    drop(file);
+    if let Err(e) = rotate(path) {
+        error!("failed to rotate backup files {e:?}")
+    }
+    fs::rename(tmp, path)?;
+    Ok(())
 }
 
 impl io::Write for LogHandle {
@@ -86,9 +206,19 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
         .unwrap();
     while let Some(msg) = rx.recv().await {
         match msg {
-            Task::SaveState(path, db) => match db.save(&path) {
-                Ok(()) => (),
-                Err(e) => error!("failed to save state to {path:?}, {e:?}"),
+            Task::SaveState(path, db) => {
+                let encoded = match encode(&db) {
+                    Ok(encoded) => encoded,
+                    Err(e) => {
+                        error!("failed to encode save state {e:?}");
+                        continue
+                    }
+                };
+                drop(db); // don't hold the db reference any longer than necessary
+                match save(&path, encoded) {
+                    Ok(()) => (),
+                    Err(e) => error!("failed to save state to {path:?}, {e:?}"),
+                }
             },
             Task::ResetState(path) => match fs::remove_file(&path) {
                 Ok(()) => (),

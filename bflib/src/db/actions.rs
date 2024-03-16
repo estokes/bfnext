@@ -411,7 +411,11 @@ impl Db {
         let group = group!(self, gid)?;
         let side = group.side;
         if let DeployKind::Action {
-            loc, player, spec, time, ..
+            loc,
+            player,
+            spec,
+            time,
+            ..
         } = &group.origin
         {
             if let SpawnLoc::InAir { pos, .. } = loc {
@@ -425,10 +429,10 @@ impl Db {
                         if let Some(d) = $ai.duration {
                             if now - *time > Duration::hours(d as i64) {
                                 self.delete_group(&gid)?;
-                                return Ok(())
+                                return Ok(());
                             }
                         }
-                    }
+                    };
                 }
                 if let ActionKind::Awacs(ai) = &spec.kind {
                     delete_expired!(ai);
@@ -1251,20 +1255,21 @@ impl Db {
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         let group = group!(self, args.group)?;
-        let init_task = if group.tags.contains(UnitTag::Link16) {
-            Task::ComboTask(vec![
+        let init_task = Task::ComboTask(vec![]);
+        let main_task = if group.tags.contains(UnitTag::Link16) {
+            vec![
                 Task::AWACS,
                 Task::WrappedCommand(Command::EPLRS {
                     enable: true,
                     group: None,
                 }),
                 Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
-            ])
+            ]
         } else {
-            Task::ComboTask(vec![
+            vec![
                 Task::AWACS,
                 Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
-            ])
+            ]
         };
         self.ai_loiter_point_mission(
             side,
@@ -1277,7 +1282,7 @@ impl Db {
                 _ => false,
             },
             move || init_task.clone(),
-            || vec![Task::AWACS],
+            move || main_task.clone(),
         )
     }
 

@@ -1003,8 +1003,8 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn start_timed_events(lua: MizLua, path: PathBuf) -> Result<()> {
-    unsafe { Context::get_mut() }.last_slow_timed_events = Utc::now();
+fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<()> {
+    ctx.last_slow_timed_events = Utc::now();
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
@@ -1060,7 +1060,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     ctx.respawn_groups(lua)
         .context("setting up the mission after load")?;
     info!("starting timed events");
-    start_timed_events(lua, path).context("starting the timed events loop")?;
+    start_timed_events(ctx, lua, path).context("starting the timed events loop")?;
     Ok(())
 }
 

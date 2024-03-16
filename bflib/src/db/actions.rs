@@ -406,11 +406,12 @@ impl Db {
         idx: &MizIndex,
         gid: GroupId,
     ) -> Result<()> {
+        let now = Utc::now();
         let spawn_pos = self.group_center(&gid)?;
         let group = group!(self, gid)?;
         let side = group.side;
         if let DeployKind::Action {
-            loc, player, spec, ..
+            loc, player, spec, time, ..
         } = &group.origin
         {
             if let SpawnLoc::InAir { pos, .. } = loc {
@@ -419,7 +420,18 @@ impl Db {
                     group: gid,
                     cfg: (),
                 };
-                if let ActionKind::Awacs(_) = &spec.kind {
+                macro_rules! delete_expired {
+                    ($ai:expr) => {
+                        if let Some(d) = $ai.duration {
+                            if now - *time > Duration::hours(d as i64) {
+                                self.delete_group(&gid)?;
+                                return Ok(())
+                            }
+                        }
+                    }
+                }
+                if let ActionKind::Awacs(ai) = &spec.kind {
+                    delete_expired!(ai);
                     let player = *player;
                     let mission = self
                         .awacs_mission(side, player, spawn_pos, args)
@@ -429,7 +441,8 @@ impl Db {
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
                 }
-                if let ActionKind::Tanker(_) = &spec.kind {
+                if let ActionKind::Tanker(ai) = &spec.kind {
+                    delete_expired!(ai);
                     let player = *player;
                     let mission = self
                         .tanker_mission(side, player, spawn_pos, args)
@@ -439,7 +452,8 @@ impl Db {
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
                 }
-                if let ActionKind::Drone(_) = &spec.kind {
+                if let ActionKind::Drone(ai) = &spec.kind {
+                    delete_expired!(ai.plane);
                     let player = *player;
                     let mission = self
                         .drone_mission(side, player, spawn_pos, args)
@@ -449,7 +463,8 @@ impl Db {
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
                 }
-                if let ActionKind::Fighters(_) = &spec.kind {
+                if let ActionKind::Fighters(ai) = &spec.kind {
+                    delete_expired!(ai);
                     let player = *player;
                     let mission = self
                         .ai_fighters_mission(side, player, spawn_pos, args)
@@ -459,7 +474,8 @@ impl Db {
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
                     return Ok(());
                 }
-                if let ActionKind::Attackers(_) = &spec.kind {
+                if let ActionKind::Attackers(ai) = &spec.kind {
+                    delete_expired!(ai);
                     let player = *player;
                     let mission = self
                         .ai_attackers_mission(side, player, spawn_pos, args)
@@ -1122,7 +1138,7 @@ impl Db {
                 }
             };
         }
-        Ok(vec![wpt!("ip", src), wpt!("tgt", tgt), wpt!("rtb", src)])
+        Ok(vec![wpt!("tgt", tgt), wpt!("rtb", src)])
     }
 
     fn bomber_strike(

@@ -153,7 +153,7 @@ pub enum UnitTag {
     Invincible,
     Driveable,
     AWACS,
-    Link16
+    Link16,
 }
 
 #[derive(
@@ -411,7 +411,7 @@ pub struct PointsCfg {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum AiPlaneKind {
     FixedWing,
-    Helicopter
+    Helicopter,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -421,7 +421,7 @@ pub struct AiPlaneCfg {
     pub template: String,
     pub altitude: f64,
     pub altitude_typ: AltType,
-    pub speed: f64
+    pub speed: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -481,7 +481,7 @@ pub enum ActionKind {
     Deployable(DeployableCfg),
     LogisticsRepair(AiPlaneCfg),
     LogisticsTransfer(AiPlaneCfg),
-    Move(MoveCfg)
+    Move(MoveCfg),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -508,7 +508,7 @@ pub struct Rules {
 }
 
 fn default_msgs_per_second() -> usize {
-    10 
+    10
 }
 
 fn default_cull_after() -> u32 {

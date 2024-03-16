@@ -1288,7 +1288,7 @@
               "kind": "FixedWing",
               "duration": 12,
               "template": "RDRONE",
-              "altitude": 6000.0,
+              "altitude": 7000.0,
               "altitude_typ": "BARO",
               "speed": 90.0
             }
@@ -1497,7 +1497,7 @@
               "kind": "FixedWing",
               "duration": 12,
               "template": "BDRONE",
-              "altitude": 6000.0,
+              "altitude": 7000.0,
               "altitude_typ": "BARO",
               "speed": 90.0
             }

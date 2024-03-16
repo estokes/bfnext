@@ -1,15 +1,7 @@
-# for actual release
 [profile.release]
-codegen-units = 1
 opt-level = 3
-lto = true
+lto = "thin"
 debug = false
-
-# for dev
-#[profile.release]
-#opt-level = 3
-#lto = "thin"
-#debug = false
 
 [profile.dev]
 opt-level = "s"

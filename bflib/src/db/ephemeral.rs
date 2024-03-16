@@ -37,7 +37,7 @@ use dcso3::{
     airbase::ClassAirbase,
     centroid2d,
     coalition::Side,
-    controller::{Command, MissionPoint},
+    controller::MissionPoint,
     env::miz::{GroupKind, Miz, MizIndex},
     group::ClassGroup,
     net::{SlotId, Ucid},
@@ -273,7 +273,7 @@ impl Ephemeral {
             for _ in 0..max(1, slen >> 4) {
                 if let Some(gid) = self.spawnq.pop_front() {
                     let group = maybe!(persisted.groups, gid, "group")?;
-                    self.spawn_group(persisted, idx, spctx, group, vec![], vec![])?;
+                    self.spawn_group(persisted, idx, spctx, group, vec![])?;
                 }
             }
         }
@@ -712,7 +712,7 @@ impl Ephemeral {
         self.cfg = Arc::new(cfg);
         Ok(())
     }
-
+    
     pub(super) fn spawn_group<'lua>(
         &mut self,
         persisted: &Persisted,
@@ -720,7 +720,6 @@ impl Ephemeral {
         spctx: &SpawnCtx<'lua>,
         group: &SpawnedGroup,
         mission: Vec<MissionPoint<'lua>>,
-        commands: Vec<Command>,
     ) -> Result<Option<Spawned<'lua>>> {
         let template = spctx
             .get_template(
@@ -804,12 +803,6 @@ impl Ephemeral {
                     let oid = g.object_id()?;
                     self.object_id_by_gid.insert(group.id, oid.clone());
                     self.gid_by_object_id.insert(oid, group.id);
-                    if commands.len() > 0 {
-                        let c = g.get_controller().context("getting controller")?;
-                        for cmd in commands {
-                            c.set_command(cmd).context("setting command")?
-                        }
-                    }
                 }
             }
             Ok(Some(spawned))

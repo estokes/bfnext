@@ -395,11 +395,12 @@ impl Db {
                             Some(inv) if inv.stored > 0 => (),
                             Some(_) | None => break SlotAuth::VehicleNotAvailable(sifo.typ.clone()),
                         }
-                        self.ephemeral
-                            .players_by_slot
-                            .insert(slot.clone(), ucid.clone());
                         player.changing_slots = true;
                         player.jtac_or_spectators = false;
+                        if let Some(ucid) = self.ephemeral.players_by_slot.swap_remove(&slot) {
+                            self.player_deslot(&ucid)
+                        }
+                        self.ephemeral.players_by_slot.insert(slot, *ucid);
                         break SlotAuth::Yes;
                     };
                 }

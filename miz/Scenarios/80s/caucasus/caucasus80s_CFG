@@ -127,7 +127,7 @@
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
-  "crate_spread": 250,
+  "crate_spread": 500,
   "artillery_mission_range": 15000,
   "side_switches": 1,
   "max_crates": 4,

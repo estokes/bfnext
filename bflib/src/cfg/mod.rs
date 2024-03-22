@@ -512,7 +512,7 @@ pub struct Rules {
 }
 
 fn default_msgs_per_second() -> usize {
-    10
+    5
 }
 
 fn default_cull_after() -> u32 {

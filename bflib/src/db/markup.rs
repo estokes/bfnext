@@ -106,6 +106,17 @@ impl ObjectiveMarkup {
         }
     }
 
+    pub(super) fn needs_update(&self, obj: &Objective) -> bool {
+        obj.owner != self.side
+            || obj.threatened != self.threatened
+            || obj.health != self.health
+            || obj.logi != self.logi
+            || obj.supply != self.supply
+            || obj.fuel != self.fuel
+    }
+
+    // this causes desync currently so it is unused
+    #[allow(dead_code)]
     pub(super) fn update(&mut self, msgq: &mut MsgQ, obj: &Objective) {
         if obj.owner != self.side {
             let text_color = |a| text_color(obj.owner, a);
@@ -116,9 +127,9 @@ impl ObjectiveMarkup {
             msgq.set_markup_color(self.logi_label, text_color(0.75));
             msgq.set_markup_color(self.supply_label, text_color(0.75));
             msgq.set_markup_color(self.fuel_label, text_color(0.75));
-                for id in self.supply_connections.drain(..) {
-                    msgq.delete_mark(id);
-                }
+            for id in self.supply_connections.drain(..) {
+                msgq.delete_mark(id);
+            }
         }
         if obj.threatened != self.threatened {
             self.threatened = obj.threatened;

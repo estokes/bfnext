@@ -19,7 +19,7 @@ use crate::{
     cfg::{ActionKind, UnitTag},
     db::{
         actions::{ActionArgs, ActionCmd, WithJtac},
-        group::GroupId as DbGid,
+        group::{DeployKind, GroupId as DbGid},
         objective::ObjectiveId,
         Db,
     },
@@ -503,8 +503,46 @@ pub(super) fn add_menu_for_jtac(
     ucid: &Ucid,
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-    let root =
-        mc.add_submenu_for_group(mizgid, format_compact!("{}", jtac.gid()).into(), Some(root))?;
+    let name = match jtac.gid() {
+        JtId::Group(gid) => match db.group(&gid) {
+            Err(_) => format_compact!("{gid}"),
+            Ok(group) => match &group.origin {
+                DeployKind::Action { name, .. } => format_compact!("{gid}({name})"),
+                DeployKind::Deployed { player, spec, .. } => match db.player(player) {
+                    Some(player) => {
+                        format_compact!("{gid}({} {})", spec.path.last().unwrap(), player.name)
+                    }
+                    None => format_compact!("{gid}({})", spec.path.last().unwrap()),
+                },
+                DeployKind::Troop { player, spec, .. } => match db.player(player) {
+                    Some(player) => format_compact!("{gid}({} {})", spec.name, player.name),
+                    None => format_compact!("{gid}({})", spec.name),
+                },
+                DeployKind::Objective | DeployKind::Crate { .. } => format_compact!("{gid}"),
+            },
+        },
+        JtId::Slot(sl) => {
+            let name = match db.ephemeral.player_in_slot(&sl) {
+                None => String::from(""),
+                Some(ucid) => match db.player(ucid) {
+                    None => String::from(""),
+                    Some(p) => p.name.clone(),
+                },
+            };
+            let typ = match db.persisted.objectives_by_slot.get(&sl) {
+                None => String::from(""),
+                Some(oid) => match db.persisted.objectives.get(oid) {
+                    None => String::from(""),
+                    Some(obj) => match obj.slots.get(&sl) {
+                        None => String::from(""),
+                        Some(ifo) => ifo.typ.0.clone(),
+                    },
+                },
+            };
+            format_compact!("sl{sl}({typ} {name})")
+        }
+    };
+    let root = mc.add_submenu_for_group(mizgid, name.into(), Some(root))?;
     mc.add_command_for_group(
         mizgid,
         "Status".into(),
@@ -646,15 +684,24 @@ fn add_jtacs_by_location(
         .ok_or_else(|| anyhow!("missing player"))?;
     if let Some((slot, _)) = &player.current_slot {
         let slot = *slot;
-        ctx.subscribed_jtac_menus.entry(slot).or_default().insert(arg.trd);
+        ctx.subscribed_jtac_menus
+            .entry(slot)
+            .or_default()
+            .insert(arg.trd);
         let mc = MissionCommands::singleton(lua)?;
         let name = ctx.db.objective(&arg.trd)?.name.clone();
         let mut cmd: Vec<String> = arg.fth.clone().into();
         cmd.push(format_compact!("{name}>>").into());
         mc.remove_command_for_group(arg.snd, cmd.into())?;
-        let root = mc.add_submenu_for_group(arg.snd, name, Some(arg.fth))?;
+        let mut root = mc.add_submenu_for_group(arg.snd, name, Some(arg.fth))?;
+        let mut n = 0;
         for jtac in ctx.jtac.jtacs() {
             if jtac.side() == player.side && jtac.location().oid == arg.trd {
+                if n >= 8 {
+                    root =
+                        mc.add_submenu_for_group(arg.snd, "NEXT>>".into(), Some(root.clone()))?;
+                    n = 0;
+                }
                 add_menu_for_jtac(
                     &ctx.db,
                     player.side,
@@ -663,7 +710,8 @@ fn add_jtacs_by_location(
                     arg.snd,
                     jtac,
                     &arg.fst,
-                )?
+                )?;
+                n += 1
             }
         }
     }

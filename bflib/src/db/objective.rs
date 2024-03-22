@@ -237,7 +237,7 @@ pub struct Objective {
     pub(super) radius: f64,
     pub owner: Side,
     pub(super) kind: ObjectiveKind,
-    pub(super) slots: Map<SlotId, SlotInfo>,
+    pub(crate) slots: Map<SlotId, SlotInfo>,
     pub(super) groups: Map<Side, Set<GroupId>>,
     pub(super) health: u8,
     pub(super) logi: u8,
@@ -1072,15 +1072,8 @@ impl Db {
     }
 
     pub fn update_objectives_markup(&mut self) -> Result<()> {
-        let objectives = self
-            .persisted
-            .objectives
-            .into_iter()
-            .map(|(oid, _)| *oid)
-            .collect::<SmallVec<[_; 64]>>();
-        for oid in objectives {
-            let obj = objective!(self, oid)?;
-            self.ephemeral.update_objective_markup(obj)
+        for (_, obj) in &self.persisted.objectives {
+            self.ephemeral.update_objective_markup(&self.persisted, obj)
         }
         Ok(())
     }

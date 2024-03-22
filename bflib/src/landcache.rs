@@ -15,9 +15,9 @@ struct Tile {
 
 impl Tile {
     fn new(d: f64, v: Vector3) -> Self {
-        // tile size is 1 / 16th of the distance between the two
+        // tile size is 1 / 32th of the distance between the two
         // points being checked rounded to the nearest power of 2
-        let d = max(1, ((d.trunc() as i64) >> 4) as u32).next_power_of_two();
+        let d = max(1, ((d.trunc() as i64) >> 5) as u32).next_power_of_two();
         let df = d as f64;
         let x = v.x.div_euclid(df) as i32;
         let y = v.y.div_euclid(df) as i32;
@@ -56,7 +56,6 @@ pub struct LandCache {
     h: IndexMap<(Tile, Tile), CacheEntry, FxBuildHasher>,
     max_size: usize,
     added: usize,
-    debug: bool,
     stats: Stats,
 }
 

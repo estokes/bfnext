@@ -182,9 +182,21 @@ impl Ephemeral {
         );
     }
 
-    pub fn update_objective_markup(&mut self, obj: &Objective) {
-        if let Some(mk) = self.objective_markup.get_mut(&obj.id) {
-            mk.update(&mut self.msgs, obj)
+    pub fn update_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {
+        match self.objective_markup.entry(obj.id) {
+            Entry::Occupied(mut e) => {
+                if e.get().needs_update(obj) {
+                    *e.get_mut() = ObjectiveMarkup::new(&self.cfg, &mut self.msgs, obj, persisted);
+                }
+            }
+            Entry::Vacant(e) => {
+                e.insert(ObjectiveMarkup::new(
+                    &self.cfg,
+                    &mut self.msgs,
+                    obj,
+                    persisted,
+                ));
+            }
         }
     }
 
@@ -712,7 +724,7 @@ impl Ephemeral {
         self.cfg = Arc::new(cfg);
         Ok(())
     }
-    
+
     pub(super) fn spawn_group<'lua>(
         &mut self,
         persisted: &Persisted,

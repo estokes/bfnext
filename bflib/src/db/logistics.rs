@@ -638,7 +638,7 @@ impl Db {
         for (oid, current) in current {
             let obj = objective!(self, oid)?;
             if obj.warehouse.destination != current {
-                self.ephemeral.create_objective_markup(obj, &self.persisted)
+                self.ephemeral.create_objective_markup(&self.persisted, obj)
             }
         }
         Ok(())

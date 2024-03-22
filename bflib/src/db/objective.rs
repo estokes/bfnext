@@ -405,7 +405,7 @@ impl Db {
             let logi = objective_mut!(self, lid)?;
             logi.warehouse.destination.remove_cow(&obj.id);
             self.ephemeral
-                .create_objective_markup(objective!(self, lid)?, &self.persisted);
+                .create_objective_markup(&self.persisted, objective!(self, lid)?);
         }
         for (_, groups) in &obj.groups {
             for gid in groups {
@@ -562,7 +562,7 @@ impl Db {
             objectives: self.persisted.objectives.into_iter().map(|(oid, _)| *oid).collect(),
         };
         self.ephemeral
-            .create_objective_markup(objective!(self, oid)?, &self.persisted);
+            .create_objective_markup(&self.persisted, objective!(self, oid)?);
         self.ephemeral.dirty();
         Ok(oid)
     }
@@ -1059,7 +1059,7 @@ impl Db {
                     }
                 }
                 let obj = objective!(self, oid)?;
-                self.ephemeral.create_objective_markup(obj, &self.persisted);
+                self.ephemeral.create_objective_markup(&self.persisted, obj);
                 self.ephemeral.dirty();
             }
         }

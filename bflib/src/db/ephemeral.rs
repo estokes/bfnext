@@ -172,10 +172,7 @@ impl Default for Ephemeral {
 }
 
 impl Ephemeral {
-    pub fn create_objective_markup(&mut self, obj: &Objective, persisted: &Persisted) {
-        if let Some(mk) = self.objective_markup.remove(&obj.id) {
-            mk.remove(&mut self.msgs)
-        }
+    pub fn create_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {
         self.objective_markup.insert(
             obj.id,
             ObjectiveMarkup::new(&self.cfg, &mut self.msgs, obj, persisted),
@@ -184,11 +181,7 @@ impl Ephemeral {
 
     pub fn update_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {
         match self.objective_markup.entry(obj.id) {
-            Entry::Occupied(mut e) => {
-                if e.get().needs_update(obj) {
-                    *e.get_mut() = ObjectiveMarkup::new(&self.cfg, &mut self.msgs, obj, persisted);
-                }
-            }
+            Entry::Occupied(mut e) => e.get_mut().update(&mut self.msgs, obj),
             Entry::Vacant(e) => {
                 e.insert(ObjectiveMarkup::new(
                     &self.cfg,

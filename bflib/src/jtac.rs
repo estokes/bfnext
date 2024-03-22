@@ -813,8 +813,20 @@ impl Jtacs {
             .insert(gid);
     }
 
-    fn remove_code_by_location(t: &mut LocByCode, side: Side, oid: ObjectiveId, code: u16, gid: JtId) {
-        match t.entry(side).or_default().entry(oid).or_default().entry(code) {
+    fn remove_code_by_location(
+        t: &mut LocByCode,
+        side: Side,
+        oid: ObjectiveId,
+        code: u16,
+        gid: JtId,
+    ) {
+        match t
+            .entry(side)
+            .or_default()
+            .entry(oid)
+            .or_default()
+            .entry(code)
+        {
             Entry::Vacant(_) => (),
             Entry::Occupied(mut e) => {
                 let set = e.get_mut();

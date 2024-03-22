@@ -136,7 +136,7 @@ impl ArtilleryAdjustment {
     }
 }
 
-type LocByCode = FxHashMap<ObjectiveId, FxHashMap<u16, FxHashSet<JtId>>>;
+type LocByCode = FxHashMap<Side, FxHashMap<ObjectiveId, FxHashMap<u16, FxHashSet<JtId>>>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct Contact {
@@ -291,7 +291,8 @@ impl Jtac {
                     Some(mid) => format_compact!("{mid}"),
                 };
                 let conflicts = loc_by_code
-                    .get(&self.location.oid)
+                    .get(&self.side)
+                    .and_then(|by_side| by_side.get(&self.location.oid))
                     .and_then(|by_code| by_code.get(&self.code))
                     .and_then(|gids| {
                         let len = gids.len();
@@ -770,10 +771,11 @@ impl Jtacs {
         let jt = self.get_mut(gid)?;
         let prev_code = jt.code;
         let oid = jt.location.oid;
+        let side = jt.side;
         jt.set_code(lua, code_part)?;
         let code = jt.code;
-        Self::remove_code_by_location(&mut self.code_by_location, oid, prev_code, *gid);
-        Self::add_code_by_location(&mut self.code_by_location, oid, code, *gid);
+        Self::remove_code_by_location(&mut self.code_by_location, side, oid, prev_code, *gid);
+        Self::add_code_by_location(&mut self.code_by_location, side, oid, code, *gid);
         Ok(())
     }
 
@@ -801,16 +803,18 @@ impl Jtacs {
         ContactsIter { i: 0, contacts }
     }
 
-    fn add_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {
-        t.entry(oid)
+    fn add_code_by_location(t: &mut LocByCode, side: Side, oid: ObjectiveId, code: u16, gid: JtId) {
+        t.entry(side)
+            .or_default()
+            .entry(oid)
             .or_default()
             .entry(code)
             .or_default()
             .insert(gid);
     }
 
-    fn remove_code_by_location(t: &mut LocByCode, oid: ObjectiveId, code: u16, gid: JtId) {
-        match t.entry(oid).or_default().entry(code) {
+    fn remove_code_by_location(t: &mut LocByCode, side: Side, oid: ObjectiveId, code: u16, gid: JtId) {
+        match t.entry(side).or_default().entry(oid).or_default().entry(code) {
             Entry::Vacant(_) => (),
             Entry::Occupied(mut e) => {
                 let set = e.get_mut();
@@ -847,6 +851,7 @@ impl Jtacs {
                                 ui_jtac_dead(db, *side, jtid);
                                 Self::remove_code_by_location(
                                     &mut self.code_by_location,
+                                    jt.side,
                                     jt.location.oid,
                                     jt.code,
                                     jt.gid,
@@ -975,6 +980,7 @@ impl Jtacs {
                         .insert(jt.location.oid);
                     Self::add_code_by_location(
                         &mut self.code_by_location,
+                        jt.side,
                         jt.location.oid,
                         jt.code,
                         jt.gid,
@@ -986,12 +992,14 @@ impl Jtacs {
             if prev_loc.oid != jtac.location.oid {
                 Self::remove_code_by_location(
                     &mut self.code_by_location,
+                    jtac.side,
                     prev_loc.oid,
                     jtac.code,
                     jtac.gid,
                 );
                 Self::add_code_by_location(
                     &mut self.code_by_location,
+                    jtac.side,
                     jtac.location.oid,
                     jtac.code,
                     jtac.gid,
@@ -1045,6 +1053,7 @@ impl Jtacs {
                     ui_jtac_dead(db, *side, *gid);
                     Self::remove_code_by_location(
                         &mut self.code_by_location,
+                        jt.side,
                         jt.location.oid,
                         jt.code,
                         jt.gid,

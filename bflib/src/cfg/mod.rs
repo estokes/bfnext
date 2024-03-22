@@ -296,6 +296,10 @@ pub struct DeployableEwr {
 pub struct DeployableJtac {
     /// jtac detection and lasing range (Meters)
     pub range: u32,
+    /// if true line of sight checks are not required, the jtac will
+    /// see every unit in range regardless of terrain or cover
+    #[serde(default)]
+    pub nolos: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

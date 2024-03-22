@@ -1006,10 +1006,10 @@ impl Jtacs {
                 pos.y += 10.
             };
             for (unit, _) in db.instanced_units() {
-                saw_units.insert(unit.id);
                 if unit.side == jtac.side {
                     continue;
                 }
+                saw_units.insert(unit.id);
                 if !unit.tags.contains(jtac.filter) {
                     if let Err(e) = jtac.remove_contact(lua, db, &unit.id) {
                         warn!("could not filter jtac contact {} {:?}", unit.name, e)
@@ -1022,10 +1022,11 @@ impl Jtacs {
                     }
                 };
                 let dist = na::distance_squared(&pos.into(), &unit.position.p.0.into());
-                if dist <= range {
-                    if landcache.is_visible(&land, dist.sqrt(), pos, unit.position.p.0)? {
-                        jtac.add_contact(unit)
-                    }
+                if dist <= range
+                    && (spec.nolos
+                        || landcache.is_visible(&land, dist.sqrt(), pos, unit.position.p.0)?)
+                {
+                    jtac.add_contact(unit)
                 } else {
                     match jtac.remove_contact(lua, db, &unit.id) {
                         Err(e) => warn!("could not remove jtac contact {} {:?}", unit.name, e),

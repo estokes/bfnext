@@ -346,7 +346,8 @@
         "kind": {
           "Drone": {
             "jtac": {
-              "range": 16000
+              "range": 16000,
+              "nolos": true
             },
             "plane": {
               "kind": "FixedWing",
@@ -555,7 +556,8 @@
         "kind": {
           "Drone": {
             "jtac": {
-              "range": 16000
+              "range": 16000,
+              "nolos": true
             },
             "plane": {
               "kind": "FixedWing",
@@ -2116,13 +2118,16 @@
   },
   "airborne_jtacs": {
     "L-39ZA": {
-      "range": 16000
+      "range": 16000,
+      "nolos": true
     },
     "MB-339A": {
-      "range": 16000
+      "range": 16000,
+      "nolos": true
     },
     "C-101CC": {
-      "range": 16000
+      "range": 16000,
+      "nolos": true
     }
   },
   "extra_fixed_wing_objectives": [

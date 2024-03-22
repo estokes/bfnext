@@ -72,7 +72,6 @@ impl LandCache {
             h: IndexMap::with_capacity_and_hasher(max_size, FxBuildHasher::default()),
             added: 0,
             max_size,
-            debug: false,
             stats: Stats {
                 calls: 0,
                 hits: 0,
@@ -94,12 +93,6 @@ impl LandCache {
                 self.stats.hits += 1;
                 let ent = e.get_mut();
                 ent.hits = u32::saturating_add(ent.hits, 1);
-                if self.debug {
-                    let visible = land.is_visible(LuaVec3(p0), LuaVec3(p1))?;
-                    if ent.visible != visible {
-                        self.stats.diffs += 1;
-                    }
-                }
                 Ok(ent.visible)
             }
             Entry::Vacant(e) => {

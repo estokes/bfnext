@@ -106,17 +106,6 @@ impl ObjectiveMarkup {
         }
     }
 
-    /*
-    pub(super) fn needs_update(&self, obj: &Objective) -> bool {
-        dbg!(obj.owner != self.side)
-            || dbg!(obj.threatened != self.threatened)
-            || dbg!(obj.health != self.health)
-            || dbg!(obj.logi != self.logi)
-            || dbg!(obj.supply != self.supply)
-            || dbg!(obj.fuel != self.fuel)
-    }
-    */
-
     pub(super) fn update(&mut self, msgq: &mut MsgQ, obj: &Objective) {
         if obj.owner != self.side {
             let text_color = |a| text_color(obj.owner, a);

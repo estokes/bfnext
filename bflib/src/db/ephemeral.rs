@@ -173,6 +173,9 @@ impl Default for Ephemeral {
 
 impl Ephemeral {
     pub fn create_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {
+        if let Some(mk) = self.objective_markup.remove(&obj.id) {
+            mk.remove(&mut self.msgs);
+        }
         self.objective_markup.insert(
             obj.id,
             ObjectiveMarkup::new(&self.cfg, &mut self.msgs, obj, persisted),

@@ -416,9 +416,6 @@ fn on_player_try_change_slot(
             Ok(true) => Ok(None),
         },
     };
-    if let Ok(None) = res {
-        ctx.menu_init_queue.insert(slot);
-    }
     record_perf(
         &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
         start_ts,
@@ -481,6 +478,12 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 };
                 if let Err(e) = ctx.db.unit_born(lua, &unit, ucid) {
                     error!("unit born failed {:?} {:?}", unit, e);
+                }
+                if ucid.is_some() {
+                    let slot = unit.slot().ok();
+                    if let Some(slot) = slot {
+                        ctx.menu_init_queue.insert(slot);
+                    }
                 }
             } else if let Ok(st) = b.initiator.as_static() {
                 if let Err(e) = ctx.db.static_born(&st) {

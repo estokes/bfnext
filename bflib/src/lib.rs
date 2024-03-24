@@ -286,6 +286,15 @@ fn on_player_try_connect(
             }
         }
     }
+    if let Some(id) = ctx.id_by_name.get(&name) {
+        if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+            if ifo.ucid != ucid {
+                return Ok(Some(
+                    "your callsign is already taken by another player".into(),
+                ));
+            }
+        }
+    }
     if let Some(id) = ctx.id_by_ucid.remove(&ucid) {
         if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
             ctx.id_by_name.remove(&ifo.name);

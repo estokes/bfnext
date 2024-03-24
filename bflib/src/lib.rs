@@ -480,8 +480,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                     error!("unit born failed {:?} {:?}", unit, e);
                 }
                 if ucid.is_some() {
-                    let slot = unit.slot().ok();
-                    if let Some(slot) = slot {
+                    if let Ok(slot) = unit.slot() {
                         ctx.menu_init_queue.insert(slot);
                     }
                 }

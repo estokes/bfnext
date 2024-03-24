@@ -701,7 +701,7 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn unit_born(&mut self, lua: MizLua, unit: &Unit) -> Result<()> {
+    pub fn unit_born(&mut self, lua: MizLua, unit: &Unit, ucid: Option<Ucid>) -> Result<()> {
         let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
@@ -717,7 +717,15 @@ impl Db {
         }
         let slot = unit.slot()?;
         if let Some(oid) = self.persisted.objectives_by_slot.get(&slot) {
-            self.player_entered_slot(lua, id, unit, slot, *oid)
+            let ucid = match ucid {
+                Some(ucid) => ucid,
+                None => {
+                    error!("slot {slot} born with no player in it");
+                    unit.clone().destroy()?;
+                    return Ok(());
+                }
+            };
+            self.player_entered_slot(lua, id, unit, slot, *oid, ucid)
                 .context("entering player into slot")?
         }
         Ok(())
@@ -732,27 +740,12 @@ impl Db {
         Ok(())
     }
 
-    pub fn unit_dead(
-        &mut self,
-        lua: MizLua,
-        id: &DcsOid<ClassUnit>,
-        now: DateTime<Utc>,
-    ) -> Result<()> {
+    pub fn unit_dead(&mut self, id: &DcsOid<ClassUnit>, now: DateTime<Utc>) -> Result<()> {
         let uid = match self.ephemeral.unit_dead(&self.persisted, id) {
             None => return Ok(()),
             Some((uid, ucid)) => {
                 if let Some(ucid) = ucid {
-                    let player = &mut self.persisted.players[&ucid];
-                    if let Some((_, Some(inst))) = player.current_slot.take() {
-                        if let Some(oid) = inst.landed_at_objective {
-                            if let Err(e) = self.sync_vehicle_at_obj(lua, oid, inst.typ.clone()) {
-                                error!(
-                                    "failed to sync warehouse at {:?} for vehicle {:?} {:?}",
-                                    oid, inst.typ, e
-                                )
-                            }
-                        }
-                    }
+                    self.player_deslot(&ucid)
                 }
                 uid
             }

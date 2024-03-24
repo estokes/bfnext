@@ -52,7 +52,7 @@ use dcso3::{
     timer::Timer,
     trigger::Trigger,
     unit::{ClassUnit, Unit},
-    world::{World, MarkPanel},
+    world::{MarkPanel, World},
     HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use ewr::Ewr;
@@ -434,7 +434,7 @@ fn unit_killed(
     if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
         error!("jtac unit dead failed for {:?} {:?}", id, e)
     }
-    if let Err(e) = ctx.db.unit_dead(lua, &id, Utc::now()) {
+    if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
         error!("unit dead failed for {:?} {:?}", id, e);
     }
     Ok(())
@@ -454,7 +454,27 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
-                if let Err(e) = ctx.db.unit_born(lua, &unit) {
+                let ucid = match unit.get_player_name() {
+                    Err(e) => {
+                        error!("failed to get player name in {unit:?}, {e:?}");
+                        None
+                    }
+                    Ok(None) => None,
+                    Ok(Some(name)) => match ctx.id_by_name.get(&name) {
+                        None => {
+                            error!("unknown player {name} in {unit:?}");
+                            None
+                        }
+                        Some(id) => match ctx.info_by_player_id.get(id) {
+                            None => {
+                                error!("no info for player {id} {name}");
+                                None
+                            }
+                            Some(ifo) => Some(ifo.ucid),
+                        },
+                    },
+                };
+                if let Err(e) = ctx.db.unit_born(lua, &unit, ucid) {
                     error!("unit born failed {:?} {:?}", unit, e);
                 }
             } else if let Ok(st) = b.initiator.as_static() {
@@ -574,20 +594,25 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 }
             }
         }
-        Event::MarkAdded(MarkPanel { initiator: Some(unit), .. }) => {
+        Event::MarkAdded(MarkPanel {
+            initiator: Some(unit),
+            ..
+        }) => {
             let oid = unit.object_id()?;
             if let Some(slot) = ctx.db.ephemeral.get_slot_by_object_id(&oid) {
                 let slot = *slot;
                 if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
                     let ucid = *ucid;
                     if ctx.subscribed_action_menus.contains(&slot) {
-                        if let Err(e) = menu::action::init_action_menu_for_slot(ctx, lua, &slot, &ucid) {
+                        if let Err(e) =
+                            menu::action::init_action_menu_for_slot(ctx, lua, &slot, &ucid)
+                        {
                             error!("failed to init action menu for {ucid} {slot} {e:?}")
                         }
                     }
                 }
             }
-        },
+        }
         Event::MissionEnd => unsafe {
             Context::reset();
             Context::get_mut().init_async_bg(lua.inner())?;

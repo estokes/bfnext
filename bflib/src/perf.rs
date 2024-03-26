@@ -143,6 +143,7 @@ impl Perf {
         log_histogram(&self.inner.remark_objectives, "remark objectives: ");
         log_histogram(&self.inner.update_jtac_contacts, "update jtacs:      ");
         log_histogram(&self.inner.do_repairs, "do repairs:        ");
+        log_histogram(&self.inner.spawn_queue, "spawn queue:       ");
         log_histogram(&self.inner.spawn, "spawn:             ");
         log_histogram(&self.inner.despawn, "despawn:           ");
         log_histogram(&self.inner.advise_captured, "advise captured:   ");

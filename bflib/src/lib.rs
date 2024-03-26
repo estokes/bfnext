@@ -76,6 +76,68 @@ struct PlayerInfo {
     ucid: Ucid,
 }
 
+#[derive(Debug, Default)]
+struct Connected {
+    info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
+    id_by_ucid: FxHashMap<Ucid, PlayerId>,
+    id_by_name: FxHashMap<String, PlayerId>,
+}
+
+impl Connected {
+    pub fn get(&self, id: &PlayerId) -> Option<&PlayerInfo> {
+        self.info_by_player_id.get(id)
+    }
+
+    pub fn get_by_name(&self, name: &str) -> Option<&PlayerInfo> {
+        self.id_by_name
+            .get(name)
+            .and_then(|id| self.info_by_player_id.get(id))
+    }
+
+    fn get_or_lookup_player_info<'a, 'lua, L: LuaEnv<'lua>>(
+        &'a mut self,
+        lua: L,
+        id: PlayerId,
+    ) -> Result<&'a PlayerInfo> {
+        if self.info_by_player_id.contains_key(&id) {
+            Ok(&self.info_by_player_id[&id])
+        } else {
+            let net = Net::singleton(lua)?;
+            let ifo = net.get_player_info(id)?;
+            let ucid = ifo
+                .ucid()?
+                .ok_or_else(|| anyhow!("player {:?} has no ucid", ifo))?;
+            let name = ifo.name()?;
+            info!("player name: '{}', id: {:?}, ucid: {:?}", name, id, ucid);
+            self.player_connected(id, PlayerInfo { name, ucid })?;
+            Ok(&self.info_by_player_id[&id])
+        }
+    }
+
+    pub fn player_connected(&mut self, id: PlayerId, ifo: PlayerInfo) -> Result<()> {
+        if let Some(id) = self.id_by_ucid.remove(&ifo.ucid) {
+            if let Some(ifo) = self.info_by_player_id.remove(&id) {
+                self.id_by_name.remove(&ifo.name);
+            }
+        }
+        if self.id_by_name.contains_key(&ifo.name) {
+            bail!("your callsign is already taken by another player")
+        }
+        self.id_by_ucid.insert(ifo.ucid, id);
+        self.id_by_name.insert(ifo.name.clone(), id);
+        self.info_by_player_id.insert(id, ifo);
+        Ok(())
+    }
+
+    pub fn player_disconnected(&mut self, id: PlayerId) -> Option<PlayerInfo> {
+        self.info_by_player_id.remove(&id).map(|ifo| {
+            self.id_by_name.remove(&ifo.name);
+            self.id_by_ucid.remove(&ifo.ucid);
+            ifo
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 struct AutoShutdown {
     when: DateTime<Utc>,
@@ -152,9 +214,6 @@ struct Context {
     admin_commands: Vec<(PlayerId, AdminCommand)>,
     action_commands: Vec<(PlayerId, String)>,
     to_background: Option<UnboundedSender<bg::Task>>,
-    info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
-    id_by_ucid: FxHashMap<Ucid, PlayerId>,
-    id_by_name: FxHashMap<String, PlayerId>,
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
@@ -166,6 +225,7 @@ struct Context {
     last_player_position: usize,
     subscribed_jtac_menus: FxHashMap<SlotId, FxHashSet<ObjectiveId>>,
     subscribed_action_menus: FxHashSet<SlotId>,
+    connected: Connected,
     landcache: LandCache,
     ewr: Ewr,
     jtac: Jtacs,
@@ -229,30 +289,6 @@ impl Context {
     }
 }
 
-fn get_player_info<'a, 'lua, L: LuaEnv<'lua>>(
-    tbl: &'a mut FxHashMap<PlayerId, PlayerInfo>,
-    rtbl: &'a mut FxHashMap<Ucid, PlayerId>,
-    ntbl: &'a mut FxHashMap<String, PlayerId>,
-    lua: L,
-    id: PlayerId,
-) -> Result<&'a PlayerInfo> {
-    if tbl.contains_key(&id) {
-        Ok(&tbl[&id])
-    } else {
-        let net = Net::singleton(lua)?;
-        let ifo = net.get_player_info(id)?;
-        let ucid = ifo
-            .ucid()?
-            .ok_or_else(|| anyhow!("player {:?} has no ucid", ifo))?;
-        let name = ifo.name()?;
-        info!("player name: '{}', id: {:?}, ucid: {:?}", name, id, ucid);
-        rtbl.insert(ucid.clone(), id);
-        ntbl.insert(name.clone(), id);
-        tbl.insert(id, PlayerInfo { name, ucid });
-        Ok(&tbl[&id])
-    }
-}
-
 fn on_player_try_connect(
     _: HooksLua,
     addr: String,
@@ -288,25 +324,15 @@ fn on_player_try_connect(
             }
         }
     }
-    if let Some(id) = ctx.id_by_ucid.remove(&ucid) {
-        if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
-            ctx.id_by_name.remove(&ifo.name);
-        }
-    }
-    if ctx.id_by_name.contains_key(&name) {
-        return Ok(Some(
-            "your callsign is already taken by another player".into(),
-        ));
-    }
-    ctx.id_by_ucid.insert(ucid, id);
-    ctx.id_by_name.insert(name.clone(), id);
-    ctx.info_by_player_id.insert(
+    if let Err(e) = ctx.connected.player_connected(
         id,
         PlayerInfo {
             name: name.clone(),
             ucid,
         },
-    );
+    ) {
+        return Ok(Some(String::from(format_compact!("{e}"))));
+    }
     ctx.db.player_connected(ucid, name);
     record_perf(
         &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
@@ -401,13 +427,7 @@ fn on_player_try_change_slot(
     info!("onPlayerTryChangeSlot: {:?} {:?} {:?}", id, side, slot);
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    let res = match get_player_info(
-        &mut ctx.info_by_player_id,
-        &mut ctx.id_by_ucid,
-        &mut ctx.id_by_name,
-        lua,
-        id,
-    ) {
+    let res = match ctx.connected.get_or_lookup_player_info(lua, id) {
         Err(e) => {
             error!("failed to get player info for {:?} {:?}", id, e);
             Ok(Some(false))
@@ -461,32 +481,15 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
-                let ucid = match unit.get_player_name() {
+                match ctx.db.unit_born(lua, &unit, &ctx.connected) {
                     Err(e) => {
-                        error!("failed to get player name in {unit:?}, {e:?}");
-                        None
+                        error!("unit born failed {:?} {:?}", unit, e);
                     }
-                    Ok(None) => None,
-                    Ok(Some(name)) => match ctx.id_by_name.get(&name) {
-                        None => {
-                            error!("unknown player {name} in {unit:?}");
-                            None
+                    Ok(false) => (),
+                    Ok(true) => {
+                        if let Ok(slot) = unit.slot() {
+                            ctx.menu_init_queue.insert(slot);
                         }
-                        Some(id) => match ctx.info_by_player_id.get(id) {
-                            None => {
-                                error!("no info for player {id} {name}");
-                                None
-                            }
-                            Some(ifo) => Some(ifo.ucid),
-                        },
-                    },
-                };
-                if let Err(e) = ctx.db.unit_born(lua, &unit, ucid) {
-                    error!("unit born failed {:?} {:?}", unit, e);
-                }
-                if ucid.is_some() {
-                    if let Ok(slot) = unit.slot() {
-                        ctx.menu_init_queue.insert(slot);
                     }
                 }
             } else if let Ok(st) = b.initiator.as_static() {
@@ -807,7 +810,7 @@ fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) {
 fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) {
     for (_, ids) in ctx.db.ephemeral.players_to_force_to_spectators(ts) {
         for ucid in ids {
-            match ctx.id_by_ucid.get(&ucid) {
+            match ctx.connected.id_by_ucid.get(&ucid) {
                 None => warn!("no id for player ucid {:?}", ucid),
                 Some(id) => {
                     info!("forcing player {} to spectators", ucid);
@@ -1111,9 +1114,7 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
     info!("onPlayerDisconnect({id})");
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    if let Some(ifo) = ctx.info_by_player_id.remove(&id) {
-        ctx.id_by_name.remove(&ifo.name);
-        ctx.id_by_ucid.remove(&ifo.ucid);
+    if let Some(ifo) = ctx.connected.player_disconnected(id) {
         info!("deslotting disconnected player {}", ifo.ucid);
         ctx.db.player_disconnected(&ifo.ucid)
     }

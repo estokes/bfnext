@@ -22,7 +22,7 @@ use crate::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags},
     group, group_by_name, group_health, group_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
-    unit, unit_by_name, unit_mut,
+    unit, unit_by_name, unit_mut, Connected,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -701,7 +701,7 @@ impl Db {
         Ok(gid)
     }
 
-    pub fn unit_born(&mut self, lua: MizLua, unit: &Unit, ucid: Option<Ucid>) -> Result<()> {
+    pub(crate) fn unit_born(&mut self, lua: MizLua, unit: &Unit, connected: &Connected) -> Result<bool> {
         let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
@@ -714,21 +714,25 @@ impl Db {
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
+            return Ok(false)
         }
         let slot = unit.slot()?;
         if let Some(oid) = self.persisted.objectives_by_slot.get(&slot) {
-            let ucid = match ucid {
-                Some(ucid) => ucid,
+            let name = unit.get_player_name()?;
+            let ifo = name.and_then(|name| connected.get_by_name(&name));
+            let ucid = match ifo {
+                Some(ifo) => ifo.ucid,
                 None => {
                     error!("slot {slot} born with no player in it");
                     unit.clone().destroy()?;
-                    return Ok(());
+                    return Ok(false);
                 }
             };
             self.player_entered_slot(lua, id, unit, slot, *oid, ucid)
-                .context("entering player into slot")?
+                .context("entering player into slot")?;
+            return Ok(true)
         }
-        Ok(())
+        Ok(false)
     }
 
     pub fn static_born(&mut self, st: &StaticObject) -> Result<()> {

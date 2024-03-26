@@ -314,7 +314,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
     let spctx = SpawnCtx::new(lua)?;
     let key = format_compact!("{} ", key);
     let ifo = ctx
-        .info_by_player_id
+        .connected
         .get(&id)
         .ok_or_else(|| anyhow!("unknown admin"))?;
     enum Kind {
@@ -454,7 +454,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
 
 pub(super) fn get_player_ucid<'a>(ctx: &'a Context, key: &str) -> Result<Ucid> {
     if let Ok(id) = key.parse::<PlayerId>() {
-        if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+        if let Some(ifo) = ctx.connected.get(&id) {
             return Ok(ifo.ucid.clone());
         }
     }
@@ -557,7 +557,7 @@ fn admin_ban(
         cfg.banned.insert(ucid.clone(), (until, name));
         Ok(())
     })?;
-    if let Some(id) = ctx.id_by_ucid.get(&ucid) {
+    if let Some(id) = ctx.connected.id_by_ucid.get(&ucid) {
         let msg = match until {
             None => format_compact!("you are banned forever"),
             Some(ts) => format_compact!("you are banned until {}", ts),
@@ -569,7 +569,7 @@ fn admin_ban(
 
 fn admin_kick(ctx: &mut Context, lua: MizLua, name: &String) -> Result<()> {
     let ucid = get_player_ucid(ctx, name.as_str())?;
-    let id = match ctx.id_by_ucid.get(&ucid) {
+    let id = match ctx.connected.id_by_ucid.get(&ucid) {
         None => bail!("no connected player found, is {name} on the server?"),
         Some(id) => *id,
     };
@@ -596,7 +596,8 @@ fn admin_list_banned(ctx: &Context) -> SmallVec<[(Ucid, String, Option<DateTime<
 }
 
 fn admin_list_connected(ctx: &Context) -> SmallVec<[(PlayerId, Ucid, String); 64]> {
-    ctx.info_by_player_id
+    ctx.connected
+        .info_by_player_id
         .iter()
         .map(|(id, ifo)| (*id, ifo.ucid.clone(), ifo.name.clone()))
         .collect()
@@ -617,7 +618,7 @@ fn admin_search(
                 .any(|name| expr.is_match(name.as_str()))
             {
                 Some((
-                    ctx.id_by_ucid.get(ucid).map(|id| *id),
+                    ctx.connected.id_by_ucid.get(ucid).map(|id| *id),
                     ucid.clone(),
                     player.alts.clone(),
                 ))
@@ -744,7 +745,9 @@ fn remark(ctx: &mut Context, objective: &String) -> Result<()> {
         .objectives
         .get(&oid)
         .ok_or_else(|| anyhow!("no such objective {oid}"))?;
-    ctx.db.ephemeral.create_objective_markup(&ctx.db.persisted, obj);
+    ctx.db
+        .ephemeral
+        .create_objective_markup(&ctx.db.persisted, obj);
     Ok(())
 }
 
@@ -866,7 +869,7 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     Err(e) => reply!("could not log {airbase} inventory {:?}", e),
                 }
             }
-            AdminCommand::Logdesc => match ctx.info_by_player_id.get(&id) {
+            AdminCommand::Logdesc => match ctx.connected.get(&id) {
                 None => reply!("no player {id}"),
                 Some(ifo) => match admin_log_desc(ctx, lua, &ifo.ucid) {
                     Ok(()) => reply!("{} desc logged", ifo.ucid),

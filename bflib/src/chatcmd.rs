@@ -1,9 +1,16 @@
 use crate::{
-    admin::{self, AdminCommand}, cfg::{Action, ActionKind}, db::{
+    admin::{self, AdminCommand},
+    cfg::{Action, ActionKind},
+    db::{
         actions::ActionCmd,
         group::{DeployKind, GroupId},
         player::RegErr,
-    }, get_player_info, lives, msgq::MsgTyp, perf::PerfInner, spawnctx::SpawnCtx, Context
+    },
+    lives,
+    msgq::MsgTyp,
+    perf::PerfInner,
+    spawnctx::SpawnCtx,
+    Context,
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use chrono::{prelude::*, Duration};
@@ -19,13 +26,7 @@ use log::{error, info};
 use std::sync::Arc;
 
 fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
-    let ifo = get_player_info(
-        &mut ctx.info_by_player_id,
-        &mut ctx.id_by_ucid,
-        &mut ctx.id_by_name,
-        lua,
-        id,
-    )?;
+    let ifo = ctx.connected.get_or_lookup_player_info(lua, id)?;
     let side = if msg.eq_ignore_ascii_case("blue") {
         Side::Blue
     } else if msg.eq_ignore_ascii_case("red") {
@@ -68,13 +69,7 @@ fn sideswitch_player(
     id: PlayerId,
     msg: String,
 ) -> Result<String> {
-    let ifo = get_player_info(
-        &mut ctx.info_by_player_id,
-        &mut ctx.id_by_ucid,
-        &mut ctx.id_by_name,
-        lua,
-        id,
-    )?;
+    let ifo = ctx.connected.get_or_lookup_player_info(lua, id)?;
     let (_, slot) = Net::singleton(lua)?.get_slot(id)?;
     if !slot.is_spectator() {
         bail!("you must be in spectators to switch sides")
@@ -98,7 +93,7 @@ fn sideswitch_player(
 
 fn lives_command(ctx: &mut Context, id: PlayerId) -> Result<()> {
     let ifo = ctx
-        .info_by_player_id
+        .connected
         .get(&id)
         .ok_or_else(|| anyhow!("missing info for player {:?}", id))?;
     let msg = lives(&mut ctx.db, &ifo.ucid, None)?;
@@ -107,7 +102,7 @@ fn lives_command(ctx: &mut Context, id: PlayerId) -> Result<()> {
 }
 
 fn admin_command(ctx: &mut Context, id: PlayerId, cmd: &str) {
-    let ifo = match ctx.info_by_player_id.get(&id) {
+    let ifo = match ctx.connected.get(&id) {
         Some(ifo) => ifo,
         None => return,
     };
@@ -155,7 +150,7 @@ fn time_command(ctx: &mut Context, id: PlayerId, now: DateTime<Utc>) {
 }
 
 fn balance_command(ctx: &mut Context, id: PlayerId) {
-    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+    if let Some(ifo) = ctx.connected.get(&id) {
         if let Some(player) = ctx.db.player(&ifo.ucid) {
             let points = player.points;
             ctx.db.ephemeral.msgs().send(
@@ -175,7 +170,7 @@ fn transfer_command(ctx: &mut Context, id: PlayerId, s: &str) {
                 .send(MsgTyp::Chat(Some(id)), format_compact!($msg))
         };
     }
-    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+    if let Some(ifo) = ctx.connected.get(&id) {
         match s.split_once(" ") {
             None => reply!("transfer expected amount and player"),
             Some((amount, player)) => match amount.parse::<u32>() {
@@ -201,7 +196,7 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
                 .send(MsgTyp::Chat(Some(id)), format_compact!($msg))
         };
     }
-    if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+    if let Some(ifo) = ctx.connected.get(&id) {
         match s.parse::<GroupId>() {
             Err(e) => reply!("delete expected a group id {e:?}"),
             Ok(id) => match ctx.db.group(&id) {
@@ -330,7 +325,7 @@ fn action_help(ctx: &mut Context, actions: &IndexMap<String, Action, FxBuildHash
 
 fn action_command(ctx: &mut Context, id: PlayerId, cmd: &str) {
     if cmd.trim().eq_ignore_ascii_case("help") {
-        if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+        if let Some(ifo) = ctx.connected.get(&id) {
             if let Some(player) = ctx.db.player(&ifo.ucid) {
                 let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
                 if let Some(actions) = cfg.actions.get(&player.side) {
@@ -350,7 +345,7 @@ pub(super) fn run_action_commands(
 ) -> Result<()> {
     let spctx = SpawnCtx::new(lua).context("creating spawn ctx")?;
     for (id, s) in ctx.action_commands.drain(..) {
-        if let Some(ifo) = ctx.info_by_player_id.get(&id) {
+        if let Some(ifo) = ctx.connected.get(&id) {
             if let Some(player) = ctx.db.player(&ifo.ucid) {
                 let ucid = ifo.ucid.clone();
                 let side = player.side;
@@ -378,7 +373,7 @@ pub(super) fn run_action_commands(
 }
 
 fn help_command(ctx: &mut Context, id: PlayerId) {
-    let admin = match ctx.info_by_player_id.get(&id) {
+    let admin = match ctx.connected.get(&id) {
         None => false,
         Some(ifo) => ctx.db.ephemeral.cfg.admins.contains_key(&ifo.ucid),
     };

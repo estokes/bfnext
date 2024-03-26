@@ -33,7 +33,7 @@ use dcso3::{
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
-    net::Ucid,
+    net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
     rotate2d,
     static_object::{ClassStatic, StaticObject},
@@ -701,7 +701,7 @@ impl Db {
         Ok(gid)
     }
 
-    pub(crate) fn unit_born(&mut self, lua: MizLua, unit: &Unit, connected: &Connected) -> Result<bool> {
+    pub(crate) fn unit_born(&mut self, lua: MizLua, unit: &Unit, connected: &Connected) -> Result<Option<SlotId>> {
         let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
@@ -714,7 +714,7 @@ impl Db {
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
-            return Ok(false)
+            return Ok(None)
         }
         let slot = unit.slot()?;
         if let Some(oid) = self.persisted.objectives_by_slot.get(&slot) {
@@ -725,14 +725,14 @@ impl Db {
                 None => {
                     error!("slot {slot} born with no player in it");
                     unit.clone().destroy()?;
-                    return Ok(false);
+                    return Ok(None);
                 }
             };
             self.player_entered_slot(lua, id, unit, slot, *oid, ucid)
                 .context("entering player into slot")?;
-            return Ok(true)
+            return Ok(Some(slot))
         }
-        Ok(false)
+        Ok(None)
     }
 
     pub fn static_born(&mut self, st: &StaticObject) -> Result<()> {

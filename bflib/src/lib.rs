@@ -482,14 +482,12 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
                 match ctx.db.unit_born(lua, &unit, &ctx.connected) {
+                    Ok(None) => (),
+                    Ok(Some(slot)) => {
+                        ctx.menu_init_queue.insert(slot);
+                    }
                     Err(e) => {
                         error!("unit born failed {:?} {:?}", unit, e);
-                    }
-                    Ok(false) => (),
-                    Ok(true) => {
-                        if let Ok(slot) = unit.slot() {
-                            ctx.menu_init_queue.insert(slot);
-                        }
                     }
                 }
             } else if let Ok(st) = b.initiator.as_static() {

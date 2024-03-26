@@ -14,18 +14,16 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
+use std::sync::Arc;
+
 use super::{ArgQuad, ArgTriple, ArgTuple};
 use crate::{
-    cfg::{ActionKind, UnitTag},
-    db::{
+    cfg::{ActionKind, UnitTag}, db::{
         actions::{ActionArgs, ActionCmd, WithJtac},
         group::{DeployKind, GroupId as DbGid},
         objective::ObjectiveId,
         Db,
-    },
-    jtac::{AdjustmentDir, JtId, Jtac, Jtacs},
-    spawnctx::SpawnCtx,
-    Context,
+    }, jtac::{AdjustmentDir, JtId, Jtac, Jtacs}, perf::Perf, spawnctx::SpawnCtx, Context
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use compact_str::format_compact;
@@ -444,6 +442,7 @@ fn add_artillery_menu_for_jtac(
 
 fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
+    let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     let spctx = SpawnCtx::new(lua)?;
     let jtac = get_jtac(&ctx.jtac, &arg.fst)?;
     let (near, name) = change_info(jtac, &ctx.db, &arg.snd);
@@ -460,6 +459,7 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
         _ => bail!("not a bomber action"),
     };
     match ctx.db.start_action(
+        perf,
         &spctx,
         &ctx.idx,
         &ctx.jtac,

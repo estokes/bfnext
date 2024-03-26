@@ -24,7 +24,7 @@ use crate::{
     cfg::Vehicle,
     db::objective::ObjectiveKind,
     maybe, objective, objective_mut,
-    perf::{record_perf, Perf},
+    perf::{record_perf, PerfInner},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -455,7 +455,7 @@ impl Db {
     pub fn logistics_step(
         &mut self,
         lua: MizLua,
-        perf: &mut Perf,
+        perf: &mut PerfInner,
         ts: DateTime<Utc>,
     ) -> Result<()> {
         if let Some(wcfg) = self.ephemeral.cfg.warehouse.as_ref() {

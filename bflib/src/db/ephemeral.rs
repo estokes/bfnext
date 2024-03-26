@@ -25,10 +25,7 @@ use crate::{
     cfg::{
         ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
         DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
-    },
-    maybe,
-    msgq::MsgQ,
-    spawnctx::{Despawn, SpawnCtx, Spawned},
+    }, maybe, msgq::MsgQ, perf::{record_perf, PerfInner}, spawnctx::{Despawn, SpawnCtx, Spawned}
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -237,6 +234,7 @@ impl Ephemeral {
 
     pub fn process_spawn_queue(
         &mut self,
+        perf: &mut PerfInner,
         persisted: &Persisted,
         now: DateTime<Utc>,
         idx: &MizIndex,
@@ -274,14 +272,15 @@ impl Ephemeral {
                             }
                         }
                     }
-                    spctx.despawn(despawn)?
+                    spctx.despawn(perf, despawn)?;
+                    
                 }
             }
         } else if slen > 0 {
             for _ in 0..max(1, slen >> 4) {
                 if let Some(gid) = self.spawnq.pop_front() {
                     let group = maybe!(persisted.groups, gid, "group")?;
-                    self.spawn_group(persisted, idx, spctx, group, vec![])?;
+                    self.spawn_group(perf, persisted, idx, spctx, group, vec![])?;
                 }
             }
         }
@@ -723,12 +722,14 @@ impl Ephemeral {
 
     pub(super) fn spawn_group<'lua>(
         &mut self,
+        perf: &mut PerfInner,
         persisted: &Persisted,
         idx: &MizIndex,
         spctx: &SpawnCtx<'lua>,
         group: &SpawnedGroup,
         mission: Vec<MissionPoint<'lua>>,
     ) -> Result<Option<Spawned<'lua>>> {
+        let ts = Utc::now();
         let template = spctx
             .get_template(
                 idx,
@@ -790,6 +791,7 @@ impl Ephemeral {
             units.len() > 0
         };
         if !alive {
+            record_perf(&mut perf.spawn, ts);
             Ok(None)
         } else {
             let point = centroid2d(points.iter().map(|p| *p));
@@ -813,6 +815,7 @@ impl Ephemeral {
                     self.gid_by_object_id.insert(oid, group.id);
                 }
             }
+            record_perf(&mut perf.spawn, ts);
             Ok(Some(spawned))
         }
     }

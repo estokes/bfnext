@@ -1,13 +1,12 @@
+use std::sync::Arc;
+
 use super::{ArgPent, ArgQuad, ArgTriple};
 use crate::{
-    cfg::{Action, ActionKind},
-    db::{
+    cfg::{Action, ActionKind}, db::{
         actions::{ActionArgs, ActionCmd, WithObj, WithPos, WithPosAndGroup},
         group::{DeployKind, GroupId as DbGid},
         objective::ObjectiveId,
-    },
-    spawnctx::SpawnCtx,
-    Context,
+    }, perf::{Perf, PerfInner}, spawnctx::SpawnCtx, Context
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use compact_str::format_compact;
@@ -25,6 +24,7 @@ use fxhash::FxHashMap;
 
 fn run_action(
     ctx: &mut Context,
+    perf: &mut PerfInner,
     lua: MizLua,
     side: Side,
     slot: SlotId,
@@ -34,7 +34,7 @@ fn run_action(
 ) -> Result<()> {
     let spctx = SpawnCtx::new(lua)?;
     ctx.db
-        .start_action(&spctx, &ctx.idx, &ctx.jtac, side, Some(ucid), cmd)?;
+        .start_action(perf, &spctx, &ctx.idx, &ctx.jtac, side, Some(ucid), cmd)?;
     if let Some(mark) = mark {
         ctx.db.ephemeral.msgs().delete_mark(mark);
     }
@@ -43,6 +43,7 @@ fn run_action(
 
 fn do_pos_action(
     ctx: &mut Context,
+    perf: &mut PerfInner,
     lua: MizLua,
     side: Side,
     slot: SlotId,
@@ -97,7 +98,7 @@ fn do_pos_action(
         | ActionKind::AttackersWaypoint => bail!("invalid action type for this menu item"),
     };
     let cmd = ActionCmd { name, action, args };
-    run_action(ctx, lua, side, slot, ucid, Some(mark), cmd)
+    run_action(ctx, perf, lua, side, slot, ucid, Some(mark), cmd)
 }
 
 fn side_slot_action(ctx: &mut Context, ucid: &Ucid, name: &str) -> Result<(Side, SlotId, Action)> {
@@ -126,9 +127,11 @@ fn side_slot_action(ctx: &mut Context, ucid: &Ucid, name: &str) -> Result<(Side,
 
 fn run_pos_action(lua: MizLua, arg: ArgQuad<Ucid, String, LuaVec3, MarkId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
+    let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     let (side, slot, action) = side_slot_action(ctx, &arg.fst, &arg.snd)?;
     match do_pos_action(
         ctx,
+        perf,
         lua,
         side,
         slot,
@@ -156,6 +159,7 @@ fn run_pos_action(lua: MizLua, arg: ArgQuad<Ucid, String, LuaVec3, MarkId>) -> R
 
 fn do_pos_group_action(
     ctx: &mut Context,
+    perf: &mut PerfInner,
     lua: MizLua,
     side: Side,
     slot: SlotId,
@@ -211,7 +215,7 @@ fn do_pos_group_action(
         | ActionKind::LogisticsRepair(_) => bail!("invalid action type for this menu item"),
     };
     let cmd = ActionCmd { name, action, args };
-    run_action(ctx, lua, side, slot, ucid, Some(mark), cmd)
+    run_action(ctx, perf, lua, side, slot, ucid, Some(mark), cmd)
 }
 
 fn run_pos_group_action(
@@ -219,9 +223,11 @@ fn run_pos_group_action(
     arg: ArgPent<Ucid, String, LuaVec3, DbGid, MarkId>,
 ) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
+    let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     let (side, slot, action) = side_slot_action(ctx, &arg.fst, &arg.snd)?;
     match do_pos_group_action(
         ctx,
+        perf,
         lua,
         side,
         slot,
@@ -250,6 +256,7 @@ fn run_pos_group_action(
 
 fn do_objective_action(
     ctx: &mut Context,
+    perf: &mut PerfInner,
     lua: MizLua,
     side: Side,
     slot: SlotId,
@@ -281,14 +288,16 @@ fn do_objective_action(
         | ActionKind::Move(_) => bail!("invalid action type for this menu item"),
     };
     let cmd = ActionCmd { name, action, args };
-    run_action(ctx, lua, side, slot, ucid, None, cmd)
+    run_action(ctx, perf, lua, side, slot, ucid, None, cmd)
 }
 
 fn run_objective_action(lua: MizLua, arg: ArgTriple<Ucid, String, ObjectiveId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
+    let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     let (side, slot, action) = side_slot_action(ctx, &arg.fst, &arg.snd)?;
     match do_objective_action(
         ctx,
+        perf,
         lua,
         side,
         slot,

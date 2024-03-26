@@ -63,7 +63,7 @@ use landcache::LandCache;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
-use perf::Perf;
+use perf::{Perf, PerfInner};
 use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
@@ -160,6 +160,7 @@ struct Context {
     captureable: FxHashMap<ObjectiveId, usize>,
     shots_out: ShotDb,
     menu_init_queue: IndexSet<SlotId, FxBuildHasher>,
+    last_frame: Option<DateTime<Utc>>,
     last_slow_timed_events: DateTime<Utc>,
     last_unit_position: usize,
     last_player_position: usize,
@@ -214,14 +215,15 @@ impl Context {
 
     fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
+        let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
         self.db
-            .respawn_after_load(&self.idx, &mut self.landcache, &spctx)
+            .respawn_after_load(perf, &self.idx, &mut self.landcache, &spctx)
     }
 
     fn log_perf(&mut self, now: DateTime<Utc>) {
         if now - self.last_perf_log > Duration::seconds(60) {
             self.last_perf_log = now;
-            self.do_bg_task(bg::Task::LogPerf(Arc::clone(unsafe { Perf::get_mut() })));
+            self.do_bg_task(bg::Task::LogPerf(unsafe { Perf::get_mut() }.clone()));
             info!("landcache {}", self.landcache.stats())
         }
     }
@@ -306,7 +308,10 @@ fn on_player_try_connect(
         },
     );
     ctx.db.player_connected(ucid, name);
-    record_perf(&mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks, ts);
+    record_perf(
+        &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
+        ts,
+    );
     Ok(None)
 }
 
@@ -318,7 +323,7 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
     );
     let r = chatcmd::process(unsafe { Context::get_mut() }, lua, start_ts, id, msg);
     record_perf(
-        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+        &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
         start_ts,
     );
     match r {
@@ -417,7 +422,7 @@ fn on_player_try_change_slot(
         },
     };
     record_perf(
-        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+        &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
         start_ts,
     );
     res
@@ -627,7 +632,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         _ => (),
     }
     record_perf(
-        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_events,
+        &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_events,
         start_ts,
     );
     Ok(())
@@ -857,7 +862,7 @@ fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
 fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
-    perf: &mut Perf,
+    perf: &mut PerfInner,
     path: &PathBuf,
     ts: DateTime<Utc>,
 ) -> Result<()> {
@@ -941,7 +946,7 @@ fn run_slow_timed_events(
 fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
-    let perf = Arc::make_mut(unsafe { Perf::get_mut() });
+    let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
     force_players_to_spectators(ctx, &net, ts);
@@ -986,10 +991,10 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     let now = Utc::now();
     let spctx = SpawnCtx::new(lua)?;
-    if let Err(e) = ctx
-        .db
-        .ephemeral
-        .process_spawn_queue(&ctx.db.persisted, ts, &ctx.idx, &spctx)
+    if let Err(e) =
+        ctx.db
+            .ephemeral
+            .process_spawn_queue(perf, &ctx.db.persisted, ts, &ctx.idx, &spctx)
     {
         error!("error processing spawn queue {:?}", e)
     }
@@ -1026,7 +1031,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = run_admin_commands(ctx, lua) {
         error!("failed to run admin commands {e:?}")
     }
-    if let Err(e) = run_action_commands(ctx, lua) {
+    if let Err(e) = run_action_commands(ctx, perf, lua) {
         error!("failed to run action commands {e:?}")
     }
     ctx.load_state.step();
@@ -1113,9 +1118,29 @@ fn on_player_disconnect(_: HooksLua, id: PlayerId) -> Result<()> {
         ctx.db.player_disconnected(&ifo.ucid)
     }
     record_perf(
-        &mut Arc::make_mut(unsafe { Perf::get_mut() }).dcs_hooks,
+        &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
         start_ts,
     );
+    Ok(())
+}
+
+fn on_simulation_frame(_: HooksLua) -> Result<()> {
+    let frame = Arc::make_mut(&mut unsafe { Perf::get_mut() }.frame);
+    let now = Utc::now();
+    let ctx = unsafe { Context::get_mut() };
+    match &mut ctx.last_frame {
+        Some(last) => {
+            if let Some(ns) = (now - *last).num_nanoseconds() {
+                if ns >= 1 && ns <= 1_000_000_000 {
+                    *frame += ns as u64;
+                }
+            }
+            *last = now;
+        }
+        None => {
+            ctx.last_frame = Some(now);
+        }
+    }
     Ok(())
 }
 
@@ -1127,6 +1152,7 @@ fn init_hooks(lua: HooksLua) -> Result<()> {
         .on_player_try_connect(on_player_try_connect)?
         .on_player_try_send_chat(on_player_try_send_chat)?
         .on_player_disconnect(on_player_disconnect)?
+        .on_simulation_frame(on_simulation_frame)?
         .register()?;
     Ok(())
 }

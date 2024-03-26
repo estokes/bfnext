@@ -1,15 +1,9 @@
 use crate::{
-    admin::{self, AdminCommand},
-    cfg::{Action, ActionKind},
-    db::{
+    admin::{self, AdminCommand}, cfg::{Action, ActionKind}, db::{
         actions::ActionCmd,
         group::{DeployKind, GroupId},
         player::RegErr,
-    },
-    get_player_info, lives,
-    msgq::MsgTyp,
-    spawnctx::SpawnCtx,
-    Context,
+    }, get_player_info, lives, msgq::MsgTyp, perf::PerfInner, spawnctx::SpawnCtx, Context
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use chrono::{prelude::*, Duration};
@@ -349,7 +343,11 @@ fn action_command(ctx: &mut Context, id: PlayerId, cmd: &str) {
     }
 }
 
-pub(super) fn run_action_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
+pub(super) fn run_action_commands(
+    ctx: &mut Context,
+    perf: &mut PerfInner,
+    lua: MizLua,
+) -> Result<()> {
     let spctx = SpawnCtx::new(lua).context("creating spawn ctx")?;
     for (id, s) in ctx.action_commands.drain(..) {
         if let Some(ifo) = ctx.info_by_player_id.get(&id) {
@@ -358,10 +356,15 @@ pub(super) fn run_action_commands(ctx: &mut Context, lua: MizLua) -> Result<()> 
                 let side = player.side;
                 let r = match ActionCmd::parse(&mut ctx.db, lua, side, &s) {
                     Err(e) => Err(e),
-                    Ok(cmd) => {
-                        ctx.db
-                            .start_action(&spctx, &ctx.idx, &ctx.jtac, side, Some(ucid), cmd)
-                    }
+                    Ok(cmd) => ctx.db.start_action(
+                        perf,
+                        &spctx,
+                        &ctx.idx,
+                        &ctx.jtac,
+                        side,
+                        Some(ucid),
+                        cmd,
+                    ),
                 };
                 let msg = match r {
                     Err(e) => format_compact!("could not run action {s}: {e:?}"),

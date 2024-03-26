@@ -179,7 +179,7 @@ pub(super) enum Task {
     ResetState(PathBuf),
     SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
-    LogPerf(Arc<Perf>),
+    LogPerf(Perf),
     Sync(Arc<(Mutex<bool>, Condvar)>),
 }
 

@@ -20,15 +20,10 @@ use super::{
     Db, Map,
 };
 use crate::{
-    cfg::{Cfg, Vehicle},
-    db::{
+    cfg::{Cfg, Vehicle}, db::{
         logistics::Warehouse,
         objective::{Objective, ObjectiveId, ObjectiveKind},
-    },
-    group,
-    landcache::LandCache,
-    objective_mut,
-    spawnctx::{SpawnCtx, SpawnLoc},
+    }, group, landcache::LandCache, objective_mut, perf::PerfInner, spawnctx::{SpawnCtx, SpawnLoc}
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -315,6 +310,7 @@ impl Db {
 
     pub fn respawn_after_load(
         &mut self,
+        perf: &mut PerfInner,
         idx: &MizIndex,
         landcache: &mut LandCache,
         spctx: &SpawnCtx,
@@ -338,7 +334,7 @@ impl Db {
             let actions: SmallVec<[GroupId; 16]> =
                 SmallVec::from_iter(self.persisted.actions.into_iter().map(|g| *g));
             for gid in actions {
-                if let Err(e) = self.respawn_action(spctx, idx, gid) {
+                if let Err(e) = self.respawn_action(perf, spctx, idx, gid) {
                     error!("failed to respawn action {e:?}");
                 }
             }

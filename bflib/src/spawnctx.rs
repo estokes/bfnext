@@ -15,6 +15,7 @@ for more details.
 */
 
 use anyhow::{anyhow, Context, Result};
+use chrono::Utc;
 use compact_str::format_compact;
 use dcso3::{
     coalition::{Coalition, Side, Static},
@@ -29,6 +30,8 @@ use fxhash::FxHashMap;
 use log::info;
 use mlua::Value;
 use serde_derive::{Deserialize, Serialize};
+
+use crate::perf::{record_perf, PerfInner};
 
 fn default_speed() -> f64 {
     220.
@@ -207,13 +210,15 @@ impl<'lua> SpawnCtx<'lua> {
         }
     }
 
-    pub fn despawn(&self, name: Despawn) -> Result<()> {
+    pub fn despawn(&self, perf: &mut PerfInner, name: Despawn) -> Result<()> {
+        let ts = Utc::now();
         match name {
             Despawn::Group(oid) => {
                 match dcso3::group::Group::get_instance(self.lua, &oid) {
                     Ok(group) => group.destroy()?,
                     Err(e) => info!("attempt to despawn invalid group {e:?}"),
                 }
+                record_perf(&mut perf.despawn, ts);
                 Ok(())
             }
             Despawn::Static(name) => {
@@ -222,6 +227,7 @@ impl<'lua> SpawnCtx<'lua> {
                     Ok(Static::Static(obj)) => obj.destroy()?,
                     Err(e) => info!("attempt to despawn unknown static {} {}", name, e),
                 }
+                record_perf(&mut perf.despawn, ts);
                 Ok(())
             }
         }

@@ -13,6 +13,7 @@ use crate::{
     group, group_mut,
     jtac::{JtId, Jtacs},
     objective,
+    perf::PerfInner,
     spawnctx::{SpawnCtx, SpawnLoc},
     unit,
 };
@@ -251,6 +252,7 @@ fn group_position(lua: MizLua, name: &str) -> Result<Vector2> {
 impl Db {
     pub fn start_action(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         jtacs: &Jtacs,
@@ -322,13 +324,14 @@ impl Db {
         let name = cmd.name.clone();
         match cmd.args {
             ActionArgs::Awacs(args) => self
-                .awacs(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .awacs(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling awacs")?,
             ActionArgs::AwacsWaypoint(args) => self
                 .move_awacs(spctx, side, ucid.clone(), args)
                 .context("moving awacs")?,
             ActionArgs::Bomber(args) => self
                 .bomber_strike(
+                    perf,
                     jtacs,
                     spctx,
                     idx,
@@ -340,38 +343,38 @@ impl Db {
                 )
                 .context("calling bomber strike")?,
             ActionArgs::Deployable(args) => self
-                .ai_deploy(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .ai_deploy(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai deployment")?,
             ActionArgs::Fighters(args) => self
-                .ai_fighters(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .ai_fighters(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai fighters")?,
             ActionArgs::FightersWaypoint(args) => self
                 .move_ai_fighters(spctx, side, ucid.clone(), args)
                 .context("moving ai fighters")?,
             ActionArgs::Attackers(args) => {
-                self.ai_attackers(spctx, idx, side, ucid.clone(), name, cmd.action, args)?
+                self.ai_attackers(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)?
             }
             ActionArgs::AttackersWaypoint(args) => {
                 self.move_ai_attackers(spctx, side, ucid.clone(), args)?
             }
             ActionArgs::Drone(args) => self
-                .drone(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .drone(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling drone")?,
             ActionArgs::DroneWaypoint(args) => self
                 .move_drone(spctx, side, ucid.clone(), args)
                 .context("moving drone")?,
             ActionArgs::LogisticsRepair(args) => self
-                .ai_logistics_repair(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .ai_logistics_repair(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai logi repair")?,
             ActionArgs::LogisticsTransfer(args) => self
-                .ai_logistics_transfer(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .ai_logistics_transfer(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai log transfer")?,
             ActionArgs::Nuke(args) => self.nuke(spctx, args).context("calling nuke")?,
             ActionArgs::Paratrooper(args) => self
-                .paratroops(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .paratroops(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling paratroops")?,
             ActionArgs::Tanker(args) => self
-                .tanker(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .tanker(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling tanker")?,
             ActionArgs::TankerWaypoint(args) => self
                 .move_tanker(spctx, side, ucid.clone(), args)
@@ -379,7 +382,13 @@ impl Db {
             ActionArgs::Move(args) => match &ucid {
                 None => bail!("ucid is required for move"),
                 Some(ucid) => self
-                    .move_group(spctx, side, ucid, cmd.action.penalty.unwrap_or(0), args)
+                    .move_group(
+                        spctx,
+                        side,
+                        ucid,
+                        cmd.action.penalty.unwrap_or(0),
+                        args,
+                    )
                     .context("moving unit")?,
             },
         }
@@ -402,6 +411,7 @@ impl Db {
 
     pub(super) fn respawn_action(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         gid: GroupId,
@@ -441,8 +451,14 @@ impl Db {
                         .awacs_mission(side, player, spawn_pos, args)
                         .context("generating awacs mission")?;
                     let group = group!(self, gid)?;
-                    self.ephemeral
-                        .spawn_group(&self.persisted, idx, spctx, group, mission)?;
+                    self.ephemeral.spawn_group(
+                        perf,
+                        &self.persisted,
+                        idx,
+                        spctx,
+                        group,
+                        mission,
+                    )?;
                     return Ok(());
                 }
                 if let ActionKind::Tanker(ai) = &spec.kind {
@@ -452,8 +468,14 @@ impl Db {
                         .tanker_mission(side, player, spawn_pos, args)
                         .context("generate tanker mission")?;
                     let group = group!(self, gid)?;
-                    self.ephemeral
-                        .spawn_group(&self.persisted, idx, spctx, group, mission)?;
+                    self.ephemeral.spawn_group(
+                        perf,
+                        &self.persisted,
+                        idx,
+                        spctx,
+                        group,
+                        mission,
+                    )?;
                     return Ok(());
                 }
                 if let ActionKind::Drone(ai) = &spec.kind {
@@ -463,8 +485,14 @@ impl Db {
                         .drone_mission(side, player, spawn_pos, args)
                         .context("generate drone mission")?;
                     let group = group!(self, gid)?;
-                    self.ephemeral
-                        .spawn_group(&self.persisted, idx, spctx, group, mission)?;
+                    self.ephemeral.spawn_group(
+                        perf,
+                        &self.persisted,
+                        idx,
+                        spctx,
+                        group,
+                        mission,
+                    )?;
                     return Ok(());
                 }
                 if let ActionKind::Fighters(ai) = &spec.kind {
@@ -474,8 +502,14 @@ impl Db {
                         .ai_fighters_mission(side, player, spawn_pos, args)
                         .context("generate fighters mission")?;
                     let group = group!(self, gid)?;
-                    self.ephemeral
-                        .spawn_group(&self.persisted, idx, spctx, group, mission)?;
+                    self.ephemeral.spawn_group(
+                        perf,
+                        &self.persisted,
+                        idx,
+                        spctx,
+                        group,
+                        mission,
+                    )?;
                     return Ok(());
                 }
                 if let ActionKind::Attackers(ai) = &spec.kind {
@@ -485,8 +519,14 @@ impl Db {
                         .ai_attackers_mission(side, player, spawn_pos, args)
                         .context("generate ai attackers mission")?;
                     let group = group!(self, gid)?;
-                    self.ephemeral
-                        .spawn_group(&self.persisted, idx, spctx, group, mission)?;
+                    self.ephemeral.spawn_group(
+                        perf,
+                        &self.persisted,
+                        idx,
+                        spctx,
+                        group,
+                        mission,
+                    )?;
                     return Ok(());
                 }
             }
@@ -535,6 +575,7 @@ impl Db {
 
     fn drone(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -544,6 +585,7 @@ impl Db {
         args: WithPos<DroneCfg>,
     ) -> Result<()> {
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -630,6 +672,7 @@ impl Db {
 
     fn ai_fighters(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -639,6 +682,7 @@ impl Db {
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -725,6 +769,7 @@ impl Db {
 
     fn ai_attackers(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -734,6 +779,7 @@ impl Db {
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -926,6 +972,7 @@ impl Db {
 
     fn tanker(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -935,6 +982,7 @@ impl Db {
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -963,6 +1011,7 @@ impl Db {
 
     fn paratroops(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -972,6 +1021,7 @@ impl Db {
         args: WithPos<DeployableCfg>,
     ) -> Result<()> {
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -1003,6 +1053,7 @@ impl Db {
 
     fn ai_logistics_transfer(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -1014,6 +1065,7 @@ impl Db {
         let from = objective!(self, args.from)?.pos;
         let to = objective!(self, args.to)?.pos;
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -1034,6 +1086,7 @@ impl Db {
 
     fn ai_logistics_repair(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -1044,6 +1097,7 @@ impl Db {
     ) -> Result<()> {
         let pos = objective!(self, args.oid)?.pos;
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -1064,6 +1118,7 @@ impl Db {
 
     fn ai_deploy(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -1073,6 +1128,7 @@ impl Db {
         args: WithPos<DeployableCfg>,
     ) -> Result<()> {
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -1147,6 +1203,7 @@ impl Db {
 
     fn bomber_strike(
         &mut self,
+        perf: &mut PerfInner,
         jtacs: &Jtacs,
         spctx: &SpawnCtx,
         idx: &MizIndex,
@@ -1163,6 +1220,7 @@ impl Db {
             .map(|t| Vector2::new(t.pos.x, t.pos.z))
             .unwrap_or(jt.location().pos);
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,
@@ -1183,6 +1241,7 @@ impl Db {
 
     fn add_and_spawn_ai_air<'lua>(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx<'lua>,
         idx: &MizIndex,
         side: Side,
@@ -1242,7 +1301,14 @@ impl Db {
             .context("creating group")?;
         let mission = gen_mission(self, gid, pos).context("generating mission for new unit")?;
         self.ephemeral
-            .spawn_group(&self.persisted, idx, spctx, group!(self, gid)?, mission)
+            .spawn_group(
+                perf,
+                &self.persisted,
+                idx,
+                spctx,
+                group!(self, gid)?,
+                mission,
+            )
             .context("spawning group")?;
         Ok(gid)
     }
@@ -1305,6 +1371,7 @@ impl Db {
 
     fn awacs(
         &mut self,
+        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -1314,6 +1381,7 @@ impl Db {
         args: WithPos<AiPlaneCfg>,
     ) -> Result<()> {
         self.add_and_spawn_ai_air(
+            perf,
             spctx,
             idx,
             side,

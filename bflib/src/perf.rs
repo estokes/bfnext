@@ -20,7 +20,7 @@ use log::info;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
-pub struct Perf {
+pub struct PerfInner {
     pub timed_events: Histogram<u64>,
     pub slow_timed: Histogram<u64>,
     pub dcs_events: Histogram<u64>,
@@ -34,6 +34,8 @@ pub struct Perf {
     pub update_jtac_contacts: Histogram<u64>,
     pub do_repairs: Histogram<u64>,
     pub spawn_queue: Histogram<u64>,
+    pub spawn: Histogram<u64>,
+    pub despawn: Histogram<u64>,
     pub advise_captured: Histogram<u64>,
     pub advise_capturable: Histogram<u64>,
     pub jtac_target_positions: Histogram<u64>,
@@ -46,34 +48,54 @@ pub struct Perf {
     pub logistics_sync_to: Histogram<u64>,
 }
 
-static mut PERF: Option<Arc<Perf>> = None;
+#[derive(Debug)]
+pub struct Perf {
+    pub inner: Arc<PerfInner>,
+    pub frame: Arc<Histogram<u64>>,
+}
+
+static mut PERF: Option<Perf> = None;
+
+impl Clone for Perf {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            frame: Arc::clone(&self.frame),
+        }
+    }
+}
 
 impl Default for Perf {
     fn default() -> Self {
         Perf {
-            timed_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            slow_timed: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            dcs_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            dcs_hooks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            unit_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            player_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            ewr_tracks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            ewr_reports: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            unit_culling: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            remark_objectives: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            update_jtac_contacts: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            do_repairs: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            spawn_queue: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            advise_captured: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            advise_capturable: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            jtac_target_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            process_messages: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            snapshot: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            logistics: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            logistics_distribute: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            logistics_deliver: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            logistics_sync_from: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            logistics_sync_to: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            inner: Arc::new(PerfInner {
+                timed_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                slow_timed: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                dcs_events: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                dcs_hooks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                unit_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                player_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                ewr_tracks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                ewr_reports: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                unit_culling: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                remark_objectives: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                update_jtac_contacts: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                do_repairs: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                spawn_queue: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                spawn: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                despawn: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                advise_captured: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                advise_capturable: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                jtac_target_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                process_messages: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                snapshot: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                logistics: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                logistics_distribute: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                logistics_deliver: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                logistics_sync_from: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                logistics_sync_to: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            }),
+            frame: Arc::new(Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap()),
         }
     }
 }
@@ -87,11 +109,11 @@ pub fn record_perf(h: &mut Histogram<u64>, start_ts: DateTime<Utc>) {
 }
 
 impl Perf {
-    pub unsafe fn get_mut() -> &'static mut Arc<Perf> {
+    pub unsafe fn get_mut() -> &'static mut Perf {
         match PERF.as_mut() {
             Some(perf) => perf,
             None => {
-                PERF = Some(Arc::new(Perf::default()));
+                PERF = Some(Perf::default());
                 PERF.as_mut().unwrap()
             }
         }
@@ -109,28 +131,30 @@ impl Perf {
                 n, twenty_five, fifty, ninety, ninety_nine
             );
         }
-        log_histogram(&self.timed_events, "timed events:      ");
-        log_histogram(&self.slow_timed, "slow timed events: ");
-        log_histogram(&self.dcs_events, "dcs events:        ");
-        log_histogram(&self.dcs_hooks, "dcs hooks:         ");
-        log_histogram(&self.unit_positions, "unit positions:    ");
-        log_histogram(&self.player_positions, "player positions:  ");
-        log_histogram(&self.ewr_tracks, "ewr tracks:        ");
-        log_histogram(&self.ewr_reports, "ewr reports:       ");
-        log_histogram(&self.unit_culling, "unit culling:      ");
-        log_histogram(&self.remark_objectives, "remark objectives: ");
-        log_histogram(&self.update_jtac_contacts, "update jtacs:      ");
-        log_histogram(&self.do_repairs, "do repairs:        ");
-        log_histogram(&self.spawn_queue, "spawn queue:       ");
-        log_histogram(&self.advise_captured, "advise captured:   ");
-        log_histogram(&self.advise_capturable, "advise capturable: ");
-        log_histogram(&self.jtac_target_positions, "jtac target pos:   ");
-        log_histogram(&self.process_messages, "process messages:  ");
-        log_histogram(&self.snapshot, "snapshot:          ");
-        log_histogram(&self.logistics, "logistics:         ");
-        log_histogram(&self.logistics_distribute, "logistics_distrib: ");
-        log_histogram(&self.logistics_deliver, "logistics_deliver: ");
-        log_histogram(&self.logistics_sync_from, "logistics_sfrom:   ");
-        log_histogram(&self.logistics_sync_to, "logistics_sto:     ");
+        log_histogram(&self.inner.timed_events, "timed events:      ");
+        log_histogram(&self.inner.slow_timed, "slow timed events: ");
+        log_histogram(&self.inner.dcs_events, "dcs events:        ");
+        log_histogram(&self.inner.dcs_hooks, "dcs hooks:         ");
+        log_histogram(&self.inner.unit_positions, "unit positions:    ");
+        log_histogram(&self.inner.player_positions, "player positions:  ");
+        log_histogram(&self.inner.ewr_tracks, "ewr tracks:        ");
+        log_histogram(&self.inner.ewr_reports, "ewr reports:       ");
+        log_histogram(&self.inner.unit_culling, "unit culling:      ");
+        log_histogram(&self.inner.remark_objectives, "remark objectives: ");
+        log_histogram(&self.inner.update_jtac_contacts, "update jtacs:      ");
+        log_histogram(&self.inner.do_repairs, "do repairs:        ");
+        log_histogram(&self.inner.spawn, "spawn:             ");
+        log_histogram(&self.inner.despawn, "despawn:           ");
+        log_histogram(&self.inner.advise_captured, "advise captured:   ");
+        log_histogram(&self.inner.advise_capturable, "advise capturable: ");
+        log_histogram(&self.inner.jtac_target_positions, "jtac target pos:   ");
+        log_histogram(&self.inner.process_messages, "process messages:  ");
+        log_histogram(&self.inner.snapshot, "snapshot:          ");
+        log_histogram(&self.inner.logistics, "logistics:         ");
+        log_histogram(&self.inner.logistics_distribute, "logistics_distrib: ");
+        log_histogram(&self.inner.logistics_deliver, "logistics_deliver: ");
+        log_histogram(&self.inner.logistics_sync_from, "logistics_sfrom:   ");
+        log_histogram(&self.inner.logistics_sync_to, "logistics_sto:     ");
+        log_histogram(&self.frame, "frame:             ")
     }
 }

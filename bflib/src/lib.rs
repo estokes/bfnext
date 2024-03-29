@@ -628,6 +628,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         }
         Event::MissionEnd => unsafe {
             Context::reset();
+            Perf::reset();
             Context::get_mut().init_async_bg(lua.inner())?;
         },
         _ => (),

@@ -119,6 +119,10 @@ impl Perf {
         }
     }
 
+    pub unsafe fn reset() {
+        PERF = None;
+    }
+
     pub fn log(&self) {
         fn log_histogram(h: &Histogram<u64>, name: &str) {
             let n = h.len();

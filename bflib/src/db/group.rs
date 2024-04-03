@@ -103,6 +103,8 @@ pub struct SpawnedUnit {
     pub dead: bool,
     #[serde(skip)]
     pub moved: Option<DateTime<Utc>>,
+    #[serde(skip)]
+    pub airborne_velocity: Option<Vector3>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -630,6 +632,7 @@ impl Db {
                 heading: gpos.heading,
                 dead: false,
                 moved: None,
+                airborne_velocity: None,
             };
             spawned.units.insert_cow(uid);
             self.persisted.units.insert_cow(uid, spawned_unit);
@@ -929,6 +932,11 @@ impl Db {
                 self.ephemeral
                     .units_potentially_close_to_enemies
                     .insert(*uid);
+                if spunit.tags.contains(UnitTag::Aircraft) && instance.in_air()? {
+                    spunit.airborne_velocity = Some(instance.get_velocity()?.0)
+                } else {
+                    spunit.airborne_velocity = None;
+                }
             }
             unit = Some(instance);
         }

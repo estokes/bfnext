@@ -16,6 +16,7 @@ for more details.
 
 use crate::{
     db::{
+        group::GroupId,
         player::{InstancedPlayer, Player},
         Db,
     },
@@ -30,6 +31,12 @@ use dcso3::{
 use fxhash::FxHashMap;
 use smallvec::{smallvec, SmallVec};
 use std::fmt;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum TrackId {
+    Player(Ucid),
+    Group(GroupId),
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct GibBraa {
@@ -127,7 +134,7 @@ impl Default for PlayerState {
 
 #[derive(Debug, Clone, Default)]
 pub struct Ewr {
-    tracks: FxHashMap<Side, FxHashMap<Ucid, Track>>,
+    tracks: FxHashMap<Side, FxHashMap<TrackId, Track>>,
     player_state: FxHashMap<Ucid, PlayerState>,
 }
 
@@ -140,24 +147,48 @@ impl Ewr {
         now: DateTime<Utc>,
     ) -> Result<()> {
         let land = Land::singleton(lua)?;
-        let players: SmallVec<[_; 64]> = db
-            .instanced_players()
-            .filter(|(_, _, inst)| inst.in_air)
-            .collect();
+        let aircraft: SmallVec<[(TrackId, Side, Position3, Vector3); 128]> = {
+            let players = db
+                .instanced_players()
+                .filter(|(_, _, inst)| inst.in_air)
+                .map(|(ucid, player, inst)| {
+                    (
+                        TrackId::Player(*ucid),
+                        player.side,
+                        inst.position,
+                        inst.velocity,
+                    )
+                });
+            let actions = db
+                .persisted
+                .actions
+                .into_iter()
+                .filter_map(|gid| db.persisted.groups.get(gid))
+                .flat_map(|sg| {
+                    sg.units
+                        .into_iter()
+                        .filter_map(|uid| db.persisted.units.get(uid))
+                        .filter_map(|su| {
+                            su.airborne_velocity
+                                .map(|v| (TrackId::Group(sg.id), sg.side, su.position, v))
+                        })
+                });
+            players.chain(actions).collect()
+        };
         for (mut ewr_pos, side, ewr) in db.ewrs() {
             let range = (ewr.range as f64).powi(2);
             let tracks = self.tracks.entry(side).or_default();
             ewr_pos.y += 10.; // factor in antenna height
-            for (ucid, player, inst) in &players {
-                let track = tracks.entry(**ucid).or_default();
+            for (id, side, pos, velocity) in &aircraft {
+                let track = tracks.entry(*id).or_default();
                 if track.last != now {
-                    let dist = na::distance_squared(&ewr_pos.into(), &inst.position.p.0.into());
+                    let dist = na::distance_squared(&ewr_pos.into(), &pos.p.0.into());
                     if dist <= range {
-                        if landcache.is_visible(&land, dist.sqrt(), ewr_pos, inst.position.p.0)? {
-                            track.pos = inst.position;
-                            track.velocity = inst.velocity;
+                        if landcache.is_visible(&land, dist.sqrt(), ewr_pos, pos.p.0)? {
+                            track.pos = *pos;
+                            track.velocity = *velocity;
                             track.last = now;
-                            track.side = player.side;
+                            track.side = *side;
                         }
                     }
                 }
@@ -196,10 +227,11 @@ impl Ewr {
         if !force && !state.enabled {
             return reports;
         }
+        let ownship = TrackId::Player(*ucid);
         tracks.retain(|tucid, track| {
             let age = (now - track.last).num_seconds();
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
-            if include && age <= 120 && tucid != ucid {
+            if include && age <= 120 && tucid != &ownship {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);
                 let range = na::distance(&pos.into(), &cpos.into());
                 let bearing = radians_to_degrees(azumith2d_to(pos, cpos));
@@ -229,8 +261,8 @@ impl Ewr {
         let since_last = (now - state.last).num_seconds();
         if force
             || since_last >= 60
-            || reports[0].range <= 20000
-            || (reports[0].range <= 40000 && since_last >= 30)
+            || (reports[0].range <= 20000 && reports[0].age <= 10)
+            || (reports[0].range <= 40000 && reports[0].age <= 10 && since_last >= 30)
         {
             state.last = now;
             reports.iter_mut().for_each(|r| r.convert(state.units));

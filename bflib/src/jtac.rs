@@ -1036,6 +1036,9 @@ impl Jtacs {
                     }
                     continue;
                 }
+                if unit.airborne_velocity.is_some() && !unit.tags.contains(UnitTag::Helicopter) {
+                    continue;
+                }
                 if let Some(ct) = jtac.contacts.get(&unit.id) {
                     if unit.moved == ct.last_move {
                         continue;

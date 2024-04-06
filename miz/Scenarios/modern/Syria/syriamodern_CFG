@@ -1637,6 +1637,7 @@
       "Driveable"
     ],
     "Ka-50_3": [
+      "Aircraft",
       "Helicopter"
     ],
     "GeneratorF": [
@@ -1738,6 +1739,7 @@
       "Aircraft"
     ],
     "AH-64D_BLK_II": [
+      "Aircraft",
       "Helicopter"
     ],
     "M-109": [
@@ -1795,6 +1797,7 @@
       "Driveable"
     ],
     "Mi-24P": [
+      "Aircraft",
       "Helicopter"
     ],
     "BMP-1": [
@@ -1856,6 +1859,7 @@
       "SearchRadar"
     ],
     "Mi-8MT": [
+      "Aircraft",
       "Helicopter"
     ],
     "SA-18 Igla-S manpad": [
@@ -1905,6 +1909,7 @@
       "Driveable"
     ],
     "Ka-50": [
+      "Aircraft",
       "Helicopter"
     ],
     "SA-18 Igla comm": [
@@ -2079,6 +2084,7 @@
       "SmallArms"
     ],
     "SA342L": [
+      "Aircraft",
       "Helicopter"
     ],
     "Invisible FARP": [
@@ -2108,6 +2114,7 @@
       "EngagesWeapons"
     ],
     "UH-1H": [
+      "Aircraft",
       "Helicopter"
     ],
     "FARP Fuel Depot": [
@@ -2185,6 +2192,7 @@
       "Unarmed"
     ],
     "SA342M": [
+      "Aircraft",
       "Helicopter"
     ],
     "Su-33": [

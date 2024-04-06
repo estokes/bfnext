@@ -1630,6 +1630,7 @@
       "Unarmed"
     ],
     "Ka-50_3": [
+      "Aircraft",
       "Helicopter"
     ],
     "FARP Ammo Dump Coating": [
@@ -1732,6 +1733,7 @@
       "Unarmed"
     ],
     "AH-64D_BLK_II": [
+      "Aircraft",
       "Helicopter"
     ],
     "55G6 EWR": [
@@ -1793,6 +1795,7 @@
       "Driveable"
     ],
     "Mi-24P": [
+      "Aircraft",
       "Helicopter"
     ],
     "GeneratorF": [
@@ -1871,6 +1874,7 @@
       "SearchRadar"
     ],
     "Mi-8MT": [
+      "Aircraft",
       "Helicopter"
     ],
     "SA-18 Igla-S manpad": [
@@ -1924,6 +1928,7 @@
       "Driveable"
     ],
     "Ka-50": [
+      "Aircraft",
       "Helicopter"
     ],
     "SA-18 Igla comm": [
@@ -1978,6 +1983,7 @@
       "Aircraft"
     ],
     "SA342M": [
+      "Aircraft",
       "Helicopter"
     ],
     "Su-27": [
@@ -2000,6 +2006,7 @@
       "SmallArms"
     ],
     "SA342L": [
+      "Aircraft",
       "Helicopter"
     ],
     "Su-33": [
@@ -2025,6 +2032,7 @@
       "Driveable"
     ],
     "UH-1H": [
+      "Aircraft",
       "Helicopter"
     ],
     "FARP Fuel Depot": [

@@ -283,7 +283,7 @@ pub struct DeployableLogistics {
     pub barracks_template: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct DeployableEwr {
     /// range for likely detection (Meters)
@@ -429,6 +429,12 @@ pub struct AiPlaneCfg {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwacsCfg {
+    pub ewr: DeployableEwr,
+    pub plane: AiPlaneCfg,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BomberCfg {
     pub targets: u32,
     pub power: u32,
@@ -470,7 +476,7 @@ pub struct MoveCfg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActionKind {
     Tanker(AiPlaneCfg),
-    Awacs(AiPlaneCfg),
+    Awacs(AwacsCfg),
     Bomber(BomberCfg),
     Fighters(AiPlaneCfg),
     Attackers(AiPlaneCfg),

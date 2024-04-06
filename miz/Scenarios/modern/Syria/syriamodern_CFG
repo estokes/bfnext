@@ -1,10 +1,10 @@
 {
   "admins": {
-    "f279deb7a6b62c96a78eca3ddb2bd8d0": "REAPER 32 | EvilKipper", 
+    "f279deb7a6b62c96a78eca3ddb2bd8d0": "REAPER 32 | EvilKipper",
     "69d60e1a0fe1c86bc3e81792458dba61": "<64>Cookie",
     "317b35352512a554457dd1e6b07311d9": "admin",
     "d613f7f534f4498e47652c29d00836e6": "admin",
-    "d931948745285fc8e42adbe35a7dfd50": "admin" 
+    "d931948745285fc8e42adbe35a7dfd50": "admin"
   },
   "banned": {},
   "rules": {
@@ -21,7 +21,7 @@
     "lr_sam_bonus": 5,
     "logistics_repair": 50,
     "logistics_transfer": 5,
-    "capture": 50 
+    "capture": 50
   },
   "repair_time": 1800,
   "shutdown": 5,
@@ -110,15 +110,12 @@
     "AH-64D_BLK_II": 14400,
     "UH-1H": 9000,
     "L-39ZA": 9000,
-    "F-5E-3": 14400,
     "Yak-52": 0,
     "Mi-24P": 14400,
     "JF-17": 36000,
     "F-15ESE": 36000,
-    "Su-25": 21600,
     "AV8BNA": 36000,
     "MB-339A": 9000,
-    "C-101CC": 9000,
     "J-11A": 36000,
     "Su-33": 36000,
     "B-1B": 36000,
@@ -128,7 +125,7 @@
     "IL-78M": 0,
     "Tu-22M3": 36000,
     "KC130": 0,
-    "KC-135": 0 
+    "KC-135": 0
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
@@ -167,15 +164,12 @@
     "AH-64D_BLK_II": "Attack",
     "UH-1H": "Logistics",
     "L-39ZA": "Recon",
-    "F-5E-3": "Intercept",
     "Yak-52": "Recon",
     "Mi-24P": "Attack",
     "JF-17": "Standard",
     "F-15ESE": "Standard",
-    "Su-25": "Attack",
     "AV8BNA": "Attack",
     "MB-339A": "Recon",
-    "C-101CC": "Recon",
     "J-11A": "Standard",
     "Su-33": "Standard"
   },
@@ -1134,9 +1128,9 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "RTANKER",
-            "altitude": 9000.0,
+            "altitude": 9000,
             "altitude_typ": "BARO",
-            "speed": 220.0
+            "speed": 220
           }
         },
         "cost": 50,
@@ -1149,9 +1143,9 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "RBOOMTANKER",
-            "altitude": 9000.0,
+            "altitude": 9000,
             "altitude_typ": "BARO",
-            "speed": 220.0
+            "speed": 220
           }
         },
         "cost": 50,
@@ -1180,9 +1174,9 @@
               "kind": "FixedWing",
               "duration": null,
               "template": "RBOMBER",
-              "altitude": 12000.0,
+              "altitude": 12000,
               "altitude_typ": "BARO",
-              "speed": 500.0
+              "speed": 500
             }
           }
         },
@@ -1198,9 +1192,9 @@
               "kind": "Helicopter",
               "duration": null,
               "template": "RTROOPCARRIER",
-              "altitude": 1000.0,
+              "altitude": 1000,
               "altitude_typ": "RADIO",
-              "speed": 70.0
+              "speed": 70
             }
           }
         },
@@ -1226,9 +1220,9 @@
             "kind": "Helicopter",
             "duration": 2,
             "template": "RATTACKHELI",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 80.0
+            "speed": 80
           }
         },
         "cost": 100,
@@ -1243,9 +1237,9 @@
               "kind": "Helicopter",
               "duration": null,
               "template": "RTROOPCARRIER",
-              "altitude": 1000.0,
+              "altitude": 1000,
               "altitude_typ": "RADIO",
-              "speed": 70.0
+              "speed": 70
             }
           }
         },
@@ -1259,9 +1253,9 @@
             "kind": "Helicopter",
             "duration": null,
             "template": "RCARGOCARRIER",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 70.0
+            "speed": 70
           }
         },
         "cost": 100,
@@ -1274,9 +1268,9 @@
             "kind": "Helicopter",
             "duration": null,
             "template": "RCARGOCARRIER",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 70.0
+            "speed": 70
           }
         },
         "cost": 100,
@@ -1294,9 +1288,9 @@
               "kind": "FixedWing",
               "duration": 12,
               "template": "RDRONE",
-              "altitude": 7000.0,
+              "altitude": 7000,
               "altitude_typ": "BARO",
-              "speed": 90.0
+              "speed": 90
             }
           }
         },
@@ -1321,9 +1315,9 @@
             "kind": "FixedWing",
             "duration": 2,
             "template": "RFIGHTERS",
-            "altitude": 10000.0,
+            "altitude": 10000,
             "altitude_typ": "BARO",
-            "speed": 250.0
+            "speed": 250
           }
         },
         "cost": 100,
@@ -1333,12 +1327,17 @@
       "awacs": {
         "kind": {
           "Awacs": {
-            "kind": "FixedWing",
-            "duration": 8,
-            "template": "RAWACS",
-            "altitude": 11000.0,
-            "altitude_typ": "BARO",
-            "speed": 200.0
+            "ewr": {
+              "range": 400000
+            },
+            "plane": {
+              "kind": "FixedWing",
+              "duration": 8,
+              "template": "RAWACS",
+              "altitude": 11000,
+              "altitude_typ": "BARO",
+              "speed": 200
+            }
           }
         },
         "cost": 100,
@@ -1375,9 +1374,9 @@
               "kind": "FixedWing",
               "duration": null,
               "template": "BBOMBER",
-              "altitude": 12000.0,
+              "altitude": 12000,
               "altitude_typ": "BARO",
-              "speed": 300.0
+              "speed": 300
             }
           }
         },
@@ -1391,9 +1390,9 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "BBASKETTANKER",
-            "altitude": 9000.0,
+            "altitude": 9000,
             "altitude_typ": "BARO",
-            "speed": 220.0
+            "speed": 220
           }
         },
         "cost": 50,
@@ -1408,9 +1407,9 @@
               "kind": "Helicopter",
               "duration": null,
               "template": "BTROOPCARRIER",
-              "altitude": 1000.0,
+              "altitude": 1000,
               "altitude_typ": "RADIO",
-              "speed": 60.0
+              "speed": 60
             }
           }
         },
@@ -1436,9 +1435,9 @@
             "kind": "Helicopter",
             "duration": 2,
             "template": "BATTACKHELI",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 60.0
+            "speed": 60
           }
         },
         "cost": 100,
@@ -1453,9 +1452,9 @@
               "kind": "Helicopter",
               "duration": null,
               "template": "BTROOPCARRIER",
-              "altitude": 1000.0,
+              "altitude": 1000,
               "altitude_typ": "RADIO",
-              "speed": 60.0
+              "speed": 60
             }
           }
         },
@@ -1469,9 +1468,9 @@
             "kind": "Helicopter",
             "duration": null,
             "template": "BCARGOCARRIER",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 60.0
+            "speed": 60
           }
         },
         "cost": 100,
@@ -1484,9 +1483,9 @@
             "kind": "Helicopter",
             "duration": null,
             "template": "BCARGOCARRIER",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 60.0
+            "speed": 60
           }
         },
         "cost": 100,
@@ -1504,9 +1503,9 @@
               "kind": "FixedWing",
               "duration": 12,
               "template": "BDRONE",
-              "altitude": 7000.0,
+              "altitude": 7000,
               "altitude_typ": "BARO",
-              "speed": 90.0
+              "speed": 90
             }
           }
         },
@@ -1520,9 +1519,9 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "BBOOMTANKER",
-            "altitude": 9000.0,
+            "altitude": 9000,
             "altitude_typ": "BARO",
-            "speed": 220.0
+            "speed": 220
           }
         },
         "cost": 50,
@@ -1546,9 +1545,9 @@
             "kind": "FixedWing",
             "duration": 2,
             "template": "BFIGHTERS",
-            "altitude": 10000.0,
+            "altitude": 10000,
             "altitude_typ": "BARO",
-            "speed": 250.0
+            "speed": 250
           }
         },
         "cost": 100,
@@ -1558,12 +1557,17 @@
       "awacs": {
         "kind": {
           "Awacs": {
-            "kind": "FixedWing",
-            "duration": 8,
-            "template": "BAWACS",
-            "altitude": 11000.0,
-            "altitude_typ": "BARO",
-            "speed": 200.0
+            "ewr": {
+              "range": 400000
+            },
+            "plane": {
+              "kind": "FixedWing",
+              "duration": 8,
+              "template": "BAWACS",
+              "altitude": 11000,
+              "altitude_typ": "BARO",
+              "speed": 200
+            }
           }
         },
         "cost": 100,
@@ -1945,109 +1949,109 @@
       "RadarGuided",
       "AuxRadarUnit"
     ],
-	"Patriot cp": [
+    "Patriot cp": [
       "SAM",
       "LR",
       "RadarGuided",
       "AuxRadarUnit"
     ],
-	"NASAMS_Radar_MPQ64F1": [
+    "NASAMS_Radar_MPQ64F1": [
       "SAM",
       "MR",
       "RadarGuided",
-	  "EngagesWeapons",
+      "EngagesWeapons",
       "SearchRadar"
     ],
-	"S-300PS 54K6 cp": [
+    "S-300PS 54K6 cp": [
       "SAM",
       "LR",
       "RadarGuided",
       "AuxRadarUnit"
     ],
-	"Patriot AMG": [
+    "Patriot AMG": [
       "SAM",
       "LR",
       "RadarGuided",
       "AuxRadarUnit"
     ],
-	"Patriot EPP": [
+    "Patriot EPP": [
       "SAM",
       "LR",
       "RadarGuided",
       "AuxRadarUnit"
     ],
-	"Patriot ECS": [
+    "Patriot ECS": [
       "SAM",
       "LR",
       "RadarGuided",
       "AuxRadarUnit"
     ],
-	"NASAMS_Command_Post": [
+    "NASAMS_Command_Post": [
       "SAM",
       "MR",
       "RadarGuided",
       "AuxRadarUnit"
     ],
-	"S-300PS 40B6M tr": [
+    "S-300PS 40B6M tr": [
       "SAM",
       "LR",
       "RadarGuided",
       "TrackRadar"
     ],
-	"S-300PS 5H63C 30H6_tr": [
+    "S-300PS 5H63C 30H6_tr": [
       "SAM",
       "LR",
       "RadarGuided",
       "TrackRadar",
-	  "EngagesWeapons"
+      "EngagesWeapons"
     ],
-	"S-300PS 40B6MD sr": [
+    "S-300PS 40B6MD sr": [
       "SAM",
       "LR",
       "RadarGuided",
       "SearchRadar"
     ],
-	"S-300PS 64H6E sr": [
+    "S-300PS 64H6E sr": [
       "SAM",
       "LR",
       "RadarGuided",
       "SearchRadar"
     ],
-	"Patriot str": [
+    "Patriot str": [
       "SAM",
       "LR",
       "RadarGuided",
       "SearchRadar",
-	  "TrackRadar",
-	  "EngagesWeapons"
+      "TrackRadar",
+      "EngagesWeapons"
     ],
-	"NASAMS_LN_C": [
+    "NASAMS_LN_C": [
       "SAM",
       "MR",
       "RadarGuided",
       "Launcher",
-	  "EngagesWeapons"
+      "EngagesWeapons"
     ],
-	"Patriot ln": [
+    "Patriot ln": [
       "SAM",
       "LR",
       "RadarGuided",
       "Launcher",
-	  "EngagesWeapons"
+      "EngagesWeapons"
     ],
-	"S-300PS 5P85C ln": [
+    "S-300PS 5P85C ln": [
       "SAM",
       "LR",
       "RadarGuided",
       "Launcher",
-	  "EngagesWeapons"
+      "EngagesWeapons"
     ],
-	"S-300PS 5P85D ln": [
+    "S-300PS 5P85D ln": [
       "SAM",
       "LR",
       "RadarGuided",
       "Launcher",
-	  "EngagesWeapons"
+      "EngagesWeapons"
     ],
     "SA-18 Igla-S comm": [
       "SAM",
@@ -2096,12 +2100,12 @@
       "RadarGuided",
       "Driveable"
     ],
-	"HEMTT_C-RAM_Phalanx": [
+    "HEMTT_C-RAM_Phalanx": [
       "AAA",
       "MR",
       "RadarGuided",
       "Driveable",
-	  "EngagesWeapons"
+      "EngagesWeapons"
     ],
     "UH-1H": [
       "Helicopter"
@@ -2150,7 +2154,7 @@
       "Armor",
       "MR",
       "HeavyCannon",
-      "SmallArms", 
+      "SmallArms",
       "Driveable"
     ],
     "SAU Msta": [

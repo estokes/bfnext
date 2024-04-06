@@ -17,7 +17,10 @@ for more details.
 extern crate nalgebra as na;
 use self::{group::DeployKind, persisted::Persisted};
 use crate::{
-    cfg::{Action, ActionKind, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg, Troop},
+    cfg::{
+        Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg,
+        Troop,
+    },
     db::ephemeral::Ephemeral,
     jtac::JtId,
 };
@@ -161,7 +164,7 @@ macro_rules! group_health {
             }
         }
         Ok::<_, anyhow::Error>((alive, group.units.len()))
-    }}
+    }};
 }
 
 #[derive(Debug, Default)]
@@ -197,12 +200,19 @@ impl Db {
         self.persisted.ewrs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
             match &group.origin {
-                DeployKind::Crate { .. }
-                | DeployKind::Objective
-                | DeployKind::Troop { .. }
-                | DeployKind::Action { .. } => None,
-                DeployKind::Deployed { spec, .. } => {
-                    let ewr = spec.ewr.as_ref()?;
+                DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
+                DeployKind::Action {
+                    spec:
+                        Action {
+                            kind: ActionKind::Awacs(AwacsCfg { ewr, .. }),
+                            ..
+                        },
+                    ..
+                }
+                | DeployKind::Deployed {
+                    spec: Deployable { ewr: Some(ewr), .. },
+                    ..
+                } => {
                     let pos = centroid3d(
                         group
                             .units
@@ -211,6 +221,7 @@ impl Db {
                     );
                     Some((pos, group.side, ewr))
                 }
+                DeployKind::Action { .. } | DeployKind::Deployed { .. } => None,
             }
         })
     }

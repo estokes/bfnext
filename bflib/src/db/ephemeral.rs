@@ -23,9 +23,13 @@ use super::{
 };
 use crate::{
     cfg::{
-        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
         DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
-    }, maybe, msgq::MsgQ, perf::{record_perf, PerfInner}, spawnctx::{Despawn, SpawnCtx, Spawned}
+    },
+    maybe,
+    msgq::MsgQ,
+    perf::{record_perf, PerfInner},
+    spawnctx::{Despawn, SpawnCtx, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -273,7 +277,6 @@ impl Ephemeral {
                         }
                     }
                     spctx.despawn(perf, despawn)?;
-                    
                 }
             }
         } else if slen > 0 {
@@ -667,7 +670,10 @@ impl Ephemeral {
                     bail!("the points system is disabled but {act:?} costs points")
                 }
                 match &act.kind {
-                    ActionKind::Awacs(AiPlaneCfg { template, .. })
+                    ActionKind::Awacs(AwacsCfg {
+                        plane: AiPlaneCfg { template, .. },
+                        ..
+                    })
                     | ActionKind::Bomber(BomberCfg {
                         plane: AiPlaneCfg { template, .. },
                         ..

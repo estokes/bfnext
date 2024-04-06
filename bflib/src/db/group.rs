@@ -19,7 +19,7 @@ use super::{
     Db, Set,
 };
 use crate::{
-    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags},
+    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     group, group_by_name, group_health, group_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut, Connected,
@@ -91,7 +91,7 @@ pub struct SpawnedUnit {
     pub id: UnitId,
     pub group: GroupId,
     pub side: Side,
-    pub typ: String,
+    pub typ: Vehicle,
     pub tags: UnitTags,
     pub template_name: String,
     pub spawn_pos: Vector2,
@@ -620,7 +620,7 @@ impl Db {
                 id: uid,
                 group: gid,
                 side,
-                typ,
+                typ: Vehicle(typ),
                 tags,
                 name: unit_name.clone(),
                 template_name,
@@ -874,6 +874,7 @@ impl Db {
     pub fn update_unit_positions_incremental(
         &mut self,
         lua: MizLua,
+        now: DateTime<Utc>,
         mut last: usize,
     ) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
         let total = self.ephemeral.units_able_to_move.len();
@@ -885,7 +886,7 @@ impl Db {
                 uids.push(elts[last]);
                 last += 1;
             }
-            Ok((last, self.update_unit_positions(lua, &uids)?))
+            Ok((last, self.update_unit_positions(lua, now, &uids)?))
         } else {
             Ok((0, vec![]))
         }
@@ -894,6 +895,7 @@ impl Db {
     pub fn update_unit_positions(
         &mut self,
         lua: MizLua,
+        now: DateTime<Utc>,
         units: &[UnitId],
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
         let mut unit: Option<Unit> = None;
@@ -926,6 +928,7 @@ impl Db {
             let spunit = unit_mut!(self, uid)?;
             if (spunit.position.p.0 - pos.p.0).magnitude_squared() > 1.0 {
                 moved.push(spunit.group);
+                spunit.moved = Some(now);
                 spunit.position = pos;
                 spunit.pos = Vector2::new(pos.p.x, pos.p.z);
                 spunit.heading = azumith3d(pos.x.0);

@@ -38,7 +38,7 @@ use dcso3::{
 use log::{debug, error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::cmp::max;
+use std::cmp::{max, min};
 
 #[derive(Debug, Clone)]
 pub enum SlotAuth {
@@ -70,6 +70,7 @@ pub struct InstancedPlayer {
     pub typ: Vehicle,
     pub in_air: bool,
     pub landed_at_objective: Option<ObjectiveId>,
+    pub moved: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -502,45 +503,62 @@ impl Db {
         }
     }
 
-    pub fn update_player_positions_incremental(
+    pub fn update_player_positions<'a>(
         &mut self,
         lua: MizLua,
-        mut i: usize,
-    ) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
+        now: DateTime<Utc>,
+        ids: impl IntoIterator<Item = &'a Ucid>,
+    ) -> Result<Vec<DcsOid<ClassUnit>>> {
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
         let mut unit: Option<Unit> = None;
-        let total = self.ephemeral.players_by_slot.len();
-        if i < total {
-            let stop = i + max(1, total / 10);
-            while i < total && i < stop {
-                let (slot, ucid) = self.ephemeral.players_by_slot.get_index(i).unwrap();
-                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+        for ucid in ids {
+            if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
+                if let Some((slot, Some(inst))) = &mut player.current_slot {
                     if let Some(id) = self.ephemeral.object_id_by_slot.get(slot) {
                         let instance = match unit.take() {
                             Some(unit) => unit.change_instance(id),
                             None => Unit::get_instance(lua, id),
                         };
                         match instance {
+                            Ok(instance) => {
+                                let pos = instance.get_position()?;
+                                if (inst.position.p.0 - pos.p.0).magnitude_squared() > 1.0 {
+                                    inst.position = instance.get_position()?;
+                                    inst.velocity = instance.get_velocity()?.0;
+                                    inst.in_air = instance.in_air()?;
+                                    inst.moved = Some(now);
+                                }
+                                unit = Some(instance);
+                            }
                             Err(e) => {
                                 warn!(
                                     "updating player positions, skipping invalid unit {ucid:?}, {id:?}, player {e:?}",
                                 );
                                 dead.push(id.clone())
                             }
-                            Ok(instance) => {
-                                if let Some((_, Some(inst))) = &mut player.current_slot {
-                                    inst.position = instance.get_position()?;
-                                    inst.velocity = instance.get_velocity()?.0;
-                                    inst.in_air = instance.in_air()?;
-                                }
-                                unit = Some(instance);
-                            }
                         }
                     }
                 }
-                i += 1;
             }
-            Ok((i, dead))
+        }
+        Ok(dead)
+    }
+
+    pub fn update_player_positions_incremental(
+        &mut self,
+        lua: MizLua,
+        now: DateTime<Utc>,
+        i: usize,
+    ) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
+        let total = self.ephemeral.players_by_slot.len();
+        if i < total {
+            let stop = min(total, i + max(1, total / 10));
+            let players: SmallVec<[Ucid; 64]> = self.ephemeral.players_by_slot.as_slice()[i..stop]
+                .into_iter()
+                .map(|(_, ucid)| *ucid)
+                .collect();
+            let dead = self.update_player_positions(lua, now, &players)?;
+            Ok((stop, dead))
         } else {
             Ok((0, vec![]))
         }
@@ -628,6 +646,7 @@ impl Db {
                 in_air: unit.in_air()?,
                 typ: Vehicle::from(unit.get_type_name()?),
                 landed_at_objective,
+                moved: None,
             }),
         ));
         player.changing_slots = false;
@@ -635,12 +654,17 @@ impl Db {
         Ok(())
     }
 
-    pub fn player_left_unit(&mut self, lua: MizLua, unit: &Unit) -> Result<Vec<DcsOid<ClassUnit>>> {
+    pub fn player_left_unit(
+        &mut self,
+        lua: MizLua,
+        now: DateTime<Utc>,
+        unit: &Unit,
+    ) -> Result<Vec<DcsOid<ClassUnit>>> {
         let name = unit.get_name()?;
         let mut dead = vec![];
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             let uid = *uid;
-            match self.update_unit_positions(lua, &[uid]) {
+            match self.update_unit_positions(lua, now, &[uid]) {
                 Ok(v) => dead = v,
                 Err(e) => error!("could not sync final CA unit position {e}"),
             }

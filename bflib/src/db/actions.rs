@@ -6,7 +6,7 @@ use super::{
 use crate::{
     admin,
     cfg::{
-        Action, ActionKind, AiPlaneCfg, AiPlaneKind, BomberCfg, DeployableCfg, DroneCfg,
+        Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg, DroneCfg,
         LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
     db::{cargo::Oldest, group::DeployKind},
@@ -79,7 +79,7 @@ pub struct WithJtac<T> {
 #[derive(Debug, Clone)]
 pub enum ActionArgs {
     Tanker(WithPos<AiPlaneCfg>),
-    Awacs(WithPos<AiPlaneCfg>),
+    Awacs(WithPos<AwacsCfg>),
     Bomber(WithJtac<BomberCfg>),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
@@ -382,13 +382,7 @@ impl Db {
             ActionArgs::Move(args) => match &ucid {
                 None => bail!("ucid is required for move"),
                 Some(ucid) => self
-                    .move_group(
-                        spctx,
-                        side,
-                        ucid,
-                        cmd.action.penalty.unwrap_or(0),
-                        args,
-                    )
+                    .move_group(spctx, side, ucid, cmd.action.penalty.unwrap_or(0), args)
                     .context("moving unit")?,
             },
         }
@@ -445,7 +439,7 @@ impl Db {
                     };
                 }
                 if let ActionKind::Awacs(ai) = &spec.kind {
-                    delete_expired!(ai);
+                    delete_expired!(ai.plane);
                     let player = *player;
                     let mission = self
                         .awacs_mission(side, player, spawn_pos, args)
@@ -1378,7 +1372,7 @@ impl Db {
         ucid: Option<Ucid>,
         name: String,
         action: Action,
-        args: WithPos<AiPlaneCfg>,
+        args: WithPos<AwacsCfg>,
     ) -> Result<()> {
         self.add_and_spawn_ai_air(
             perf,
@@ -1389,7 +1383,10 @@ impl Db {
             name,
             action,
             0.,
-            &args,
+            &WithPos {
+                cfg: args.cfg.plane,
+                pos: args.pos,
+            },
             None,
             UnitTag::AWACS.into(),
             move |db, gid, pos| {
@@ -1443,7 +1440,7 @@ impl Db {
                     bail!("this move action is not compatible with the selected group")
                 }
                 match &mut spec.kind {
-                    ActionKind::Awacs(a)
+                    ActionKind::Awacs(AwacsCfg { plane: a, .. })
                     | ActionKind::Tanker(a)
                     | ActionKind::Drone(DroneCfg { plane: a, .. })
                     | ActionKind::Fighters(a)
@@ -1841,7 +1838,7 @@ impl Db {
             } = &mut group.origin
             {
                 match &spec.kind {
-                    ActionKind::Awacs(ai)
+                    ActionKind::Awacs(AwacsCfg { plane: ai, .. })
                     | ActionKind::Fighters(ai)
                     | ActionKind::Attackers(ai)
                     | ActionKind::Drone(DroneCfg { plane: ai, .. })

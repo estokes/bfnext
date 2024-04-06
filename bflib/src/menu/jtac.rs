@@ -151,8 +151,7 @@ fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let target = jtac
         .target()
         .as_ref()
-        .and_then(|t| ctx.db.unit(&t.uid).ok())
-        .map(|u| u.typ.clone())
+        .map(|t| t.typ.clone())
         .unwrap_or("no target".into());
     let msg = format_compact!(
         "JTAC SHIFTED NOW TARGETING {}\nauto shift is now disabled\njtac {} near {}\nrequested by {}",

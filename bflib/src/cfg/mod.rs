@@ -36,6 +36,12 @@ mod example;
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Vehicle(pub String);
 
+impl fmt::Display for Vehicle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl<'a> From<&'a str> for Vehicle {
     fn from(value: &'a str) -> Self {
         Self(value.into())

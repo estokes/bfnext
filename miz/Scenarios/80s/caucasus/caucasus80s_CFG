@@ -208,7 +208,7 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "RTANKER",
-            "altitude": 9000,
+            "altitude": 6000,
             "altitude_typ": "BARO",
             "speed": 220
           }
@@ -455,7 +455,7 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "BBASKETTANKER",
-            "altitude": 9000,
+            "altitude": 6000,
             "altitude_typ": "BARO",
             "speed": 220
           }
@@ -584,7 +584,7 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "BBOOMTANKER",
-            "altitude": 9000,
+            "altitude": 6000,
             "altitude_typ": "BARO",
             "speed": 220
           }

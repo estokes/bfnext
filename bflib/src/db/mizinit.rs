@@ -15,15 +15,19 @@ for more details.
 */
 
 use super::{
-    group::{DeployKind, GroupId},
-    objective::{ObjGroup, SlotInfo},
-    Db, Map,
+    ephemeral::SlotInfo, group::{DeployKind, GroupId}, objective::ObjGroup, Db, Map
 };
 use crate::{
-    cfg::{Cfg, Vehicle}, db::{
+    cfg::{Cfg, Vehicle},
+    db::{
         logistics::Warehouse,
         objective::{Objective, ObjectiveId, ObjectiveKind},
-    }, group, landcache::LandCache, objective_mut, perf::PerfInner, spawnctx::{SpawnCtx, SpawnLoc}
+    },
+    group,
+    landcache::LandCache,
+    objective_mut,
+    perf::PerfInner,
+    spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -100,7 +104,6 @@ impl Db {
             name: name.clone(),
             kind,
             owner,
-            slots: Map::new(),
             groups: Map::new(),
             health: 0,
             logi: 0,
@@ -229,13 +232,11 @@ impl Db {
                     }
                 },
             }
-            self.persisted
-                .objectives_by_slot
-                .insert_cow(id.clone(), obj);
-            objective_mut!(self, obj)?.slots.insert_cow(
-                id,
+            self.ephemeral.slot_info.insert(
+                id.clone(),
                 SlotInfo {
                     typ: vehicle,
+                    objective: obj,
                     ground_start,
                     miz_gid: slot.id()?,
                     side,
@@ -312,9 +313,24 @@ impl Db {
         &mut self,
         perf: &mut PerfInner,
         idx: &MizIndex,
+        miz: &Miz,
         landcache: &mut LandCache,
         spctx: &SpawnCtx,
     ) -> Result<()> {
+        for side in Side::ALL {
+            let coa = miz.coalition(side)?;
+            for country in coa.countries()? {
+                let country = country?;
+                for plane in country.planes()? {
+                    let plane = plane?;
+                    self.init_objective_slots(side, plane)?
+                }
+                for heli in country.helicopters()? {
+                    let heli = heli?;
+                    self.init_objective_slots(side, heli)?
+                }
+            }
+        }
         for name in &self.ephemeral.cfg.extra_fixed_wing_objectives {
             if !self.persisted.objectives_by_name.get(name).is_some() {
                 bail!("extra_fixed_wing_objectives {name} does not match any objective")

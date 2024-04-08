@@ -206,23 +206,17 @@ impl Db {
         slot: SlotId,
         position: Vector2,
     ) -> Result<TakeoffRes> {
-        let oid = *self
-            .persisted
-            .objectives_by_slot
+        let sifo = self
+            .ephemeral
+            .slot_info
             .get(&slot)
-            .ok_or_else(|| anyhow!("could not find objective for slot {:?}", slot))?;
-        let objective = self
-            .persisted
-            .objectives
-            .get(&oid)
-            .ok_or_else(|| anyhow!("could not find objective for slot {:?}", slot))?;
+            .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
         let player = self
             .ephemeral
             .players_by_slot
             .get(&slot)
             .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
             .ok_or_else(|| anyhow!("could not find player in slot {:?}", slot))?;
-        let sifo = maybe!(objective.slots, slot, "slot")?.clone();
         let life_type = match self.ephemeral.cfg.life_types.get(&sifo.typ) {
             None => bail!("no life type for vehicle {:?}", sifo.typ),
             Some(typ) => *typ,
@@ -256,12 +250,8 @@ impl Db {
     }
 
     pub fn land(&mut self, slot: SlotId, position: Vector2) -> Option<LifeType> {
-        let oid = match self.persisted.objectives_by_slot.get(&slot) {
-            Some(oid) => *oid,
-            None => return None,
-        };
-        let objective = match self.persisted.objectives.get(&oid) {
-            Some(objective) => objective,
+        let sifo = match self.ephemeral.slot_info.get(&slot) {
+            Some(sifo) => sifo,
             None => return None,
         };
         let player = match self
@@ -273,20 +263,23 @@ impl Db {
             Some(player) => player,
             None => return None,
         };
-        let sifo = objective.slots[&slot].clone();
         let life_type = self.ephemeral.cfg.life_types[&sifo.typ];
         let (_, player_lives) = match player.lives.get_mut_cow(&life_type) {
             Some(l) => l,
             None => return None,
         };
-        let is_on_owned_objective = self
-            .persisted
-            .objectives
-            .into_iter()
-            .fold(false, |res, (_, obj)| {
-                res || (obj.owner == player.side && obj.is_in_circle(position))
-            });
-        if is_on_owned_objective {
+        let on_owned_objective =
+            self.persisted
+                .objectives
+                .into_iter()
+                .find_map(|(oid, obj)| {
+                    if obj.owner == player.side && obj.is_in_circle(position) {
+                        Some(*oid)
+                    } else {
+                        None
+                    }
+                });
+        if let Some(oid) = on_owned_objective {
             *player_lives += 1;
             player.airborne = None;
             if *player_lives >= self.ephemeral.cfg.default_lives[&life_type].0 {
@@ -370,15 +363,15 @@ impl Db {
                 }
             }
             SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
-                let oid = match self.persisted.objectives_by_slot.get(&slot) {
+                let sifo = match self.ephemeral.slot_info.get(&slot) {
+                    Some(sifo) => sifo,
                     None => {
                         player.changing_slots = true;
                         player.jtac_or_spectators = false;
                         return SlotAuth::Yes; // it's a multicrew slot
                     }
-                    Some(oid) => oid,
                 };
-                let objective = match self.persisted.objectives.get(oid) {
+                let objective = match self.persisted.objectives.get(&sifo.objective) {
                     Some(o) if o.owner != Side::Neutral => o,
                     Some(_) | None => return SlotAuth::ObjectiveNotOwned(player.side),
                 };
@@ -388,7 +381,6 @@ impl Db {
                 if objective.captureable() {
                     return SlotAuth::ObjectiveHasNoLogistics;
                 }
-                let sifo = &objective.slots[&slot];
                 let life_type = self.ephemeral.cfg.life_types[&sifo.typ];
                 macro_rules! yes {
                     () => {
@@ -412,7 +404,7 @@ impl Db {
                             );
                             if time - reset >= reset_after {
                                 player.lives.remove_cow(&life_type);
-                                self.ephemeral.dirty();
+                                self.ephemeral.dirty = true;
                             } else if n == 0 {
                                 break SlotAuth::NoLives(life_type);
                             }
@@ -580,7 +572,7 @@ impl Db {
             }
         }
         let obj = objective_mut!(self, oid)?;
-        let sifo = maybe!(obj.slots, slot, "slot")?;
+        let sifo = maybe!(self.ephemeral.slot_info, slot, "slot")?;
         let player = maybe!(self.persisted.players, ucid, "player")?;
         let life_typ = self.ephemeral.cfg.life_types[&sifo.typ];
         match player.lives.get(&life_typ) {

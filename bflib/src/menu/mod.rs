@@ -14,11 +14,11 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
+pub mod action;
 pub mod cargo;
 mod ewr;
 pub mod jtac;
 mod troop;
-pub mod action;
 
 use std::sync::Arc;
 
@@ -256,7 +256,11 @@ pub(super) fn init_for_slot(ctx: &mut Context, lua: MizLua, slot: &SlotId) -> Re
                 Some(ucid) => *ucid,
                 None => return Ok(()),
             };
-            let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
+            let si = ctx
+                .db
+                .ephemeral
+                .get_slot_info(slot)
+                .context("getting slot info")?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["EWR".into()]))?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Cargo".into()]))?;
             mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Troops".into()]))?;

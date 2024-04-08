@@ -20,15 +20,10 @@ use super::{
     player::Player,
     Map, Set,
 };
-use dcso3::{
-    coalition::Side,
-    net::{SlotId, Ucid},
-    String,
-};
+use dcso3::{coalition::Side, net::Ucid, String};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Persisted {
     pub groups: Map<GroupId, SpawnedGroup>,
     pub units: Map<UnitId, SpawnedUnit>,
@@ -44,7 +39,6 @@ pub struct Persisted {
     #[serde(default)]
     pub actions: Set<GroupId>,
     pub objectives: Map<ObjectiveId, Objective>,
-    pub objectives_by_slot: Map<SlotId, ObjectiveId>,
     pub objectives_by_name: Map<String, ObjectiveId>,
     pub objectives_by_group: Map<GroupId, ObjectiveId>,
     pub players: Map<Ucid, Player>,

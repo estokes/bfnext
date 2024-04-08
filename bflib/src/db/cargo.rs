@@ -240,18 +240,16 @@ impl Db {
             .and_then(|d| self.persisted.players.get(&st.ucid).map(|p| (d, p)))
         {
             if player.points < dep.cost as i32 {
-                if let Some(oid) = self.persisted.objectives_by_slot.get(slot) {
-                    let obj = objective!(self, oid)?;
-                    if let Some(si) = obj.slots.get(slot) {
-                        let msg = format_compact!(
-                            "WARNING: you have {} points, and this deployable costs {} points",
-                            player.points,
-                            dep.cost
-                        );
-                        self.ephemeral
-                            .msgs()
-                            .panel_to_group(10, false, si.miz_gid, msg);
-                    }
+                if let Some(si) = self.ephemeral.slot_info.get(slot) {
+                    let gid = si.miz_gid;
+                    let msg = format_compact!(
+                        "WARNING: you have {} points, and this deployable costs {} points",
+                        player.points,
+                        dep.cost
+                    );
+                    self.ephemeral
+                        .msgs()
+                        .panel_to_group(10, false, gid, msg);
                 }
             }
         }

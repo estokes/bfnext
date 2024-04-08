@@ -278,7 +278,8 @@ impl Db {
                     if obj.owner == side {
                         let hub = self.persisted.logistics_hubs.contains(&oid);
                         let capacity = whcfg.capacity(hub, equip.production);
-                        if aircraft && !(hub || obj.has_slot_typ(name.as_str())) {
+                        if aircraft && !(hub || self.ephemeral.has_slot_typ(&obj.id, name.as_str()))
+                        {
                             continue;
                         }
                         let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
@@ -398,11 +399,7 @@ impl Db {
                     for (name, eqip) in &prod.equipment {
                         let capacity = whcfg.capacity(hub, eqip.production);
                         if eqip.category.is_aircraft() {
-                            let include = hub
-                                || obj
-                                    .slots
-                                    .into_iter()
-                                    .any(|(_, v)| v.typ.as_str() == name.as_str());
+                            let include = hub || self.ephemeral.has_slot_typ(oid, name.as_str());
                             if !include {
                                 continue;
                             }
@@ -550,7 +547,7 @@ impl Db {
             match production.equipment.get(&name) {
                 Some(equip) => {
                     let aircraft = equip.category.is_aircraft();
-                    if aircraft && !(hub || obj.has_slot_typ(name.as_str())) {
+                    if aircraft && !(hub || self.ephemeral.has_slot_typ(&obj.id, name.as_str())) {
                         let inv = obj.warehouse.equipment.get_or_default_cow(name);
                         inv.capacity = 0;
                         inv.stored = 0;

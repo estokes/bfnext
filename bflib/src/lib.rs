@@ -273,11 +273,11 @@ impl Context {
         Ok(())
     }
 
-    fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
+    fn respawn_groups(&mut self, lua: MizLua, miz: &Miz) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
         let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
         self.db
-            .respawn_after_load(perf, &self.idx, &mut self.landcache, &spctx)
+            .respawn_after_load(perf, &self.idx, miz, &mut self.landcache, &spctx)
     }
 
     fn log_perf(&mut self, now: DateTime<Utc>) {
@@ -1096,7 +1096,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         .shutdown
         .map(|hrs| AutoShutdown::new(Utc::now() + Duration::hours(hrs as i64)));
     info!("spawning units");
-    ctx.respawn_groups(lua)
+    ctx.respawn_groups(lua, &miz)
         .context("setting up the mission after load")?;
     info!("starting timed events");
     start_timed_events(ctx, lua, path).context("starting the timed events loop")?;

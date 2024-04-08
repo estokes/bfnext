@@ -720,7 +720,7 @@ impl Db {
             return Ok(None)
         }
         let slot = unit.slot()?;
-        if let Some(oid) = self.persisted.objectives_by_slot.get(&slot) {
+        if let Some(si) = self.ephemeral.slot_info.get(&slot) {
             let name = unit.get_player_name()?;
             let ifo = name.and_then(|name| connected.get_by_name(&name));
             let ucid = match ifo {
@@ -731,7 +731,7 @@ impl Db {
                     return Ok(None);
                 }
             };
-            self.player_entered_slot(lua, id, unit, slot, *oid, ucid)
+            self.player_entered_slot(lua, id, unit, slot, si.objective, ucid)
                 .context("entering player into slot")?;
             return Ok(Some(slot))
         }

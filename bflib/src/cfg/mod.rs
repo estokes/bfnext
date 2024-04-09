@@ -432,6 +432,8 @@ pub struct AiPlaneCfg {
     pub altitude: f64,
     pub altitude_typ: AltType,
     pub speed: f64,
+    #[serde(default)]
+    pub freq: Option<i64>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

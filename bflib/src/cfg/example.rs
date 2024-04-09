@@ -1192,6 +1192,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude: 11000.,
                         altitude_typ: AltType::BARO,
                         speed: 200.,
+                        freq: Some(125000000)
                     },
                 }),
             },
@@ -1218,6 +1219,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 180.,
+                    freq: Some(125000000)
                 }),
             },
         ),
@@ -1244,6 +1246,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude: 7000.,
                         altitude_typ: AltType::BARO,
                         speed: 90.,
+                        freq: None
                     },
                     jtac: DeployableJtac {
                         range: 16000,
@@ -1278,6 +1281,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::BARO,
                         duration: None,
                         speed: 500.,
+                        freq: None
                     },
                 }),
             },
@@ -1295,6 +1299,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 250.,
+                    freq: None
                 }),
             },
         ),
@@ -1320,6 +1325,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 500.,
                     altitude_typ: AltType::RADIO,
                     speed: 80.,
+                    freq: None
                 }),
             },
         ),
@@ -1347,6 +1353,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::RADIO,
                         speed: 70.,
                         duration: None,
+                        freq: None
                     },
                 }),
             },
@@ -1366,6 +1373,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::RADIO,
                         duration: None,
                         speed: 70.,
+                        freq: None
                     },
                 }),
             },
@@ -1383,6 +1391,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 70.,
+                    freq: None
                 }),
             },
         ),
@@ -1399,6 +1408,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 70.,
+                    freq: None
                 }),
             },
         ),
@@ -1445,6 +1455,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude: 11000.,
                         altitude_typ: AltType::BARO,
                         speed: 200.,
+                        freq: Some(264000000)
                     },
                     ewr: DeployableEwr { range: 400000 },
                 }),
@@ -1472,6 +1483,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 180.,
+                    freq: Some(264000000)
                 }),
             },
         ),
@@ -1488,6 +1500,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 180.,
+                    freq: Some(264000000)
                 }),
             },
         ),
@@ -1514,6 +1527,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude: 7000.,
                         altitude_typ: AltType::BARO,
                         speed: 90.,
+                        freq: None
                     },
                     jtac: DeployableJtac {
                         range: 16000,
@@ -1548,6 +1562,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude: 12000.,
                         altitude_typ: AltType::BARO,
                         speed: 300.,
+                        freq: None
                     },
                 }),
             },
@@ -1565,6 +1580,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 250.,
+                    freq: None
                 }),
             },
         ),
@@ -1590,6 +1606,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 500.,
                     altitude_typ: AltType::RADIO,
                     speed: 60.,
+                    freq: None
                 }),
             },
         ),
@@ -1617,6 +1634,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::RADIO,
                         duration: None,
                         speed: 60.,
+                        freq: None
                     },
                 }),
             },
@@ -1636,6 +1654,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::RADIO,
                         duration: None,
                         speed: 60.,
+                        freq: None
                     },
                 }),
             },
@@ -1653,6 +1672,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 60.,
+                    freq: None
                 }),
             },
         ),
@@ -1669,6 +1689,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 60.,
+                    freq: None
                 }),
             },
         ),

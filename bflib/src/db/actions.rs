@@ -33,7 +33,7 @@ use dcso3::{
     land::Land,
     net::Ucid,
     pointing_towards2,
-    trigger::{MarkId, Trigger},
+    trigger::{MarkId, Modulation, Trigger},
     world::World,
     LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3,
 };
@@ -928,6 +928,13 @@ impl Db {
         spawn_pos: Vector2,
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
+        let freq = match &group!(self, args.group)?.origin {
+            DeployKind::Action { spec, .. } => match &spec.kind {
+                ActionKind::Tanker(pl) => pl.freq,
+                _ => None,
+            },
+            _ => None,
+        };
         self.ai_loiter_point_mission(
             side,
             ucid,
@@ -938,10 +945,15 @@ impl Db {
                 ActionKind::Tanker(_) => true,
                 _ => false,
             },
-            || {
+            move || {
                 Task::ComboTask(vec![
                     Task::Tanker,
                     Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
+                    Task::WrappedCommand(Command::SetFrequency {
+                        frequency: freq.unwrap_or(264000000),
+                        modulation: Modulation::AM,
+                        power: 25,
+                    }),
                 ])
             },
             || vec![Task::Tanker],
@@ -1315,22 +1327,39 @@ impl Db {
         args: WithPosAndGroup<()>,
     ) -> Result<Vec<MissionPoint<'lua>>> {
         let group = group!(self, args.group)?;
-        let init_task = Task::ComboTask(vec![]);
-        let main_task = if group.tags.contains(UnitTag::Link16) {
-            vec![
+        let freq = match &group.origin {
+            DeployKind::Action { spec, .. } => match &spec.kind {
+                ActionKind::Awacs(aw) => aw.plane.freq,
+                _ => None,
+            },
+            _ => None,
+        };
+        let init_task = if group.tags.contains(UnitTag::Link16) {
+            Task::ComboTask(vec![
                 Task::AWACS,
+                Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
+                Task::WrappedCommand(Command::SetFrequency {
+                    frequency: freq.unwrap_or(264000000),
+                    modulation: Modulation::AM,
+                    power: 25,
+                }),
                 Task::WrappedCommand(Command::EPLRS {
                     enable: true,
-                    group: None,
+                    group: Some(dcso3::env::miz::GroupId::from(1)),
+                }),
+            ])
+        } else {
+            Task::ComboTask(vec![
+                Task::AWACS,
+                Task::WrappedCommand(Command::SetFrequency {
+                    frequency: freq.unwrap_or(125000000),
+                    modulation: Modulation::AM,
+                    power: 25,
                 }),
                 Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
-            ]
-        } else {
-            vec![
-                Task::AWACS,
-                Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
-            ]
+            ])
         };
+        let main_task = vec![Task::AWACS];
         self.ai_loiter_point_mission(
             side,
             ucid,

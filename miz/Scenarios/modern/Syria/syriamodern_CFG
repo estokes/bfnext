@@ -1130,7 +1130,8 @@
             "template": "RTANKER",
             "altitude": 6000,
             "altitude_typ": "BARO",
-            "speed": 220
+            "speed": 220,
+            "freq": 125000000
           }
         },
         "cost": 50,
@@ -1145,7 +1146,8 @@
             "template": "RBOOMTANKER",
             "altitude": 6000,
             "altitude_typ": "BARO",
-            "speed": 220
+            "speed": 220,
+            "freq": 125000000
           }
         },
         "cost": 50,
@@ -1336,7 +1338,8 @@
               "template": "RAWACS",
               "altitude": 11000,
               "altitude_typ": "BARO",
-              "speed": 200
+              "speed": 200,
+              "freq": 125000000
             }
           }
         },
@@ -1392,7 +1395,8 @@
             "template": "BBASKETTANKER",
             "altitude": 6000,
             "altitude_typ": "BARO",
-            "speed": 220
+            "speed": 220,
+            "freq": 264000000
           }
         },
         "cost": 50,
@@ -1521,7 +1525,8 @@
             "template": "BBOOMTANKER",
             "altitude": 6000,
             "altitude_typ": "BARO",
-            "speed": 220
+            "speed": 220,
+            "freq": 264000000
           }
         },
         "cost": 50,
@@ -1566,7 +1571,8 @@
               "template": "BAWACS",
               "altitude": 11000,
               "altitude_typ": "BARO",
-              "speed": 200
+              "speed": 200,
+              "freq": 264000000
             }
           }
         },

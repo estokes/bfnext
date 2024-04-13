@@ -14,19 +14,20 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-pub mod admin;
-pub mod bg;
-pub mod cfg;
-pub mod chatcmd;
-pub mod db;
-pub mod ewr;
-pub mod jtac;
-pub mod landcache;
-pub mod menu;
-pub mod msgq;
-pub mod perf;
-pub mod shots;
-pub mod spawnctx;
+mod admin;
+mod bg;
+mod cfg;
+mod chatcmd;
+mod db;
+mod ewr;
+mod jtac;
+mod landcache;
+mod menu;
+mod msgq;
+mod perf;
+mod shots;
+mod spawnctx;
+pub mod stats;
 
 extern crate nalgebra as na;
 use crate::{cfg::Cfg, db::player::SlotAuth, perf::record_perf};

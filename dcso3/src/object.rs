@@ -19,10 +19,11 @@ use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{hash::Hash, marker::PhantomData, ops::Deref};
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DcsOid<T> {
     pub(crate) id: u64,
     pub(crate) class: String,
+    #[serde(skip)]
     pub(crate) t: PhantomData<T>,
 }
 

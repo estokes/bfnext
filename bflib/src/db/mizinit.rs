@@ -18,16 +18,10 @@ use super::{
     ephemeral::SlotInfo, group::{DeployKind, GroupId}, objective::ObjGroup, Db, Map
 };
 use crate::{
-    cfg::{Cfg, Vehicle},
-    db::{
+    cfg::{Cfg, Vehicle}, db::{
         logistics::Warehouse,
         objective::{Objective, ObjectiveId, ObjectiveKind},
-    },
-    group,
-    landcache::LandCache,
-    objective_mut,
-    perf::PerfInner,
-    spawnctx::{SpawnCtx, SpawnLoc},
+    }, group, landcache::LandCache, maybe, objective, objective_mut, perf::PerfInner, spawnctx::{SpawnCtx, SpawnLoc}
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -41,7 +35,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
-use log::{error, info};
+use log::{debug, error, info};
 use smallvec::SmallVec;
 
 impl Db {
@@ -317,6 +311,7 @@ impl Db {
         landcache: &mut LandCache,
         spctx: &SpawnCtx,
     ) -> Result<()> {
+        debug!("init slots");
         for side in Side::ALL {
             let coa = miz.coalition(side)?;
             for country in coa.countries()? {
@@ -337,6 +332,7 @@ impl Db {
             }
         }
         let mut spawn_deployed_and_logistics = || -> Result<()> {
+            debug!("queue respawn deployables");
             let land = Land::singleton(spctx.lua())?;
             for gid in &self.persisted.deployed {
                 self.ephemeral.push_spawn(*gid);
@@ -349,11 +345,13 @@ impl Db {
             }
             let actions: SmallVec<[GroupId; 16]> =
                 SmallVec::from_iter(self.persisted.actions.into_iter().map(|g| *g));
+            debug!("respawn actions");
             for gid in actions {
                 if let Err(e) = self.respawn_action(perf, spctx, idx, gid) {
                     error!("failed to respawn action {e:?}");
                 }
             }
+            debug!("respawning farps");
             for (_, obj) in self.persisted.objectives.iter_mut_cow() {
                 let alt = land.get_height(LuaVec2(obj.pos))? + 50.;
                 obj.threat_pos3 = Vector3::new(obj.pos.x, alt, obj.pos.y);
@@ -412,8 +410,8 @@ impl Db {
                             .insert(*uid);
                     }
                     DeployKind::Objective => {
-                        let oid = self.persisted.objectives_by_group[&unit.group];
-                        let obj = &self.persisted.objectives[&oid];
+                        let oid = maybe!(self.persisted.objectives_by_group, unit.group, "objective group")?;
+                        let obj = objective!(self, oid)?;
                         if obj.owner == group.side {
                             self.ephemeral
                                 .units_potentially_close_to_enemies

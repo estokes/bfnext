@@ -133,14 +133,16 @@ fn jtac_toggle_ir_pointer(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> 
 fn jtac_smoke_target(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
-    jtac.smoke_target(lua).context("smoking jtac target")?;
     let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
-    let msg = format_compact!(
-        "SMOKE DEPLOYED ON TARGET\njtac {} near {}\nrequested by {}",
-        arg.snd,
-        near,
-        name
-    );
+    let msg = match jtac.smoke_target(lua).context("smoking jtac target") {
+        Err(e) => format_compact!("COULD NOT SMOKE TARGET\njtac {}\n{e:?}", arg.snd),
+        Ok(()) => format_compact!(
+            "SMOKE DEPLOYED ON TARGET\njtac {} near {}\nrequested by {}",
+            arg.snd,
+            near,
+            name
+        ),
+    };
     ctx.db
         .ephemeral
         .msgs()
@@ -794,7 +796,11 @@ pub(crate) fn init_jtac_menu_for_slot(ctx: &mut Context, lua: MizLua, slot: &Slo
         None => return Ok(()),
     };
     let mc = MissionCommands::singleton(lua)?;
-    let si = ctx.db.ephemeral.get_slot_info(slot).context("getting slot info")?;
+    let si = ctx
+        .db
+        .ephemeral
+        .get_slot_info(slot)
+        .context("getting slot info")?;
     ctx.subscribed_jtac_menus.remove(slot);
     mc.remove_command_for_group(si.miz_gid, GroupCommandItem::from(vec!["JTAC>>".into()]))?;
     mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;

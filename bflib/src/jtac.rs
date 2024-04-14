@@ -43,7 +43,7 @@ use dcso3::{
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{info, warn};
 use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
@@ -355,13 +355,25 @@ impl Jtac {
         if self.contacts.is_empty() {
             write!(msg, "No enemies in sight")?;
         } else {
-            write!(msg, "Visual On: ")?;
-            for (i, id) in self.contacts.keys().enumerate() {
+            let mut counts: IndexMap<Vehicle, usize, FxBuildHasher> = IndexMap::default();
+            for id in self.contacts.keys() {
                 let typ = get_typ(db, id)?;
+                *counts.entry(typ).or_insert(0) += 1;
+            }
+            write!(msg, "Visual On: ")?;
+            for (i, (typ, count)) in counts.into_iter().enumerate() {
                 if i == self.contacts.len() - 1 {
-                    write!(msg, "{}", typ)?;
+                    if count > 1 {
+                        write!(msg, "{}x{}", typ, count)?;
+                    } else {
+                        write!(msg, "{}", typ)?;
+                    }
                 } else {
-                    write!(msg, "{}, ", typ)?;
+                    if count > 1 {
+                        write!(msg, "{}x{}, ", typ, count)?;
+                    } else {
+                        write!(msg, "{}, ", typ)?;
+                    }
                 }
             }
         }
@@ -599,7 +611,7 @@ impl Jtac {
         if let Some(target) = &self.target {
             if let Some(ct) = self.contacts.get(&target.id) {
                 let now = Utc::now();
-                if now - self.last_smoke < Duration::seconds(150) {
+                if now - self.last_smoke < Duration::seconds(60) {
                     let rdy = (now - self.last_smoke).num_seconds();
                     bail!("smoke will not be ready for another {}s", rdy)
                 }

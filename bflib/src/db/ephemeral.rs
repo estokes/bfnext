@@ -457,6 +457,15 @@ impl Ephemeral {
                     if !global_pad_templates.insert(pad.clone()) {
                         bail!("pad template names must be globally unique {pad} is used more than once")
                     }
+                    let gifo = miz.get_group_by_name(mizidx, GroupKind::Any, side, pad)?
+                        .ok_or_else(|| anyhow!("missing pad template {:?} {:?}", side, pad))?;
+                    for unit in gifo.group.units()? {
+                        let unit = unit?;
+                        let uname = unit.name()?;
+                        if &uname != pad {
+                            bail!("pad template groups and units must be named the same thing {uname} != {pad}")
+                        }
+                    }
                 }
                 if dep.limit as usize > pad_templates.len() {
                     bail!(

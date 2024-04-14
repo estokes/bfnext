@@ -378,7 +378,11 @@ impl Db {
     }
 
     pub(super) fn delete_objective(&mut self, oid: &ObjectiveId) -> Result<()> {
-        let obj = self.persisted.objectives.remove_cow(oid).unwrap();
+        let obj = self
+            .persisted
+            .objectives
+            .remove_cow(oid)
+            .ok_or_else(|| anyhow!("no such objective {oid}"))?;
         self.persisted.objectives_by_name.remove_cow(&obj.name);
         if let Some(lid) = obj.warehouse.supplier {
             let logi = objective_mut!(self, lid)?;
@@ -388,8 +392,8 @@ impl Db {
         }
         for (_, groups) in &obj.groups {
             for gid in groups {
-                self.persisted.objectives_by_group.remove_cow(gid);
                 self.delete_group(gid)?;
+                self.persisted.objectives_by_group.remove_cow(gid);
             }
         }
         self.ephemeral
@@ -478,7 +482,7 @@ impl Db {
                     for gid in &groups {
                         let _ = self.delete_group(gid);
                     }
-                    return Err(e)
+                    return Err(e);
                 }
             };
             groups.insert_cow(gid);

@@ -43,7 +43,7 @@ use dcso3::{
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{info, warn};
 use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
@@ -355,7 +355,7 @@ impl Jtac {
         if self.contacts.is_empty() {
             write!(msg, "No enemies in sight")?;
         } else {
-            let mut counts: FxHashMap<Vehicle, usize> = FxHashMap::default();
+            let mut counts: IndexMap<Vehicle, usize, FxBuildHasher> = IndexMap::default();
             for id in self.contacts.keys() {
                 let typ = get_typ(db, id)?;
                 *counts.entry(typ).or_insert(0) += 1;

@@ -11,6 +11,7 @@ use dcso3::{
     String,
 };
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -85,6 +86,6 @@ pub enum StatKind {
     Kill {
         shots: Dead,
         team_kill: bool,
-        points: Vec<(Ucid, usize)>,
+        points: SmallVec<[(Ucid, usize); 2]>,
     },
 }

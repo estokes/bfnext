@@ -537,6 +537,7 @@ impl Db {
         }
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
+        self.persisted.farps.insert_cow(oid);
         let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
             .with_context(|| format_compact!("getting airbase {pad_template}"))?;
         airbase.set_coalition(side)?;

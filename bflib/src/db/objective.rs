@@ -463,7 +463,7 @@ impl Db {
             &fuel_template,
             &barracks_template,
         ] {
-            groups.insert_cow(self.add_and_queue_group(
+            let gid = match self.add_and_queue_group(
                 spctx,
                 idx,
                 side,
@@ -472,15 +472,28 @@ impl Db {
                 DeployKind::Objective,
                 BitFlags::empty(),
                 Some(now + Duration::seconds(60)),
-            )?);
+            ) {
+                Ok(gid) => gid,
+                Err(e) => {
+                    for gid in &groups {
+                        let _ = self.delete_group(gid);
+                    }
+                    return Err(e)
+                }
+            };
+            groups.insert_cow(gid);
         }
         let name = {
-            let coord = Coord::singleton(spctx.lua())?;
-            let pos = coord.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
-            let mgrs = coord.ll_to_mgrs(pos.latitude, pos.longitude)?;
+            let get_utm_zone = || -> Result<String> {
+                let coord = Coord::singleton(spctx.lua())?;
+                let pos = coord.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
+                let mgrs = coord.ll_to_mgrs(pos.latitude, pos.longitude)?;
+                Ok(mgrs.utm_zone)
+            };
+            let utm_zone = get_utm_zone().unwrap_or_else(|_| String::from("UK"));
             let mut n = 0;
             loop {
-                let name = String::from(format_compact!("farp {} {n}", mgrs.utm_zone));
+                let name = String::from(format_compact!("farp {} {n}", utm_zone));
                 if self.persisted.objectives_by_name.get(&name).is_none() {
                     break name;
                 } else {
@@ -489,7 +502,7 @@ impl Db {
             }
         };
         let threat_pos3 = {
-            let alt = land.get_height(LuaVec2(pos))?;
+            let alt = land.get_height(LuaVec2(pos)).unwrap_or_else(|_| 0.);
             Vector3::new(pos.x, alt, pos.y)
         };
         let obj = Objective {
@@ -517,13 +530,6 @@ impl Db {
             threat_pos3,
         };
         let oid = obj.id;
-        let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
-            .with_context(|| format_compact!("getting airbase {pad_template}"))?;
-        airbase.set_coalition(side)?;
-        let airbase = airbase
-            .object_id()
-            .with_context(|| format_compact!("getting airbase {pad_template} object id"))?;
-        self.ephemeral.airbase_by_oid.insert(oid, airbase);
         for (_, groups) in &obj.groups {
             for gid in groups {
                 self.persisted.objectives_by_group.insert_cow(*gid, oid);
@@ -531,6 +537,13 @@ impl Db {
         }
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
+        let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
+            .with_context(|| format_compact!("getting airbase {pad_template}"))?;
+        airbase.set_coalition(side)?;
+        let airbase = airbase
+            .object_id()
+            .with_context(|| format_compact!("getting airbase {pad_template} object id"))?;
+        self.ephemeral.airbase_by_oid.insert(oid, airbase);
         self.init_farp_warehouse(&oid)
             .context("initializing farp warehouse")?;
         self.setup_supply_lines().context("setup supply lines")?;

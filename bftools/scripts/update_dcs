@@ -33,4 +33,5 @@ if test "$SUCCESS" == "y"; then
     rm ~/current
     ln -s "$NEXT" ~/current
     echo "symlinks updated, servers will use the new version on the next restart"
+    echo "don't forget to unsanitize the lua environment!!!!"
 fi

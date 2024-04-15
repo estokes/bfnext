@@ -30,6 +30,7 @@ wine "${NEXT}/DCS World Server/bin/DCS_updater.exe" update
 
 read -p "Was the update successful (y/n)?" SUCCESS
 if test "$SUCCESS" == "y"; then
-    ln -fs "$NEXT" ~/current
+    rm ~/current
+    ln -s "$NEXT" ~/current
     echo "symlinks updated, servers will use the new version on the next restart"
 fi

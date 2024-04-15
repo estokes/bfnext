@@ -154,6 +154,10 @@ function unblock_incoming() {
 function run_dcs() {
     while true; do
         update_from_git
+        # Symlink to the latest version of DCS
+        if test -d ~/current; then
+            cp -d ~/current "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
+        fi
         PORT=$(dcs_port)
         cd "$DCS"
         block_incoming $PORT

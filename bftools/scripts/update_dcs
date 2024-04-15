@@ -1,0 +1,34 @@
+#! /bin/bash
+
+if test -z "$DISPLAY"; then
+    echo "you must run this with an X11 display"
+    exit 3
+fi
+
+if ! test -d ~/current; then
+    echo "error current does not point to a valid dcs install"
+    exit 1
+fi
+
+CURRENT="$(readlink -f ~/current)"
+
+if test ${CURRENT: -1} == "A"; then
+    NEXT="${CURRENT: 0:-1}B"
+elif test ${CURRENT: -1} == "B"; then
+    NEXT="${CURRENT: 0:-1}A"
+else
+    echo "invalid A/B DCS dirs"
+    exit 2
+fi
+
+# make next a hard link to current
+rm -rf "$NEXT"
+cp -al "$CURRENT" "$NEXT"
+
+wine "${NEXT}/bin/DCS_updater.exe update"
+
+read -p "Was the update successful (y/n)?" SUCCESS
+if test "$SUCCESS" == "y"; then
+    ln -fs "$NEXT" ~/current
+    echo "symlinks updated, servers will use the new version on the next restart"
+fi

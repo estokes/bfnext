@@ -19,7 +19,7 @@ use super::{
     Db, Set,
 };
 use crate::{
-    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags},
+    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     group, group_by_name, group_health, group_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut, Connected,
@@ -91,7 +91,7 @@ pub struct SpawnedUnit {
     pub id: UnitId,
     pub group: GroupId,
     pub side: Side,
-    pub typ: String,
+    pub typ: Vehicle,
     pub tags: UnitTags,
     pub template_name: String,
     pub spawn_pos: Vector2,
@@ -103,6 +103,8 @@ pub struct SpawnedUnit {
     pub dead: bool,
     #[serde(skip)]
     pub moved: Option<DateTime<Utc>>,
+    #[serde(skip)]
+    pub airborne_velocity: Option<Vector3>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -618,7 +620,7 @@ impl Db {
                 id: uid,
                 group: gid,
                 side,
-                typ,
+                typ: Vehicle(typ),
                 tags,
                 name: unit_name.clone(),
                 template_name,
@@ -630,6 +632,7 @@ impl Db {
                 heading: gpos.heading,
                 dead: false,
                 moved: None,
+                airborne_velocity: None,
             };
             spawned.units.insert_cow(uid);
             self.persisted.units.insert_cow(uid, spawned_unit);
@@ -717,7 +720,7 @@ impl Db {
             return Ok(None)
         }
         let slot = unit.slot()?;
-        if let Some(oid) = self.persisted.objectives_by_slot.get(&slot) {
+        if let Some(si) = self.ephemeral.slot_info.get(&slot) {
             let name = unit.get_player_name()?;
             let ifo = name.and_then(|name| connected.get_by_name(&name));
             let ucid = match ifo {
@@ -728,7 +731,7 @@ impl Db {
                     return Ok(None);
                 }
             };
-            self.player_entered_slot(lua, id, unit, slot, *oid, ucid)
+            self.player_entered_slot(lua, id, unit, slot, si.objective, ucid)
                 .context("entering player into slot")?;
             return Ok(Some(slot))
         }
@@ -871,6 +874,7 @@ impl Db {
     pub fn update_unit_positions_incremental(
         &mut self,
         lua: MizLua,
+        now: DateTime<Utc>,
         mut last: usize,
     ) -> Result<(usize, Vec<DcsOid<ClassUnit>>)> {
         let total = self.ephemeral.units_able_to_move.len();
@@ -882,7 +886,7 @@ impl Db {
                 uids.push(elts[last]);
                 last += 1;
             }
-            Ok((last, self.update_unit_positions(lua, &uids)?))
+            Ok((last, self.update_unit_positions(lua, now, &uids)?))
         } else {
             Ok((0, vec![]))
         }
@@ -891,6 +895,7 @@ impl Db {
     pub fn update_unit_positions(
         &mut self,
         lua: MizLua,
+        now: DateTime<Utc>,
         units: &[UnitId],
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
         let mut unit: Option<Unit> = None;
@@ -923,12 +928,18 @@ impl Db {
             let spunit = unit_mut!(self, uid)?;
             if (spunit.position.p.0 - pos.p.0).magnitude_squared() > 1.0 {
                 moved.push(spunit.group);
+                spunit.moved = Some(now);
                 spunit.position = pos;
                 spunit.pos = Vector2::new(pos.p.x, pos.p.z);
                 spunit.heading = azumith3d(pos.x.0);
                 self.ephemeral
                     .units_potentially_close_to_enemies
                     .insert(*uid);
+                if spunit.tags.contains(UnitTag::Aircraft) && instance.in_air()? {
+                    spunit.airborne_velocity = Some(instance.get_velocity()?.0)
+                } else {
+                    spunit.airborne_velocity = None;
+                }
             }
             unit = Some(instance);
         }

@@ -21,7 +21,7 @@ use super::{
     Db, Map, Set,
 };
 use crate::{
-    cfg::{Deployable, DeployableLogistics, UnitTag, Vehicle},
+    cfg::{Deployable, DeployableLogistics, UnitTag},
     group, group_health, group_mut,
     landcache::LandCache,
     maybe, objective, objective_mut,
@@ -37,10 +37,10 @@ use dcso3::{
     coalition::Side,
     coord::Coord,
     cvt_err,
-    env::miz::{self, GroupKind, MizIndex},
+    env::miz::{GroupKind, MizIndex},
     group::Group,
     land::Land,
-    net::{SlotId, Ucid},
+    net::Ucid,
     object::DcsObject,
     warehouse::LiquidType,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
@@ -219,14 +219,6 @@ impl ObjGroup {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SlotInfo {
-    pub typ: Vehicle,
-    pub ground_start: bool,
-    pub miz_gid: miz::GroupId,
-    pub side: Side,
-}
-
 atomic_id!(ObjectiveId);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -237,7 +229,6 @@ pub struct Objective {
     pub(super) radius: f64,
     pub owner: Side,
     pub(super) kind: ObjectiveKind,
-    pub(crate) slots: Map<SlotId, SlotInfo>,
     pub(super) groups: Map<Side, Set<GroupId>>,
     pub(super) health: u8,
     pub(super) logi: u8,
@@ -314,12 +305,6 @@ impl Objective {
             .map(|i| *i)
             .unwrap_or_default()
     }
-
-    pub fn has_slot_typ(&self, typ: &str) -> bool {
-        self.slots
-            .into_iter()
-            .any(|(_, v)| v.typ.as_str() == typ)
-    }
 }
 
 impl Db {
@@ -329,12 +314,6 @@ impl Db {
 
     pub fn objectives(&self) -> impl Iterator<Item = (&ObjectiveId, &Objective)> {
         self.persisted.objectives.into_iter()
-    }
-
-    pub fn info_for_slot(&self, slot: &SlotId) -> Result<&SlotInfo> {
-        let oid = maybe!(self.persisted.objectives_by_slot, slot, "slot")?;
-        let obj = objective!(self, oid)?;
-        maybe!(obj.slots, slot, "objective slot")
     }
 
     /// returns the closest objective that matches the critera to the specified point
@@ -399,7 +378,11 @@ impl Db {
     }
 
     pub(super) fn delete_objective(&mut self, oid: &ObjectiveId) -> Result<()> {
-        let obj = self.persisted.objectives.remove_cow(oid).unwrap();
+        let obj = self
+            .persisted
+            .objectives
+            .remove_cow(oid)
+            .ok_or_else(|| anyhow!("no such objective {oid}"))?;
         self.persisted.objectives_by_name.remove_cow(&obj.name);
         if let Some(lid) = obj.warehouse.supplier {
             let logi = objective_mut!(self, lid)?;
@@ -409,13 +392,13 @@ impl Db {
         }
         for (_, groups) in &obj.groups {
             for gid in groups {
-                self.persisted.objectives_by_group.remove_cow(gid);
                 self.delete_group(gid)?;
+                self.persisted.objectives_by_group.remove_cow(gid);
             }
         }
-        for (slot, _) in &obj.slots {
-            self.persisted.objectives_by_slot.remove_cow(slot);
-        }
+        self.ephemeral
+            .slot_info
+            .retain(|_, si| &si.objective != oid);
         if let ObjectiveKind::Farp {
             spec: _,
             pad_template,
@@ -484,7 +467,7 @@ impl Db {
             &fuel_template,
             &barracks_template,
         ] {
-            groups.insert_cow(self.add_and_queue_group(
+            let gid = match self.add_and_queue_group(
                 spctx,
                 idx,
                 side,
@@ -493,15 +476,28 @@ impl Db {
                 DeployKind::Objective,
                 BitFlags::empty(),
                 Some(now + Duration::seconds(60)),
-            )?);
+            ) {
+                Ok(gid) => gid,
+                Err(e) => {
+                    for gid in &groups {
+                        let _ = self.delete_group(gid);
+                    }
+                    return Err(e);
+                }
+            };
+            groups.insert_cow(gid);
         }
         let name = {
-            let coord = Coord::singleton(spctx.lua())?;
-            let pos = coord.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
-            let mgrs = coord.ll_to_mgrs(pos.latitude, pos.longitude)?;
+            let get_utm_zone = || -> Result<String> {
+                let coord = Coord::singleton(spctx.lua())?;
+                let pos = coord.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
+                let mgrs = coord.ll_to_mgrs(pos.latitude, pos.longitude)?;
+                Ok(mgrs.utm_zone)
+            };
+            let utm_zone = get_utm_zone().unwrap_or_else(|_| String::from("UK"));
             let mut n = 0;
             loop {
-                let name = String::from(format_compact!("farp {} {n}", mgrs.utm_zone));
+                let name = String::from(format_compact!("farp {} {n}", utm_zone));
                 if self.persisted.objectives_by_name.get(&name).is_none() {
                     break name;
                 } else {
@@ -510,7 +506,7 @@ impl Db {
             }
         };
         let threat_pos3 = {
-            let alt = land.get_height(LuaVec2(pos))?;
+            let alt = land.get_height(LuaVec2(pos)).unwrap_or_else(|_| 0.);
             Vector3::new(pos.x, alt, pos.y)
         };
         let obj = Objective {
@@ -524,7 +520,6 @@ impl Db {
             pos,
             radius: 2000.,
             owner: side,
-            slots: Map::new(),
             health: 100,
             logi: 100,
             supply: 0,
@@ -539,13 +534,6 @@ impl Db {
             threat_pos3,
         };
         let oid = obj.id;
-        let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
-            .with_context(|| format_compact!("getting airbase {pad_template}"))?;
-        airbase.set_coalition(side)?;
-        let airbase = airbase
-            .object_id()
-            .with_context(|| format_compact!("getting airbase {pad_template} object id"))?;
-        self.ephemeral.airbase_by_oid.insert(oid, airbase);
         for (_, groups) in &obj.groups {
             for gid in groups {
                 self.persisted.objectives_by_group.insert_cow(*gid, oid);
@@ -553,13 +541,26 @@ impl Db {
         }
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
+        self.persisted.farps.insert_cow(oid);
+        let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
+            .with_context(|| format_compact!("getting airbase {pad_template}"))?;
+        airbase.set_coalition(side)?;
+        let airbase = airbase
+            .object_id()
+            .with_context(|| format_compact!("getting airbase {pad_template} object id"))?;
+        self.ephemeral.airbase_by_oid.insert(oid, airbase);
         self.init_farp_warehouse(&oid)
             .context("initializing farp warehouse")?;
         self.setup_supply_lines().context("setup supply lines")?;
         self.deliver_supplies_from_logistics_hubs()
             .context("distributing supplies")?;
         self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
-            objectives: self.persisted.objectives.into_iter().map(|(oid, _)| *oid).collect(),
+            objectives: self
+                .persisted
+                .objectives
+                .into_iter()
+                .map(|(oid, _)| *oid)
+                .collect(),
         };
         self.ephemeral
             .create_objective_markup(&self.persisted, objective!(self, oid)?);
@@ -1065,7 +1066,12 @@ impl Db {
         }
         if actually_captured.len() > 0 {
             self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
-                objectives: self.persisted.objectives.into_iter().map(|(oid, _)| *oid).collect()
+                objectives: self
+                    .persisted
+                    .objectives
+                    .into_iter()
+                    .map(|(oid, _)| *oid)
+                    .collect(),
             };
         }
         Ok(actually_captured)

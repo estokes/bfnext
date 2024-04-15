@@ -25,7 +25,10 @@ fn default_red_troops() -> Vec<Troop> {
             template: "RSTANDARDTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             cost: 0,
@@ -36,7 +39,10 @@ fn default_red_troops() -> Vec<Troop> {
             template: "RATTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             cost: 1,
@@ -47,7 +53,10 @@ fn default_red_troops() -> Vec<Troop> {
             template: "RMORTARTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             cost: 5,
@@ -74,7 +83,10 @@ fn default_blue_troops() -> Vec<Troop> {
             template: "BSTANDARDTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             cost: 0,
@@ -85,7 +97,10 @@ fn default_blue_troops() -> Vec<Troop> {
             template: "BATTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             cost: 1,
@@ -96,7 +111,10 @@ fn default_blue_troops() -> Vec<Troop> {
             template: "BMORTARTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: true,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             cost: 5,
@@ -107,7 +125,10 @@ fn default_blue_troops() -> Vec<Troop> {
             template: "BSTINGERTROOP".into(),
             persist: PersistTyp::Forever,
             can_capture: false,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
             limit: 10,
             limit_enforce: LimitEnforceTyp::DeleteOldest,
             cost: 5,
@@ -358,7 +379,10 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
         },
         Deployable {
             path: vec!["Ground Units".into(), "BMP3".into()],
@@ -378,7 +402,10 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
         },
         Deployable {
             path: vec!["Ground Units".into(), "Ammo Truck".into()],
@@ -646,7 +673,10 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
         },
         Deployable {
             path: vec!["Ground Units".into(), "2A6M Leopard".into()],
@@ -666,7 +696,10 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_crate: None,
             logistics: None,
             ewr: None,
-            jtac: Some(DeployableJtac { range: 8000, nolos: false }),
+            jtac: Some(DeployableJtac {
+                range: 8000,
+                nolos: false,
+            }),
         },
         Deployable {
             path: vec!["Ground Units".into(), "Ammo Truck".into()],
@@ -1150,13 +1183,17 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Awacs(AiPlaneCfg {
-                    kind: AiPlaneKind::FixedWing,
-                    duration: Some(8),
-                    template: "RAWACS".into(),
-                    altitude: 11000.,
-                    altitude_typ: AltType::BARO,
-                    speed: 200.,
+                kind: ActionKind::Awacs(AwacsCfg {
+                    ewr: DeployableEwr { range: 400000 },
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::FixedWing,
+                        duration: Some(8),
+                        template: "RAWACS".into(),
+                        altitude: 11000.,
+                        altitude_typ: AltType::BARO,
+                        speed: 200.,
+                        freq: Some(125000000)
+                    },
                 }),
             },
         ),
@@ -1182,6 +1219,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 180.,
+                    freq: Some(125000000)
                 }),
             },
         ),
@@ -1208,8 +1246,12 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude: 7000.,
                         altitude_typ: AltType::BARO,
                         speed: 90.,
+                        freq: None
                     },
-                    jtac: DeployableJtac { range: 16000, nolos: true },
+                    jtac: DeployableJtac {
+                        range: 16000,
+                        nolos: true,
+                    },
                 }),
             },
         ),
@@ -1239,6 +1281,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::BARO,
                         duration: None,
                         speed: 500.,
+                        freq: None
                     },
                 }),
             },
@@ -1256,6 +1299,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 250.,
+                    freq: None
                 }),
             },
         ),
@@ -1281,6 +1325,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 500.,
                     altitude_typ: AltType::RADIO,
                     speed: 80.,
+                    freq: None
                 }),
             },
         ),
@@ -1308,6 +1353,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::RADIO,
                         speed: 70.,
                         duration: None,
+                        freq: None
                     },
                 }),
             },
@@ -1327,6 +1373,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::RADIO,
                         duration: None,
                         speed: 70.,
+                        freq: None
                     },
                 }),
             },
@@ -1344,6 +1391,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 70.,
+                    freq: None
                 }),
             },
         ),
@@ -1360,6 +1408,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 70.,
+                    freq: None
                 }),
             },
         ),
@@ -1398,13 +1447,17 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                 cost: 100,
                 penalty: Some(100),
                 limit: None,
-                kind: ActionKind::Awacs(AiPlaneCfg {
-                    kind: AiPlaneKind::FixedWing,
-                    duration: Some(8),
-                    template: "BAWACS".into(),
-                    altitude: 11000.,
-                    altitude_typ: AltType::BARO,
-                    speed: 200.,
+                kind: ActionKind::Awacs(AwacsCfg {
+                    plane: AiPlaneCfg {
+                        kind: AiPlaneKind::FixedWing,
+                        duration: Some(8),
+                        template: "BAWACS".into(),
+                        altitude: 11000.,
+                        altitude_typ: AltType::BARO,
+                        speed: 200.,
+                        freq: Some(264000000)
+                    },
+                    ewr: DeployableEwr { range: 400000 },
                 }),
             },
         ),
@@ -1430,6 +1483,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 180.,
+                    freq: Some(264000000)
                 }),
             },
         ),
@@ -1446,6 +1500,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 180.,
+                    freq: Some(264000000)
                 }),
             },
         ),
@@ -1472,8 +1527,12 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude: 7000.,
                         altitude_typ: AltType::BARO,
                         speed: 90.,
+                        freq: None
                     },
-                    jtac: DeployableJtac { range: 16000, nolos: true },
+                    jtac: DeployableJtac {
+                        range: 16000,
+                        nolos: true,
+                    },
                 }),
             },
         ),
@@ -1503,6 +1562,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude: 12000.,
                         altitude_typ: AltType::BARO,
                         speed: 300.,
+                        freq: None
                     },
                 }),
             },
@@ -1520,6 +1580,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 10000.,
                     altitude_typ: AltType::BARO,
                     speed: 250.,
+                    freq: None
                 }),
             },
         ),
@@ -1545,6 +1606,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude: 500.,
                     altitude_typ: AltType::RADIO,
                     speed: 60.,
+                    freq: None
                 }),
             },
         ),
@@ -1572,6 +1634,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::RADIO,
                         duration: None,
                         speed: 60.,
+                        freq: None
                     },
                 }),
             },
@@ -1591,6 +1654,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         altitude_typ: AltType::RADIO,
                         duration: None,
                         speed: 60.,
+                        freq: None
                     },
                 }),
             },
@@ -1608,6 +1672,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 60.,
+                    freq: None
                 }),
             },
         ),
@@ -1624,6 +1689,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                     altitude_typ: AltType::RADIO,
                     duration: None,
                     speed: 60.,
+                    freq: None
                 }),
             },
         ),
@@ -1733,8 +1799,20 @@ impl Default for Cfg {
             ]),
             unit_classification: default_unit_classification(),
             airborne_jtacs: FxHashMap::from_iter([
-                ("L-39ZA".into(), DeployableJtac { range: 16000, nolos: true }),
-                ("MB-339A".into(), DeployableJtac { range: 16000, nolos: true }),
+                (
+                    "L-39ZA".into(),
+                    DeployableJtac {
+                        range: 16000,
+                        nolos: true,
+                    },
+                ),
+                (
+                    "MB-339A".into(),
+                    DeployableJtac {
+                        range: 16000,
+                        nolos: true,
+                    },
+                ),
             ]),
             jtac_priority: default_jtac_priority(),
             extra_fixed_wing_objectives: FxHashSet::default(),

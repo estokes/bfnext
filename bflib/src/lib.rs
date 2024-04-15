@@ -273,11 +273,11 @@ impl Context {
         Ok(())
     }
 
-    fn respawn_groups(&mut self, lua: MizLua) -> Result<()> {
+    fn respawn_groups(&mut self, lua: MizLua, miz: &Miz) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
         let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
         self.db
-            .respawn_after_load(perf, &self.idx, &mut self.landcache, &spctx)
+            .respawn_after_load(perf, &self.idx, miz, &mut self.landcache, &spctx)
     }
 
     fn log_perf(&mut self, now: DateTime<Utc>) {
@@ -510,7 +510,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         }
                     }
                 }
-                if let Err(e) = ctx.db.player_left_unit(lua, &unit) {
+                if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &unit) {
                     error!("player left unit failed {:?} {:?}", unit, e)
                 }
             }
@@ -764,7 +764,7 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
         }
     }
     for (uid, msg) in msgs {
-        ctx.db.ephemeral.msgs().panel_to_unit(10, true, uid, msg)
+        ctx.db.ephemeral.msgs().panel_to_unit(10, false, uid, msg)
     }
     Ok(())
 }
@@ -954,7 +954,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     force_players_to_spectators(ctx, &net, ts);
     match ctx
         .db
-        .update_unit_positions_incremental(lua, ctx.last_unit_position)
+        .update_unit_positions_incremental(lua, ts, ctx.last_unit_position)
     {
         Err(e) => error!("could not update unit positions {e}"),
         Ok((i, dead)) => {
@@ -970,7 +970,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     match ctx
         .db
-        .update_player_positions_incremental(lua, ctx.last_player_position)
+        .update_player_positions_incremental(lua, ts, ctx.last_player_position)
     {
         Err(e) => error!("could not update player positions {e}"),
         Ok((i, dead)) => {
@@ -1012,7 +1012,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.advise_capturable, now);
     let now = Utc::now();
-    match ctx.jtac.update_target_positions(lua, &mut ctx.db) {
+    match ctx.jtac.update_target_positions(lua, now, &mut ctx.db) {
         Err(e) => error!("error updating jtac target positions {:?}", e),
         Ok(dead) => {
             for id in dead {
@@ -1096,7 +1096,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         .shutdown
         .map(|hrs| AutoShutdown::new(Utc::now() + Duration::hours(hrs as i64)));
     info!("spawning units");
-    ctx.respawn_groups(lua)
+    ctx.respawn_groups(lua, &miz)
         .context("setting up the mission after load")?;
     info!("starting timed events");
     start_timed_events(ctx, lua, path).context("starting the timed events loop")?;

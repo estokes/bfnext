@@ -306,6 +306,7 @@ struct VehicleTemplates {
     payload: HashMap<String, Table<'static>>,
     prop_aircraft: HashMap<String, Table<'static>>,
     radio: HashMap<String, Table<'static>>,
+    frequency: HashMap<String, Value<'static>>,
 }
 
 impl VehicleTemplates {
@@ -313,6 +314,7 @@ impl VehicleTemplates {
         let mut payload: HashMap<String, Table> = HashMap::new();
         let mut prop_aircraft: HashMap<String, Table> = HashMap::new();
         let mut radio: HashMap<String, Table> = HashMap::new();
+        let mut frequency: HashMap<String, Value> = HashMap::new();
         for coa in wep
             .mission
             .raw_get::<_, Table>("coalition")?
@@ -345,7 +347,10 @@ impl VehicleTemplates {
                             prop_aircraft.insert(unit_type.clone(), w);
                         }
                         if let Ok(w) = unit.raw_get("Radio") {
-                            radio.insert(unit_type, w);
+                            radio.insert(unit_type.clone(), w);
+                        }
+                        if let Ok(v) = unit.raw_get("frequency") {
+                            frequency.insert(unit_type, v);
                         }
                     }
                 }
@@ -355,6 +360,7 @@ impl VehicleTemplates {
             payload,
             prop_aircraft,
             radio,
+            frequency
         })
     }
 
@@ -415,6 +421,9 @@ impl VehicleTemplates {
                         };
                         if let Some(w) = self.radio.get(&unit_type) {
                             unit.set("Radio", w.deep_clone(lua)?)?
+                        }
+                        if let Some(v) = self.frequency.get(&unit_type) {
+                            unit.set("frequency", v.deep_clone(lua)?)?
                         }
                         increment_key(&mut replace_count, &unit_type);
                         let x = unit.get("x")?;

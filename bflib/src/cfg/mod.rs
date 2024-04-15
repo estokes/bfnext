@@ -36,6 +36,12 @@ mod example;
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Vehicle(pub String);
 
+impl fmt::Display for Vehicle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl<'a> From<&'a str> for Vehicle {
     fn from(value: &'a str) -> Self {
         Self(value.into())
@@ -283,7 +289,7 @@ pub struct DeployableLogistics {
     pub barracks_template: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct DeployableEwr {
     /// range for likely detection (Meters)
@@ -426,6 +432,14 @@ pub struct AiPlaneCfg {
     pub altitude: f64,
     pub altitude_typ: AltType,
     pub speed: f64,
+    #[serde(default)]
+    pub freq: Option<i64>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AwacsCfg {
+    pub ewr: DeployableEwr,
+    pub plane: AiPlaneCfg,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -470,7 +484,7 @@ pub struct MoveCfg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActionKind {
     Tanker(AiPlaneCfg),
-    Awacs(AiPlaneCfg),
+    Awacs(AwacsCfg),
     Bomber(BomberCfg),
     Fighters(AiPlaneCfg),
     Attackers(AiPlaneCfg),

@@ -15,15 +15,13 @@ for more details.
 */
 
 use super::{
-    group::{DeployKind, GroupId},
-    objective::{ObjGroup, SlotInfo},
-    Db, Map,
+    ephemeral::SlotInfo, group::{DeployKind, GroupId}, objective::ObjGroup, Db, Map
 };
 use crate::{
     cfg::{Cfg, Vehicle}, db::{
         logistics::Warehouse,
         objective::{Objective, ObjectiveId, ObjectiveKind},
-    }, group, landcache::LandCache, objective_mut, perf::PerfInner, spawnctx::{SpawnCtx, SpawnLoc}
+    }, group, landcache::LandCache, maybe, objective, objective_mut, perf::PerfInner, spawnctx::{SpawnCtx, SpawnLoc}
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -37,7 +35,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
-use log::{error, info};
+use log::{debug, error, info};
 use smallvec::SmallVec;
 
 impl Db {
@@ -100,7 +98,6 @@ impl Db {
             name: name.clone(),
             kind,
             owner,
-            slots: Map::new(),
             groups: Map::new(),
             health: 0,
             logi: 0,
@@ -229,13 +226,11 @@ impl Db {
                     }
                 },
             }
-            self.persisted
-                .objectives_by_slot
-                .insert_cow(id.clone(), obj);
-            objective_mut!(self, obj)?.slots.insert_cow(
-                id,
+            self.ephemeral.slot_info.insert(
+                id.clone(),
                 SlotInfo {
                     typ: vehicle,
+                    objective: obj,
                     ground_start,
                     miz_gid: slot.id()?,
                     side,
@@ -312,15 +307,32 @@ impl Db {
         &mut self,
         perf: &mut PerfInner,
         idx: &MizIndex,
+        miz: &Miz,
         landcache: &mut LandCache,
         spctx: &SpawnCtx,
     ) -> Result<()> {
+        debug!("init slots");
+        for side in Side::ALL {
+            let coa = miz.coalition(side)?;
+            for country in coa.countries()? {
+                let country = country?;
+                for plane in country.planes()? {
+                    let plane = plane?;
+                    self.init_objective_slots(side, plane)?
+                }
+                for heli in country.helicopters()? {
+                    let heli = heli?;
+                    self.init_objective_slots(side, heli)?
+                }
+            }
+        }
         for name in &self.ephemeral.cfg.extra_fixed_wing_objectives {
             if !self.persisted.objectives_by_name.get(name).is_some() {
                 bail!("extra_fixed_wing_objectives {name} does not match any objective")
             }
         }
         let mut spawn_deployed_and_logistics = || -> Result<()> {
+            debug!("queue respawn deployables");
             let land = Land::singleton(spctx.lua())?;
             for gid in &self.persisted.deployed {
                 self.ephemeral.push_spawn(*gid);
@@ -333,11 +345,13 @@ impl Db {
             }
             let actions: SmallVec<[GroupId; 16]> =
                 SmallVec::from_iter(self.persisted.actions.into_iter().map(|g| *g));
+            debug!("respawn actions");
             for gid in actions {
                 if let Err(e) = self.respawn_action(perf, spctx, idx, gid) {
                     error!("failed to respawn action {e:?}");
                 }
             }
+            debug!("respawning farps");
             for (_, obj) in self.persisted.objectives.iter_mut_cow() {
                 let alt = land.get_height(LuaVec2(obj.pos))? + 50.;
                 obj.threat_pos3 = Vector3::new(obj.pos.x, alt, obj.pos.y);
@@ -396,8 +410,8 @@ impl Db {
                             .insert(*uid);
                     }
                     DeployKind::Objective => {
-                        let oid = self.persisted.objectives_by_group[&unit.group];
-                        let obj = &self.persisted.objectives[&oid];
+                        let oid = maybe!(self.persisted.objectives_by_group, unit.group, "objective group")?;
+                        let obj = objective!(self, oid)?;
                         if obj.owner == group.side {
                             self.ephemeral
                                 .units_potentially_close_to_enemies

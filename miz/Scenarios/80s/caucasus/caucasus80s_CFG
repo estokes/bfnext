@@ -21,7 +21,7 @@
     "lr_sam_bonus": 5,
     "logistics_repair": 50,
     "logistics_transfer": 5,
-    "capture": 50 
+    "capture": 50
   },
   "repair_time": 1800,
   "repair_crate": {
@@ -123,7 +123,7 @@
     "IL-78M": 0,
     "Tu-22M3": 36000,
     "KC130": 0,
-    "KC-135": 0 
+    "KC-135": 0
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
@@ -208,9 +208,10 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "RTANKER",
-            "altitude": 9000.0,
+            "altitude": 6000,
             "altitude_typ": "BARO",
-            "speed": 220.0
+            "speed": 220,
+            "freq": 125000000
           }
         },
         "cost": 50,
@@ -239,9 +240,9 @@
               "kind": "FixedWing",
               "duration": null,
               "template": "RBOMBER",
-              "altitude": 12000.0,
+              "altitude": 12000,
               "altitude_typ": "BARO",
-              "speed": 500.0
+              "speed": 500
             }
           }
         },
@@ -257,9 +258,9 @@
               "kind": "Helicopter",
               "duration": null,
               "template": "RTROOPCARRIER",
-              "altitude": 1000.0,
+              "altitude": 1000,
               "altitude_typ": "RADIO",
-              "speed": 70.0
+              "speed": 70
             }
           }
         },
@@ -285,9 +286,9 @@
             "kind": "Helicopter",
             "duration": 2,
             "template": "RATTACKHELI",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 80.0
+            "speed": 80
           }
         },
         "cost": 100,
@@ -302,9 +303,9 @@
               "kind": "Helicopter",
               "duration": null,
               "template": "RTROOPCARRIER",
-              "altitude": 1000.0,
+              "altitude": 1000,
               "altitude_typ": "RADIO",
-              "speed": 70.0
+              "speed": 70
             }
           }
         },
@@ -318,9 +319,9 @@
             "kind": "Helicopter",
             "duration": null,
             "template": "RCARGOCARRIER",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 70.0
+            "speed": 70
           }
         },
         "cost": 100,
@@ -333,9 +334,9 @@
             "kind": "Helicopter",
             "duration": null,
             "template": "RCARGOCARRIER",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 70.0
+            "speed": 70
           }
         },
         "cost": 100,
@@ -353,9 +354,9 @@
               "kind": "FixedWing",
               "duration": 12,
               "template": "RDRONE",
-              "altitude": 7000.0,
+              "altitude": 7000,
               "altitude_typ": "BARO",
-              "speed": 90.0
+              "speed": 90
             }
           }
         },
@@ -380,9 +381,9 @@
             "kind": "FixedWing",
             "duration": 5,
             "template": "RFIGHTERS",
-            "altitude": 10000.0,
+            "altitude": 10000,
             "altitude_typ": "BARO",
-            "speed": 250.0
+            "speed": 250
           }
         },
         "cost": 100,
@@ -392,12 +393,18 @@
       "awacs": {
         "kind": {
           "Awacs": {
-            "kind": "FixedWing",
-            "duration": 8,
-            "template": "RAWACS",
-            "altitude": 11000.0,
-            "altitude_typ": "BARO",
-            "speed": 200.0
+            "ewr": {
+              "range": 400000
+            },
+            "plane": {
+              "kind": "FixedWing",
+              "duration": 8,
+              "template": "RAWACS",
+              "altitude": 11000,
+              "altitude_typ": "BARO",
+              "speed": 200,
+              "freq": 125000000
+            }
           }
         },
         "cost": 100,
@@ -434,9 +441,9 @@
               "kind": "FixedWing",
               "duration": null,
               "template": "BBOMBER",
-              "altitude": 12000.0,
+              "altitude": 12000,
               "altitude_typ": "BARO",
-              "speed": 300.0
+              "speed": 300
             }
           }
         },
@@ -450,9 +457,10 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "BBASKETTANKER",
-            "altitude": 9000.0,
+            "altitude": 6000,
             "altitude_typ": "BARO",
-            "speed": 220.0
+            "speed": 220,
+            "freq": 264000000
           }
         },
         "cost": 50,
@@ -467,9 +475,9 @@
               "kind": "Helicopter",
               "duration": null,
               "template": "BTROOPCARRIER",
-              "altitude": 1000.0,
+              "altitude": 1000,
               "altitude_typ": "RADIO",
-              "speed": 60.0
+              "speed": 60
             }
           }
         },
@@ -495,9 +503,9 @@
             "kind": "Helicopter",
             "duration": 2,
             "template": "BATTACKHELI",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 60.0
+            "speed": 60
           }
         },
         "cost": 100,
@@ -512,9 +520,9 @@
               "kind": "Helicopter",
               "duration": null,
               "template": "BTROOPCARRIER",
-              "altitude": 1000.0,
+              "altitude": 1000,
               "altitude_typ": "RADIO",
-              "speed": 60.0
+              "speed": 60
             }
           }
         },
@@ -528,9 +536,9 @@
             "kind": "Helicopter",
             "duration": null,
             "template": "BCARGOCARRIER",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 60.0
+            "speed": 60
           }
         },
         "cost": 100,
@@ -543,9 +551,9 @@
             "kind": "Helicopter",
             "duration": null,
             "template": "BCARGOCARRIER",
-            "altitude": 1000.0,
+            "altitude": 1000,
             "altitude_typ": "RADIO",
-            "speed": 60.0
+            "speed": 60
           }
         },
         "cost": 100,
@@ -563,9 +571,9 @@
               "kind": "FixedWing",
               "duration": 12,
               "template": "BDRONE",
-              "altitude": 7000.0,
+              "altitude": 7000,
               "altitude_typ": "BARO",
-              "speed": 90.0
+              "speed": 90
             }
           }
         },
@@ -579,9 +587,10 @@
             "kind": "FixedWing",
             "duration": 8,
             "template": "BBOOMTANKER",
-            "altitude": 9000.0,
+            "altitude": 6000,
             "altitude_typ": "BARO",
-            "speed": 220.0
+            "speed": 220,
+            "freq": 264000000
           }
         },
         "cost": 50,
@@ -591,8 +600,8 @@
       "move": {
         "kind": {
           "Move": {
-            "troop": 1000,
-            "deployable": 1000
+            "troop": 2000,
+            "deployable": 2000
           }
         },
         "cost": 10,
@@ -605,9 +614,9 @@
             "kind": "FixedWing",
             "duration": 5,
             "template": "BFIGHTERS",
-            "altitude": 10000.0,
+            "altitude": 10000,
             "altitude_typ": "BARO",
-            "speed": 250.0
+            "speed": 250
           }
         },
         "cost": 100,
@@ -617,12 +626,18 @@
       "awacs": {
         "kind": {
           "Awacs": {
-            "kind": "FixedWing",
-            "duration": 8,
-            "template": "BAWACS",
-            "altitude": 11000.0,
-            "altitude_typ": "BARO",
-            "speed": 200.0
+            "ewr": {
+              "range": 400000
+            },
+            "plane": {
+              "kind": "FixedWing",
+              "duration": 8,
+              "template": "BAWACS",
+              "altitude": 11000,
+              "altitude_typ": "BARO",
+              "speed": 200,
+              "freq": 264000000
+            }
           }
         },
         "cost": 100,
@@ -1620,6 +1635,7 @@
       "Unarmed"
     ],
     "Ka-50_3": [
+      "Aircraft",
       "Helicopter"
     ],
     "FARP Ammo Dump Coating": [
@@ -1722,6 +1738,7 @@
       "Unarmed"
     ],
     "AH-64D_BLK_II": [
+      "Aircraft",
       "Helicopter"
     ],
     "55G6 EWR": [
@@ -1783,6 +1800,7 @@
       "Driveable"
     ],
     "Mi-24P": [
+      "Aircraft",
       "Helicopter"
     ],
     "GeneratorF": [
@@ -1861,6 +1879,7 @@
       "SearchRadar"
     ],
     "Mi-8MT": [
+      "Aircraft",
       "Helicopter"
     ],
     "SA-18 Igla-S manpad": [
@@ -1914,6 +1933,7 @@
       "Driveable"
     ],
     "Ka-50": [
+      "Aircraft",
       "Helicopter"
     ],
     "SA-18 Igla comm": [
@@ -1968,6 +1988,7 @@
       "Aircraft"
     ],
     "SA342M": [
+      "Aircraft",
       "Helicopter"
     ],
     "Su-27": [
@@ -1990,6 +2011,7 @@
       "SmallArms"
     ],
     "SA342L": [
+      "Aircraft",
       "Helicopter"
     ],
     "Su-33": [
@@ -2015,6 +2037,7 @@
       "Driveable"
     ],
     "UH-1H": [
+      "Aircraft",
       "Helicopter"
     ],
     "FARP Fuel Depot": [

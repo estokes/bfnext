@@ -23,9 +23,13 @@ use super::{
 };
 use crate::{
     cfg::{
-        ActionKind, AiPlaneCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
         DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
-    }, maybe, msgq::MsgQ, perf::{record_perf, PerfInner}, spawnctx::{Despawn, SpawnCtx, Spawned}
+    },
+    maybe,
+    msgq::MsgQ,
+    perf::{record_perf, PerfInner},
+    spawnctx::{Despawn, SpawnCtx, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
@@ -35,7 +39,7 @@ use dcso3::{
     centroid2d,
     coalition::Side,
     controller::MissionPoint,
-    env::miz::{GroupKind, Miz, MizIndex},
+    env::miz::{self, GroupKind, Miz, MizIndex},
     group::ClassGroup,
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
@@ -56,6 +60,15 @@ use std::{
     mem,
     sync::Arc,
 };
+
+#[derive(Debug, Clone)]
+pub struct SlotInfo {
+    pub typ: Vehicle,
+    pub objective: ObjectiveId,
+    pub ground_start: bool,
+    pub miz_gid: miz::GroupId,
+    pub side: Side,
+}
 
 #[derive(Debug, Clone)]
 pub enum LogiStage {
@@ -116,6 +129,7 @@ pub struct Ephemeral {
     pub(super) gid_by_object_id: FxHashMap<DcsOid<ClassGroup>, GroupId>,
     pub(super) uid_by_static: FxHashMap<DcsOid<ClassStatic>, UnitId>,
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
+    pub(super) slot_info: FxHashMap<SlotId, SlotInfo>,
     used_pad_templates: FxHashSet<String>,
     force_to_spectators: BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>>,
     pub(super) units_able_to_move: IndexSet<UnitId, FxBuildHasher>,
@@ -150,6 +164,7 @@ impl Default for Ephemeral {
             gid_by_object_id: FxHashMap::default(),
             uid_by_static: FxHashMap::default(),
             airbase_by_oid: FxHashMap::default(),
+            slot_info: FxHashMap::default(),
             used_pad_templates: FxHashSet::default(),
             force_to_spectators: BTreeMap::default(),
             units_able_to_move: IndexSet::default(),
@@ -169,6 +184,10 @@ impl Default for Ephemeral {
 }
 
 impl Ephemeral {
+    pub fn get_slot_info(&self, slot: &SlotId) -> Option<&SlotInfo> {
+        self.slot_info.get(slot)
+    }
+
     pub fn create_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {
         if let Some(mk) = self.objective_markup.remove(&obj.id) {
             mk.remove(&mut self.msgs);
@@ -273,7 +292,6 @@ impl Ephemeral {
                         }
                     }
                     spctx.despawn(perf, despawn)?;
-                    
                 }
             }
         } else if slen > 0 {
@@ -439,6 +457,15 @@ impl Ephemeral {
                     if !global_pad_templates.insert(pad.clone()) {
                         bail!("pad template names must be globally unique {pad} is used more than once")
                     }
+                    let gifo = miz.get_group_by_name(mizidx, GroupKind::Any, side, pad)?
+                        .ok_or_else(|| anyhow!("missing pad template {:?} {:?}", side, pad))?;
+                    for unit in gifo.group.units()? {
+                        let unit = unit?;
+                        let uname = unit.name()?;
+                        if &uname != pad {
+                            bail!("pad template groups and units must be named the same thing {uname} != {pad}")
+                        }
+                    }
                 }
                 if dep.limit as usize > pad_templates.len() {
                     bail!(
@@ -577,17 +604,21 @@ impl Ephemeral {
         msg: S,
     ) {
         if let Some(player) = persisted.players.get(ucid) {
-            let ifo = player.current_slot.as_ref().and_then(|(s, _)| {
-                persisted
-                    .objectives_by_slot
-                    .get(s)
-                    .and_then(|i| persisted.objectives.get(i).and_then(|o| o.slots.get(s)))
-            });
-            if let Some(ifo) = ifo {
+            if let Some(ifo) = player
+                .current_slot
+                .as_ref()
+                .and_then(|(s, _)| self.slot_info.get(s))
+            {
                 let miz_id = ifo.miz_gid;
                 self.msgs().panel_to_group(duration, false, miz_id, msg);
             }
         }
+    }
+
+    pub(super) fn has_slot_typ(&self, oid: &ObjectiveId, typ: &str) -> bool {
+        self.slot_info
+            .values()
+            .any(|si| &si.objective == oid && si.typ.as_str() == typ)
     }
 
     pub(super) fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, mut cfg: Cfg) -> Result<()> {
@@ -667,7 +698,10 @@ impl Ephemeral {
                     bail!("the points system is disabled but {act:?} costs points")
                 }
                 match &act.kind {
-                    ActionKind::Awacs(AiPlaneCfg { template, .. })
+                    ActionKind::Awacs(AwacsCfg {
+                        plane: AiPlaneCfg { template, .. },
+                        ..
+                    })
                     | ActionKind::Bomber(BomberCfg {
                         plane: AiPlaneCfg { template, .. },
                         ..

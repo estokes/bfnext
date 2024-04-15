@@ -531,7 +531,7 @@ pub(crate) fn init_action_menu_for_slot(
     ucid: &Ucid,
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-    let si = ctx.db.info_for_slot(slot).context("getting slot info")?;
+    let si = ctx.db.ephemeral.get_slot_info(slot).context("getting slot info")?;
     ctx.subscribed_action_menus.remove(slot);
     mc.remove_command_for_group(si.miz_gid, GroupCommandItem::from(vec!["Actions>>".into()]))?;
     mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Actions".into()]))?;

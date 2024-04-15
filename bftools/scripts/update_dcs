@@ -10,7 +10,7 @@ if ! test -d ~/current; then
     exit 1
 fi
 
-# real target of current
+# real target
 CURRENT="$(readlink -f ~/current)"
 
 if test ${CURRENT: -1} == "A"; then

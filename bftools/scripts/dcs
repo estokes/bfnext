@@ -156,6 +156,7 @@ function run_dcs() {
         update_from_git
         # Symlink to the latest version of DCS
         if test -d ~/current; then
+            rm "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
             cp -d ~/current "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
         fi
         PORT=$(dcs_port)

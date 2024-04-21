@@ -303,6 +303,7 @@ fn increment_key(map: &mut HashMap<String, isize>, key: &str) -> isize {
 }
 
 struct VehicleTemplates {
+    slot: HashMap<String, Table<'static>>,
     payload: HashMap<String, Table<'static>>,
     prop_aircraft: HashMap<String, Table<'static>>,
     radio: HashMap<String, Table<'static>>,
@@ -311,6 +312,7 @@ struct VehicleTemplates {
 
 impl VehicleTemplates {
     fn new(wep: &LoadedMiz) -> Result<Self> {
+        let mut slot: HashMap<String, Table> = HashMap::new();
         let mut payload: HashMap<String, Table> = HashMap::new();
         let mut prop_aircraft: HashMap<String, Table> = HashMap::new();
         let mut radio: HashMap<String, Table> = HashMap::new();
@@ -339,6 +341,7 @@ impl VehicleTemplates {
                     {
                         let unit = unit?.1;
                         let unit_type: String = unit.raw_get("type").context("getting units")?;
+                        slot.insert(unit_type.clone(), group.clone());
                         info!("adding payload template: {unit_type}");
                         if let Ok(w) = unit.raw_get("payload") {
                             payload.insert(unit_type.clone(), w);
@@ -357,11 +360,21 @@ impl VehicleTemplates {
             }
         }
         Ok(Self {
+            slot,
             payload,
             prop_aircraft,
             radio,
-            frequency
+            frequency,
         })
+    }
+
+    fn place_slots(
+        &self,
+        lua: &Lua,
+        slot_zones: &mut Vec<TriggerZone>,
+        base: &mut LoadedMiz,
+    ) -> Result<()> {
+        unimplemented!()
     }
 
     fn apply(

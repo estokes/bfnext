@@ -374,7 +374,7 @@ impl Db {
                 let logi = ((logi_alive as f32 / logi_total as f32) * 100.).trunc() as u8;
                 Ok((health, logi))
             })
-            .unwrap_or(Ok((100, 100)))
+            .unwrap_or(Ok((0, 0)))
     }
 
     pub(super) fn delete_objective(&mut self, oid: &ObjectiveId) -> Result<()> {

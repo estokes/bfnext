@@ -10,7 +10,8 @@ crate-type = ["cdylib"]
 [dependencies]
 dcso3 = { version = "0.1", path = "../dcso3" }
 chrono = { workspace = true }
-mlua = { workspace = true }
+mlua = { version = "0.9.1", features = ["lua51", "module", "serialize"] }
+#mlua = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_derive = { workspace = true }

@@ -31,8 +31,9 @@ use dcso3::{
 };
 use fxhash::FxHashMap;
 use smallvec::SmallVec;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dead {
     pub victim: DcsOid<ClassUnit>,
     pub victim_ucid: Option<Ucid>,
@@ -42,7 +43,7 @@ pub struct Dead {
     pub shots: Vec<Shot>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shot {
     pub weapon_name: Option<String>,
     pub weapon: Option<DcsOid<ClassWeapon>>,

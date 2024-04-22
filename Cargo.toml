@@ -20,7 +20,6 @@ debug = 1
 anyhow = "1"
 bytes = "1"
 chrono = { version = "0.4.31", features = ["serde"] }
-clap = { version = "4.4.18", features = ["derive"] }
 compact_str = { version = "0.7", features = ["serde"] }
 enumflags2 = "0.7.8"
 env_logger = "0.11.0"

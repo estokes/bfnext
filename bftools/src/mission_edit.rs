@@ -16,12 +16,22 @@ use crate::MizCmd;
 use anyhow::{anyhow, bail, Context, Result};
 use compact_str::{format_compact, CompactStringExt};
 use dcso3::{
-    azumith2d, coalition::Side, controller::{MissionPoint, PointType}, country::Country, env::miz::{Group, Miz, Property, TriggerZoneTyp}, normal2, LuaVec2, Quad2, Sequence, String, Vector2
+    azumith2d,
+    coalition::Side,
+    controller::{MissionPoint, PointType},
+    country::Country,
+    env::miz::{Group, Miz, Property, TriggerZoneTyp},
+    normal2, LuaVec2, Quad2, Sequence, String, Vector2,
 };
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value};
 use std::{
-    collections::HashMap, fs::{self, File}, io::{self, BufWriter}, ops::Deref, path::{Path, PathBuf}, str::FromStr
+    collections::HashMap,
+    fs::{self, File},
+    io::{self, BufWriter},
+    ops::Deref,
+    path::{Path, PathBuf},
+    str::FromStr,
 };
 use zip::{read::ZipArchive, write::FileOptions, ZipWriter};
 
@@ -366,6 +376,7 @@ impl SlotGrid {
         } else {
             bail!("the area is too thin")
         };
+        let p0 = p0 + row * 10.;
         Ok(Self {
             quad,
             cr: p0,
@@ -408,8 +419,8 @@ enum SlotType {
 }
 
 struct VehicleTemplates {
-    plane_slots: HashMap<String, Group<'static>>,
-    helicopter_slots: HashMap<String, Group<'static>>,
+    plane_slots: HashMap<Side, HashMap<String, Group<'static>>>,
+    helicopter_slots: HashMap<Side, HashMap<String, Group<'static>>>,
     payload: HashMap<String, Table<'static>>,
     prop_aircraft: HashMap<String, Table<'static>>,
     radio: HashMap<String, Table<'static>>,
@@ -418,15 +429,15 @@ struct VehicleTemplates {
 
 impl VehicleTemplates {
     fn new(wep: &LoadedMiz) -> Result<Self> {
-        let mut plane_slots: HashMap<String, Group> = HashMap::new();
-        let mut helicopter_slots: HashMap<String, Group> = HashMap::new();
+        let mut plane_slots: HashMap<Side, HashMap<String, Group>> = HashMap::new();
+        let mut helicopter_slots: HashMap<Side, HashMap<String, Group>> = HashMap::new();
         let mut payload: HashMap<String, Table> = HashMap::new();
         let mut prop_aircraft: HashMap<String, Table> = HashMap::new();
         let mut radio: HashMap<String, Table> = HashMap::new();
         let mut frequency: HashMap<String, Value> = HashMap::new();
-        for coa in [Side::Blue, Side::Red]
+        for (side, coa) in [Side::Blue, Side::Red]
             .into_iter()
-            .map(|side| wep.mission.coalition(side))
+            .map(|side| (side, wep.mission.coalition(side)))
         {
             let coa = coa?;
             for country in coa.countries()? {
@@ -453,8 +464,8 @@ impl VehicleTemplates {
                         let unit = unit?.1;
                         let unit_type: String = unit.raw_get("type").context("getting units")?;
                         match st {
-                            SlotType::Helicopter => &mut helicopter_slots,
-                            SlotType::Plane => &mut plane_slots,
+                            SlotType::Helicopter => helicopter_slots.entry(side).or_default(),
+                            SlotType::Plane => &mut plane_slots.entry(side).or_default(),
                         }
                         .insert(unit_type.clone(), group.clone());
                         info!("adding payload template: {unit_type}");
@@ -512,12 +523,15 @@ impl VehicleTemplates {
                 let helicopters = country.helicopters()?;
                 let planes = country.planes()?;
                 for (vehicle, n) in slots {
-                    let (seq, tmpl) = match self.plane_slots.get(vehicle) {
+                    let (seq, tmpl) = match self.plane_slots.get(side).and_then(|s| s.get(vehicle))
+                    {
                         Some(t) => (&planes, t),
-                        None => match self.helicopter_slots.get(vehicle) {
-                            Some(t) => (&helicopters, t),
-                            None => bail!("missing required slot template {vehicle}"),
-                        },
+                        None => {
+                            match self.helicopter_slots.get(side).and_then(|s| s.get(vehicle)) {
+                                Some(t) => (&helicopters, t),
+                                None => bail!("missing required slot template {vehicle}"),
+                            }
+                        }
                     };
                     for _ in 0..*n {
                         let tmpl = tmpl.deep_clone(lua)?;

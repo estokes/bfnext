@@ -19,7 +19,14 @@ use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
-    backtrace::Backtrace, borrow::Borrow, collections::hash_map::Entry, f64, fmt::Debug, marker::PhantomData, ops::{Add, AddAssign, Deref, DerefMut, Sub}, panic::{self, AssertUnwindSafe}
+    backtrace::Backtrace,
+    borrow::Borrow,
+    collections::hash_map::Entry,
+    f64,
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Add, AddAssign, Deref, DerefMut, Sub},
+    panic::{self, AssertUnwindSafe},
 };
 
 pub mod airbase;
@@ -205,6 +212,27 @@ impl Quad2 {
         check_edge!(self.p2, self.p3);
         check_edge!(self.p3, self.p0);
         intersections % 2 == 1
+    }
+
+    pub fn longest_edge(&self) -> (Vector2, Vector2, f64) {
+        [
+            (self.p0.0, self.p1.0),
+            (self.p1.0, self.p2.0),
+            (self.p2.0, self.p3.0),
+            (self.p3.0, self.p0.0),
+        ]
+        .into_iter()
+        .fold(
+            (Vector2::default(), Vector2::default(), 0.),
+            |x @ (_, _, d), (v0, v1)| {
+                let d2 = na::distance_squared(&v0.into(), &v1.into());
+                if d2 > d {
+                    (v0, v1, d2)
+                } else {
+                    x
+                }
+            },
+        )
     }
 }
 
@@ -1183,6 +1211,16 @@ impl<'lua, T: FromLua<'lua> + 'lua> Sequence<'lua, T> {
         Ok(self.t.for_each(|_: Value, v: Value| {
             f(T::from_lua(v, &self.lua).map_err(anyhow::Error::from)).map_err(lua_err)
         })?)
+    }
+}
+
+impl<'lua, T: FromLua<'lua>  + IntoLua<'lua> + 'lua> Sequence<'lua, T> {
+    pub fn push(&self, t: T) -> Result<()> {
+        Ok(self.t.push(t)?)
+    }
+
+    pub fn pop(&self) -> Result<T> {
+        Ok(self.t.pop()?)
     }
 }
 

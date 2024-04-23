@@ -6,7 +6,7 @@ use std::path::PathBuf;
 mod mission_edit;
 
 #[derive(Args, Clone, Debug, Serialize)]
-struct Miz {
+struct MizCmd {
     /// the final miz file to output
     #[clap(long)]
     output: PathBuf,
@@ -30,7 +30,7 @@ struct Miz {
 
 #[derive(Subcommand, Clone, Debug, Serialize)]
 enum Tools {
-    Miz(Miz),
+    Miz(MizCmd),
 }
 
 #[derive(Parser)]

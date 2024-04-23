@@ -61,6 +61,22 @@ string_enum!(Skill, u8, [
     High => "High"
 ]);
 
+#[derive(Debug, Clone)]
+pub struct Property {
+    pub key: String,
+    pub value: String
+}
+
+impl<'lua> FromLua<'lua> for Property {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        let tbl = LuaTable::from_lua(value, lua)?;
+        Ok(Self {
+            key: tbl.raw_get("key")?,
+            value: tbl.raw_get("value")?
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum TriggerZoneTyp {
     Circle { radius: f64 },
@@ -99,6 +115,10 @@ impl<'lua> TriggerZone<'lua> {
 
     pub fn id(&self) -> Result<TriggerZoneId> {
         Ok(self.raw_get("zoneId")?)
+    }
+
+    pub fn properties(&self) -> Result<Sequence<'lua, Property>> {
+        Ok(self.raw_get("properties")?)
     }
 }
 

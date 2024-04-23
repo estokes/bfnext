@@ -16,20 +16,12 @@ use crate::MizCmd;
 use anyhow::{anyhow, bail, Context, Result};
 use compact_str::{format_compact, CompactStringExt};
 use dcso3::{
-    coalition::Side,
-    controller::{MissionPoint, PointType},
-    country::Country,
-    env::miz::{Group, Miz, TriggerZoneTyp},
-    normal2, LuaVec2, Quad2, String, Vector2,
+    azumith2d, coalition::Side, controller::{MissionPoint, PointType}, country::Country, env::miz::{Group, Miz, Property, TriggerZoneTyp}, normal2, LuaVec2, Quad2, Sequence, String, Vector2
 };
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value};
 use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::{self, BufWriter},
-    path::{Path, PathBuf},
-    str::FromStr,
+    collections::HashMap, fs::{self, File}, io::{self, BufWriter}, ops::Deref, path::{Path, PathBuf}, str::FromStr
 };
 use zip::{read::ZipArchive, write::FileOptions, ZipWriter};
 
@@ -313,57 +305,44 @@ fn increment_key(map: &mut HashMap<String, isize>, key: &str) -> isize {
 
 struct SlotSpec(HashMap<Side, HashMap<String, usize>>);
 
-impl FromStr for SlotSpec {
-    type Err = anyhow::Error;
+impl Deref for SlotSpec {
+    type Target = HashMap<Side, HashMap<String, usize>>;
 
-    fn from_str(mut s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl SlotSpec {
+    fn new(props: Sequence<Property>) -> Result<Self> {
         let mut spec: HashMap<Side, HashMap<String, usize>> = HashMap::default();
-        while s.len() > 0 {
-            let side = match s.strip_prefix("B") {
-                Some(bs) => {
-                    s = bs;
-                    Side::Blue
-                }
-                None => match s.strip_prefix("R") {
-                    None => bail!("invalid spec expected R or B {s}"),
-                    Some(rs) => {
-                        s = rs;
-                        Side::Red
+        let mut side = None;
+        for prop in props {
+            let prop = prop?;
+            match Side::from_str(&prop.key) {
+                Ok(s) => side = Some(s),
+                Err(_) => match side {
+                    None => bail!("expected Blue or Red before airframe declarations"),
+                    Some(side) => {
+                        *spec.entry(side).or_default().entry(prop.key).or_default() +=
+                            prop.value.parse::<usize>()?
                     }
                 },
-            };
-            let slots = match s.find(";") {
-                None => bail!("slot spec must end in ;"),
-                Some(i) => {
-                    let slots = &s[0..i];
-                    if s.len() > i {
-                        s = &s[i + 1..];
-                    } else {
-                        s = ""
-                    }
-                    slots
-                }
-            };
-            let by_side = spec.entry(side).or_default();
-            for item in slots.split(",") {
-                let (vehicle, n) = match item.split_once("*") {
-                    None => (item, 1),
-                    Some((vehicle, n)) => (vehicle, n.parse::<usize>()?),
-                };
-                *by_side.entry(String::from(vehicle)).or_default() += n;
             }
         }
-        Ok(SlotSpec(spec))
+        Ok(Self(spec))
     }
 }
 
 trait PosGenerator {
     fn next(&mut self) -> Result<Vector2>;
+    fn azumith(&self) -> f64;
 }
 
 struct SlotGrid {
     quad: Quad2,
     cr: Vector2,
+    row_az: f64,
     row: Vector2,
     column: Vector2,
     current: Vector2,
@@ -390,6 +369,7 @@ impl SlotGrid {
         Ok(Self {
             quad,
             cr: p0,
+            row_az: azumith2d(row),
             row,
             column,
             current: p0,
@@ -414,6 +394,10 @@ impl PosGenerator for SlotGrid {
                 bail!("zone is full")
             }
         }
+    }
+
+    fn azumith(&self) -> f64 {
+        self.row_az
     }
 }
 
@@ -506,70 +490,70 @@ impl VehicleTemplates {
         let mut next_gid = idx.max_gid().next();
         for zone in base.mission.triggers()? {
             let zone = zone?;
-            let name = zone.name()?;
-            if let Some(s) = name.strip_prefix("TS") {
-                let spec: SlotSpec = s.parse()?;
+            if !zone.name()?.starts_with("TS") {
+                continue;
+            }
+            for (side, slots) in &*SlotSpec::new(zone.properties()?)? {
                 let mut posgen: Box<dyn PosGenerator> = match zone.typ()? {
                     TriggerZoneTyp::Circle { radius: _ } => {
                         unimplemented!()
                     }
                     TriggerZoneTyp::Quad(quad) => Box::new(SlotGrid::new(quad)?),
                 };
-                for (side, slots) in &spec.0 {
-                    let coa = base.mission.coalition(*side)?;
-                    let cname = match side {
-                        Side::Blue => Country::CJTF_BLUE,
-                        Side::Red => Country::CJTF_RED,
-                        Side::Neutral => unreachable!(),
+                let coa = base.mission.coalition(*side)?;
+                let cname = match side {
+                    Side::Blue => Country::CJTF_BLUE,
+                    Side::Red => Country::CJTF_RED,
+                    Side::Neutral => unreachable!(),
+                };
+                let country = coa
+                    .country(cname)?
+                    .ok_or_else(|| anyhow!("you must have CJTF_BLUE and CJTF_RED in your miz"))?;
+                let helicopters = country.helicopters()?;
+                let planes = country.planes()?;
+                for (vehicle, n) in slots {
+                    let (seq, tmpl) = match self.plane_slots.get(vehicle) {
+                        Some(t) => (&planes, t),
+                        None => match self.helicopter_slots.get(vehicle) {
+                            Some(t) => (&helicopters, t),
+                            None => bail!("missing required slot template {vehicle}"),
+                        },
                     };
-                    let country = coa.country(cname)?.ok_or_else(|| {
-                        anyhow!("you must have CJTF_BLUE and CJTF_RED in your miz")
-                    })?;
-                    let helicopters = country.helicopters()?;
-                    let planes = country.planes()?;
-                    for (vehicle, n) in slots {
-                        let (seq, tmpl) = match self.plane_slots.get(vehicle) {
-                            Some(t) => (&planes, t),
-                            None => match self.helicopter_slots.get(vehicle) {
-                                Some(t) => (&helicopters, t),
-                                None => bail!("unknown slot template {vehicle}"),
-                            },
-                        };
-                        for _ in 0..*n { 
-                            let tmpl = tmpl.deep_clone(lua)?;
-                            let pos = posgen.next()?;
-                            let route = tmpl.route()?;
-                            let mut has_ground_start = false;
-                            route.set_points(
-                                route
-                                    .points()?
-                                    .into_iter()
-                                    .map(|p| {
-                                        let mut p = p?;
-                                        match p.typ {
-                                            PointType::TakeOffGround | PointType::TakeOffGroundHot => {
-                                                has_ground_start = true;
-                                                p.pos = LuaVec2(pos);
-                                            }
-                                            _ => (),
+                    for _ in 0..*n {
+                        let tmpl = tmpl.deep_clone(lua)?;
+                        let pos = posgen.next()?;
+                        let route = tmpl.route()?;
+                        let mut has_ground_start = false;
+                        route.set_points(
+                            route
+                                .points()?
+                                .into_iter()
+                                .map(|p| {
+                                    let mut p = p?;
+                                    match p.typ {
+                                        PointType::TakeOffGround | PointType::TakeOffGroundHot => {
+                                            has_ground_start = true;
+                                            p.pos = LuaVec2(pos);
                                         }
-                                        Ok(p)
-                                    })
-                                    .collect::<Result<Vec<MissionPoint>>>()?,
-                            )?;
-                            if !has_ground_start {
-                                bail!("slot template aircraft must be ground starts")
-                            }
-                            tmpl.set_route(route)?;
-                            tmpl.set_id(next_gid)?;
-                            for u in tmpl.units()? {
-                                let u = u?;
-                                u.set_id(next_uid)?;
-                                next_uid = next_uid.next();
-                            }
-                            next_gid = next_gid.next();
-                            seq.push(tmpl)?;
+                                        _ => (),
+                                    }
+                                    Ok(p)
+                                })
+                                .collect::<Result<Vec<MissionPoint>>>()?,
+                        )?;
+                        if !has_ground_start {
+                            bail!("slot template aircraft must be ground starts")
                         }
+                        tmpl.set_route(route)?;
+                        tmpl.set_id(next_gid)?;
+                        for u in tmpl.units()? {
+                            let u = u?;
+                            u.set_id(next_uid)?;
+                            u.set_heading(posgen.azumith())?;
+                            next_uid = next_uid.next();
+                        }
+                        next_gid = next_gid.next();
+                        seq.push(tmpl)?;
                     }
                 }
             }

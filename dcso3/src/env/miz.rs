@@ -12,18 +12,45 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use crate::{
-    as_tbl, coalition::Side, controller::MissionPoint, country, is_hooks_env, net::SlotId, string_enum, wrapped_prim, wrapped_table, Color, DcsTableExt, LuaEnv, LuaVec2, Path, Quad2, Sequence, String
+    as_tbl, coalition::Side, controller::MissionPoint, country, is_hooks_env, net::SlotId,
+    string_enum, wrapped_prim, wrapped_table, Color, DcsTableExt, LuaEnv, LuaVec2, Path, Quad2,
+    Sequence, String,
 };
 use anyhow::{bail, Result};
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::hash_map::Entry, ops::Deref};
+use std::{cmp::max, collections::hash_map::Entry, ops::Deref};
 
 wrapped_table!(Weather, None);
 
 wrapped_prim!(UnitId, i64, Hash, Copy);
+
+impl Default for UnitId {
+    fn default() -> Self {
+        UnitId(0)
+    }
+}
+
+impl UnitId {
+    pub fn next(self) -> Self {
+        UnitId(self.0 + 1)
+    }
+}
+
 wrapped_prim!(GroupId, i64, Hash, Copy);
+
+impl Default for GroupId {
+    fn default() -> Self {
+        GroupId(0)
+    }
+}
+
+impl GroupId {
+    pub fn next(self) -> Self {
+        GroupId(self.0 + 1)
+    }
+}
 
 string_enum!(Skill, u8, [
     Client => "Client",
@@ -100,6 +127,10 @@ impl<'lua> Unit<'lua> {
 
     pub fn id(&self) -> Result<UnitId> {
         Ok(self.raw_get("unitId")?)
+    }
+
+    pub fn set_id(&self, id: UnitId) -> Result<()> {
+        Ok(self.raw_set("unitId", id)?)
     }
 
     pub fn slot(&self) -> Result<SlotId> {
@@ -188,6 +219,10 @@ impl<'lua> Group<'lua> {
         Ok(self.raw_get("groupId")?)
     }
 
+    pub fn set_id(&self, id: GroupId) -> Result<()> {
+        Ok(self.raw_set("groupId", id)?)
+    }
+
     pub fn tasks(&self) -> Result<Sequence<'lua, Task>> {
         Ok(self.raw_get("tasks")?)
     }
@@ -274,6 +309,16 @@ impl<'lua> Coalition<'lua> {
         Ok(self.t.raw_get("country")?)
     }
 
+    pub fn country(&self, country: country::Country) -> Result<Option<Country<'lua>>> {
+        for c in self.countries()? {
+            let c = c?;
+            if c.id()? == country {
+                return Ok(Some(c));
+            }
+        }
+        return Ok(None);
+    }
+
     fn index(&self, side: Side, base: Path) -> Result<CoalitionIndex> {
         let base = base.append(["country"]);
         let mut idx = CoalitionIndex::default();
@@ -287,6 +332,7 @@ impl<'lua> Coalition<'lua> {
                         let group = group?;
                         let name = group.name()?;
                         let gid = group.id()?;
+                        idx.max_gid = GroupId(max(idx.max_gid.0, gid.0));
                         let base = base.append([$name, "group"]).append([i + 1]);
                         match idx.groups.entry(gid) {
                             Entry::Occupied(_) => bail!("duplicate group id {:?}", gid),
@@ -312,6 +358,7 @@ impl<'lua> Coalition<'lua> {
                             let base = base.append(["units"]).append([i + 1]);
                             let name = unit.name()?;
                             let uid = unit.id()?;
+                            idx.max_uid = UnitId(max(idx.max_uid.0, uid.0));
                             match idx.units.entry(uid) {
                                 Entry::Occupied(_) => bail!("duplicate unit id {:?}", uid),
                                 Entry::Vacant(e) => e.insert(IndexedUnit {
@@ -346,7 +393,7 @@ impl<'lua> Coalition<'lua> {
 pub struct Role {
     pub neutrals: u8,
     pub red: u8,
-    pub blue: u8
+    pub blue: u8,
 }
 
 impl<'lua> FromLua<'lua> for Role {
@@ -355,7 +402,7 @@ impl<'lua> FromLua<'lua> for Role {
         Ok(Self {
             neutrals: tbl.raw_get("neutrals")?,
             red: tbl.raw_get("red")?,
-            blue: tbl.raw_get("blue")?
+            blue: tbl.raw_get("blue")?,
         })
     }
 }
@@ -405,6 +452,8 @@ struct IndexedUnit {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct CoalitionIndex {
+    max_uid: UnitId,
+    max_gid: GroupId,
     units: FxHashMap<UnitId, IndexedUnit>,
     units_by_name: FxHashMap<String, UnitId>,
     groups: FxHashMap<GroupId, IndexedGroup>,
@@ -421,6 +470,24 @@ pub struct CoalitionIndex {
 pub struct MizIndex {
     by_side: FxHashMap<Side, CoalitionIndex>,
     triggers: FxHashMap<String, Path>,
+}
+
+impl MizIndex {
+    pub fn max_uid(&self) -> UnitId {
+        self.by_side
+            .iter()
+            .fold(UnitId::default(), |muid, (_, cidx)| {
+                UnitId(max(muid.0, cidx.max_uid.0))
+            })
+    }
+
+    pub fn max_gid(&self) -> GroupId {
+        self.by_side
+            .iter()
+            .fold(GroupId::default(), |mgid, (_, cidx)| {
+                GroupId(max(mgid.0, cidx.max_gid.0))
+            })
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -543,7 +610,11 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_group_by_unit(&self, idx: &MizIndex, id: &UnitId) -> Result<Option<GroupInfo<'lua>>> {
+    pub fn get_group_by_unit(
+        &self,
+        idx: &MizIndex,
+        id: &UnitId,
+    ) -> Result<Option<GroupInfo<'lua>>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| idx.groups_by_unit.get(id))
@@ -551,7 +622,11 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_group_by_unit_name(&self, idx: &MizIndex, name: &str) -> Result<Option<GroupInfo<'lua>>> {
+    pub fn get_group_by_unit_name(
+        &self,
+        idx: &MizIndex,
+        name: &str,
+    ) -> Result<Option<GroupInfo<'lua>>> {
         idx.by_side
             .iter()
             .find_map(|(_, idx)| {
@@ -563,7 +638,11 @@ impl<'lua> Miz<'lua> {
             .transpose()
     }
 
-    pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> Result<Option<TriggerZone<'lua>>> {
+    pub fn get_trigger_zone(
+        &self,
+        idx: &MizIndex,
+        name: &str,
+    ) -> Result<Option<TriggerZone<'lua>>> {
         idx.triggers
             .get(name)
             .map(|path| self.raw_get_path(path))

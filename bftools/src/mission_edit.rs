@@ -12,8 +12,16 @@
 //edit mission table (crack open templates 1 at a time)
 
 //repack miz
-use crate::Miz;
-use anyhow::{bail, Context, Result};
+use crate::MizCmd;
+use anyhow::{anyhow, bail, Context, Result};
+use compact_str::{format_compact, CompactStringExt};
+use dcso3::{
+    coalition::Side,
+    controller::{MissionPoint, PointType},
+    country::Country,
+    env::miz::{Group, Miz, TriggerZoneTyp},
+    normal2, LuaVec2, Quad2, String, Vector2,
+};
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value};
 use std::{
@@ -21,6 +29,7 @@ use std::{
     fs::{self, File},
     io::{self, BufWriter},
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use zip::{read::ZipArchive, write::FileOptions, ZipWriter};
 
@@ -77,7 +86,7 @@ impl TriggerZone {
                 bail!("trigger name {name} too short")
             }
             let t = TriggerZone {
-                objective_name: name[4..].to_string(),
+                objective_name: String::from(&name[4..]),
                 x,
                 y,
                 radius,
@@ -121,15 +130,16 @@ impl UnpackedMiz {
         for i in 0..archive.len() {
             let mut file = archive
                 .by_index(i)
-                .with_context(|| format!("getting file {i}"))?;
+                .with_context(|| format_compact!("getting file {i}"))?;
             let dump_path = root.join(file.name());
             let dump_root = dump_path.parent().unwrap();
-            fs::create_dir_all(dump_root).with_context(|| format!("creating {dump_root:?}"))?;
-            let mut extracted_file =
-                File::create(&dump_path).with_context(|| format!("creating {dump_path:?}"))?;
+            fs::create_dir_all(dump_root)
+                .with_context(|| format_compact!("creating {dump_root:?}"))?;
+            let mut extracted_file = File::create(&dump_path)
+                .with_context(|| format_compact!("creating {dump_path:?}"))?;
             io::copy(&mut file, &mut extracted_file)
-                .with_context(|| format!("copying {i} to {dump_path:?}"))?;
-            files.insert(file.name().to_string(), dump_path);
+                .with_context(|| format_compact!("copying {i} to {dump_path:?}"))?;
+            files.insert(String::from(file.name()), dump_path);
         }
         Ok(Self { root, files })
     }
@@ -137,18 +147,18 @@ impl UnpackedMiz {
     fn pack(&self, destination_file: &Path) -> Result<()> {
         info!("repacking current miz to: {destination_file:?}");
         let file = File::create(&destination_file)
-            .with_context(|| format!("creating {:?}", destination_file))?;
+            .with_context(|| format_compact!("creating {:?}", destination_file))?;
         let zip_file = BufWriter::new(file);
         let mut zip_writer = ZipWriter::new(zip_file);
         for (_, file_path) in &self.files {
             if file_path.is_dir() {
                 continue;
             }
-            let mut file =
-                File::open(file_path).with_context(|| format!("opening file {:?}", file_path))?;
-            let relative_path = file_path
-                .strip_prefix(&self.root)
-                .with_context(|| format!("stripping {:?} from file {file_path:?}", self.root))?;
+            let mut file = File::open(file_path)
+                .with_context(|| format_compact!("opening file {:?}", file_path))?;
+            let relative_path = file_path.strip_prefix(&self.root).with_context(|| {
+                format_compact!("stripping {:?} from file {file_path:?}", self.root)
+            })?;
             zip_writer
                 .start_file(relative_path.to_string_lossy(), FileOptions::default())
                 .context("starting zip file")?;
@@ -162,11 +172,11 @@ impl UnpackedMiz {
 
 fn basic_serialize(value: &Value<'_>) -> String {
     match value {
-        Value::Integer(i) => i.to_string(),
-        Value::Number(n) => n.to_string(),
-        Value::Boolean(b) => b.to_string(),
-        Value::String(s) => format!("{:?}", s.to_str().unwrap()),
-        _ => "".to_string(),
+        Value::Integer(i) => String::from(format_compact!("{i}")),
+        Value::Number(n) => String::from(format_compact!("{n}")),
+        Value::Boolean(b) => String::from(format_compact!("{b}")),
+        Value::String(s) => String::from(format_compact!("{:?}", s.to_str().unwrap())),
+        _ => String::from(""),
     }
 }
 
@@ -183,26 +193,26 @@ fn serialize_with_cycles<'lua>(
         || value.type_name() == "boolean"
         || value.type_name() == "table"
     {
-        serialized.push(format!("{} = ", name));
-
+        serialized.push(String::from(format_compact!("{} = ", name)));
         if value.type_name() == "number"
             || value.type_name() == "integer"
             || value.type_name() == "string"
             || value.type_name() == "boolean"
         {
-            serialized.push(format!("{}\n", key));
+            serialized.push(String::from(format_compact!("{}\n", key)));
         } else {
             if saved.contains_key(key) {
-                serialized.push(format!("{}\n", saved[key]));
+                serialized.push(String::from(format_compact!("{}\n", saved[key])));
             } else {
                 saved.insert(name.clone(), basic_serialize(&value));
-                serialized.push("{}\n".to_string());
+                serialized.push(String::from("{}\n"));
 
                 match value {
                     Value::Table(t) => {
                         for r in t.pairs::<Value, Value>() {
                             let (k, v) = r.unwrap();
-                            let field_name = format!("{}[{}]", name, basic_serialize(&k));
+                            let field_name =
+                                String::from(format_compact!("{}[{}]", name, basic_serialize(&k)));
                             serialized.push(serialize_with_cycles(field_name, v, saved));
                         }
                     }
@@ -210,16 +220,15 @@ fn serialize_with_cycles<'lua>(
                 }
             }
         }
-
-        serialized.concat()
+        String::from(serialized.concat_compact())
     } else {
-        "".to_string()
+        String::from("")
     }
 }
 
 struct LoadedMiz {
     miz: UnpackedMiz,
-    mission: Table<'static>,
+    mission: Miz<'static>,
     #[allow(dead_code)]
     options: Table<'static>,
     #[allow(dead_code)]
@@ -228,33 +237,33 @@ struct LoadedMiz {
 
 impl LoadedMiz {
     fn new(lua: &'static Lua, path: &Path) -> Result<Self> {
-        let miz = UnpackedMiz::new(path).with_context(|| format!("unpacking {path:?}"))?;
+        let miz = UnpackedMiz::new(path).with_context(|| format_compact!("unpacking {path:?}"))?;
         let mut mission = lua.create_table()?;
         let mut options = lua.create_table()?;
         let mut warehouses = lua.create_table()?;
         for (file_name, file) in &miz.files {
-            if file_name != "mission" && file_name != "warehouses" && file_name != "options" {
+            if **file_name != "mission" && **file_name != "warehouses" && **file_name != "options" {
                 continue;
             }
             info!("processing {file_name}");
-            let file_content =
-                fs::read_to_string(file).with_context(|| format!("error reading file {file:?}"))?;
+            let file_content = fs::read_to_string(file)
+                .with_context(|| format_compact!("error reading file {file:?}"))?;
             lua.load(&file_content)
                 .exec()
-                .with_context(|| format!("loading {file_name} into lua"))?;
-            if file_name == "mission" {
+                .with_context(|| format_compact!("loading {file_name} into lua"))?;
+            if **file_name == "mission" {
                 mission = lua
                     .globals()
                     .raw_get("mission")
                     .context("extracting mission")?;
             }
-            if file_name == "warehouses" {
+            if **file_name == "warehouses" {
                 warehouses = lua
                     .globals()
                     .raw_get("warehouses")
                     .context("extracting warehouses")?;
             }
-            if file_name == "options" {
+            if **file_name == "options" {
                 options = lua
                     .globals()
                     .raw_get("options")
@@ -272,7 +281,7 @@ impl LoadedMiz {
         }
         Ok(Self {
             miz,
-            mission,
+            mission: Miz::from_lua(Value::Table(mission), lua)?,
             options,
             warehouses,
         })
@@ -297,13 +306,126 @@ fn vehicle(
 }
 
 fn increment_key(map: &mut HashMap<String, isize>, key: &str) -> isize {
-    let n = map.entry(key.to_string()).or_default();
+    let n = map.entry(String::from(key)).or_default();
     *n += 1;
     *n
 }
 
+struct SlotSpec(HashMap<Side, HashMap<String, usize>>);
+
+impl FromStr for SlotSpec {
+    type Err = anyhow::Error;
+
+    fn from_str(mut s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        let mut spec: HashMap<Side, HashMap<String, usize>> = HashMap::default();
+        while s.len() > 0 {
+            let side = match s.strip_prefix("B") {
+                Some(bs) => {
+                    s = bs;
+                    Side::Blue
+                }
+                None => match s.strip_prefix("R") {
+                    None => bail!("invalid spec expected R or B {s}"),
+                    Some(rs) => {
+                        s = rs;
+                        Side::Red
+                    }
+                },
+            };
+            let slots = match s.find(";") {
+                None => bail!("slot spec must end in ;"),
+                Some(i) => {
+                    let slots = &s[0..i];
+                    if s.len() > i {
+                        s = &s[i + 1..];
+                    } else {
+                        s = ""
+                    }
+                    slots
+                }
+            };
+            let by_side = spec.entry(side).or_default();
+            for item in slots.split(",") {
+                let (vehicle, n) = match item.split_once("*") {
+                    None => (item, 1),
+                    Some((vehicle, n)) => (vehicle, n.parse::<usize>()?),
+                };
+                *by_side.entry(String::from(vehicle)).or_default() += n;
+            }
+        }
+        Ok(SlotSpec(spec))
+    }
+}
+
+trait PosGenerator {
+    fn next(&mut self) -> Result<Vector2>;
+}
+
+struct SlotGrid {
+    quad: Quad2,
+    cr: Vector2,
+    row: Vector2,
+    column: Vector2,
+    current: Vector2,
+}
+
+impl SlotGrid {
+    fn new(quad: Quad2) -> Result<SlotGrid> {
+        let (p0, p1, _) = quad.longest_edge();
+        let column = (p0 - p1).normalize();
+        let row = normal2(column).normalize();
+        // unit vectors pointing along the row and column axis of the grid that starts
+        // at p0 and ends at p1
+        let (row, column) = if quad.contains(LuaVec2(p0 + column + row)) {
+            (row, column)
+        } else if quad.contains(LuaVec2(p0 + column - row)) {
+            (-row, column)
+        } else if quad.contains(LuaVec2(p0 - column + row)) {
+            (row, -column)
+        } else if quad.contains(LuaVec2(p0 - column - row)) {
+            (-row, -column)
+        } else {
+            bail!("the area is too thin")
+        };
+        Ok(Self {
+            quad,
+            cr: p0,
+            row,
+            column,
+            current: p0,
+        })
+    }
+}
+
+impl PosGenerator for SlotGrid {
+    fn next(&mut self) -> Result<Vector2> {
+        let p = self.current + self.column * 25.;
+        if self.quad.contains(LuaVec2(p)) {
+            self.current = p;
+            Ok(p)
+        } else {
+            let cr = self.cr + self.row * 25.;
+            let p = cr + self.column * 25.;
+            if self.quad.contains(LuaVec2(p)) {
+                self.cr = cr;
+                self.current = p;
+                Ok(p)
+            } else {
+                bail!("zone is full")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum SlotType {
+    Plane,
+    Helicopter,
+}
+
 struct VehicleTemplates {
-    slot: HashMap<String, Table<'static>>,
+    plane_slots: HashMap<String, Group<'static>>,
+    helicopter_slots: HashMap<String, Group<'static>>,
     payload: HashMap<String, Table<'static>>,
     prop_aircraft: HashMap<String, Table<'static>>,
     radio: HashMap<String, Table<'static>>,
@@ -312,26 +434,31 @@ struct VehicleTemplates {
 
 impl VehicleTemplates {
     fn new(wep: &LoadedMiz) -> Result<Self> {
-        let mut slot: HashMap<String, Table> = HashMap::new();
+        let mut plane_slots: HashMap<String, Group> = HashMap::new();
+        let mut helicopter_slots: HashMap<String, Group> = HashMap::new();
         let mut payload: HashMap<String, Table> = HashMap::new();
         let mut prop_aircraft: HashMap<String, Table> = HashMap::new();
         let mut radio: HashMap<String, Table> = HashMap::new();
         let mut frequency: HashMap<String, Value> = HashMap::new();
-        for coa in wep
-            .mission
-            .raw_get::<_, Table>("coalition")?
-            .pairs::<Value, Table>()
+        for coa in [Side::Blue, Side::Red]
+            .into_iter()
+            .map(|side| wep.mission.coalition(side))
         {
-            let coa = coa?.1;
-            for country in coa
-                .raw_get::<_, Table>("country")
-                .context("getting countries")?
-                .pairs::<Value, Table>()
-            {
-                let country = country?.1;
-                for group in vehicle(&country, "plane")
+            let coa = coa?;
+            for country in coa.countries()? {
+                let country = country?;
+                for (st, group) in country
+                    .planes()
                     .context("getting planes")?
-                    .chain(vehicle(&country, "helicopter").context("getting helicopters")?)
+                    .into_iter()
+                    .map(|p| (SlotType::Plane, p))
+                    .chain(
+                        country
+                            .helicopters()
+                            .context("getting helicopters")?
+                            .into_iter()
+                            .map(|p| (SlotType::Helicopter, p)),
+                    )
                 {
                     let group = group?;
                     for unit in group
@@ -341,7 +468,11 @@ impl VehicleTemplates {
                     {
                         let unit = unit?.1;
                         let unit_type: String = unit.raw_get("type").context("getting units")?;
-                        slot.insert(unit_type.clone(), group.clone());
+                        match st {
+                            SlotType::Helicopter => &mut helicopter_slots,
+                            SlotType::Plane => &mut plane_slots,
+                        }
+                        .insert(unit_type.clone(), group.clone());
                         info!("adding payload template: {unit_type}");
                         if let Ok(w) = unit.raw_get("payload") {
                             payload.insert(unit_type.clone(), w);
@@ -360,7 +491,8 @@ impl VehicleTemplates {
             }
         }
         Ok(Self {
-            slot,
+            plane_slots,
+            helicopter_slots,
             payload,
             prop_aircraft,
             radio,
@@ -368,13 +500,81 @@ impl VehicleTemplates {
         })
     }
 
-    fn place_slots(
-        &self,
-        lua: &Lua,
-        slot_zones: &mut Vec<TriggerZone>,
-        base: &mut LoadedMiz,
-    ) -> Result<()> {
-        unimplemented!()
+    fn generate_slots(&self, lua: &Lua, base: &mut LoadedMiz) -> Result<()> {
+        let idx = base.mission.index()?;
+        let mut next_uid = idx.max_uid().next();
+        let mut next_gid = idx.max_gid().next();
+        for zone in base.mission.triggers()? {
+            let zone = zone?;
+            let name = zone.name()?;
+            if let Some(s) = name.strip_prefix("TS") {
+                let spec: SlotSpec = s.parse()?;
+                let mut posgen: Box<dyn PosGenerator> = match zone.typ()? {
+                    TriggerZoneTyp::Circle { radius: _ } => {
+                        unimplemented!()
+                    }
+                    TriggerZoneTyp::Quad(quad) => Box::new(SlotGrid::new(quad)?),
+                };
+                for (side, slots) in &spec.0 {
+                    let coa = base.mission.coalition(*side)?;
+                    let cname = match side {
+                        Side::Blue => Country::CJTF_BLUE,
+                        Side::Red => Country::CJTF_RED,
+                        Side::Neutral => unreachable!(),
+                    };
+                    let country = coa.country(cname)?.ok_or_else(|| {
+                        anyhow!("you must have CJTF_BLUE and CJTF_RED in your miz")
+                    })?;
+                    let helicopters = country.helicopters()?;
+                    let planes = country.planes()?;
+                    for (vehicle, n) in slots {
+                        let (seq, tmpl) = match self.plane_slots.get(vehicle) {
+                            Some(t) => (&planes, t),
+                            None => match self.helicopter_slots.get(vehicle) {
+                                Some(t) => (&helicopters, t),
+                                None => bail!("unknown slot template {vehicle}"),
+                            },
+                        };
+                        for _ in 0..*n { 
+                            let tmpl = tmpl.deep_clone(lua)?;
+                            let pos = posgen.next()?;
+                            let route = tmpl.route()?;
+                            let mut has_ground_start = false;
+                            route.set_points(
+                                route
+                                    .points()?
+                                    .into_iter()
+                                    .map(|p| {
+                                        let mut p = p?;
+                                        match p.typ {
+                                            PointType::TakeOffGround | PointType::TakeOffGroundHot => {
+                                                has_ground_start = true;
+                                                p.pos = LuaVec2(pos);
+                                            }
+                                            _ => (),
+                                        }
+                                        Ok(p)
+                                    })
+                                    .collect::<Result<Vec<MissionPoint>>>()?,
+                            )?;
+                            if !has_ground_start {
+                                bail!("slot template aircraft must be ground starts")
+                            }
+                            tmpl.set_route(route)?;
+                            tmpl.set_id(next_gid)?;
+                            for u in tmpl.units()? {
+                                let u = u?;
+                                u.set_id(next_uid)?;
+                                next_uid = next_uid.next();
+                            }
+                            next_gid = next_gid.next();
+                            seq.push(tmpl)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn apply(
@@ -417,16 +617,19 @@ impl VehicleTemplates {
                             None => warn!("no payload table for {unit_type}"),
                         }
                         let stn_string = match self.prop_aircraft.get(&unit_type) {
-                            None => String::new(),
+                            None => String::from(""),
                             Some(tmpl) => {
                                 let tmpl = tmpl.deep_clone(lua)?;
                                 let stn = if tmpl.contains_key("STN_L16")? {
-                                    tmpl.raw_set("STN_L16", format!("{:005o}", stn))?;
-                                    let s = format!(" STN#{:005o}", stn);
+                                    tmpl.raw_set(
+                                        "STN_L16",
+                                        String::from(format_compact!("{:005o}", stn)),
+                                    )?;
+                                    let s = String::from(format_compact!(" STN#{:005o}", stn));
                                     stn += 1;
                                     s
                                 } else {
-                                    String::new()
+                                    String::from("")
                                 };
                                 unit.set("AddPropAircraft", tmpl)?;
                                 stn
@@ -445,10 +648,13 @@ impl VehicleTemplates {
                             if trigger_zone.vec2_in_zone(x, y) {
                                 let count =
                                     increment_key(&mut trigger_zone.spawn_count, &unit_type);
-                                let new_name = format!(
+                                let new_name = String::from(format_compact!(
                                     "{} {} {}{}",
-                                    trigger_zone.objective_name, &unit_type, count, stn_string
-                                );
+                                    trigger_zone.objective_name,
+                                    &unit_type,
+                                    count,
+                                    stn_string
+                                ));
                                 unit.set("name", new_name.clone())?;
                                 group.set("name", new_name)?;
                                 if let Some(cnt) = slots
@@ -491,7 +697,7 @@ struct WarehouseTemplate {
 }
 
 impl WarehouseTemplate {
-    fn new(wht: &LoadedMiz, cfg: &Miz) -> Result<Self> {
+    fn new(wht: &LoadedMiz, cfg: &MizCmd) -> Result<Self> {
         let mut blue_inventory_id = 0;
         let mut red_inventory_id = 0;
         let mut default_id = 0;
@@ -507,14 +713,14 @@ impl WarehouseTemplate {
                     let group = group?;
                     for unit in group.raw_get::<_, Table>("units")?.pairs::<Value, Table>() {
                         let unit = unit?.1;
-                        if unit.raw_get::<_, String>("type")? == "Invisible FARP" {
+                        if *unit.raw_get::<_, String>("type")? == "Invisible FARP" {
                             let name = unit.raw_get::<_, String>("name")?;
                             let id = unit.raw_get::<_, i64>("unitId")?;
-                            if name == "DEFAULT" {
+                            if *name == "DEFAULT" {
                                 default_id = id;
-                            } else if name == cfg.blue_production_template {
+                            } else if *name == cfg.blue_production_template {
                                 blue_inventory_id = id;
-                            } else if name == cfg.red_production_template {
+                            } else if *name == cfg.red_production_template {
                                 red_inventory_id = id;
                             } else {
                                 bail!(
@@ -555,7 +761,7 @@ impl WarehouseTemplate {
         })
     }
 
-    fn apply(&self, lua: &Lua, cfg: &Miz, base: &mut LoadedMiz) -> Result<()> {
+    fn apply(&self, lua: &Lua, cfg: &MizCmd, base: &mut LoadedMiz) -> Result<()> {
         let mut blue_inventory = 0;
         let mut red_inventory = 0;
         let mut whids = vec![];
@@ -575,14 +781,14 @@ impl WarehouseTemplate {
                             let typ: String = unit.raw_get("type")?;
                             let name: String = unit.raw_get("name")?;
                             let id: i64 = unit.raw_get("unitId")?;
-                            if typ == "FARP"
-                                || typ == "SINGLE_HELIPAD"
-                                || typ == "FARP_SINGLE_01"
-                                || typ == "Invisible FARP"
+                            if *typ == "FARP"
+                                || *typ == "SINGLE_HELIPAD"
+                                || *typ == "FARP_SINGLE_01"
+                                || *typ == "Invisible FARP"
                             {
-                                if name == cfg.blue_production_template {
+                                if *name == cfg.blue_production_template {
                                     blue_inventory = id;
-                                } else if name == cfg.red_production_template {
+                                } else if *name == cfg.red_production_template {
                                     red_inventory = id;
                                 } else {
                                     whids.push(id);
@@ -609,12 +815,12 @@ impl WarehouseTemplate {
         for id in airport_ids {
             airports
                 .set(id, self.default.deep_clone(lua)?)
-                .with_context(|| format!("setting airport {id}"))?;
+                .with_context(|| format_compact!("setting airport {id}"))?;
         }
         for id in whids {
             warehouses
                 .set(id, self.default.deep_clone(lua)?)
-                .with_context(|| format!("setting warehouse {id}"))?
+                .with_context(|| format_compact!("setting warehouse {id}"))?
         }
         warehouses
             .set(red_inventory, self.red_inventory.deep_clone(lua)?)
@@ -646,7 +852,7 @@ fn compile_objectives(base: &LoadedMiz) -> Result<Vec<TriggerZone>> {
     Ok(objectives)
 }
 
-pub fn run(cfg: &Miz) -> Result<()> {
+pub fn run(cfg: &MizCmd) -> Result<()> {
     let lua = Box::leak(Box::new(Lua::new()));
     lua.gc_stop();
     let mut base = LoadedMiz::new(lua, &cfg.base).context("loading base mission")?;
@@ -663,14 +869,17 @@ pub fn run(cfg: &Miz) -> Result<()> {
         }
     };
     vehicle_templates
+        .generate_slots(lua, &mut base)
+        .context("generating slots")?;
+    vehicle_templates
         .apply(lua, &mut objectives, &mut base)
         .context("applying vehicle templates")?;
     let s = serialize_with_cycles(
         "mission".into(),
-        Value::Table(base.mission.clone()),
+        Value::Table((&*base.mission).clone()),
         &mut HashMap::new(),
     );
-    fs::write(&base.miz.files["mission"], s).context("writing mission file")?;
+    fs::write(&base.miz.files["mission"], &*s).context("writing mission file")?;
     info!("wrote serialized mission to mission file.");
     if let Some(wht) = warehouse_template {
         wht.apply(lua, &cfg, &mut base)
@@ -680,7 +889,7 @@ pub fn run(cfg: &Miz) -> Result<()> {
             Value::Table(base.warehouses.clone()),
             &mut HashMap::new(),
         );
-        fs::write(&base.miz.files["warehouses"], s).context("writing warehouse file")?;
+        fs::write(&base.miz.files["warehouses"], &*s).context("writing warehouse file")?;
         info!("wrote serialized warehouses to warehouse file.");
     }
     //replace options file

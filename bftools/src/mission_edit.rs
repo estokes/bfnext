@@ -465,7 +465,7 @@ impl VehicleTemplates {
                         let unit_type: String = unit.raw_get("type").context("getting units")?;
                         match st {
                             SlotType::Helicopter => helicopter_slots.entry(side).or_default(),
-                            SlotType::Plane => &mut plane_slots.entry(side).or_default(),
+                            SlotType::Plane => plane_slots.entry(side).or_default(),
                         }
                         .insert(unit_type.clone(), group.clone());
                         info!("adding payload template: {unit_type}");
@@ -560,10 +560,12 @@ impl VehicleTemplates {
                         }
                         tmpl.set_route(route)?;
                         tmpl.set_id(next_gid)?;
+                        tmpl.set_pos(pos)?;
                         for u in tmpl.units()? {
                             let u = u?;
                             u.set_id(next_uid)?;
                             u.set_heading(posgen.azumith())?;
+                            u.set_pos(pos)?;
                             next_uid = next_uid.next();
                         }
                         next_gid = next_gid.next();

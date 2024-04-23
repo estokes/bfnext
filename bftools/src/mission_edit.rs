@@ -20,7 +20,7 @@ use dcso3::{
     coalition::Side,
     controller::{MissionPoint, PointType},
     country::Country,
-    env::miz::{Group, Miz, Property, TriggerZoneTyp},
+    env::miz::{Group, Miz, Property, Skill, TriggerZoneTyp},
     normal2, LuaVec2, Quad2, Sequence, String, Vector2,
 };
 use log::{info, warn};
@@ -497,8 +497,10 @@ impl VehicleTemplates {
 
     fn generate_slots(&self, lua: &Lua, base: &mut LoadedMiz) -> Result<()> {
         let idx = base.mission.index()?;
-        let mut next_uid = idx.max_uid().next();
-        let mut next_gid = idx.max_gid().next();
+        let mut uid = idx.max_uid();
+        let mut gid = idx.max_gid();
+        uid.next();
+        gid.next();
         for zone in base.mission.triggers()? {
             let zone = zone?;
             if !zone.name()?.starts_with("TS") {
@@ -559,16 +561,19 @@ impl VehicleTemplates {
                             bail!("slot template aircraft must be ground starts")
                         }
                         tmpl.set_route(route)?;
-                        tmpl.set_id(next_gid)?;
+                        tmpl.set_id(gid)?;
                         tmpl.set_pos(pos)?;
                         for u in tmpl.units()? {
                             let u = u?;
-                            u.set_id(next_uid)?;
+                            if u.skill()? != Skill::Client {
+                                bail!("slot templates must be set to Client skill level")
+                            }
+                            u.set_id(uid)?;
                             u.set_heading(posgen.azumith())?;
                             u.set_pos(pos)?;
-                            next_uid = next_uid.next();
+                            uid.next();
                         }
-                        next_gid = next_gid.next();
+                        gid.next();
                         seq.push(tmpl)?;
                     }
                 }

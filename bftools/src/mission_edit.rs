@@ -382,10 +382,12 @@ struct SlotRadial {
     i: usize,
     j: usize,
     last_az: f64,
+    name: String,
 }
 
 impl SlotRadial {
     fn new(
+        name: String,
         radius: f64,
         center: Vector2,
         margin: Option<f64>,
@@ -422,6 +424,7 @@ impl SlotRadial {
             i: 0,
             j: 0,
             last_az: PI,
+            name,
         })
     }
 }
@@ -430,7 +433,7 @@ impl PosGenerator for SlotRadial {
     fn next(&mut self) -> Result<Vector2> {
         let (radius, az) = loop {
             match self.slots.get(self.i) {
-                None => bail!("radial zone is full"),
+                None => bail!("radial zone {} is full", self.name),
                 Some((radius, azumiths)) => match azumiths.get(self.j) {
                     Some(az) => {
                         self.j += 1;
@@ -453,6 +456,7 @@ impl PosGenerator for SlotRadial {
 }
 
 struct SlotGrid {
+    name: String,
     quad: Quad2,
     cr: Vector2,
     row_az: f64,
@@ -464,7 +468,7 @@ struct SlotGrid {
 }
 
 impl SlotGrid {
-    fn new(quad: Quad2, margin: Option<f64>, spacing: Option<f64>) -> Result<Self> {
+    fn new(name: String, quad: Quad2, margin: Option<f64>, spacing: Option<f64>) -> Result<Self> {
         let margin = margin.unwrap_or(5.);
         let spacing = spacing.unwrap_or(25.);
         let (p0, p1, _) = quad.longest_edge();
@@ -481,10 +485,11 @@ impl SlotGrid {
         } else if quad.contains(LuaVec2(p0 - column - row)) {
             (-row, -column)
         } else {
-            bail!("the area is too thin")
+            bail!("the area {name} is too thin")
         };
         let p0 = p0 + row * margin + column * margin;
         Ok(Self {
+            name,
             quad,
             cr: p0,
             row_az: azumith2d(row),
@@ -502,7 +507,7 @@ impl PosGenerator for SlotGrid {
         if !self.quad.contains(LuaVec2(
             self.current + self.column * self.margin + self.row * self.margin,
         )) {
-            bail!("zone is full")
+            bail!("zone {} is full", self.name)
         }
         let res = self.current;
         let p = self.current + self.column * self.spacing;
@@ -627,16 +632,21 @@ impl VehicleTemplates {
         }
         for zone in base.mission.triggers()? {
             let zone = zone?;
-            if !zone.name()?.starts_with("TS") {
+            let name = zone.name()?;
+            if !name.starts_with("TS") {
                 continue;
             }
             let spec = SlotSpec::new(&templates, zone.properties()?)?;
             for (side, slots) in &spec.slots {
                 let mut posgen: Box<dyn PosGenerator> = match zone.typ()? {
-                    TriggerZoneTyp::Quad(quad) => {
-                        Box::new(SlotGrid::new(quad, spec.margin, spec.spacing)?)
-                    }
+                    TriggerZoneTyp::Quad(quad) => Box::new(SlotGrid::new(
+                        name.clone(),
+                        quad,
+                        spec.margin,
+                        spec.spacing,
+                    )?),
                     TriggerZoneTyp::Circle { radius } => Box::new(SlotRadial::new(
+                        name.clone(),
                         radius,
                         zone.pos()?,
                         spec.margin,

@@ -25,4 +25,3 @@ mlua = { path = "../../mlua", version = "0.9", features = [ "lua51", "serialize"
 walkdir = "2.4.0"
 dcso3 = { version = "0.1", path = "../dcso3" }
 compact_str = { version = "0.7", features = ["serde"] }
-nalgebra = { version = "0.32", features = ["serde-serialize"] }

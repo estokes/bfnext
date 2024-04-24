@@ -16,7 +16,7 @@ use crate::MizCmd;
 use anyhow::{bail, Context, Result};
 use compact_str::{format_compact, CompactStringExt};
 use dcso3::{
-    azumith2d, azumith2d_to, change_heading,
+    azumith2d, change_heading,
     coalition::Side,
     controller::{MissionPoint, PointType},
     country::Country,
@@ -25,7 +25,6 @@ use dcso3::{
 };
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value};
-use nalgebra as na;
 use std::{
     collections::HashMap,
     f64::consts::PI,
@@ -376,10 +375,12 @@ trait PosGenerator {
     fn azumith(&self) -> f64;
 }
 
+#[derive(Debug)]
 struct SlotRadial {
     center: Vector2,
-    current: Vector2,
-    spacing: f64,
+    slots: Vec<(f64, Vec<f64>)>,
+    i: usize,
+    j: usize,
     last_az: f64,
 }
 
@@ -392,38 +393,58 @@ impl SlotRadial {
     ) -> Result<Self> {
         let margin = margin.unwrap_or(5.);
         let spacing = spacing.unwrap_or(25.);
-        let current = center + pointing_towards2(0.) * (radius - margin);
-        let last_az = azumith2d_to(current, center);
+        let mut radius = radius - margin;
+        let mut step = (spacing / radius).asin();
+        let mut slots: Vec<(f64, Vec<f64>)> = vec![(radius, vec![])];
+        let mut i = 0;
+        while radius >= spacing / 2. {
+            if slots.len() <= i {
+                radius -= spacing;
+                step = (f64::min(1., f64::max(-1., spacing / radius))).asin();
+                slots.push((radius, vec![]));
+            } else {
+                match slots[i].1.last().map(|az| *az) {
+                    None => slots[i].1.push(0.),
+                    Some(az) => {
+                        let next2 = change_heading(az, step * 2.);
+                        if next2 < az {
+                            i += 1;
+                        } else {
+                            slots[i].1.push(change_heading(az, step));
+                        }
+                    }
+                }
+            }
+        }
         Ok(Self {
             center,
-            spacing,
-            current,
-            last_az,
+            slots,
+            i: 0,
+            j: 0,
+            last_az: PI,
         })
     }
 }
 
 impl PosGenerator for SlotRadial {
     fn next(&mut self) -> Result<Vector2> {
-        let d = dbg!(na::distance(
-            &dbg!(self.current).into(),
-            &dbg!(self.center).into()
-        ));
-        if d < self.spacing / 2. {
-            bail!("radial zone is full")
-        }
-        let current_az = dbg!(azumith2d_to(self.center, self.current));
-        let next_az = dbg!(change_heading(current_az, (self.spacing / d).asin()));
-        let next = if next_az < current_az {
-            dbg!(self.center + pointing_towards2(0.) * (d - self.spacing))
-        } else {
-            dbg!(self.center + pointing_towards2(next_az) * d)
+        let (radius, az) = loop {
+            match self.slots.get(self.i) {
+                None => bail!("radial zone is full"),
+                Some((radius, azumiths)) => match azumiths.get(self.j) {
+                    Some(az) => {
+                        self.j += 1;
+                        break (*radius, *az);
+                    }
+                    None => {
+                        self.i += 1;
+                        self.j = 0;
+                    }
+                },
+            }
         };
-        self.last_az = azumith2d_to(self.current, self.center);
-        let res = dbg!(self.current);
-        self.current = dbg!(next);
-        dbg!(self.current);
-        Ok(res)
+        self.last_az = change_heading(az, PI);
+        Ok(self.center + pointing_towards2(az) * radius)
     }
 
     fn azumith(&self) -> f64 {

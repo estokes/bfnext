@@ -29,7 +29,6 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{self, BufWriter},
-    ops::Deref,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -313,34 +312,51 @@ fn increment_key(map: &mut HashMap<String, isize>, key: &str) -> isize {
     *n
 }
 
-struct SlotSpec(HashMap<Side, HashMap<String, usize>>);
-
-impl Deref for SlotSpec {
-    type Target = HashMap<Side, HashMap<String, usize>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+struct SlotSpec {
+    slots: HashMap<Side, HashMap<String, usize>>,
+    margin: f64,
+    spacing: f64,
 }
 
 impl SlotSpec {
-    fn new(props: Sequence<Property>) -> Result<Self> {
-        let mut spec: HashMap<Side, HashMap<String, usize>> = HashMap::default();
+    fn new(templates: &HashMap<String, SlotSpec>, props: Sequence<Property>) -> Result<Self> {
+        let mut slots: HashMap<Side, HashMap<String, usize>> = HashMap::default();
         let mut side = None;
+        let mut margin = 5.;
+        let mut spacing = 25.;
         for prop in props {
             let prop = prop?;
-            match Side::from_str(&prop.key) {
-                Ok(s) => side = Some(s),
-                Err(_) => match side {
-                    None => bail!("expected Blue or Red before airframe declarations"),
-                    Some(side) => {
-                        *spec.entry(side).or_default().entry(prop.key).or_default() +=
-                            prop.value.parse::<usize>()?
+            if *prop.key == "include" {
+                match templates.get(&prop.value) {
+                    Some(tmpl) => {
+                        margin = tmpl.margin;
+                        spacing = tmpl.spacing;
+                        slots.extend(tmpl.slots.iter().map(|(k, v)| (k.clone(), v.clone())));
                     }
-                },
+                    None => bail!("invalid template {} in include", prop.value),
+                }
+            } else if *prop.key == "margin" {
+                margin = prop.value.parse()?;
+            } else if *prop.key == "spacing" {
+                spacing = prop.value.parse()?;
+            } else {
+                match Side::from_str(&prop.key) {
+                    Ok(s) => side = Some(s),
+                    Err(_) => match side {
+                        None => bail!("expected Blue or Red before airframe declarations"),
+                        Some(side) => {
+                            *slots.entry(side).or_default().entry(prop.key).or_default() +=
+                                prop.value.parse::<usize>()?
+                        }
+                    },
+                }
             }
         }
-        Ok(Self(spec))
+        Ok(Self {
+            slots,
+            margin,
+            spacing,
+        })
     }
 }
 
@@ -356,10 +372,12 @@ struct SlotGrid {
     row: Vector2,
     column: Vector2,
     current: Vector2,
+    margin: f64,
+    spacing: f64,
 }
 
 impl SlotGrid {
-    fn new(quad: Quad2) -> Result<SlotGrid> {
+    fn new(quad: Quad2, margin: f64, spacing: f64) -> Result<SlotGrid> {
         let (p0, p1, _) = quad.longest_edge();
         let column = (p0 - p1).normalize();
         let row = normal2(column).normalize();
@@ -376,7 +394,7 @@ impl SlotGrid {
         } else {
             bail!("the area is too thin")
         };
-        let p0 = p0 + row * 10.;
+        let p0 = p0 + row * margin + column * margin;
         Ok(Self {
             quad,
             cr: p0,
@@ -384,20 +402,24 @@ impl SlotGrid {
             row,
             column,
             current: p0,
+            margin,
+            spacing,
         })
     }
 }
 
 impl PosGenerator for SlotGrid {
     fn next(&mut self) -> Result<Vector2> {
-        let p = self.current + self.column * 25.;
-        if self.quad.contains(LuaVec2(p)) {
+        let p = self.current + self.column * self.spacing;
+        if self.quad.contains(LuaVec2(p + self.column * self.margin)) {
             self.current = p;
             Ok(p)
         } else {
-            let cr = self.cr + self.row * 25.;
-            let p = cr + self.column * 25.;
-            if self.quad.contains(LuaVec2(p)) {
+            let cr = self.cr + self.row * self.spacing;
+            let p = cr + self.column * self.spacing;
+            if self.quad.contains(LuaVec2(
+                p + self.column * self.margin + self.row * self.margin,
+            )) {
                 self.cr = cr;
                 self.current = p;
                 Ok(p)
@@ -497,21 +519,34 @@ impl VehicleTemplates {
 
     fn generate_slots(&self, lua: &Lua, base: &mut LoadedMiz) -> Result<()> {
         let idx = base.mission.index()?;
+        let mut templates = HashMap::default();
         let mut uid = idx.max_uid();
         let mut gid = idx.max_gid();
         uid.next();
         gid.next();
         for zone in base.mission.triggers()? {
             let zone = zone?;
+            if let Some(s) = zone.name()?.strip_prefix("TTS") {
+                templates.insert(
+                    String::from(s),
+                    SlotSpec::new(&HashMap::default(), zone.properties()?)?,
+                );
+            }
+        }
+        for zone in base.mission.triggers()? {
+            let zone = zone?;
             if !zone.name()?.starts_with("TS") {
                 continue;
             }
-            for (side, slots) in &*SlotSpec::new(zone.properties()?)? {
+            let spec = SlotSpec::new(&templates, zone.properties()?)?;
+            for (side, slots) in &spec.slots {
                 let mut posgen: Box<dyn PosGenerator> = match zone.typ()? {
                     TriggerZoneTyp::Circle { radius: _ } => {
                         unimplemented!()
                     }
-                    TriggerZoneTyp::Quad(quad) => Box::new(SlotGrid::new(quad)?),
+                    TriggerZoneTyp::Quad(quad) => {
+                        Box::new(SlotGrid::new(quad, spec.margin, spec.spacing)?)
+                    }
                 };
                 let coa = base.mission.coalition(*side)?;
                 let cname = match side {

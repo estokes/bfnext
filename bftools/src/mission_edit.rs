@@ -331,7 +331,12 @@ impl SlotSpec {
                     Some(tmpl) => {
                         margin = tmpl.margin;
                         spacing = tmpl.spacing;
-                        slots.extend(tmpl.slots.iter().map(|(k, v)| (k.clone(), v.clone())));
+                        for (side, tmpl) in &tmpl.slots {
+                            let slots = slots.entry(*side).or_default();
+                            for (ac, n) in tmpl {
+                                *slots.entry(ac.clone()).or_default() += *n;
+                            }
+                        }
                     }
                     None => bail!("invalid template {} in include", prop.value),
                 }
@@ -531,6 +536,7 @@ impl VehicleTemplates {
                     String::from(s),
                     SlotSpec::new(&HashMap::default(), zone.properties()?)?,
                 );
+                info!("added slot template {s}")
             }
         }
         for zone in base.mission.triggers()? {

@@ -406,7 +406,7 @@ impl SlotRadial {
 impl PosGenerator for SlotRadial {
     fn next(&mut self) -> Result<Vector2> {
         let d = na::distance(&self.current.into(), &self.center.into());
-        if d < self.margin {
+        if d < self.spacing / 2. {
             bail!("radial zone is full")
         }
         let res = self.current;

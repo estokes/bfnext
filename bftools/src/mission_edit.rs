@@ -16,15 +16,16 @@ use crate::MizCmd;
 use anyhow::{bail, Context, Result};
 use compact_str::{format_compact, CompactStringExt};
 use dcso3::{
-    azumith2d,
+    azumith2d, azumith2d_to, change_heading,
     coalition::Side,
     controller::{MissionPoint, PointType},
     country::Country,
     env::miz::{Group, Miz, Property, Skill, TriggerZoneTyp},
-    normal2, LuaVec2, Quad2, Sequence, String, Vector2,
+    normal2, pointing_towards2, LuaVec2, Quad2, Sequence, String, Vector2,
 };
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value};
+use nalgebra as na;
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -374,21 +375,58 @@ trait PosGenerator {
     fn azumith(&self) -> f64;
 }
 
-/*
 struct SlotRadial {
     center: Vector2,
-    radius: f64,
     margin: f64,
     spacing: f64,
     current: Vector2,
+    last_az: f64,
 }
 
 impl SlotRadial {
-    fn new(radius: f64, pos: Vector2, margin: Option<f64>, spacing: Option<f64>) -> Result<Self> {
-        
+    fn new(
+        radius: f64,
+        center: Vector2,
+        margin: Option<f64>,
+        spacing: Option<f64>,
+    ) -> Result<Self> {
+        let margin = margin.unwrap_or(5.);
+        let spacing = spacing.unwrap_or(25.);
+        let current = center + pointing_towards2(0.) * (radius - margin);
+        Ok(Self {
+            center,
+            margin,
+            spacing,
+            current,
+            last_az: azumith2d_to(current, center),
+        })
     }
 }
-*/
+
+impl PosGenerator for SlotRadial {
+    fn next(&mut self) -> Result<Vector2> {
+        let d = na::distance(&self.current.into(), &self.center.into());
+        if d < self.margin {
+            bail!("radial zone is full")
+        }
+        let res = self.current;
+        self.last_az = azumith2d_to(res, self.center);
+        let current_az = azumith2d_to(self.center, self.current);
+        let next_az = change_heading(current_az, (self.spacing / d).asin());
+        if next_az < current_az {
+            // we went all the way around
+            self.current = self.center + pointing_towards2(0.) * (d - self.spacing);
+            Ok(res)
+        } else {
+            self.current = self.center + pointing_towards2(next_az) * d;
+            Ok(res)
+        }
+    }
+
+    fn azumith(&self) -> f64 {
+        self.last_az
+    }
+}
 
 struct SlotGrid {
     quad: Quad2,
@@ -571,12 +609,15 @@ impl VehicleTemplates {
             let spec = SlotSpec::new(&templates, zone.properties()?)?;
             for (side, slots) in &spec.slots {
                 let mut posgen: Box<dyn PosGenerator> = match zone.typ()? {
-                    TriggerZoneTyp::Circle { radius: _ } => {
-                        unimplemented!()
-                    }
                     TriggerZoneTyp::Quad(quad) => {
                         Box::new(SlotGrid::new(quad, spec.margin, spec.spacing)?)
                     }
+                    TriggerZoneTyp::Circle { radius } => Box::new(SlotRadial::new(
+                        radius,
+                        zone.pos()?,
+                        spec.margin,
+                        spec.spacing,
+                    )?),
                 };
                 let coa = base.mission.coalition(*side)?;
                 let cname = match side {

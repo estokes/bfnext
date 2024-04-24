@@ -13,7 +13,7 @@
 
 //repack miz
 use crate::MizCmd;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use compact_str::{format_compact, CompactStringExt};
 use dcso3::{
     azumith2d,
@@ -314,23 +314,28 @@ fn increment_key(map: &mut HashMap<String, isize>, key: &str) -> isize {
 
 struct SlotSpec {
     slots: HashMap<Side, HashMap<String, usize>>,
-    margin: f64,
-    spacing: f64,
+    margin: Option<f64>,
+    spacing: Option<f64>,
 }
 
 impl SlotSpec {
     fn new(templates: &HashMap<String, SlotSpec>, props: Sequence<Property>) -> Result<Self> {
         let mut slots: HashMap<Side, HashMap<String, usize>> = HashMap::default();
         let mut side = None;
-        let mut margin = 5.;
-        let mut spacing = 25.;
+        let mut margin = None;
+        let mut spacing = None;
         for prop in props {
             let prop = prop?;
             if *prop.key == "include" {
                 match templates.get(&prop.value) {
+                    None => bail!("invalid template {} in include", prop.value),
                     Some(tmpl) => {
-                        margin = tmpl.margin;
-                        spacing = tmpl.spacing;
+                        if let Some(v) = tmpl.margin {
+                            margin = Some(v);
+                        }
+                        if let Some(v) = tmpl.spacing {
+                            spacing = Some(v);
+                        }
                         for (side, tmpl) in &tmpl.slots {
                             let slots = slots.entry(*side).or_default();
                             for (ac, n) in tmpl {
@@ -338,12 +343,11 @@ impl SlotSpec {
                             }
                         }
                     }
-                    None => bail!("invalid template {} in include", prop.value),
                 }
             } else if *prop.key == "margin" {
-                margin = prop.value.parse()?;
+                margin = Some(prop.value.parse()?);
             } else if *prop.key == "spacing" {
-                spacing = prop.value.parse()?;
+                spacing = Some(prop.value.parse()?);
             } else {
                 match Side::from_str(&prop.key) {
                     Ok(s) => side = Some(s),
@@ -382,7 +386,9 @@ struct SlotGrid {
 }
 
 impl SlotGrid {
-    fn new(quad: Quad2, margin: f64, spacing: f64) -> Result<SlotGrid> {
+    fn new(quad: Quad2, margin: Option<f64>, spacing: Option<f64>) -> Result<SlotGrid> {
+        let margin = margin.unwrap_or(5.);
+        let spacing = spacing.unwrap_or(25.);
         let (p0, p1, _) = quad.longest_edge();
         let column = (p0 - p1).normalize();
         let row = normal2(column).normalize();
@@ -560,11 +566,42 @@ impl VehicleTemplates {
                     Side::Red => Country::CJTF_RED,
                     Side::Neutral => unreachable!(),
                 };
-                let country = coa
-                    .country(cname)?
-                    .ok_or_else(|| anyhow!("you must have CJTF_BLUE and CJTF_RED in your miz"))?;
-                let helicopters = country.helicopters()?;
-                let planes = country.planes()?;
+                let country = match coa.country(cname)? {
+                    Some(c) => c,
+                    None => {
+                        let tbl = lua.create_table()?;
+                        tbl.raw_set("id", cname)?;
+                        tbl.raw_set("name", match cname {
+                            Country::CJTF_BLUE => "CJTF Blue",
+                            Country::CJTF_RED => "CJTF Red",
+                            _ => unreachable!()
+                        })?;
+                        coa.raw_get::<_, Table>("country")?.push(tbl)?;
+                        coa.country(cname)?.unwrap()
+                    }
+                };
+                let helicopters = { 
+                    let heli = country.helicopters()?;
+                    if heli.len() > 0 {
+                        heli
+                    } else {
+                        let heli = lua.create_table()?;
+                        heli.raw_set("group", lua.create_table()?)?;
+                        country.raw_set("helicopter", heli)?;
+                        country.helicopters()?
+                    }
+                };
+                let planes = { 
+                    let plane = country.planes()?;
+                    if plane.len() > 0 {
+                        plane
+                    } else {
+                        let plane = lua.create_table()?;
+                        plane.raw_set("group", lua.create_table()?)?;
+                        country.raw_set("plane", plane)?;
+                        country.planes()?
+                    }
+                };
                 for (vehicle, n) in slots {
                     let (seq, tmpl) = match self.plane_slots.get(side).and_then(|s| s.get(vehicle))
                     {

@@ -33,8 +33,8 @@ impl Default for UnitId {
 }
 
 impl UnitId {
-    pub fn next(self) -> Self {
-        UnitId(self.0 + 1)
+    pub fn next(&mut self) {
+        self.0 += 1
     }
 }
 
@@ -47,8 +47,8 @@ impl Default for GroupId {
 }
 
 impl GroupId {
-    pub fn next(self) -> Self {
-        GroupId(self.0 + 1)
+    pub fn next(&mut self) {
+        self.0 += 1
     }
 }
 

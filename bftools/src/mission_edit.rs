@@ -374,6 +374,22 @@ trait PosGenerator {
     fn azumith(&self) -> f64;
 }
 
+/*
+struct SlotRadial {
+    center: Vector2,
+    radius: f64,
+    margin: f64,
+    spacing: f64,
+    current: Vector2,
+}
+
+impl SlotRadial {
+    fn new(radius: f64, pos: Vector2, margin: Option<f64>, spacing: Option<f64>) -> Result<Self> {
+        
+    }
+}
+*/
+
 struct SlotGrid {
     quad: Quad2,
     cr: Vector2,
@@ -386,7 +402,7 @@ struct SlotGrid {
 }
 
 impl SlotGrid {
-    fn new(quad: Quad2, margin: Option<f64>, spacing: Option<f64>) -> Result<SlotGrid> {
+    fn new(quad: Quad2, margin: Option<f64>, spacing: Option<f64>) -> Result<Self> {
         let margin = margin.unwrap_or(5.);
         let spacing = spacing.unwrap_or(25.);
         let (p0, p1, _) = quad.longest_edge();

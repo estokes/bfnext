@@ -421,22 +421,24 @@ impl SlotGrid {
 
 impl PosGenerator for SlotGrid {
     fn next(&mut self) -> Result<Vector2> {
+        if !self.quad.contains(LuaVec2(
+            self.current + self.column * self.margin + self.row * self.margin,
+        )) {
+            bail!("zone is full")
+        }
+        let res = self.current;
         let p = self.current + self.column * self.spacing;
         if self.quad.contains(LuaVec2(p + self.column * self.margin)) {
             self.current = p;
-            Ok(p)
+            Ok(res)
         } else {
-            let cr = self.cr + self.row * self.spacing;
-            let p = cr + self.column * self.spacing;
-            if self.quad.contains(LuaVec2(
-                p + self.column * self.margin + self.row * self.margin,
-            )) {
-                self.cr = cr;
-                self.current = p;
-                Ok(p)
-            } else {
-                bail!("zone is full")
+            let mut cr = self.cr + self.row * self.spacing;
+            while !self.quad.contains(LuaVec2(cr - self.column * self.margin)) {
+                cr = cr + self.column * 1.;
             }
+            self.cr = cr;
+            self.current = cr;
+            Ok(res)
         }
     }
 
@@ -571,16 +573,19 @@ impl VehicleTemplates {
                     None => {
                         let tbl = lua.create_table()?;
                         tbl.raw_set("id", cname)?;
-                        tbl.raw_set("name", match cname {
-                            Country::CJTF_BLUE => "CJTF Blue",
-                            Country::CJTF_RED => "CJTF Red",
-                            _ => unreachable!()
-                        })?;
+                        tbl.raw_set(
+                            "name",
+                            match cname {
+                                Country::CJTF_BLUE => "CJTF Blue",
+                                Country::CJTF_RED => "CJTF Red",
+                                _ => unreachable!(),
+                            },
+                        )?;
                         coa.raw_get::<_, Table>("country")?.push(tbl)?;
                         coa.country(cname)?.unwrap()
                     }
                 };
-                let helicopters = { 
+                let helicopters = {
                     let heli = country.helicopters()?;
                     if heli.len() > 0 {
                         heli
@@ -591,7 +596,7 @@ impl VehicleTemplates {
                         country.helicopters()?
                     }
                 };
-                let planes = { 
+                let planes = {
                     let plane = country.planes()?;
                     if plane.len() > 0 {
                         plane

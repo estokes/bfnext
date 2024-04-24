@@ -25,6 +25,7 @@ use dcso3::{
 };
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value};
+use nalgebra as na;
 use std::{
     collections::HashMap,
     f64::consts::PI,
@@ -465,6 +466,7 @@ struct SlotGrid {
     current: Vector2,
     margin: f64,
     spacing: f64,
+    max_edge: f64,
 }
 
 impl SlotGrid {
@@ -472,6 +474,7 @@ impl SlotGrid {
         let margin = margin.unwrap_or(5.);
         let spacing = spacing.unwrap_or(25.);
         let (p0, p1, _) = quad.longest_edge();
+        let max_edge = na::distance(&p0.into(), &p1.into());
         let column = (p0 - p1).normalize();
         let row = normal2(column).normalize();
         // unit vectors pointing along the row and column axis of the grid that starts
@@ -498,6 +501,7 @@ impl SlotGrid {
             current: p0,
             margin,
             spacing,
+            max_edge,
         })
     }
 }
@@ -516,8 +520,13 @@ impl PosGenerator for SlotGrid {
             Ok(res)
         } else {
             let mut cr = self.cr + self.row * self.spacing;
+            let mut moved = 0.;
             while !self.quad.contains(LuaVec2(cr - self.column * self.margin)) {
                 cr = cr + self.column * 1.;
+                moved += 1.;
+                if moved > self.max_edge {
+                    bail!("zone {} is full", self.name)
+                }
             }
             self.cr = cr;
             self.current = cr;

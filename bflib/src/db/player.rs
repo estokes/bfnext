@@ -35,7 +35,7 @@ use dcso3::{
     unit::{ClassUnit, Unit},
     MizLua, Position3, String, Vector2, Vector3,
 };
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::cmp::{max, min};
@@ -98,8 +98,9 @@ impl Db {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             player.airborne = None;
             if let Some((slot, _)) = player.current_slot.take() {
-                let _ = self.ephemeral.player_deslot(&self.persisted, &slot);
+                let _ = self.ephemeral.player_deslot(&self.persisted, &slot, Some(*ucid));
             }
+            self.ephemeral.dirty()
         }
     }
 
@@ -577,6 +578,8 @@ impl Db {
         let life_typ = self.ephemeral.cfg.life_types[&sifo.typ];
         match player.lives.get(&life_typ) {
             Some((_, n)) if *n == 0 => {
+                info!("player {ucid} has no lives for this unit type");
+                self.player_deslot(&ucid);
                 unit.clone().destroy()?;
                 return Ok(());
             }

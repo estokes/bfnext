@@ -260,6 +260,7 @@ impl Objective {
         self.name.as_str()
     }
 
+    #[allow(dead_code)]
     pub fn health(&self) -> u8 {
         self.health
     }

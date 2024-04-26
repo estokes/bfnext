@@ -826,6 +826,7 @@ impl Jtacs {
         self.jtacs.values().flat_map(|jtx| jtx.values())
     }
 
+    #[allow(dead_code)]
     pub fn jtacs_mut(&mut self) -> impl Iterator<Item = &mut Jtac> {
         self.jtacs.values_mut().flat_map(|jtx| jtx.values_mut())
     }
@@ -1115,19 +1116,29 @@ impl Jtacs {
                 pos.y += 10.
             };
             for (unit, _) in db.instanced_units() {
+                let id = CtId::Unit(unit.id);
+                macro_rules! lost {
+                    () => {{
+                        match jtac.remove_contact(lua, db, &id) {
+                            Err(e) => warn!(
+                                "could not remove airborne jtac contact {} {:?}",
+                                unit.name, e
+                            ),
+                            Ok(false) => (),
+                            Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
+                        }
+                        continue;
+                    }};
+                }
                 if unit.side == jtac.side {
                     continue;
                 }
-                let id = CtId::Unit(unit.id);
                 saw_units.insert(id);
                 if !unit.tags.contains(jtac.filter) {
-                    if let Err(e) = jtac.remove_contact(lua, db, &id) {
-                        warn!("could not filter jtac contact {} {:?}", unit.name, e)
-                    }
-                    continue;
+                    lost!();
                 }
                 if unit.airborne_velocity.is_some() && !unit.tags.contains(UnitTag::Helicopter) {
-                    continue;
+                    lost!();
                 }
                 if let Some(ct) = jtac.contacts.get(&id) {
                     if unit.moved == ct.last_move {
@@ -1141,11 +1152,7 @@ impl Jtacs {
                 {
                     jtac.add_unit_contact(unit)
                 } else {
-                    match jtac.remove_contact(lua, db, &id) {
-                        Err(e) => warn!("could not remove jtac contact {} {:?}", unit.name, e),
-                        Ok(false) => (),
-                        Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
-                    }
+                    lost!()
                 }
             }
             for (ucid, player, inst) in db.instanced_players() {

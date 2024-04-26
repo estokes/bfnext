@@ -33,6 +33,7 @@ pub enum PanelDest {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum MarkDest {
     All,
     Side(Side),
@@ -157,6 +158,7 @@ impl MsgQ {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mark_to_all<S: Into<String>>(
         &mut self,
         position: Vector2,
@@ -198,6 +200,7 @@ impl MsgQ {
         id
     }
 
+    #[allow(dead_code)]
     pub fn mark_to_group<S: Into<String>>(
         &mut self,
         group: GroupId,

@@ -121,6 +121,7 @@ pub struct SpawnedGroup {
 }
 
 impl Db {
+    #[allow(dead_code)]
     pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
         self.persisted.groups.into_iter()
     }
@@ -140,6 +141,7 @@ impl Db {
         ))
     }
 
+    #[allow(dead_code)]
     pub fn group_center3(&self, id: &GroupId) -> Result<Vector3> {
         let group = group!(self, id)?;
         Ok(centroid3d(
@@ -157,6 +159,7 @@ impl Db {
         ))
     }
 
+    #[allow(dead_code)]
     pub fn group_by_name(&self, name: &str) -> Result<&SpawnedGroup> {
         group_by_name!(self, name)
     }
@@ -165,6 +168,7 @@ impl Db {
         unit!(self, id)
     }
 
+    #[allow(dead_code)]
     pub fn unit_by_name(&self, name: &str) -> Result<&SpawnedUnit> {
         unit_by_name!(self, name)
     }

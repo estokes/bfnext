@@ -51,7 +51,7 @@ use dcso3::{
 };
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::{IndexMap, IndexSet};
-use log::info;
+use log::{error, info};
 use mlua::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -457,7 +457,8 @@ impl Ephemeral {
                     if !global_pad_templates.insert(pad.clone()) {
                         bail!("pad template names must be globally unique {pad} is used more than once")
                     }
-                    let gifo = miz.get_group_by_name(mizidx, GroupKind::Any, side, pad)?
+                    let gifo = miz
+                        .get_group_by_name(mizidx, GroupKind::Any, side, pad)?
                         .ok_or_else(|| anyhow!("missing pad template {:?} {:?}", side, pad))?;
                     for unit in gifo.group.units()? {
                         let unit = unit?;
@@ -497,6 +498,7 @@ impl Ephemeral {
             .and_then(|id| Unit::get_instance(lua, id))
     }
 
+    #[allow(dead_code)]
     pub fn instance_unit<'lua>(&self, lua: MizLua<'lua>, uid: &UnitId) -> Result<Unit<'lua>> {
         self.object_id_by_uid
             .get(uid)
@@ -535,9 +537,15 @@ impl Ephemeral {
         &mut self,
         per: &Persisted,
         slot: &SlotId,
+        expected_ucid: Option<Ucid>,
     ) -> Option<(UnitId, Ucid)> {
         if let Some(ucid) = self.players_by_slot.swap_remove(slot) {
-            info!("deslotting player {ucid} from dead unit");
+            if let Some(expected_ucid) = expected_ucid {
+                if expected_ucid != ucid {
+                    error!("players_by_slot ucid mismatch {expected_ucid} vs {ucid} in slot {slot}")
+                }
+            }
+            info!("deslotting player {ucid}");
             if let Some(player) = per.players.get(&ucid) {
                 if !player.changing_slots && !player.jtac_or_spectators {
                     info!("queuing force player {ucid} to spectators");
@@ -556,6 +564,7 @@ impl Ephemeral {
                     return Some((uid, ucid));
                 }
             }
+            error!("have ucid but no unitid for dead slot {slot} {ucid}");
         }
         None
     }
@@ -566,7 +575,7 @@ impl Ephemeral {
         id: &DcsOid<ClassUnit>,
     ) -> Option<(UnitId, Option<Ucid>)> {
         let (uid, ucid) = match self.slot_by_object_id.remove(id) {
-            Some(slot) => match self.player_deslot(per, &slot) {
+            Some(slot) => match self.player_deslot(per, &slot, None) {
                 Some((uid, ucid)) => (uid, Some(ucid)),
                 None => return None,
             },

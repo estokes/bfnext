@@ -353,6 +353,7 @@ impl Db {
         self.ephemeral.cargo.get(slot)
     }
 
+    #[allow(dead_code)]
     pub fn is_player_deployed(&self, gid: &GroupId) -> bool {
         self.persisted.deployed.contains(gid)
     }

@@ -123,7 +123,8 @@
     "IL-78M": 0,
     "Tu-22M3": 36000,
     "KC130": 0,
-    "KC-135": 0
+    "KC-135": 0,
+    "MosquitoFBMkVI": 9000
   },
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
@@ -170,7 +171,8 @@
     "Su-25": "Attack",
     "Mirage-F1EE": "Intercept",
     "F-15ESE": "Standard",
-    "AV8BNA": "Attack"
+    "AV8BNA": "Attack",
+    "MosquitoFBMkVI": "Logistics"
   },
   "default_lives": {
     "Standard": [
@@ -647,6 +649,11 @@
     }
   },
   "cargo": {
+    "MosquitoFBMkVI": {
+      "troop_slots": 1,
+      "crate_slots": 1,
+      "total_slots": 1
+    },
     "MB-339A": {
       "troop_slots": 0,
       "crate_slots": 1,
@@ -1564,6 +1571,9 @@
     ]
   },
   "unit_classification": {
+    "MosquitoFBMkVI": [
+      "Aircraft"
+    ],
     "ATZ-10": [
       "Logistics",
       "Unarmed"

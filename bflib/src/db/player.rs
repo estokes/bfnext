@@ -16,7 +16,7 @@ for more details.
 
 use super::{
     group::{DeployKind, GroupId},
-    objective::{ObjectiveId, ObjectiveKind},
+    objective::ObjectiveId,
     Db, Map, Set,
 };
 use crate::{
@@ -98,7 +98,9 @@ impl Db {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             player.airborne = None;
             if let Some((slot, _)) = player.current_slot.take() {
-                let _ = self.ephemeral.player_deslot(&self.persisted, &slot, Some(*ucid));
+                let _ = self
+                    .ephemeral
+                    .player_deslot(&self.persisted, &slot, Some(*ucid));
             }
             self.ephemeral.dirty()
         }
@@ -269,17 +271,17 @@ impl Db {
             Some(l) => l,
             None => return None,
         };
-        let on_owned_objective =
-            self.persisted
-                .objectives
-                .into_iter()
-                .find_map(|(oid, obj)| {
-                    if obj.owner == player.side && obj.is_in_circle(position) {
-                        Some(*oid)
-                    } else {
-                        None
-                    }
-                });
+        let on_owned_objective = self
+            .persisted
+            .objectives
+            .into_iter()
+            .find_map(|(oid, obj)| {
+                if obj.owner == player.side && obj.is_in_circle(position) {
+                    Some(*oid)
+                } else {
+                    None
+                }
+            });
         if let Some(oid) = on_owned_objective {
             *player_lives += 1;
             player.airborne = None;
@@ -672,32 +674,33 @@ impl Db {
                 let player = maybe_mut!(self.persisted.players, ucid, "player")?;
                 if let Some((_, Some(inst))) = player.current_slot.as_mut() {
                     let typ = inst.typ.clone();
-                    let ppos = inst.position.p.0;
                     if let Some(oid) = inst.landed_at_objective {
-                        let fix_warehouse = || -> Result<()> {
+                        let mut fix_warehouse = || -> Result<()> {
                             let obj = objective_mut!(self, oid).context("get objective")?;
                             let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
                             let airbase = Airbase::get_instance(lua, &id).context("get airbase")?;
                             let wh = airbase.get_warehouse().context("get warehouse")?;
-                            if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ.0) {
-                                inv.stored = wh.get_item_count(typ.0).context("getting item")?;
-                                self.ephemeral.dirty();
+                            let airbase = obj.kind.is_airbase()
+                                || self
+                                    .ephemeral
+                                    .cfg
+                                    .extra_fixed_wing_objectives
+                                    .contains(obj.name());
+                            let mut sync: SmallVec<[String; 4]> = smallvec![typ.0.clone()];
+                            if !airbase {
+                                wh.add_item(typ.0.clone(), 1)?;
+                                for ammo in unit.get_ammo().context("get ammo")? {
+                                    let ammo = ammo.context("ammo")?;
+                                    let count = ammo.count().context("ammo count")?;
+                                    let typ = ammo.type_name().context("ammo typ")?;
+                                    sync.push(typ.clone());
+                                    wh.add_item(typ, count).context("add item to warehouse")?;
+                                }
                             }
-                            match &obj.kind {
-                                ObjectiveKind::Airbase => (),
-                                ObjectiveKind::Farp { .. }
-                                | ObjectiveKind::Fob
-                                | ObjectiveKind::Logistics => {
-                                    let pos = airbase.get_point().context("get airbase pos")?.0;
-                                    if na::distance_squared(&pos.into(), &ppos.into()) > 10000. {
-                                        for ammo in unit.get_ammo().context("get ammo")? {
-                                            let ammo = ammo.context("ammo")?;
-                                            let count = ammo.count().context("ammo count")?;
-                                            let typ = ammo.type_name().context("ammo typ")?;
-                                            wh.add_item(typ, count)
-                                                .context("add item to warehouse")?;
-                                        }
-                                    }
+                            for typ in sync {
+                                if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ) {
+                                    inv.stored = wh.get_item_count(typ).context("getting item")?;
+                                    self.ephemeral.dirty();
                                 }
                             }
                             Ok(())

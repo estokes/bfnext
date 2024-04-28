@@ -79,6 +79,7 @@ pub struct WithJtac<T> {
 pub enum ActionArgs {
     Tanker(WithPos<AiPlaneCfg>),
     Awacs(WithPos<AiPlaneCfg>),
+    Blackjack(WithPos<AiPlaneCfg>),
     Bomber(WithJtac<BomberCfg>),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
@@ -340,6 +341,9 @@ impl Db {
                     args,
                 )
                 .context("calling bomber strike")?,
+            ActionArgs::Blackjack(args) => self
+                .blackjack(spctx, idx, side, ucid, name, cmd.action, args)
+                .context("calling blackjack")?,
             ActionArgs::Deployable(args) => self
                 .ai_deploy(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai deployment")?,
@@ -962,33 +966,9 @@ impl Db {
         Ok(())
     }
 
-    fn blackjack_loiter<'lua>(
+    fn move_blackjack<'lua>(
         &mut self,
-        side: Side,
-        ucid: Option<Ucid>,
-        spawn_pos: Vector2,
-        attacks_params: AttackParams,
-        attack_pos: Vector2,
-        args: WithPosAndGroup<()>,
-    ) -> Result<Vec<MissionPoint<'lua>>> {
-        self.ai_loiter_point_mission(
-            side,
-            ucid,
-            args,
-            OrbitPattern::Circle,
-            spawn_pos,
-            |k| match k {
-                ActionKind::Attackers(_) => true,
-                _ => false,
-            },
-            move || init_task.clone(),
-            move || vec![main_task.clone()],
-        )
-    }
-
-    fn move_blackjack(
-        &mut self,
-        spctx: &SpawnCtx,
+        spctx: &SpawnCtx<'lua>,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
@@ -997,9 +977,10 @@ impl Db {
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
-            .ai_loiter_point_mission(side, ucid, pos, args)
-            .context("generate blackjack loiter mission")?;
+            .blackjack_mission(side, ucid, pos, args)
+            .context("generating blackjack mission")?;
         self.set_ai_mission(spctx, gid, mission)
+            .context("setting ai mission")
     }
 
     fn blackjack_attack(
@@ -1054,7 +1035,7 @@ impl Db {
             None,
             BitFlags::empty(),
             move |db, gid, pos| {
-                db.blackjack_loiter_mission(
+                db.blackjack_mission(
                     side,
                     ucid,
                     pos,
@@ -1487,7 +1468,7 @@ impl Db {
         validator: impl Fn(&ActionKind) -> bool,
         init_task: impl Fn() -> Task<'lua> + 'static,
         main_task: impl Fn() -> Vec<Task<'lua>> + 'static,
-    ) -> Result<Vec<MissionPoint<'lua>>> {
+    ) -> Result<Vec<BombingPoint<'lua>>> {
         let enemy = side.opposite();
         let group = group_mut!(self, args.group)?;
         if group.side != side {

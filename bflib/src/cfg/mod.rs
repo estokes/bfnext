@@ -433,6 +433,11 @@ pub struct BomberCfg {
     pub plane: AiPlaneCfg,
 }
 
+pub struct BlackjackCfg {
+    pub targets: u32,
+    pub plane: AiPlaneCfg,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeployableCfg {
     pub name: String,
@@ -468,6 +473,7 @@ pub enum ActionKind {
     Tanker(AiPlaneCfg),
     Awacs(AiPlaneCfg),
     Bomber(BomberCfg),
+    Blackjack(AiPlaneCfg),
     Fighters(AiPlaneCfg),
     Attackers(AiPlaneCfg),
     Drone(DroneCfg),

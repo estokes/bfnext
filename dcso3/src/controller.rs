@@ -23,7 +23,7 @@ use crate::{
     trigger::Modulation,
     wrapped_table, LuaVec2, Sequence, Time,
 };
-use anyhow::Result;
+use anyhow::{bail,Result};
 use compact_str::format_compact;
 use enumflags2::{bitflags, BitFlags};
 use mlua::{prelude::*, Value, Variadic};
@@ -541,6 +541,7 @@ pub enum Task<'lua> {
     AWACS,
     Tanker,
     EWR,
+    PinpointStrike,
     FACEngageGroup {
         group: GroupId,
         params: FACParams,
@@ -883,6 +884,7 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
                 }
             }
             Self::Hold => root.raw_set("id", "Hold")?,
+            Self::PinpointStrike => root.raw_set("id", "Pinpoint Strike")?,
             Self::FACAttackGroup { group, params: fp } => {
                 root.raw_set("id", "FAC_AttackGroup")?;
                 params.raw_set("groupId", group)?;

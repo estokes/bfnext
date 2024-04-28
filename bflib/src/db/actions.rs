@@ -24,8 +24,8 @@ use dcso3::{
     centroid2d, change_heading,
     coalition::Side,
     controller::{
-        ActionTyp, AiOption, AlarmState, AltType, Command, GroundOption, MissionPoint,
-        OrbitPattern, PointType, Task, TurnMethod, VehicleFormation,
+        ActionTyp, AiOption, AlarmState, AltType, AttackParams, Command, GroundOption,
+        MissionPoint, OrbitPattern, PointType, Task, TurnMethod, VehicleFormation, WeaponExpend,
     },
     env::miz::MizIndex,
     group::Group,
@@ -170,6 +170,7 @@ impl ActionArgs {
         match action.clone() {
             ActionKind::Tanker(c) => Ok(Self::Tanker(pos(db, lua, side, c, s)?)),
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
+            ActionKind::Blackjack(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
             ActionKind::Fighters(c) => Ok(Self::Fighters(pos(db, lua, side, c, s)?)),
             ActionKind::FighersWaypoint => {
                 Ok(Self::FightersWaypoint(pos_group(db, lua, side, (), s)?))
@@ -961,6 +962,185 @@ impl Db {
         Ok(())
     }
 
+    fn blackjack_loiter_mission<'lua>(
+        &mut self,
+        side: Side,
+        ucid: Option<Ucid>,
+        spawn_pos: Vector2,
+        args: WithPosAndGroup<()>,
+    ) -> Result<Vec<MissionPoint<'lua>>> {
+        self.ai_loiter_point_mission(
+            side,
+            ucid,
+            args,
+            OrbitPattern::RaceTrack,
+            spawn_pos,
+            |k| match k {
+                ActionKind::Blackjack(_) => true,
+                _ => false,
+            },
+            || {
+                Task::ComboTask(vec![Task::ComboTask(vec![
+                    Task::Tanker,
+                    Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
+                ])])
+            },
+            || vec![],
+        )
+    }
+
+    fn blackjack_attack_mission<'lua>(
+        &mut self,
+        side: Side,
+        ucid: Option<Ucid>,
+        spawn_pos: Vector2,
+        attacks_params: AttackParams,
+        attack_pos: Vector2,
+        args: WithPosAndGroup<()>,
+    ) -> Result<Vec<MissionPoint<'lua>>> {
+        self.ai_loiter_point_mission(
+            side,
+            ucid,
+            args,
+            OrbitPattern::RaceTrack,
+            spawn_pos,
+            |k| match k {
+                ActionKind::Blackjack(_) => true,
+                _ => false,
+            },
+            || {
+                Task::ComboTask(vec![Task::ComboTask(vec![
+                Task::PinpointStrike,
+                Task::AttackMapObject { point: , params: () } ,
+                ])])
+            },
+            || vec![Task::Tanker],
+        )
+    }
+
+    fn move_blackjack(
+        &mut self,
+        spctx: &SpawnCtx,
+        side: Side,
+        ucid: Option<Ucid>,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
+        let mission = self
+            .blackjack_loiter_mission(side, ucid, pos, args)
+            .context("generate blackjack loiter mission")?;
+        self.set_ai_mission(spctx, gid, mission)
+    }
+
+    fn blackjack_attack(
+        &mut self,
+        spctx: &SpawnCtx,
+        side: Side,
+        ucid: Option<Ucid>,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
+        let mission = self
+            .blackjack_attack_mission(side, ucid, pos, pos, args)
+            .context("generate blackjack attack mission")?;
+        self.set_ai_mission(spctx, gid, mission)
+    }
+
+    fn blackjack(
+        &mut self,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        side: Side,
+        ucid: Option<Ucid>,
+        name: String,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<()> {
+        self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &args,
+            None,
+            BitFlags::empty(),
+            move |db, gid, pos| {
+                db.blackjack_loiter_mission(
+                    side,
+                    ucid,
+                    pos,
+                    WithPosAndGroup {
+                        cfg: (),
+                        pos: args.pos,
+                        group: gid,
+                    },
+                )
+            },
+        )?;
+        Ok(())
+    }
+
+    fn move_awacs<'lua>(
+        &mut self,
+        spctx: &SpawnCtx<'lua>,
+        side: Side,
+        ucid: Option<Ucid>,
+        args: WithPosAndGroup<()>,
+    ) -> Result<()> {
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
+        let mission = self
+            .awacs_mission(side, ucid, pos, args)
+            .context("generating awacs mission")?;
+        self.set_ai_mission(spctx, gid, mission)
+            .context("setting ai mission")
+    }
+
+    fn awacs(
+        &mut self,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        side: Side,
+        ucid: Option<Ucid>,
+        name: String,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<()> {
+        self.add_and_spawn_ai_air(
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &args,
+            None,
+            UnitTag::AWACS.into(),
+            move |db, gid, pos| {
+                db.awacs_mission(
+                    side,
+                    ucid,
+                    pos,
+                    WithPosAndGroup {
+                        cfg: (),
+                        pos: args.pos,
+                        group: gid,
+                    },
+                )
+            },
+        )?;
+        Ok(())
+    }
+
     fn paratroops(
         &mut self,
         spctx: &SpawnCtx,
@@ -1286,58 +1466,84 @@ impl Db {
         )
     }
 
-    fn move_awacs<'lua>(
+    fn blackjack_mission<'lua>(
         &mut self,
-        spctx: &SpawnCtx<'lua>,
+        side: Side,
+        ucid: Option<Ucid>,
+        spawn_pos: Vector2,
+        args: WithPosAndGroup<()>,
+    ) -> Result<Vec<MissionPoint<'lua>>> {
+        let group = group!(self, args.group)?;
+        let init_task = Task::ComboTask(vec![]);
+        let main_task = if group.tags.contains(UnitTag::Link16) {
+            vec![]
+        } else {
+            vec![]
+        };
+        self.ai_loiter_point_mission(
+            side,
+            ucid,
+            args,
+            OrbitPattern::RaceTrack,
+            spawn_pos,
+            |k| match k {
+                ActionKind::Awacs(_) => true,
+                _ => false,
+            },
+            move || init_task.clone(),
+            move || main_task.clone(),
+        )
+    }
+
+    fn ai_cruise_missile_mission<'lua>(
+        &mut self,
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
-        let gid = args.group;
-        let group = group!(self, gid)?;
-        let pos = group_position(spctx.lua(), &group.name)?;
-        let mission = self
-            .awacs_mission(side, ucid, pos, args)
-            .context("generating awacs mission")?;
-        self.set_ai_mission(spctx, gid, mission)
-            .context("setting ai mission")
-    }
+        attack_point: LuaVec2,
+        quantity: i8,
+        validator: impl Fn(&ActionKind) -> bool,
+        init_task: impl Fn() -> Task<'lua> + 'static,
+        main_task: impl Fn() -> Vec<Task<'lua>> + 'static,
+    ) -> Result<Vec<MissionPoint<'lua>>> {
+        let enemy = side.opposite();
+        let group = group_mut!(self, args.group)?;
+        if group.side != side {
+            bail!("can't command other team's missiles")
+        }
 
-    fn awacs(
-        &mut self,
-        spctx: &SpawnCtx,
-        idx: &MizIndex,
-        side: Side,
-        ucid: Option<Ucid>,
-        name: String,
-        action: Action,
-        args: WithPos<AiPlaneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
-            spctx,
-            idx,
-            side,
-            &ucid,
-            name,
-            action,
-            0.,
-            &args,
-            None,
-            UnitTag::AWACS.into(),
-            move |db, gid, pos| {
-                db.awacs_mission(
-                    side,
-                    ucid,
-                    pos,
-                    WithPosAndGroup {
-                        cfg: (),
-                        pos: args.pos,
-                        group: gid,
-                    },
-                )
-            },
-        )?;
-        Ok(())
+        let mission_set: Vec<Task> = {
+            let task_vec: Vec<Task> = Vec::new();
+            let lcd = [
+                (4, WeaponExpend::Four),
+                (2, WeaponExpend::Two),
+                (1, WeaponExpend::One),
+            ];
+            
+            for d in lcd {
+                while quantity - d.0 >= d.0 {
+                    quantity -= d.0;
+
+                    let attack_params = AttackParams {
+                        weapon_type: Some(2097152),
+                        expend: Some(d.1),
+                        direction: None,
+                        altitude: None,
+                        attack_qty: None,
+                        group_attack: None,
+                    };
+
+                    let task = Task::AttackMapObject {
+                        point: attack_point,
+                        params: attack_params,
+                    };
+
+                    task_vec.push(task);
+                }
+            }
+
+            task_vec
+        };
     }
 
     fn ai_loiter_point_mission<'lua>(
@@ -1377,6 +1583,7 @@ impl Db {
                 match &mut spec.kind {
                     ActionKind::Awacs(a)
                     | ActionKind::Tanker(a)
+                    | ActionKind::Blackjack(a)
                     | ActionKind::Drone(DroneCfg { plane: a, .. })
                     | ActionKind::Fighters(a)
                     | ActionKind::Attackers(a) => {
@@ -1774,6 +1981,7 @@ impl Db {
             {
                 match &spec.kind {
                     ActionKind::Awacs(ai)
+                    | ActionKind::Blackjack(ai)
                     | ActionKind::Fighters(ai)
                     | ActionKind::Attackers(ai)
                     | ActionKind::Drone(DroneCfg { plane: ai, .. })

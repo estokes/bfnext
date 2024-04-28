@@ -962,34 +962,7 @@ impl Db {
         Ok(())
     }
 
-    fn blackjack_loiter_mission<'lua>(
-        &mut self,
-        side: Side,
-        ucid: Option<Ucid>,
-        spawn_pos: Vector2,
-        args: WithPosAndGroup<()>,
-    ) -> Result<Vec<MissionPoint<'lua>>> {
-        self.ai_loiter_point_mission(
-            side,
-            ucid,
-            args,
-            OrbitPattern::RaceTrack,
-            spawn_pos,
-            |k| match k {
-                ActionKind::Blackjack(_) => true,
-                _ => false,
-            },
-            || {
-                Task::ComboTask(vec![Task::ComboTask(vec![
-                    Task::Tanker,
-                    Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
-                ])])
-            },
-            || vec![],
-        )
-    }
-
-    fn blackjack_attack_mission<'lua>(
+    fn blackjack_loiter<'lua>(
         &mut self,
         side: Side,
         ucid: Option<Ucid>,
@@ -1002,19 +975,14 @@ impl Db {
             side,
             ucid,
             args,
-            OrbitPattern::RaceTrack,
+            OrbitPattern::Circle,
             spawn_pos,
             |k| match k {
-                ActionKind::Blackjack(_) => true,
+                ActionKind::Attackers(_) => true,
                 _ => false,
             },
-            || {
-                Task::ComboTask(vec![Task::ComboTask(vec![
-                Task::PinpointStrike,
-                Task::AttackMapObject { point: , params: () } ,
-                ])])
-            },
-            || vec![Task::Tanker],
+            move || init_task.clone(),
+            move || vec![main_task.clone()],
         )
     }
 
@@ -1029,7 +997,7 @@ impl Db {
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
-            .blackjack_loiter_mission(side, ucid, pos, args)
+            .ai_loiter_point_mission(side, ucid, pos, args)
             .context("generate blackjack loiter mission")?;
         self.set_ai_mission(spctx, gid, mission)
     }
@@ -1040,12 +1008,26 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
+        attack_point: Vector2,
+        quantity: i8,
     ) -> Result<()> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
-            .blackjack_attack_mission(side, ucid, pos, pos, args)
+            .ai_cruise_missile_mission(
+                side,
+                ucid,
+                args,
+                LuaVec2(attack_point),
+                quantity,
+                |k| match k {
+                    ActionKind::Blackjack(_) => true,
+                    _ => false,
+                },
+                || Task::ComboTask(vec![Task::ComboTask(vec![])]),
+                || vec![],
+            )
             .context("generate blackjack attack mission")?;
         self.set_ai_mission(spctx, gid, mission)
     }
@@ -1487,7 +1469,7 @@ impl Db {
             OrbitPattern::RaceTrack,
             spawn_pos,
             |k| match k {
-                ActionKind::Awacs(_) => true,
+                ActionKind::Blackjack(_) => true,
                 _ => false,
             },
             move || init_task.clone(),
@@ -1519,7 +1501,7 @@ impl Db {
                 (2, WeaponExpend::Two),
                 (1, WeaponExpend::One),
             ];
-            
+
             for d in lcd {
                 while quantity - d.0 >= d.0 {
                     quantity -= d.0;

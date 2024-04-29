@@ -1464,11 +1464,11 @@ impl Db {
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
         attack_point: LuaVec2,
-        quantity: i8,
+        mut quantity: i8,
         validator: impl Fn(&ActionKind) -> bool,
         init_task: impl Fn() -> Task<'lua> + 'static,
         main_task: impl Fn() -> Vec<Task<'lua>> + 'static,
-    ) -> Result<Vec<BombingPoint<'lua>>> {
+    ) -> Result<i8> {
         let enemy = side.opposite();
         let group = group_mut!(self, args.group)?;
         if group.side != side {
@@ -1476,7 +1476,7 @@ impl Db {
         }
 
         let mission_set: Vec<Task> = {
-            let task_vec: Vec<Task> = Vec::new();
+            let mut task_vec: Vec<Task> = Vec::new();
             let lcd = [
                 (4, WeaponExpend::Four),
                 (2, WeaponExpend::Two),
@@ -1507,6 +1507,8 @@ impl Db {
 
             task_vec
         };
+
+        Ok(quantity)
     }
 
     fn ai_loiter_point_mission<'lua>(

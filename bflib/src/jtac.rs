@@ -1091,6 +1091,7 @@ impl Jtacs {
                 });
             let prev_loc = jtac.location;
             jtac.location = JtacLocation::new(db, pos);
+            let jtac_moved = (prev_loc.pos - jtac.location.pos).magnitude_squared() > 1.0;
             if prev_loc.oid != jtac.location.oid {
                 Self::remove_code_by_location(
                     &mut self.code_by_location,
@@ -1141,7 +1142,7 @@ impl Jtacs {
                     lost!();
                 }
                 if let Some(ct) = jtac.contacts.get(&id) {
-                    if unit.moved == ct.last_move {
+                    if !jtac_moved && unit.moved == ct.last_move {
                         continue;
                     }
                 };

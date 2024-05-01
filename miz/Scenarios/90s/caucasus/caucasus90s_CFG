@@ -1593,6 +1593,9 @@
     "L-39C": [
       "Aircraft"
     ],
+	"F-14A-135-GR": [
+	  "Aircraft"
+	],
     "Hawk sr": [
       "SAM",
       "LR",

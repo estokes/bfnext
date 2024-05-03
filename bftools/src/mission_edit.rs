@@ -247,6 +247,9 @@ fn serialize_to_lua(key: &str, value: Value<'static>) -> Result<std::string::Str
             if let Some(e) = e.downcast_ref::<&str>() {
                 bail!("{e}")
             }
+            if let Some(e) = e.downcast_ref::<std::string::String>() {
+                bail!("{e}")
+            }
             if let Some(e) = e.downcast_ref::<mlua::Error>() {
                 bail!("{e}")
             }

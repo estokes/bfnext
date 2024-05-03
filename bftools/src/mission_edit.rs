@@ -175,64 +175,6 @@ impl UnpackedMiz {
     }
 }
 
-/*
-fn basic_serialize(value: &Value<'_>) -> String {
-    match value {
-        Value::Integer(i) => String::from(format_compact!("{i}")),
-        Value::Number(n) => String::from(format_compact!("{n}")),
-        Value::Boolean(b) => String::from(format_compact!("{b}")),
-        Value::String(s) => String::from(format_compact!("{:?}", s.to_str().unwrap())),
-        _ => String::from(""),
-    }
-}
-
-fn serialize_with_cycles<'lua>(
-    name: String,
-    value: Value<'lua>,
-    saved: &mut HashMap<String, String>,
-) -> String {
-    let mut serialized = Vec::new();
-    let key = &basic_serialize(&value);
-    if value.type_name() == "number"
-        || value.type_name() == "integer"
-        || value.type_name() == "string"
-        || value.type_name() == "boolean"
-        || value.type_name() == "table"
-    {
-        serialized.push(String::from(format_compact!("{} = ", name)));
-        if value.type_name() == "number"
-            || value.type_name() == "integer"
-            || value.type_name() == "string"
-            || value.type_name() == "boolean"
-        {
-            serialized.push(String::from(format_compact!("{}\n", key)));
-        } else {
-            if saved.contains_key(key) {
-                serialized.push(String::from(format_compact!("{}\n", saved[key])));
-            } else {
-                saved.insert(name.clone(), basic_serialize(&value));
-                serialized.push(String::from("{}\n"));
-
-                match value {
-                    Value::Table(t) => {
-                        for r in t.pairs::<Value, Value>() {
-                            let (k, v) = r.unwrap();
-                            let field_name =
-                                String::from(format_compact!("{}[{}]", name, basic_serialize(&k)));
-                            serialized.push(serialize_with_cycles(field_name, v, saved));
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-        String::from(serialized.concat_compact())
-    } else {
-        String::from("")
-    }
-}
-*/
-
 struct LuaSerVal {
     value: Value<'static>,
     level: usize,

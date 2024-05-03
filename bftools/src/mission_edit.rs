@@ -29,8 +29,10 @@ use nalgebra as na;
 use std::{
     collections::HashMap,
     f64::consts::PI,
+    fmt::Display,
     fs::{self, File},
     io::{self, BufWriter},
+    panic::AssertUnwindSafe,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -173,6 +175,7 @@ impl UnpackedMiz {
     }
 }
 
+/*
 fn basic_serialize(value: &Value<'_>) -> String {
     match value {
         Value::Integer(i) => String::from(format_compact!("{i}")),
@@ -226,6 +229,87 @@ fn serialize_with_cycles<'lua>(
         String::from(serialized.concat_compact())
     } else {
         String::from("")
+    }
+}
+*/
+
+struct LuaSerVal {
+    value: Value<'static>,
+    level: usize,
+}
+
+impl LuaSerVal {
+    fn indented(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for _ in 0..self.level {
+            write!(f, " ")?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for LuaSerVal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.value {
+            Value::Boolean(b) => write!(f, "{b}"),
+            Value::Integer(i) => write!(f, "{i}"),
+            Value::Nil => write!(f, "nil"),
+            Value::Number(n) => write!(f, "{n}"),
+            Value::String(s) => write!(f, "\"{}\"", s.to_string_lossy()),
+            Value::Table(tbl) => {
+                write!(f, "\n")?;
+                self.indented(f)?;
+                write!(f, "{{\n")?;
+                tbl.for_each(|k: Value, v: Value| {
+                    let k = LuaSerVal {
+                        value: k,
+                        level: self.level + 4,
+                    };
+                    let v = LuaSerVal {
+                        value: v,
+                        level: self.level + 4,
+                    };
+                    k.indented(f).unwrap();
+                    if v.value.is_table() {
+                        write!(f, "[{k}] = {v}, -- end of {k}\n").unwrap();
+                    } else {
+                        write!(f, "[{k}] = {v},\n").unwrap();
+                    }
+                    Ok(())
+                })
+                .unwrap();
+                self.indented(f)?;
+                write!(f, "}}")
+            }
+            Value::Error(_)
+            | Value::Function(_)
+            | Value::LightUserData(_)
+            | Value::Thread(_)
+            | Value::UserData(_) => panic!("value type {:?} can't be serialized", self.value),
+        }
+    }
+}
+
+fn serialize_to_lua(key: &str, value: Value<'static>) -> Result<std::string::String> {
+    let res = std::panic::catch_unwind(AssertUnwindSafe(move || {
+        use std::fmt::Write;
+        let mut s = std::string::String::with_capacity(4 * 1024 * 1024);
+        write!(s, "{key} = {}", LuaSerVal { value, level: 0 })?;
+        Ok::<_, anyhow::Error>(s)
+    }));
+    match res {
+        Ok(s) => Ok(s?),
+        Err(e) => {
+            if let Some(e) = e.downcast_ref::<anyhow::Error>() {
+                bail!(e.to_string());
+            }
+            if let Some(e) = e.downcast_ref::<&str>() {
+                bail!(e)
+            }
+            if let Some(e) = e.downcast_ref::<mlua::Error>() {
+                bail!(e.to_string())
+            }
+            bail!("serialization failed")
+        }
     }
 }
 
@@ -1062,21 +1146,13 @@ pub fn run(cfg: &MizCmd) -> Result<()> {
     vehicle_templates
         .apply(lua, &mut objectives, &mut base)
         .context("applying vehicle templates")?;
-    let s = serialize_with_cycles(
-        "mission".into(),
-        Value::Table((&*base.mission).clone()),
-        &mut HashMap::new(),
-    );
-    fs::write(&base.miz.files["mission"], &*s).context("writing mission file")?;
+    let s = serialize_to_lua("mission", Value::Table((&*base.mission).clone()))?;
+    fs::write(&base.miz.files["mission"], &s).context("writing mission file")?;
     info!("wrote serialized mission to mission file.");
     if let Some(wht) = warehouse_template {
         wht.apply(lua, &cfg, &mut base)
             .context("applying warehouse template")?;
-        let s = serialize_with_cycles(
-            "warehouses".into(),
-            Value::Table(base.warehouses.clone()),
-            &mut HashMap::new(),
-        );
+        let s = serialize_to_lua("warehouses", Value::Table(base.warehouses.clone()))?;
         fs::write(&base.miz.files["warehouses"], &*s).context("writing warehouse file")?;
         info!("wrote serialized warehouses to warehouse file.");
     }

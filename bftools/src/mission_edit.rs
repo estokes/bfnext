@@ -14,7 +14,7 @@
 //repack miz
 use crate::MizCmd;
 use anyhow::{bail, Context, Result};
-use compact_str::{format_compact, CompactStringExt};
+use compact_str::format_compact;
 use dcso3::{
     azumith2d, change_heading,
     coalition::Side,
@@ -292,7 +292,7 @@ impl Display for LuaSerVal {
 fn serialize_to_lua(key: &str, value: Value<'static>) -> Result<std::string::String> {
     let res = std::panic::catch_unwind(AssertUnwindSafe(move || {
         use std::fmt::Write;
-        let mut s = std::string::String::with_capacity(4 * 1024 * 1024);
+        let mut s = std::string::String::with_capacity(128 * 1024 * 1024);
         write!(s, "{key} = {}", LuaSerVal { value, level: 0 })?;
         Ok::<_, anyhow::Error>(s)
     }));
@@ -300,13 +300,13 @@ fn serialize_to_lua(key: &str, value: Value<'static>) -> Result<std::string::Str
         Ok(s) => Ok(s?),
         Err(e) => {
             if let Some(e) = e.downcast_ref::<anyhow::Error>() {
-                bail!(e.to_string());
+                bail!("{e}");
             }
             if let Some(e) = e.downcast_ref::<&str>() {
-                bail!(e)
+                bail!("{e}")
             }
             if let Some(e) = e.downcast_ref::<mlua::Error>() {
-                bail!(e.to_string())
+                bail!("{e}")
             }
             bail!("serialization failed")
         }

@@ -179,6 +179,9 @@ impl<'lua> Unit<'lua> {
     }
 
     pub fn set_heading(&self, h: f64) -> Result<()> {
+        // I don't know exactly what this is, but if it isn't set the same as heading
+        // then heading seems to be ignored.
+        self.raw_set("psi", h)?;
         Ok(self.raw_set("heading", h)?)
     }
 

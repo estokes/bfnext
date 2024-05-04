@@ -198,24 +198,43 @@ impl Display for LuaSerVal {
             Value::Number(n) => write!(f, "{n}"),
             Value::String(s) => write!(f, "\"{}\"", s.to_string_lossy()),
             Value::Table(tbl) => {
+                macro_rules! write_elt {
+                    ($k:expr, $v:expr) => {
+                        let k = LuaSerVal {
+                            value: $k,
+                            level: self.level + 4,
+                        };
+                        let v = LuaSerVal {
+                            value: $v,
+                            level: self.level + 4,
+                        };
+                        k.indented(f).unwrap();
+                        if v.value.is_table() {
+                            write!(f, "[{k}] = {v}, -- end of [{k}]\n").unwrap();
+                        } else {
+                            write!(f, "[{k}] = {v},\n").unwrap();
+                        }
+                    }
+                }
+                let mut seq_max: Option<i64> = None;
                 write!(f, "\n")?;
                 self.indented(f)?;
                 write!(f, "{{\n")?;
-                tbl.for_each(|k: Value, v: Value| {
-                    let k = LuaSerVal {
-                        value: k,
-                        level: self.level + 4,
-                    };
-                    let v = LuaSerVal {
-                        value: v,
-                        level: self.level + 4,
-                    };
-                    k.indented(f).unwrap();
-                    if v.value.is_table() {
-                        write!(f, "[{k}] = {v}, -- end of {k}\n").unwrap();
-                    } else {
-                        write!(f, "[{k}] = {v},\n").unwrap();
+                if tbl.contains_key(1).unwrap() {
+                    for (i, v) in tbl.clone().sequence_values().enumerate() {
+                        let i = (i + 1) as i64;
+                        let v = v.unwrap();
+                        seq_max = Some(i);
+                        write_elt!(Value::Integer(i), v);
                     }
+                }
+                tbl.for_each(|k: Value, v: Value| {
+                    if let Some(max) = seq_max {
+                        if k.is_integer() && k.as_integer().unwrap() <= max {
+                            return Ok(())
+                        }
+                    }
+                    write_elt!(k, v);
                     Ok(())
                 })
                 .unwrap();
@@ -782,6 +801,7 @@ impl VehicleTemplates {
                             }
                             u.set_id(uid)?;
                             u.set_heading(posgen.azumith())?;
+                            u.raw_set("psi", posgen.azumith())?;
                             u.set_pos(pos)?;
                             uid.next();
                         }

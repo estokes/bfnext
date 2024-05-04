@@ -801,7 +801,6 @@ impl VehicleTemplates {
                             }
                             u.set_id(uid)?;
                             u.set_heading(posgen.azumith())?;
-                            u.raw_set("psi", posgen.azumith())?;
                             u.set_pos(pos)?;
                             uid.next();
                         }

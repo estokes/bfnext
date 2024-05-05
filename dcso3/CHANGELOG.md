@@ -1,9 +1,12 @@
+## 0.1.6
+
 ## 0.1.5
 
 - work around a DCS bug that causes isExist to return true on dead
   groups
 - make ucid copy
 - flesh out mark events
+- set psi when setting heading in mission files
 
 ## 0.1.4
 

@@ -20,7 +20,7 @@ use anyhow::{bail, Result};
 use fxhash::FxHashMap;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::{cmp::max, collections::hash_map::Entry, f64::consts::PI, ops::Deref};
+use std::{cmp::max, collections::hash_map::Entry, ops::Deref};
 
 wrapped_table!(Weather, None);
 
@@ -179,13 +179,7 @@ impl<'lua> Unit<'lua> {
     }
 
     pub fn set_heading(&self, h: f64) -> Result<()> {
-        // I don't know exactly what this is, but if it isn't set the same as heading
-        // then heading seems to be ignored.
-        if h > PI {
-            self.raw_set("psi", -h)?;
-        } else {
-            self.raw_set("psi", h)?;
-        }
+        self.raw_set("psi", -h)?;
         Ok(self.raw_set("heading", h)?)
     }
 

@@ -79,7 +79,7 @@ pub struct WithJtac<T> {
 pub enum ActionArgs {
     Tanker(WithPos<AiPlaneCfg>),
     Awacs(WithPos<AiPlaneCfg>),
-    Blackjack(WithPos<AiPlaneCfg>),
+    CruiseMissile(WithPos<AiPlaneCfg>),
     Bomber(WithJtac<BomberCfg>),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
@@ -90,6 +90,7 @@ pub enum ActionArgs {
     Nuke(WithPos<NukeCfg>),
     TankerWaypoint(WithPosAndGroup<()>),
     AwacsWaypoint(WithPosAndGroup<()>),
+    CruiseMissileWaypoint(WithPosAndGroup<()>),
     Paratrooper(WithPos<DeployableCfg>),
     Deployable(WithPos<DeployableCfg>),
     LogisticsRepair(WithObj<AiPlaneCfg>),
@@ -171,7 +172,8 @@ impl ActionArgs {
         match action.clone() {
             ActionKind::Tanker(c) => Ok(Self::Tanker(pos(db, lua, side, c, s)?)),
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
-            ActionKind::Blackjack(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
+            ActionKind::CruiseMissile(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
+            ActionKind::CruiseMissileSpawn(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
             ActionKind::Fighters(c) => Ok(Self::Fighters(pos(db, lua, side, c, s)?)),
             ActionKind::FighersWaypoint => {
                 Ok(Self::FightersWaypoint(pos_group(db, lua, side, (), s)?))
@@ -188,6 +190,7 @@ impl ActionArgs {
             ActionKind::LogisticsRepair(c) => Ok(Self::LogisticsRepair(obj(db, c, s)?)),
             ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(from_to(db, c, s)?)),
             ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(db, lua, side, (), s)?)),
+            ActionKind::CruiseMissileWaypoint => Ok(Self::CruiseMissileWaypoint(pos_group(db, lua, side, (), s)?)),
             ActionKind::TankerWaypoint => {
                 Ok(Self::TankerWaypoint(pos_group(db, lua, side, (), s)?))
             }
@@ -341,9 +344,9 @@ impl Db {
                     args,
                 )
                 .context("calling bomber strike")?,
-            ActionArgs::Blackjack(args) => self
-                .blackjack(spctx, idx, side, ucid, name, cmd.action, args)
-                .context("calling blackjack")?,
+            ActionArgs::CruiseMissile(args) => self
+                .cruise_missile(spctx, idx, side, ucid, name, cmd.action, args)
+                .context("calling Cruise Missile Strike")?,
             ActionArgs::Deployable(args) => self
                 .ai_deploy(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai deployment")?,
@@ -380,6 +383,9 @@ impl Db {
                 .context("calling tanker")?,
             ActionArgs::TankerWaypoint(args) => self
                 .move_tanker(spctx, side, ucid.clone(), args)
+                .context("moving tanker")?,
+            ActionArgs::CruiseMissileWaypoint(args) => self
+                .move_cruise_missile(spctx, side, ucid.clone(), args)
                 .context("moving tanker")?,
             ActionArgs::Move(args) => match &ucid {
                 None => bail!("ucid is required for move"),
@@ -966,7 +972,7 @@ impl Db {
         Ok(())
     }
 
-    fn move_blackjack<'lua>(
+    fn move_cruise_missile<'lua>(
         &mut self,
         spctx: &SpawnCtx<'lua>,
         side: Side,
@@ -977,43 +983,42 @@ impl Db {
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
-            .blackjack_mission(side, ucid, pos, args)
-            .context("generating blackjack mission")?;
+            .cruise_missile_mission(side, ucid, pos, args)
+            .context("generating CruiseMissile mission")?;
         self.set_ai_mission(spctx, gid, mission)
             .context("setting ai mission")
     }
 
-    fn blackjack_attack(
+    fn cruise_missile_attack<'lua>(
         &mut self,
-        spctx: &SpawnCtx,
         side: Side,
         ucid: Option<Ucid>,
+        spawn_pos: Vector2,
         args: WithPosAndGroup<()>,
-        attack_point: Vector2,
-        quantity: i8,
-    ) -> Result<()> {
-        let gid = args.group;
-        let group = group!(self, gid)?;
-        let pos = group_position(spctx.lua(), &group.name)?;
-        let mission = self
-            .ai_cruise_missile_mission(
-                side,
-                ucid,
-                args,
-                LuaVec2(attack_point),
-                quantity,
-                |k| match k {
-                    ActionKind::Blackjack(_) => true,
-                    _ => false,
-                },
-                || Task::ComboTask(vec![Task::ComboTask(vec![])]),
-                || vec![],
-            )
-            .context("generate blackjack attack mission")?;
-        self.set_ai_mission(spctx, gid, mission)
+    ) -> Result<Vec<MissionPoint<'lua>>> {
+        let group = group!(self, args.group)?;
+        let init_task = Task::ComboTask(vec![]);
+        let main_task = if group.tags.contains(UnitTag::Link16) {
+            vec![Task::WrappedCommand(Command::SetUnlimitedFuel(true))]
+        } else {
+            vec![Task::WrappedCommand(Command::SetUnlimitedFuel(true))]
+        };
+        self.ai_loiter_point_mission(
+            side,
+            ucid,
+            args,
+            OrbitPattern::Circle,
+            spawn_pos,
+            |k| match k {
+                ActionKind::CruiseMissile(_) => true,
+                _ => false,
+            },
+            move || init_task.clone(),
+            move || main_task.clone(),
+        )
     }
 
-    fn blackjack(
+    fn cruise_missile(
         &mut self,
         spctx: &SpawnCtx,
         idx: &MizIndex,
@@ -1035,7 +1040,7 @@ impl Db {
             None,
             BitFlags::empty(),
             move |db, gid, pos| {
-                db.blackjack_mission(
+                db.cruise_missile_mission(
                     side,
                     ucid,
                     pos,
@@ -1429,7 +1434,7 @@ impl Db {
         )
     }
 
-    fn blackjack_mission<'lua>(
+    fn cruise_missile_mission<'lua>(
         &mut self,
         side: Side,
         ucid: Option<Ucid>,
@@ -1439,18 +1444,18 @@ impl Db {
         let group = group!(self, args.group)?;
         let init_task = Task::ComboTask(vec![]);
         let main_task = if group.tags.contains(UnitTag::Link16) {
-            vec![]
+            vec![Task::WrappedCommand(Command::SetUnlimitedFuel(true))]
         } else {
-            vec![]
+            vec![Task::WrappedCommand(Command::SetUnlimitedFuel(true))]
         };
         self.ai_loiter_point_mission(
             side,
             ucid,
             args,
-            OrbitPattern::RaceTrack,
+            OrbitPattern::Circle,
             spawn_pos,
             |k| match k {
-                ActionKind::Blackjack(_) => true,
+                ActionKind::CruiseMissile(_) => true,
                 _ => false,
             },
             move || init_task.clone(),
@@ -1458,7 +1463,7 @@ impl Db {
         )
     }
 
-    fn ai_cruise_missile_mission<'lua>(
+    fn ai_cruise_missile_mission_deprecated<'lua>(
         &mut self,
         side: Side,
         ucid: Option<Ucid>,
@@ -1485,11 +1490,11 @@ impl Db {
 
             for d in lcd {
                 while quantity - d.0 >= d.0 {
-                    quantity -= d.0;
+                    quantity -= d.0;                       
 
                     let attack_params = AttackParams {
-                        weapon_type: Some(2097152),
-                        expend: Some(d.1),
+                        weapon_type: Some(0x200000),
+                        expend: Some(d.1.clone()),
                         direction: None,
                         altitude: None,
                         attack_qty: None,
@@ -1548,7 +1553,8 @@ impl Db {
                 match &mut spec.kind {
                     ActionKind::Awacs(a)
                     | ActionKind::Tanker(a)
-                    | ActionKind::Blackjack(a)
+                    | ActionKind::CruiseMissile(a)
+                    | ActionKind::CruiseMissileSpawn(a)
                     | ActionKind::Drone(DroneCfg { plane: a, .. })
                     | ActionKind::Fighters(a)
                     | ActionKind::Attackers(a) => {
@@ -1591,6 +1597,7 @@ impl Db {
                     | ActionKind::AwacsWaypoint
                     | ActionKind::DroneWaypoint
                     | ActionKind::TankerWaypoint
+                    | ActionKind::CruiseMissileWaypoint
                     | ActionKind::FighersWaypoint
                     | ActionKind::Move(_)
                     | ActionKind::Deployable(_)
@@ -1946,7 +1953,8 @@ impl Db {
             {
                 match &spec.kind {
                     ActionKind::Awacs(ai)
-                    | ActionKind::Blackjack(ai)
+                    | ActionKind::CruiseMissile(ai)
+                    | ActionKind::CruiseMissileSpawn(ai)
                     | ActionKind::Fighters(ai)
                     | ActionKind::Attackers(ai)
                     | ActionKind::Drone(DroneCfg { plane: ai, .. })
@@ -2069,6 +2077,7 @@ impl Db {
                     ActionKind::AwacsWaypoint
                     | ActionKind::FighersWaypoint
                     | ActionKind::AttackersWaypoint
+                    | ActionKind::CruiseMissileWaypoint
                     | ActionKind::TankerWaypoint
                     | ActionKind::DroneWaypoint
                     | ActionKind::Nuke(_) => {

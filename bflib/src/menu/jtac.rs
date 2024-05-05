@@ -442,6 +442,156 @@ fn add_artillery_menu_for_jtac(
     Ok(())
 }
 
+
+fn add_cruise_missile_menu_for_jtac(
+    lua: MizLua,
+    mizgid: GroupId,
+    ucid: Ucid,
+    root: GroupSubMenu,
+    jtac: JtId,
+    aircraft: &[DbGid],
+) -> Result<()> {
+    let mc = MissionCommands::singleton(lua)?;
+    let root = mc.add_submenu_for_group(mizgid, "Cruise Missiles".into(), Some(root.clone()))?;
+    for gid in aircraft {
+        let root =
+            mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
+        let add_adjust = |root: &GroupSubMenu, dir: AdjustmentDir| -> Result<()> {
+            mc.add_command_for_group(
+                mizgid,
+                "10m".into(),
+                Some(root.clone()),
+                jtac_adjust_solution,
+                ArgQuad {
+                    fst: *gid,
+                    snd: dir,
+                    trd: 10,
+                    fth: ucid,
+                },
+            )?;
+            mc.add_command_for_group(
+                mizgid,
+                "25m".into(),
+                Some(root.clone()),
+                jtac_adjust_solution,
+                ArgQuad {
+                    fst: *gid,
+                    snd: dir,
+                    trd: 25,
+                    fth: ucid,
+                },
+            )?;
+            mc.add_command_for_group(
+                mizgid,
+                "50m".into(),
+                Some(root.clone()),
+                jtac_adjust_solution,
+                ArgQuad {
+                    fst: *gid,
+                    snd: dir,
+                    trd: 50,
+                    fth: ucid,
+                },
+            )?;
+            mc.add_command_for_group(
+                mizgid,
+                "100m".into(),
+                Some(root.clone()),
+                jtac_adjust_solution,
+                ArgQuad {
+                    fst: *gid,
+                    snd: dir,
+                    trd: 100,
+                    fth: ucid,
+                },
+            )?;
+            Ok(())
+        };
+        mc.add_command_for_group(
+            mizgid,
+            "Fire One".into(),
+            Some(root.clone()),
+            jtac_artillery_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 1,
+                fth: ucid,
+            },
+        )?;
+        let for_effect =
+            mc.add_submenu_for_group(mizgid, "Fire For Effect".into(), Some(root.clone()))?;
+        mc.add_command_for_group(
+            mizgid,
+            "5".into(),
+            Some(for_effect.clone()),
+            jtac_artillery_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 5,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "10".into(),
+            Some(for_effect.clone()),
+            jtac_artillery_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 10,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "20".into(),
+            Some(for_effect.clone()),
+            jtac_artillery_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 20,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "40".into(),
+            Some(for_effect.clone()),
+            jtac_artillery_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 40,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Show Adjustment".into(),
+            Some(root.clone()),
+            jtac_show_adjustment,
+            ArgTuple {
+                fst: ucid,
+                snd: *gid,
+            },
+        )?;
+        let short = mc.add_submenu_for_group(mizgid, "Report Short".into(), Some(root.clone()))?;
+        add_adjust(&short, AdjustmentDir::Short)?;
+        let long = mc.add_submenu_for_group(mizgid, "Report Long".into(), Some(root.clone()))?;
+        add_adjust(&long, AdjustmentDir::Long)?;
+        let left = mc.add_submenu_for_group(mizgid, "Report Left".into(), Some(root.clone()))?;
+        add_adjust(&left, AdjustmentDir::Left)?;
+        let right = mc.add_submenu_for_group(mizgid, "Report Right".into(), Some(root.clone()))?;
+        add_adjust(&right, AdjustmentDir::Right)?;
+    }
+    Ok(())
+}
+
+
 fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let spctx = SpawnCtx::new(lua)?;

@@ -16,12 +16,9 @@ for more details.
 
 use super::{ArgQuad, ArgTriple, ArgTuple};
 use crate::{
-    cfg::{ActionKind, UnitTag},
+    cfg::{Action, ActionKind, UnitTag},
     db::{
-        actions::{ActionArgs, ActionCmd, WithJtac},
-        group::GroupId as DbGid,
-        objective::ObjectiveId,
-        Db,
+        self, actions::{self, ActionArgs, ActionCmd, WithJtac, WithPosAndGroup}, group::GroupId as DbGid, objective::ObjectiveId, Db
     },
     jtac::{AdjustmentDir, JtId, Jtac, Jtacs},
     spawnctx::SpawnCtx,
@@ -34,10 +31,13 @@ use dcso3::{
     env::miz::GroupId,
     mission_commands::{GroupCommandItem, GroupSubMenu, MissionCommands},
     net::{SlotId, Ucid},
-    MizLua, String,
+    object::DcsObject,
+    unit::Unit,
+    LuaEnv, MizLua, String,
 };
 use enumflags2::{BitFlag, BitFlags};
 use log::error;
+use mlua::LuaSerdeExt;
 use smallvec::{smallvec, SmallVec};
 
 fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
@@ -168,6 +168,65 @@ fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
         .msgs()
         .panel_to_side(10, false, jtac.side(), msg);
     Ok(())
+}
+
+fn jtac_cruise_missile_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let db = &ctx.db;
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
+    let mut min_dist: Option<f64> = None;
+    let quant = arg.trd as i64;
+    let mut final_gid: Option<db::group::GroupId> = None;
+
+    for gid in &db.persisted.actions {
+        let aircraft = db.unit(
+            db.group(gid)?
+                .units
+                .into_iter()
+                .next()
+                .ok_or(anyhow!("no unit!"))?,
+        )?;
+        let id = db
+            .ephemeral
+            .get_object_id_by_uid(&aircraft.id)
+            .ok_or(anyhow!("no object with id"))?;
+        let unit = Unit::get_instance(lua, id).context("getting unit")?;
+        let ammo_state = unit.get_ammo()?;
+        let dist = na::distance(&aircraft.pos.into(), &jtac.location().pos.into());
+
+        min_dist = match min_dist {
+            Some(c) => {
+                if dist < c {
+                    final_gid = Some(*gid);
+                    Some(dist)
+                } else {
+                    final_gid = Some(*gid);
+                    Some(c)
+                }
+            }
+            None => {
+                final_gid = Some(*gid);
+                Some(dist)
+            }
+        };
+    }
+
+    match min_dist {
+        Some(_) => {
+            call_cruise_missile_strike(
+                lua,
+                "cruise-missile".to_owned().into(),
+                ArgQuad {
+                    fst: arg.fst,
+                    snd: arg.fth,
+                    trd: quant,
+                    fth: final_gid.ok_or(anyhow!("no bomber to use for mission!"))?,
+                },
+            )?;
+            Ok(())
+        }
+        None => bail!("no bombers available!"),
+    }
 }
 
 fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
@@ -442,7 +501,6 @@ fn add_artillery_menu_for_jtac(
     Ok(())
 }
 
-
 fn add_cruise_missile_menu_for_jtac(
     lua: MizLua,
     mizgid: GroupId,
@@ -456,80 +514,54 @@ fn add_cruise_missile_menu_for_jtac(
     for gid in aircraft {
         let root =
             mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
-        let add_adjust = |root: &GroupSubMenu, dir: AdjustmentDir| -> Result<()> {
-            mc.add_command_for_group(
-                mizgid,
-                "10m".into(),
-                Some(root.clone()),
-                jtac_adjust_solution,
-                ArgQuad {
-                    fst: *gid,
-                    snd: dir,
-                    trd: 10,
-                    fth: ucid,
-                },
-            )?;
-            mc.add_command_for_group(
-                mizgid,
-                "25m".into(),
-                Some(root.clone()),
-                jtac_adjust_solution,
-                ArgQuad {
-                    fst: *gid,
-                    snd: dir,
-                    trd: 25,
-                    fth: ucid,
-                },
-            )?;
-            mc.add_command_for_group(
-                mizgid,
-                "50m".into(),
-                Some(root.clone()),
-                jtac_adjust_solution,
-                ArgQuad {
-                    fst: *gid,
-                    snd: dir,
-                    trd: 50,
-                    fth: ucid,
-                },
-            )?;
-            mc.add_command_for_group(
-                mizgid,
-                "100m".into(),
-                Some(root.clone()),
-                jtac_adjust_solution,
-                ArgQuad {
-                    fst: *gid,
-                    snd: dir,
-                    trd: 100,
-                    fth: ucid,
-                },
-            )?;
-            Ok(())
-        };
+
+        let for_effect =
+            mc.add_submenu_for_group(mizgid, "Salvo Count".into(), Some(root.clone()))?;
         mc.add_command_for_group(
             mizgid,
-            "Fire One".into(),
-            Some(root.clone()),
-            jtac_artillery_mission,
+            "2".into(),
+            Some(for_effect.clone()),
+            jtac_cruise_missile_mission,
             ArgQuad {
                 fst: jtac,
                 snd: *gid,
-                trd: 1,
+                trd: 2,
                 fth: ucid,
             },
         )?;
-        let for_effect =
-            mc.add_submenu_for_group(mizgid, "Fire For Effect".into(), Some(root.clone()))?;
         mc.add_command_for_group(
             mizgid,
-            "5".into(),
+            "4".into(),
             Some(for_effect.clone()),
-            jtac_artillery_mission,
+            jtac_cruise_missile_mission,
             ArgQuad {
                 fst: jtac,
                 snd: *gid,
-                trd: 5,
+                trd: 4,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "6".into(),
+            Some(for_effect.clone()),
+            jtac_cruise_missile_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 6,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "8".into(),
+            Some(for_effect.clone()),
+            jtac_cruise_missile_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 8,
                 fth: ucid,
             },
         )?;
@@ -537,7 +569,7 @@ fn add_cruise_missile_menu_for_jtac(
             mizgid,
             "10".into(),
             Some(for_effect.clone()),
-            jtac_artillery_mission,
+            jtac_cruise_missile_mission,
             ArgQuad {
                 fst: jtac,
                 snd: *gid,
@@ -547,25 +579,13 @@ fn add_cruise_missile_menu_for_jtac(
         )?;
         mc.add_command_for_group(
             mizgid,
-            "20".into(),
+            "12".into(),
             Some(for_effect.clone()),
             jtac_artillery_mission,
             ArgQuad {
                 fst: jtac,
                 snd: *gid,
-                trd: 20,
-                fth: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "40".into(),
-            Some(for_effect.clone()),
-            jtac_artillery_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 40,
+                trd: 12,
                 fth: ucid,
             },
         )?;
@@ -579,18 +599,9 @@ fn add_cruise_missile_menu_for_jtac(
                 snd: *gid,
             },
         )?;
-        let short = mc.add_submenu_for_group(mizgid, "Report Short".into(), Some(root.clone()))?;
-        add_adjust(&short, AdjustmentDir::Short)?;
-        let long = mc.add_submenu_for_group(mizgid, "Report Long".into(), Some(root.clone()))?;
-        add_adjust(&long, AdjustmentDir::Long)?;
-        let left = mc.add_submenu_for_group(mizgid, "Report Left".into(), Some(root.clone()))?;
-        add_adjust(&left, AdjustmentDir::Left)?;
-        let right = mc.add_submenu_for_group(mizgid, "Report Right".into(), Some(root.clone()))?;
-        add_adjust(&right, AdjustmentDir::Right)?;
     }
     Ok(())
 }
-
 
 fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
@@ -638,6 +649,67 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
             10,
             &arg.snd,
             format_compact!("bomber mission could not start {e:?}"),
+        ),
+    }
+    Ok(())
+}
+
+fn call_cruise_missile_strike(lua: MizLua, s: String ,arg: ArgQuad<JtId, Ucid, i64, db::group::GroupId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let spctx = SpawnCtx::new(lua)?;
+    let jtac = get_jtac(&ctx.jtac, &arg.fst)?;
+    let q = arg.trd;
+    let gid = arg.fth;
+    let tgt = jtac.target().clone().ok_or(anyhow!("no jtac target!"))?;
+    let (near, name) = change_info(jtac, &ctx.db, &arg.snd);
+    let action = ctx
+        .db
+        .ephemeral
+        .cfg
+        .actions
+        .get(&jtac.side())
+        .and_then(|acts| acts.get(&s))
+        .ok_or_else(|| anyhow!("no such action {}", arg.trd))?;
+    // let cfg = match &action.kind {
+    //     ActionKind::CruiseMissile(cfg, q) => cfg.clone(),
+    //     _ => bail!("not a cruise missile bomber action"),
+    // };
+    match ctx.db.start_action(
+        &spctx,
+        &ctx.idx,
+        &ctx.jtac,
+        jtac.side(),
+        Some(arg.snd.clone()),
+        ActionCmd {
+            name: s,
+            action: action.clone(),
+            args: ActionArgs::CruiseMissile(
+                WithPosAndGroup {
+                    cfg: (),
+                    pos: na::base::Vector2::new(tgt.pos.x, tgt.pos.z),
+                    group: gid,
+                },
+                q,
+            ),
+        },
+    ) {
+        Ok(()) => {
+            let msg = format_compact!(
+                "BOMBER MISSION STARTED\ntargeting by jtac {} near {}\nstarted by {}",
+                arg.fst,
+                near,
+                name
+            );
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_side(10, false, jtac.side(), msg)
+        }
+        Err(e) => ctx.db.ephemeral.panel_to_player(
+            &ctx.db.persisted,
+            10,
+            &arg.snd,
+            format_compact!("cruise missile strike could not start {e:?}"),
         ),
     }
     Ok(())
@@ -762,6 +834,15 @@ pub(super) fn add_menu_for_jtac(
         jtac.gid(),
         jtac.nearby_artillery(),
     )?;
+    add_cruise_missile_menu_for_jtac(
+        lua,
+        mizgid,
+        *ucid,
+        root.clone(),
+        jtac.gid(),
+        jtac.nearby_cruise_missile_bombers(),
+    )?;
+
     let bomber_missions = db.ephemeral.cfg.actions.get(&side);
     let bomber_missions = bomber_missions.iter().flat_map(|acts| {
         acts.iter().filter_map(|(n, a)| match a.kind {
@@ -796,7 +877,10 @@ fn add_jtacs_by_location(
         .ok_or_else(|| anyhow!("missing player"))?;
     if let Some((slot, _)) = &player.current_slot {
         let slot = *slot;
-        ctx.subscribed_jtac_menus.entry(slot).or_default().insert(arg.trd);
+        ctx.subscribed_jtac_menus
+            .entry(slot)
+            .or_default()
+            .insert(arg.trd);
         let mc = MissionCommands::singleton(lua)?;
         let name = ctx.db.objective(&arg.trd)?.name.clone();
         let mut cmd: Vec<String> = arg.fth.clone().into();

@@ -876,6 +876,8 @@ fn default_threatened_distance() -> FxHashMap<Vehicle, u32> {
         ("KC130".into(), 0),
         ("B-1B".into(), 36000),
         ("E-3A".into(), 0),
+        ("Tu-160".into(), 0),
+        ("B-52H".into(), 0),
     ])
 }
 
@@ -1061,6 +1063,8 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("B-1B".into(), Aircraft.into()),
             ("IL-78M".into(), Aircraft.into()),
             ("Tu-22M3".into(), Aircraft.into()),
+            ("Tu-160".into(), Aircraft | CruiseMissile),
+            ("B-52H".into(), Aircraft | CruiseMissile),
             (".Ammunition depot".into(), Logistics | Unarmed),
         ]
         .into_iter()
@@ -1189,6 +1193,15 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
             "cruise-missile-waypoint".into(),
             Action {
                 cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::CruiseMissileWaypoint,
+            },
+        ),
+        (
+            "cruise-missile".into(),
+            Action {
+                cost: 25,
                 penalty: None,
                 limit: None,
                 kind: ActionKind::CruiseMissileWaypoint,
@@ -1462,6 +1475,15 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
             "cruise-missile-waypoint".into(),
             Action {
                 cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::CruiseMissileWaypoint,
+            },
+        ),
+        (
+            "cruise-missile".into(),
+            Action {
+                cost: 25,
                 penalty: None,
                 limit: None,
                 kind: ActionKind::CruiseMissileWaypoint,

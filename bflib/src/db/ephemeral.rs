@@ -666,7 +666,10 @@ impl Ephemeral {
                         ..
                     })
                     | ActionKind::Tanker(AiPlaneCfg { template, .. })
-                    | ActionKind::CruiseMissile(AiPlaneCfg { template, .. })
+                    | ActionKind::CruiseMissile(BomberCfg {
+                        plane: AiPlaneCfg { template, .. },
+                        ..
+                    },_)
                     | ActionKind::CruiseMissileSpawn(AiPlaneCfg { template, .. })
                     | ActionKind::Drone(DroneCfg {
                         plane: AiPlaneCfg { template, .. },
@@ -715,7 +718,7 @@ impl Ephemeral {
         self.cfg = Arc::new(cfg);
         Ok(())
     }
-    
+
     pub(super) fn spawn_group<'lua>(
         &mut self,
         persisted: &Persisted,

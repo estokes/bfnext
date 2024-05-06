@@ -79,7 +79,8 @@ pub struct WithJtac<T> {
 pub enum ActionArgs {
     Tanker(WithPos<AiPlaneCfg>),
     Awacs(WithPos<AiPlaneCfg>),
-    CruiseMissile(WithPos<AiPlaneCfg>),
+    CruiseMissileSpawn(WithPos<AiPlaneCfg>),
+    CruiseMissile(WithPosAndGroup<()>, i64),
     Bomber(WithJtac<BomberCfg>),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
@@ -91,6 +92,7 @@ pub enum ActionArgs {
     TankerWaypoint(WithPosAndGroup<()>),
     AwacsWaypoint(WithPosAndGroup<()>),
     CruiseMissileWaypoint(WithPosAndGroup<()>),
+
     Paratrooper(WithPos<DeployableCfg>),
     Deployable(WithPos<DeployableCfg>),
     LogisticsRepair(WithObj<AiPlaneCfg>),
@@ -172,8 +174,12 @@ impl ActionArgs {
         match action.clone() {
             ActionKind::Tanker(c) => Ok(Self::Tanker(pos(db, lua, side, c, s)?)),
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
-            ActionKind::CruiseMissile(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
-            ActionKind::CruiseMissileSpawn(c) => Ok(Self::CruiseMissile(pos(db, lua, side, c, s)?)),
+            ActionKind::CruiseMissile(c, q) => {
+                Ok(Self::CruiseMissile(pos_group(db, lua, side, (), s)?, q))
+            }
+            ActionKind::CruiseMissileSpawn(c) => {
+                Ok(Self::CruiseMissileSpawn(pos(db, lua, side, c, s)?))
+            }
             ActionKind::Fighters(c) => Ok(Self::Fighters(pos(db, lua, side, c, s)?)),
             ActionKind::FighersWaypoint => {
                 Ok(Self::FightersWaypoint(pos_group(db, lua, side, (), s)?))
@@ -190,7 +196,13 @@ impl ActionArgs {
             ActionKind::LogisticsRepair(c) => Ok(Self::LogisticsRepair(obj(db, c, s)?)),
             ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(from_to(db, c, s)?)),
             ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(db, lua, side, (), s)?)),
-            ActionKind::CruiseMissileWaypoint => Ok(Self::CruiseMissileWaypoint(pos_group(db, lua, side, (), s)?)),
+            ActionKind::CruiseMissileWaypoint => Ok(Self::CruiseMissileWaypoint(pos_group(
+                db,
+                lua,
+                side,
+                (),
+                s,
+            )?)),
             ActionKind::TankerWaypoint => {
                 Ok(Self::TankerWaypoint(pos_group(db, lua, side, (), s)?))
             }
@@ -344,9 +356,21 @@ impl Db {
                     args,
                 )
                 .context("calling bomber strike")?,
-            ActionArgs::CruiseMissile(args) => self
-                .cruise_missile(spctx, idx, side, ucid, name, cmd.action, args)
-                .context("Spawning Cruise Missile Bomber")?,
+            ActionArgs::CruiseMissile(args, quantity) => self
+                .cruise_missile_attack(
+                    spctx,
+                    idx,
+                    side,
+                    ucid.clone(),
+                    name,
+                    cmd.action,
+                    args,
+                    quantity,
+                )
+                .context("starting cruise missile strike")?,
+            ActionArgs::CruiseMissileSpawn(args) => self
+                .cruise_missile(spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling cruise missile bomber")?,
             ActionArgs::Deployable(args) => self
                 .ai_deploy(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai deployment")?,
@@ -451,6 +475,17 @@ impl Db {
                     let mission = self
                         .awacs_mission(side, player, spawn_pos, args)
                         .context("generating awacs mission")?;
+                    let group = group!(self, gid)?;
+                    self.ephemeral
+                        .spawn_group(&self.persisted, idx, spctx, group, mission)?;
+                    return Ok(());
+                }
+                if let ActionKind::CruiseMissileSpawn(ai) = &spec.kind {
+                    delete_expired!(ai);
+                    let player = *player;
+                    let mission = self
+                        .cruise_missile_mission(side, player, spawn_pos, args)
+                        .context("generating cruise missile mission")?;
                     let group = group!(self, gid)?;
                     self.ephemeral
                         .spawn_group(&self.persisted, idx, spctx, group, mission)?;
@@ -991,31 +1026,73 @@ impl Db {
 
     fn cruise_missile_attack<'lua>(
         &mut self,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
         side: Side,
         ucid: Option<Ucid>,
-        spawn_pos: Vector2,
+        name: String,
+        action: Action,
         args: WithPosAndGroup<()>,
-    ) -> Result<Vec<MissionPoint<'lua>>> {
-        let group = group!(self, args.group)?;
-        let init_task = Task::ComboTask(vec![]);
-        let main_task = if group.tags.contains(UnitTag::Link16) {
-            vec![Task::WrappedCommand(Command::SetUnlimitedFuel(true))]
-        } else {
-            vec![Task::WrappedCommand(Command::SetUnlimitedFuel(true))]
+        quantity: i64,
+    ) -> Result<()> {
+        let attack_pos = &args.pos;
+        let mut quantity = quantity;
+        let mission_set: Vec<Task> = {
+            let mut task_vec: Vec<Task> = Vec::new();
+            let lcd = [
+                (4, WeaponExpend::Four),
+                (2, WeaponExpend::Two),
+                (1, WeaponExpend::One),
+            ];
+
+            for d in lcd {
+                while quantity - d.0 >= d.0 {
+                    quantity -= d.0;
+
+                    let attack_params = AttackParams {
+                        weapon_type: Some(2097152),
+                        expend: Some(d.1.clone()),
+                        direction: None,
+                        altitude: None,
+                        attack_qty: Some(1),
+                        group_attack: None,
+                    };
+
+                    let task = Task::Bombing {
+                        point: LuaVec2 {
+                            0: attack_pos.clone(),
+                        },
+                        params: attack_params,
+                    };
+
+                    task_vec.push(task);
+                }
+            }
+
+            task_vec
         };
+        let init_task = vec![];
+        let main_task = vec![Task::ComboTask(mission_set)];
+        let pos = self.unit(self.group(&args.group)?.units.into_iter().next().ok_or(anyhow!("cant find unit"))?)?.pos;
+        let spawn_pos = args.pos.clone();
         self.ai_loiter_point_mission(
             side,
             ucid,
-            args,
+            WithPosAndGroup{
+                cfg: args.cfg,
+                pos: pos,
+                group: args.group,
+            },
             OrbitPattern::Circle,
             spawn_pos,
             |k| match k {
-                ActionKind::CruiseMissile(_) => true,
+                ActionKind::CruiseMissileSpawn(_) => true,
                 _ => false,
             },
-            move || init_task.clone(),
+            move || dcso3::controller::Task::ComboTask(init_task.clone()),
             move || main_task.clone(),
-        )
+        )?;
+        Ok(())
     }
 
     fn cruise_missile(
@@ -1455,65 +1532,12 @@ impl Db {
             OrbitPattern::Circle,
             spawn_pos,
             |k| match k {
-                ActionKind::CruiseMissile(_) => true,
+                ActionKind::CruiseMissileSpawn(_) => true,
                 _ => false,
             },
             move || init_task.clone(),
             move || main_task.clone(),
         )
-    }
-
-    fn ai_cruise_missile_mission_deprecated<'lua>(
-        &mut self,
-        side: Side,
-        ucid: Option<Ucid>,
-        args: WithPosAndGroup<()>,
-        attack_point: LuaVec2,
-        mut quantity: i8,
-        validator: impl Fn(&ActionKind) -> bool,
-        init_task: impl Fn() -> Task<'lua> + 'static,
-        main_task: impl Fn() -> Vec<Task<'lua>> + 'static,
-    ) -> Result<i8> {
-        let enemy = side.opposite();
-        let group = group_mut!(self, args.group)?;
-        if group.side != side {
-            bail!("can't command other team's missiles")
-        }
-
-        let mission_set: Vec<Task> = {
-            let mut task_vec: Vec<Task> = Vec::new();
-            let lcd = [
-                (4, WeaponExpend::Four),
-                (2, WeaponExpend::Two),
-                (1, WeaponExpend::One),
-            ];
-
-            for d in lcd {
-                while quantity - d.0 >= d.0 {
-                    quantity -= d.0;                       
-
-                    let attack_params = AttackParams {
-                        weapon_type: Some(0x200000),
-                        expend: Some(d.1.clone()),
-                        direction: None,
-                        altitude: None,
-                        attack_qty: None,
-                        group_attack: None,
-                    };
-
-                    let task = Task::AttackMapObject {
-                        point: attack_point,
-                        params: attack_params,
-                    };
-
-                    task_vec.push(task);
-                }
-            }
-
-            task_vec
-        };
-
-        Ok(quantity)
     }
 
     fn ai_loiter_point_mission<'lua>(
@@ -1548,12 +1572,11 @@ impl Db {
                 ..
             } => {
                 if !validator(&spec.kind) {
-                    bail!("this move action is not compatible with the selected group")
+                    bail!("this move action is not compatible with the selected group {0:?}", spec.kind)
                 }
                 match &mut spec.kind {
                     ActionKind::Awacs(a)
                     | ActionKind::Tanker(a)
-                    | ActionKind::CruiseMissile(a)
                     | ActionKind::CruiseMissileSpawn(a)
                     | ActionKind::Drone(DroneCfg { plane: a, .. })
                     | ActionKind::Fighters(a)
@@ -1602,6 +1625,7 @@ impl Db {
                     | ActionKind::Move(_)
                     | ActionKind::Deployable(_)
                     | ActionKind::Paratrooper(_)
+                    | ActionKind::CruiseMissile(_,_)
                     | ActionKind::Bomber(_)
                     | ActionKind::Nuke(_)
                     | ActionKind::LogisticsRepair(_)
@@ -1684,7 +1708,8 @@ impl Db {
         }
         match &pattern {
             OrbitPattern::Circle => {
-                let mut tlist = vec![Task::Orbit {
+                let mut tlist: Vec<Task<'lua>> = Vec::new();
+                let orbit = vec![Task::Orbit {
                     pattern: OrbitPattern::Circle,
                     point: Some(LuaVec2(point1)),
                     point2: None,
@@ -1694,9 +1719,11 @@ impl Db {
                 for t in main_task() {
                     tlist.push(t);
                 }
+                //tlist.push(orbit);
                 Ok(vec![
                     wpt!("ip", spawn_point, init_task()),
-                    wpt!("orbit", point1, Task::ComboTask(tlist)),
+                    wpt!("main", point1, Task::ComboTask(tlist)),
+                    wpt!("orbit", point1, Task::ComboTask(orbit))
                 ])
             }
             OrbitPattern::RaceTrack => {
@@ -1953,7 +1980,6 @@ impl Db {
             {
                 match &spec.kind {
                     ActionKind::Awacs(ai)
-                    | ActionKind::CruiseMissile(ai)
                     | ActionKind::CruiseMissileSpawn(ai)
                     | ActionKind::Fighters(ai)
                     | ActionKind::Attackers(ai)
@@ -1975,6 +2001,21 @@ impl Db {
                         if destination.is_none() {
                             if let Some(target) = *rtb {
                                 if at_dest!(group, target, 10_000.) {
+                                    to_delete.push(*gid);
+                                }
+                            }
+                        }
+                    }
+                    ActionKind::CruiseMissile(b,q) => {
+                        if let Some(target) = *destination {
+                            if true {
+                                destination.take();
+                                to_bomb.push((b.clone(), target, group.side,));
+                            }
+                        }
+                        if destination.is_none() {
+                            if let Some(target) = *rtb {
+                                if true {
                                     to_delete.push(*gid);
                                 }
                             }

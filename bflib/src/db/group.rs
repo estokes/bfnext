@@ -871,6 +871,17 @@ impl Db {
         artillery
     }
 
+    pub fn cruise_missile_bombers_near_point(&self, side: Side) -> Vec<GroupId> {
+        let mut v: Vec<GroupId> = Vec::new();
+
+        for (gid, group) in self.persisted.groups.into_iter() {
+            if group.tags.contains(UnitTag::CruiseMissile) && group.side == side {
+                v.push(gid.clone())
+            }
+        }
+        v
+    }
+
     pub fn update_unit_positions_incremental(
         &mut self,
         lua: MizLua,

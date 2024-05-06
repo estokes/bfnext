@@ -62,11 +62,7 @@ fn do_pos_action(
             cfg: cfg.clone(),
             pos,
         }),
-        ActionKind::CruiseMissile(cfg) => ActionArgs::CruiseMissile(WithPos {
-            cfg: cfg.clone(),
-            pos,
-        }),
-        ActionKind::CruiseMissileSpawn(cfg) => ActionArgs::CruiseMissile(WithPos {
+        ActionKind::CruiseMissileSpawn(cfg) => ActionArgs::CruiseMissileSpawn(WithPos {
             cfg: cfg.clone(),
             pos,
         }),
@@ -95,6 +91,7 @@ fn do_pos_action(
             pos,
         }),
         ActionKind::Bomber(_)
+        | ActionKind::CruiseMissile(_, _)
         | ActionKind::LogisticsTransfer(_)
         | ActionKind::LogisticsRepair(_)
         | ActionKind::Move(_)
@@ -214,7 +211,7 @@ fn do_pos_group_action(
         }),
         ActionKind::Attackers(_)
         | ActionKind::Awacs(_)
-        | ActionKind::CruiseMissile(_)
+        | ActionKind::CruiseMissile(_, _)
         | ActionKind::CruiseMissileSpawn(_)
         | ActionKind::Deployable(_)
         | ActionKind::Drone(_)
@@ -287,7 +284,7 @@ fn do_objective_action(
         | ActionKind::AttackersWaypoint
         | ActionKind::Attackers(_)
         | ActionKind::Awacs(_)
-        | ActionKind::CruiseMissile(_)
+        | ActionKind::CruiseMissile(_, _)
         | ActionKind::CruiseMissileSpawn(_)
         | ActionKind::Awacs(_)
         | ActionKind::Deployable(_)
@@ -516,7 +513,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             }
             ActionKind::Attackers(_)
             | ActionKind::Awacs(_)
-            | ActionKind::CruiseMissile(_)
+            | ActionKind::CruiseMissile(_, _)
             | ActionKind::CruiseMissileSpawn(_)
             | ActionKind::Deployable(_)
             | ActionKind::Drone(_)

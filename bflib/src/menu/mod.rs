@@ -116,6 +116,14 @@ struct ArgQuad<T, U, V, W> {
     fth: W,
 }
 
+struct ArgQuint<T, U, V, W, X> {
+    fst: T,
+    snd: U,
+    trd: V,
+    fth: W,
+    ffh: X,
+}
+
 impl<'lua, T, U, V, W> IntoLua<'lua> for ArgQuad<T, U, V, W>
 where
     T: IntoLua<'lua>,

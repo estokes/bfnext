@@ -245,6 +245,7 @@ pub struct Jtac {
     code: u16,
     last_smoke: DateTime<Utc>,
     nearby_artillery: SmallVec<[GroupId; 8]>,
+    nearby_cruise_missile_bombers: Vec<GroupId>,
     menu_dirty: bool,
     air: bool,
 }
@@ -271,6 +272,7 @@ impl Jtac {
             code: 1688,
             last_smoke: DateTime::<Utc>::default(),
             nearby_artillery: smallvec![],
+            nearby_cruise_missile_bombers: Vec::new(),
             menu_dirty: false,
             air,
         }
@@ -417,8 +419,13 @@ impl Jtac {
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
+
+                self.nearby_cruise_missile_bombers =
+                    db.cruise_missile_bombers_near_point(self.side);
+
                 Ok(false)
             }
+
             Some(_) | None => {
                 self.remove_target(db, lua)?;
                 let jtid = match &self.gid {
@@ -477,6 +484,8 @@ impl Jtac {
                 });
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.nearby_cruise_missile_bombers =
+                    db.cruise_missile_bombers_near_point(self.side);
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
@@ -712,6 +721,10 @@ impl Jtac {
 
     pub fn nearby_artillery(&self) -> &[GroupId] {
         &self.nearby_artillery
+    }
+
+    pub fn nearby_cruise_missile_bombers(&self) -> &Vec<GroupId> {
+        &self.nearby_cruise_missile_bombers
     }
 }
 

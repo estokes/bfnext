@@ -1170,6 +1170,31 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
             },
         ),
         (
+            "cruise-missile-spawn".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::CruiseMissileSpawn(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(8),
+                    template: "RCRUISE".into(),
+                    altitude: 11000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 240.,
+                }),
+            },
+        ),
+        (
+            "cruise-missile-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::CruiseMissileWaypoint,
+            },
+        ),
+        (
             "tanker".into(),
             Action {
                 cost: 50,
@@ -1418,6 +1443,31 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
             },
         ),
         (
+            "cruise-missile-spawn".into(),
+            Action {
+                cost: 100,
+                penalty: Some(100),
+                limit: None,
+                kind: ActionKind::CruiseMissileSpawn(AiPlaneCfg {
+                    kind: AiPlaneKind::FixedWing,
+                    duration: Some(8),
+                    template: "BCRUISE".into(),
+                    altitude: 11000.,
+                    altitude_typ: AltType::BARO,
+                    speed: 240.,
+                }),
+            },
+        ),
+        (
+            "cruise-missile-waypoint".into(),
+            Action {
+                cost: 10,
+                penalty: None,
+                limit: None,
+                kind: ActionKind::CruiseMissileWaypoint,
+            },
+        ),
+        (
             "basket-tanker".into(),
             Action {
                 cost: 50,
@@ -1657,10 +1707,16 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
 impl Default for Cfg {
     fn default() -> Self {
         Self {
-            admins: FxHashMap::from_iter([(
-                "f279deb7a6b62c96a78eca3ddb2bd8d0".parse().unwrap(),
-                "REAPER 32 | EvilKipper".into(),
-            )]),
+            admins: FxHashMap::from_iter([
+                (
+                    "f279deb7a6b62c96a78eca3ddb2bd8d0".parse().unwrap(),
+                    "REAPER 32 | EvilKipper".into(),
+                ),
+                (
+                    "025ee29567ec00061db890812f4b8ec5".parse().unwrap(),
+                    "REAPER 32 | Yink".into(),
+                ),
+            ]),
             banned: FxHashMap::default(),
             max_msgs_per_second: 3,
             repair_time: 1800,

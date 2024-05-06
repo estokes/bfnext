@@ -173,7 +173,7 @@ impl ActionArgs {
             ActionKind::Tanker(c) => Ok(Self::Tanker(pos(db, lua, side, c, s)?)),
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
             ActionKind::CruiseMissile(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
-            ActionKind::CruiseMissileSpawn(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
+            ActionKind::CruiseMissileSpawn(c) => Ok(Self::CruiseMissile(pos(db, lua, side, c, s)?)),
             ActionKind::Fighters(c) => Ok(Self::Fighters(pos(db, lua, side, c, s)?)),
             ActionKind::FighersWaypoint => {
                 Ok(Self::FightersWaypoint(pos_group(db, lua, side, (), s)?))
@@ -346,7 +346,7 @@ impl Db {
                 .context("calling bomber strike")?,
             ActionArgs::CruiseMissile(args) => self
                 .cruise_missile(spctx, idx, side, ucid, name, cmd.action, args)
-                .context("calling Cruise Missile Strike")?,
+                .context("Spawning Cruise Missile Bomber")?,
             ActionArgs::Deployable(args) => self
                 .ai_deploy(spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai deployment")?,

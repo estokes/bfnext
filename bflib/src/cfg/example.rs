@@ -1201,7 +1201,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
         (
             "cruise-missile".into(),
             Action {
-                cost: 0,
+                cost: 15,
                 penalty: None,
                 limit: None,
                 kind: ActionKind::CruiseMissileWaypoint,

@@ -367,6 +367,7 @@ impl Db {
                     cmd.action,
                     args,
                     quantity,
+                    cost
                 )
                 .context("starting cruise missile strike")?,
             ActionArgs::CruiseMissileSpawn(args) => self
@@ -1035,6 +1036,7 @@ impl Db {
         action: Action,
         args: WithPosAndGroup<()>,
         quantity: i64,
+        cost: u32,
     ) -> Result<()> {
         let attack_pos = &args.pos;
         let mut quantity = quantity;
@@ -1082,6 +1084,14 @@ impl Db {
                         attack_qty: None,
                         group_attack: None,
                     };
+
+                    if let Some(ucid) = ucid.as_ref() {
+                        self.adjust_points(
+                            ucid,
+                            -((cost as i32)*(quantity as i32)),
+                            &format!("cruise missile expenditure"),
+                        );
+                    }
 
                     let task = Task::AttackMapObject {
                         point: LuaVec2::new(attack_pos.x, attack_pos.y),
@@ -1756,10 +1766,11 @@ impl Db {
                 for t in main_task() {
                     tlist.push(t);
                 }
-                tlist.push(orbit);
+                tlist.push(orbit.clone());
                 Ok(vec![
                     wpt!("ip", spawn_point, init_task()),
                     wpt!("point1", point1, Task::ComboTask(tlist)),
+                    wpt!("point2", point1, Task::ComboTask(vec![orbit])),
                 ])
             }
             OrbitPattern::RaceTrack => {

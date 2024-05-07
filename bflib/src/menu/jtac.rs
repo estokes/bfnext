@@ -212,9 +212,7 @@ fn jtac_cruise_missile_get_ammo(lua: MizLua, arg: ArgTriple<Ucid, DbGid, u8>) ->
         .ok_or(anyhow!("no weapon!"))??
         .count()? as i64;
 
-    let msg = format_compact!("Missiles Remaining: {}/12", ammo_state);
-
-    let msg = format_compact!("Missiles Remaining: {}/12", 0 as isize);
+    let msg = format_compact!("{} {} | Missiles Remaining: {}/12", aircraft.typ, aircraft.id, ammo_state);
     ctx.db.ephemeral.msgs().panel_to_unit(10, false, puid, msg);
     Ok(())
 }
@@ -634,7 +632,7 @@ fn add_cruise_missile_menu_for_jtac(
             mizgid,
             "12".into(),
             Some(for_effect.clone()),
-            jtac_artillery_mission,
+            jtac_cruise_missile_mission,
             ArgQuad {
                 fst: jtac,
                 snd: *gid,
@@ -742,7 +740,7 @@ fn call_cruise_missile_strike(
     ) {
         Ok(()) => {
             let msg = format_compact!(
-                "BOMBER MISSION STARTED\ntargeting by jtac {} near {}\nstarted by {}",
+                "CRUISE MISSILE STRIKE STARTED\ntargeting by jtac {} near {}\nstarted by {}",
                 arg.fst,
                 near,
                 name

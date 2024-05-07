@@ -782,7 +782,7 @@ impl Db {
             if !obj.spawned && spawn {
                 obj.spawned = true;
                 let radius2 = obj.radius.powi(2);
-                for gid in maybe!(&obj.groups, obj.owner, "side group")? {
+                for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
                     let group = group!(self, gid)?;
                     let farp = obj.kind.is_farp();
                     let services = group.class.is_services() && !obj.kind.is_airbase();

@@ -1181,9 +1181,9 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                 limit: None,
                 kind: ActionKind::CruiseMissileSpawn(AiPlaneCfg {
                     kind: AiPlaneKind::FixedWing,
-                    duration: Some(8),
+                    duration: Some(24),
                     template: "RCRUISE".into(),
-                    altitude: 11000.,
+                    altitude: 8000.,
                     altitude_typ: AltType::BARO,
                     speed: 240.,
                 }),
@@ -1201,7 +1201,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
         (
             "cruise-missile".into(),
             Action {
-                cost: 25,
+                cost: 0,
                 penalty: None,
                 limit: None,
                 kind: ActionKind::CruiseMissileWaypoint,
@@ -1463,9 +1463,9 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                 limit: None,
                 kind: ActionKind::CruiseMissileSpawn(AiPlaneCfg {
                     kind: AiPlaneKind::FixedWing,
-                    duration: Some(8),
+                    duration: Some(24),
                     template: "BCRUISE".into(),
-                    altitude: 11000.,
+                    altitude: 8000.,
                     altitude_typ: AltType::BARO,
                     speed: 240.,
                 }),

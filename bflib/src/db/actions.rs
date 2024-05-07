@@ -31,6 +31,7 @@ use dcso3::{
     group::Group,
     land::Land,
     net::Ucid,
+    object::DcsObject,
     pointing_towards2,
     trigger::{MarkId, Trigger},
     world::World,
@@ -38,7 +39,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
-use log::error;
+use log::{error, info};
 use rand::{thread_rng, Rng};
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, f64, vec};
@@ -1037,6 +1038,30 @@ impl Db {
     ) -> Result<()> {
         let attack_pos = &args.pos;
         let mut quantity = quantity;
+
+        let aircraft = self.unit(
+            self.group(&args.group)?
+                .units
+                .into_iter()
+                .next()
+                .ok_or(anyhow!("no unit!"))?,
+        )?;
+        let id = self
+            .ephemeral
+            .get_object_id_by_uid(&aircraft.id)
+            .ok_or(anyhow!("no object with id"))?;
+        let unit = dcso3::unit::Unit::get_instance(spctx.lua(), id).context("getting unit")?;
+
+        let ammo_state = unit
+            .get_ammo()?
+            .into_iter()
+            .next()
+            .ok_or(anyhow!("no weapon!"))??.count()? as i64;
+
+        if ammo_state <= 0 {unit.destroy()?; bail!("{} out of ammo, RTBing.",&args.group)};
+
+        if ammo_state < quantity {quantity = ammo_state};
+
         let mission_set: Vec<Task> = {
             let mut task_vec: Vec<Task> = Vec::new();
             let lcd = [
@@ -1046,7 +1071,7 @@ impl Db {
             ];
 
             for d in lcd {
-                while quantity - d.0 >= d.0 {
+                while quantity >= d.0 {
                     quantity -= d.0;
 
                     let attack_params = AttackParams {
@@ -1054,14 +1079,12 @@ impl Db {
                         expend: Some(d.1.clone()),
                         direction: None,
                         altitude: None,
-                        attack_qty: Some(1),
+                        attack_qty: None,
                         group_attack: None,
                     };
 
-                    let task = Task::Bombing {
-                        point: LuaVec2 {
-                            0: attack_pos.clone(),
-                        },
+                    let task = Task::AttackMapObject {
+                        point: LuaVec2::new(attack_pos.x, attack_pos.y),
                         params: attack_params,
                     };
 
@@ -1073,12 +1096,20 @@ impl Db {
         };
         let init_task = vec![];
         let main_task = vec![Task::ComboTask(mission_set)];
-        let pos = self.unit(self.group(&args.group)?.units.into_iter().next().ok_or(anyhow!("cant find unit"))?)?.pos;
-        let spawn_pos = args.pos.clone();
-        self.ai_loiter_point_mission(
+        let pos = self
+            .unit(
+                self.group(&args.group)?
+                    .units
+                    .into_iter()
+                    .next()
+                    .ok_or(anyhow!("cant find unit"))?,
+            )?
+            .pos;
+        let spawn_pos = pos.clone();
+        let m = self.ai_loiter_point_mission(
             side,
             ucid,
-            WithPosAndGroup{
+            WithPosAndGroup {
                 cfg: args.cfg,
                 pos: pos,
                 group: args.group,
@@ -1092,6 +1123,9 @@ impl Db {
             move || dcso3::controller::Task::ComboTask(init_task.clone()),
             move || main_task.clone(),
         )?;
+
+        self.set_ai_mission(spctx, args.group, m)?;
+
         Ok(())
     }
 
@@ -1572,7 +1606,10 @@ impl Db {
                 ..
             } => {
                 if !validator(&spec.kind) {
-                    bail!("this move action is not compatible with the selected group {0:?}", spec.kind)
+                    bail!(
+                        "this move action is not compatible with the selected group {0:?}",
+                        spec.kind
+                    )
                 }
                 match &mut spec.kind {
                     ActionKind::Awacs(a)
@@ -1625,7 +1662,7 @@ impl Db {
                     | ActionKind::Move(_)
                     | ActionKind::Deployable(_)
                     | ActionKind::Paratrooper(_)
-                    | ActionKind::CruiseMissile(_,_)
+                    | ActionKind::CruiseMissile(_, _)
                     | ActionKind::Bomber(_)
                     | ActionKind::Nuke(_)
                     | ActionKind::LogisticsRepair(_)
@@ -1708,22 +1745,21 @@ impl Db {
         }
         match &pattern {
             OrbitPattern::Circle => {
-                let mut tlist: Vec<Task<'lua>> = Vec::new();
-                let orbit = vec![Task::Orbit {
+                let mut tlist: Vec<Task> = Vec::new();
+                let orbit = Task::Orbit {
                     pattern: OrbitPattern::Circle,
                     point: Some(LuaVec2(point1)),
                     point2: None,
                     speed: Some(speed),
                     altitude: Some(altitude),
-                }];
+                };
                 for t in main_task() {
                     tlist.push(t);
                 }
-                //tlist.push(orbit);
+                tlist.push(orbit);
                 Ok(vec![
                     wpt!("ip", spawn_point, init_task()),
-                    wpt!("main", point1, Task::ComboTask(tlist)),
-                    wpt!("orbit", point1, Task::ComboTask(orbit))
+                    wpt!("point1", point1, Task::ComboTask(tlist)),
                 ])
             }
             OrbitPattern::RaceTrack => {
@@ -2006,11 +2042,11 @@ impl Db {
                             }
                         }
                     }
-                    ActionKind::CruiseMissile(b,q) => {
+                    ActionKind::CruiseMissile(b, q) => {
                         if let Some(target) = *destination {
                             if true {
                                 destination.take();
-                                to_bomb.push((b.clone(), target, group.side,));
+                                to_bomb.push((b.clone(), target, group.side));
                             }
                         }
                         if destination.is_none() {

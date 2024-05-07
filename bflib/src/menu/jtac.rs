@@ -18,7 +18,11 @@ use super::{ArgQuad, ArgTriple, ArgTuple};
 use crate::{
     cfg::{Action, ActionKind, UnitTag},
     db::{
-        self, actions::{self, ActionArgs, ActionCmd, WithJtac, WithPosAndGroup}, group::GroupId as DbGid, objective::ObjectiveId, Db
+        self,
+        actions::{self, ActionArgs, ActionCmd, WithJtac, WithPosAndGroup},
+        group::GroupId as DbGid,
+        objective::ObjectiveId,
+        Db,
     },
     jtac::{AdjustmentDir, JtId, Jtac, Jtacs},
     spawnctx::SpawnCtx,
@@ -36,7 +40,7 @@ use dcso3::{
     LuaEnv, MizLua, String,
 };
 use enumflags2::{BitFlag, BitFlags};
-use log::error;
+use log::{error, info};
 use mlua::LuaSerdeExt;
 use smallvec::{smallvec, SmallVec};
 
@@ -170,6 +174,51 @@ fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     Ok(())
 }
 
+fn jtac_cruise_missile_get_ammo(lua: MizLua, arg: ArgTriple<Ucid, DbGid, u8>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+
+    let puid = ctx
+        .db
+        .player(&arg.fst)
+        .unwrap()
+        .current_slot
+        .clone()
+        .unwrap()
+        .0
+        .as_unit_id()
+        .unwrap();
+
+    let aircraft = ctx.db.unit(
+        ctx.db
+            .group(&arg.snd)?
+            .units
+            .into_iter()
+            .next()
+            .ok_or(anyhow!("no unit!"))?,
+    )?;
+
+    let oid = ctx
+        .db
+        .ephemeral
+        .get_object_id_by_uid(&aircraft.id)
+        .ok_or(anyhow!("no object with id"))?;
+
+    let unit = dcso3::unit::Unit::get_instance(lua, oid).context("getting unit")?;
+
+    let ammo_state = unit
+        .get_ammo()?
+        .into_iter()
+        .next()
+        .ok_or(anyhow!("no weapon!"))??
+        .count()? as i64;
+
+    let msg = format_compact!("Missiles Remaining: {}/12", ammo_state);
+
+    let msg = format_compact!("Missiles Remaining: {}/12", 0 as isize);
+    ctx.db.ephemeral.msgs().panel_to_unit(10, false, puid, msg);
+    Ok(())
+}
+
 fn jtac_cruise_missile_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let db = &ctx.db;
@@ -186,12 +235,6 @@ fn jtac_cruise_missile_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>)
                 .next()
                 .ok_or(anyhow!("no unit!"))?,
         )?;
-        let id = db
-            .ephemeral
-            .get_object_id_by_uid(&aircraft.id)
-            .ok_or(anyhow!("no object with id"))?;
-        let unit = Unit::get_instance(lua, id).context("getting unit")?;
-        let ammo_state = unit.get_ammo()?;
         let dist = na::distance(&aircraft.pos.into(), &jtac.location().pos.into());
 
         min_dist = match min_dist {
@@ -514,9 +557,19 @@ fn add_cruise_missile_menu_for_jtac(
     for gid in aircraft {
         let root =
             mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
-
+        mc.add_command_for_group(
+            mizgid,
+            "Get Ammo State".into(),
+            Some(root.clone()),
+            jtac_cruise_missile_get_ammo,
+            ArgTriple {
+                fst: ucid,
+                snd: *gid,
+                trd: 0,
+            },
+        )?;
         let for_effect =
-            mc.add_submenu_for_group(mizgid, "Salvo Count".into(), Some(root.clone()))?;
+            mc.add_submenu_for_group(mizgid, "Launch Salvo Count>".into(), Some(root.clone()))?;
         mc.add_command_for_group(
             mizgid,
             "2".into(),
@@ -589,16 +642,6 @@ fn add_cruise_missile_menu_for_jtac(
                 fth: ucid,
             },
         )?;
-        mc.add_command_for_group(
-            mizgid,
-            "Show Adjustment".into(),
-            Some(root.clone()),
-            jtac_show_adjustment,
-            ArgTuple {
-                fst: ucid,
-                snd: *gid,
-            },
-        )?;
     }
     Ok(())
 }
@@ -654,7 +697,11 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
     Ok(())
 }
 
-fn call_cruise_missile_strike(lua: MizLua, s: String ,arg: ArgQuad<JtId, Ucid, i64, db::group::GroupId>) -> Result<()> {
+fn call_cruise_missile_strike(
+    lua: MizLua,
+    s: String,
+    arg: ArgQuad<JtId, Ucid, i64, db::group::GroupId>,
+) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let spctx = SpawnCtx::new(lua)?;
     let jtac = get_jtac(&ctx.jtac, &arg.fst)?;

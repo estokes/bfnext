@@ -784,7 +784,7 @@ fn call_cruise_missile_strike(
                 near,
                 name,
                 gid,
-                ammo_state
+                ammo_state - q
             );
             ctx.db
                 .ephemeral

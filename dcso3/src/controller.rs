@@ -102,6 +102,7 @@ pub struct AttackParams {
     pub direction: Option<f64>, // in radians
     pub altitude: Option<f64>,
     pub attack_qty: Option<i64>,
+    pub attack_qty_limit: Option<bool>,
     pub group_attack: Option<bool>,
 }
 
@@ -121,6 +122,7 @@ impl<'lua> FromLua<'lua> for AttackParams {
             } else {
                 None
             },
+            attack_qty_limit: tbl.raw_get("attackQtyLimit")?,
             attack_qty: if tbl.raw_get("attackQtyLimit")? {
                 tbl.raw_get("attackQty")?
             } else {
@@ -146,6 +148,9 @@ impl AttackParams {
         if let Some(alt) = self.altitude {
             tbl.raw_set("altitudeEnabled", true)?;
             tbl.raw_set("altitude", alt)?;
+        }
+        if let Some(qty_limit) = self.attack_qty_limit {
+            tbl.raw_set("attackQtyLimit", qty_limit)?;
         }
         if let Some(qty) = self.attack_qty {
             tbl.raw_set("attackQtyLimit", true)?;

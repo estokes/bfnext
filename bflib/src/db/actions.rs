@@ -1085,21 +1085,22 @@ impl Db {
                         expend: Some(d.1.clone()),
                         direction: None,
                         altitude: None,
-                        attack_qty: None,
+                        attack_qty_limit: Some(true),
+                        attack_qty: Some(1),
                         group_attack: None,
                     };
 
                     if let Some(ucid) = ucid.as_ref() {
                         let player = self.player(ucid).ok_or(anyhow!("no player for {ucid}"))?;
-                        let cost = ((cost as i32) * (quantity as i32));
+                        let cost = ((cost as i32) * (quantity as i32 - 1));
                         if player.points >= cost {
                             self.adjust_points(ucid, -cost, &format!("cruise missile expenditure"))
                         } else {
-                            
+                            bail!("not enough points to fulfill request")
                         }
                     }
 
-                    let task = Task::AttackMapObject {
+                    let task = Task::Bombing {
                         point: LuaVec2::new(attack_pos.x, attack_pos.y),
                         params: attack_params,
                     };
@@ -1778,6 +1779,7 @@ impl Db {
                 Ok(vec![
                     wpt!("ip", spawn_point, init_task()),
                     wpt!("point1", point1, Task::ComboTask(tlist)),
+                    wpt!("point2", point1, Task::ComboTask(vec![orbit])),
                 ])
             }
             OrbitPattern::RaceTrack => {

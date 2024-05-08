@@ -365,6 +365,18 @@ impl Jtac {
             }
         }
         write!(msg, "]")?;
+        write!(msg, "]\n")?;
+        write!(msg, "available cruise missiles: [")?;
+        self.nearby_cruise_missile_bombers();
+        let len = self.nearby_cruise_missile_bombers.len();
+        for (i, gid) in self.nearby_cruise_missile_bombers.iter().enumerate() {
+            if i < len - 1 {
+                write!(msg, "{gid},")?;
+            } else {
+                write!(msg, "{gid}")?;
+            }
+        }
+        write!(msg, "]")?;
         Ok(msg)
     }
 

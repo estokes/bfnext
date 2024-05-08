@@ -174,7 +174,7 @@ fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     Ok(())
 }
 
-fn jtac_cruise_missile_get_ammo(lua: MizLua, arg: ArgTriple<Ucid, DbGid, u8>) -> Result<()> {
+fn jtac_cruise_missile_get_ammo(lua: MizLua, arg: ArgTriple<Ucid, DbGid, bool>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
 
     let puid = ctx
@@ -205,16 +205,78 @@ fn jtac_cruise_missile_get_ammo(lua: MizLua, arg: ArgTriple<Ucid, DbGid, u8>) ->
 
     let unit = dcso3::unit::Unit::get_instance(lua, oid).context("getting unit")?;
 
-    let ammo_state = unit
-        .get_ammo()?
-        .into_iter()
-        .next()
-        .ok_or(anyhow!("no weapon!"))??
-        .count()? as i64;
+    let ar = unit.get_ammo()?;
 
-    let msg = format_compact!("{} {} | Missiles Remaining: {}/12", aircraft.typ, aircraft.id, ammo_state);
+    if ar.len() <= 0 {
+        unit.as_object()?.destroy()?;
+        bail!("no more weapons!")
+    };
+
+    let ammo_state = ar.into_iter().next().unwrap()?.count()? as i64;
+
+    let msg = format_compact!(
+        "{} {} | Missiles Remaining: {}/12",
+        aircraft.typ,
+        aircraft.id,
+        ammo_state
+    );
     ctx.db.ephemeral.msgs().panel_to_unit(10, false, puid, msg);
     Ok(())
+}
+
+fn jtac_cruise_missile_get_ammo_return_i64(
+    lua: MizLua,
+    arg: ArgTriple<Ucid, DbGid, bool>,
+) -> Result<i64> {
+    let ctx = unsafe { Context::get_mut() };
+
+    let puid = ctx
+        .db
+        .player(&arg.fst)
+        .unwrap()
+        .current_slot
+        .clone()
+        .unwrap()
+        .0
+        .as_unit_id()
+        .unwrap();
+
+    let aircraft = ctx.db.unit(
+        ctx.db
+            .group(&arg.snd)?
+            .units
+            .into_iter()
+            .next()
+            .ok_or(anyhow!("no unit!"))?,
+    )?;
+
+    let oid = ctx
+        .db
+        .ephemeral
+        .get_object_id_by_uid(&aircraft.id)
+        .ok_or(anyhow!("no object with id"))?;
+
+    let unit = dcso3::unit::Unit::get_instance(lua, oid).context("getting unit")?;
+
+    let ar = unit.get_ammo()?;
+
+    if ar.len() <= 0 {
+        unit.as_object()?.destroy()?;
+        bail!("no more weapons!")
+    };
+
+    let ammo_state = ar.into_iter().next().unwrap()?.count()? as i64;
+
+    if arg.trd {
+        let msg = format_compact!(
+            "{} {} | Missiles Remaining: {}/12",
+            aircraft.typ,
+            aircraft.id,
+            ammo_state
+        );
+        ctx.db.ephemeral.msgs().panel_to_unit(10, false, puid, msg);
+    }
+    Ok(ammo_state)
 }
 
 fn jtac_cruise_missile_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
@@ -563,11 +625,23 @@ fn add_cruise_missile_menu_for_jtac(
             ArgTriple {
                 fst: ucid,
                 snd: *gid,
-                trd: 0,
+                trd: true,
             },
         )?;
         let for_effect =
-            mc.add_submenu_for_group(mizgid, "Launch Salvo Count>".into(), Some(root.clone()))?;
+            mc.add_submenu_for_group(mizgid, "Launch Salvo".into(), Some(root.clone()))?;
+        mc.add_command_for_group(
+            mizgid,
+            "1".into(),
+            Some(for_effect.clone()),
+            jtac_cruise_missile_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 1,
+                fth: ucid,
+            },
+        )?;
         mc.add_command_for_group(
             mizgid,
             "2".into(),
@@ -589,54 +663,6 @@ fn add_cruise_missile_menu_for_jtac(
                 fst: jtac,
                 snd: *gid,
                 trd: 4,
-                fth: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "6".into(),
-            Some(for_effect.clone()),
-            jtac_cruise_missile_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 6,
-                fth: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "8".into(),
-            Some(for_effect.clone()),
-            jtac_cruise_missile_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 8,
-                fth: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "10".into(),
-            Some(for_effect.clone()),
-            jtac_cruise_missile_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 10,
-                fth: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "12".into(),
-            Some(for_effect.clone()),
-            jtac_cruise_missile_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 12,
                 fth: ucid,
             },
         )?;

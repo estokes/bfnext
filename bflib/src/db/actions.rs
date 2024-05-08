@@ -367,7 +367,7 @@ impl Db {
                     cmd.action,
                     args,
                     quantity,
-                    cost
+                    cost,
                 )
                 .context("starting cruise missile strike")?,
             ActionArgs::CruiseMissileSpawn(args) => self
@@ -1058,11 +1058,17 @@ impl Db {
             .get_ammo()?
             .into_iter()
             .next()
-            .ok_or(anyhow!("no weapon!"))??.count()? as i64;
+            .ok_or(anyhow!("no weapon!"))??
+            .count()? as i64;
 
-        if ammo_state <= 0 {unit.destroy()?; bail!("{} out of ammo, RTBing.",&args.group)};
+        if ammo_state <= 0 {
+            unit.destroy()?;
+            bail!("{} out of ammo, RTBing.", &args.group)
+        };
 
-        if ammo_state < quantity {quantity = ammo_state};
+        if ammo_state < quantity {
+            quantity = ammo_state
+        };
 
         let mission_set: Vec<Task> = {
             let mut task_vec: Vec<Task> = Vec::new();
@@ -1073,9 +1079,7 @@ impl Db {
             ];
 
             for d in lcd {
-                while quantity >= d.0 {
-                    quantity -= d.0;
-
+                if quantity == d.0 {
                     let attack_params = AttackParams {
                         weapon_type: Some(2097152),
                         expend: Some(d.1.clone()),
@@ -1086,11 +1090,13 @@ impl Db {
                     };
 
                     if let Some(ucid) = ucid.as_ref() {
-                        self.adjust_points(
-                            ucid,
-                            -((cost as i32)*(quantity as i32)),
-                            &format!("cruise missile expenditure"),
-                        );
+                        let player = self.player(ucid).ok_or(anyhow!("no player for {ucid}"))?;
+                        let cost = ((cost as i32) * (quantity as i32));
+                        if player.points >= cost {
+                            self.adjust_points(ucid, -cost, &format!("cruise missile expenditure"))
+                        } else {
+                            
+                        }
                     }
 
                     let task = Task::AttackMapObject {
@@ -1099,11 +1105,13 @@ impl Db {
                     };
 
                     task_vec.push(task);
+                    break;
                 }
             }
 
             task_vec
         };
+
         let init_task = vec![];
         let main_task = vec![Task::ComboTask(mission_set)];
         let pos = self
@@ -1770,7 +1778,6 @@ impl Db {
                 Ok(vec![
                     wpt!("ip", spawn_point, init_task()),
                     wpt!("point1", point1, Task::ComboTask(tlist)),
-                    wpt!("point2", point1, Task::ComboTask(vec![orbit])),
                 ])
             }
             OrbitPattern::RaceTrack => {

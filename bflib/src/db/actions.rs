@@ -1085,8 +1085,8 @@ impl Db {
                         expend: Some(d.1.clone()),
                         direction: None,
                         altitude: None,
-                        attack_qty: None,
-                        attack_qty_limit: None,
+                        attack_qty_limit: Some(false),
+                        attack_qty: Some(1),
                         group_attack: None,
                     };
 
@@ -1100,7 +1100,7 @@ impl Db {
                         }
                     }
 
-                    let task = Task::AttackMapObject {
+                    let task = Task::Bombing {
                         point: LuaVec2::new(attack_pos.x, attack_pos.y),
                         params: attack_params,
                     };

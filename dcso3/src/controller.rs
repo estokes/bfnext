@@ -149,12 +149,12 @@ impl AttackParams {
             tbl.raw_set("altitudeEnabled", true)?;
             tbl.raw_set("altitude", alt)?;
         }
-        if let Some(qty_limit) = self.attack_qty_limit {
-            tbl.raw_set("attackQtyLimit", qty_limit)?;
-        }
         if let Some(qty) = self.attack_qty {
             tbl.raw_set("attackQtyLimit", true)?;
             tbl.raw_set("attackQty", qty)?;
+        }
+        if let Some(qty_limit) = self.attack_qty_limit {
+            tbl.raw_set("attackQtyLimit", qty_limit)?;
         }
         if let Some(grp) = self.group_attack {
             tbl.raw_set("groupAttack", grp)?;

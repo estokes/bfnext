@@ -1085,8 +1085,8 @@ impl Db {
                         expend: Some(d.1.clone()),
                         direction: None,
                         altitude: None,
-                        attack_qty_limit: Some(false),
-                        attack_qty: Some(1),
+                        attack_qty_limit: None,
+                        attack_qty: Some(d.0),
                         group_attack: None,
                     };
 

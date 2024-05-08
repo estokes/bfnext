@@ -732,6 +732,19 @@ fn call_cruise_missile_strike(
     let q = arg.trd;
     let gid = arg.fth;
     let tgt = jtac.target().clone().ok_or(anyhow!("no jtac target!"))?;
+
+    let ammo_state: i64 = match jtac_cruise_missile_get_ammo_return_i64(
+        lua,
+        ArgTriple {
+            fst: arg.snd,
+            snd: gid,
+            trd: false,
+        },
+    ) {
+        Ok(a) => a,
+        Err(_) => 0,
+    };
+
     let (near, name) = change_info(jtac, &ctx.db, &arg.snd);
     let action = ctx
         .db
@@ -766,10 +779,12 @@ fn call_cruise_missile_strike(
     ) {
         Ok(()) => {
             let msg = format_compact!(
-                "CRUISE MISSILE STRIKE STARTED\ntargeting by jtac {} near {}\nstarted by {}",
+                "CRUISE MISSILE STRIKE REQUESTED\ntargeting by jtac {} near {}\nstarted by {}\n{} retasking available at {}/12",
                 arg.fst,
                 near,
-                name
+                name,
+                gid,
+                ammo_state
             );
             ctx.db
                 .ephemeral

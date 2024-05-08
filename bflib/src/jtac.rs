@@ -364,7 +364,6 @@ impl Jtac {
                 write!(msg, "{gid}")?;
             }
         }
-        write!(msg, "]")?;
         write!(msg, "]\n")?;
         write!(msg, "available cruise missiles: [")?;
         self.nearby_cruise_missile_bombers();

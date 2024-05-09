@@ -100,7 +100,9 @@ pub struct AttackParams {
     pub weapon_type: Option<u64>, // weapon flag(s)
     pub expend: Option<WeaponExpend>,
     pub direction: Option<f64>, // in radians
+    pub direction_enabled: Option<bool>,
     pub altitude: Option<f64>,
+    pub altitude_enabled: Option<bool>,
     pub attack_qty: Option<i64>,
     pub attack_qty_limit: Option<bool>,
     pub group_attack: Option<bool>,
@@ -129,6 +131,8 @@ impl<'lua> FromLua<'lua> for AttackParams {
                 None
             },
             group_attack: tbl.raw_get("groupAttack")?,
+            altitude_enabled: tbl.raw_get("altitudeEnabled")?,
+            direction_enabled: tbl.raw_get("directionEnabled")?,
         })
     }
 }
@@ -142,7 +146,6 @@ impl AttackParams {
             tbl.raw_set("expend", exp.clone())?
         }
         if let Some(dir) = self.direction {
-            tbl.raw_set("directionEnabled", true)?;
             tbl.raw_set("direction", dir)?
         }
         if let Some(alt) = self.altitude {
@@ -153,11 +156,17 @@ impl AttackParams {
             tbl.raw_set("attackQtyLimit", true)?;
             tbl.raw_set("attackQty", qty)?;
         }
+        if let Some(alt_enabled) = self.altitude_enabled {
+            tbl.raw_set("altitudeEnabled", alt_enabled)?;
+        }
         if let Some(qty_limit) = self.attack_qty_limit {
             tbl.raw_set("attackQtyLimit", qty_limit)?;
         }
         if let Some(grp) = self.group_attack {
             tbl.raw_set("groupAttack", grp)?;
+        }
+        if let Some(dir_enabled) = self.direction_enabled {
+            tbl.raw_set("directionEnabled", dir_enabled)?;
         }
         Ok(())
     }

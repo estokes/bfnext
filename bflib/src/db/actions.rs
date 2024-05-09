@@ -1081,13 +1081,15 @@ impl Db {
             for d in lcd {
                 if quantity == d.0 {
                     let attack_params = AttackParams {
-                        weapon_type: Some(2097152),
-                        expend: Some(d.1.clone()),
+                        weapon_type: Some(0x200000),
+                        expend: Some(d.1),
                         direction: None,
                         altitude: None,
                         attack_qty_limit: None,
-                        attack_qty: Some(d.0),
-                        group_attack: None,
+                        attack_qty: Some(1),
+                        group_attack:None,
+                        altitude_enabled: None,
+                        direction_enabled: None,
                     };
 
                     if let Some(ucid) = ucid.as_ref() {

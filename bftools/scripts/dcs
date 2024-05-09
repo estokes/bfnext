@@ -105,6 +105,17 @@ function kill_dcs() {
     fi
 }
 
+function kill_srs() {
+    PID=$(ps auxwww \
+        | grep "\\srs_${NAME}\\SR-Server.exe" \
+        | grep -v grep \
+        | awk '{print $2}')
+    echo "killing SRS with $PID"
+    if ! test -z $PID; then
+        kill -9 $PID
+    fi
+}
+
 function quit() {
     kill_dcs
     for job in $(jobs -p); do
@@ -170,6 +181,9 @@ function run_dcs() {
         if test $((EN - ST)) -lte $((BLOCK + 10)); then
             # cancel unblock if DCS dies before it runs
             kill $PID
+        fi
+        if test $USE_SRS -eq 1; then
+            kill_srs
         fi
         sleep 10
     done

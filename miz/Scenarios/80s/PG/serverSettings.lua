@@ -29,17 +29,17 @@ cfg =
         ["allow_trial_only_clients"] = false,
         ["allow_dynamic_radio"] = false,
     }, -- end of ["advanced"]
-    ["port"] = 10309,
+    ["port"] = 10310,
     ["mode"] = 0,
-    ["bind_address"] = "135.125.189.202",
+    ["bind_address"] = "",
     ["isPublic"] = true,
     ["missionList"] = 
     {
-        [1] = "C:\\users\\dcs\\Saved Games\\caucasus_80s\\Missions\\Operation Fowl Intent - 80s.miz",
+        [1] = "C:\\users\\dcs\\Saved Games\\pg_80s\\Missions\\Operation Fowl Intent - 80s.miz",
     }, -- end of ["missionList"]
     ["password"] = "",
     ["listLoop"] = false,
-    ["name"] = "The Coop - 80s",
+    ["name"] = "The Coop - 80s BETA",
     ["require_pure_scripts"] = true,
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,

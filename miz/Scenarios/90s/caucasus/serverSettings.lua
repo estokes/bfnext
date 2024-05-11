@@ -35,7 +35,7 @@ cfg =
     ["isPublic"] = true,
     ["missionList"] = 
     {
-        [1] = "C:\\users\\dcs\\Saved Games\\caucasus_80s\\Missions\\Operation Fowl Intent - 90s.miz",
+        [1] = "C:\\users\\dcs\\Saved Games\\caucasus_90s\\Missions\\Operation Fowl Intent - 90s.miz",
     }, -- end of ["missionList"]
     ["password"] = "",
     ["listLoop"] = false,

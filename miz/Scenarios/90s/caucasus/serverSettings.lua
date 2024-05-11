@@ -35,11 +35,11 @@ cfg =
     ["isPublic"] = true,
     ["missionList"] = 
     {
-        [1] = "C:\\users\\dcs\\Saved Games\\caucasus_80s\\Missions\\Operation Fowl Intent - 80s.miz",
+        [1] = "C:\\users\\dcs\\Saved Games\\caucasus_80s\\Missions\\Operation Fowl Intent - 90s.miz",
     }, -- end of ["missionList"]
     ["password"] = "",
     ["listLoop"] = false,
-    ["name"] = "The Coop - 80s",
+    ["name"] = "The Coop - 90s BETA",
     ["require_pure_scripts"] = true,
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,

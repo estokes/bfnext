@@ -1706,116 +1706,6 @@
       "EWR",
       "Unarmed"
     ],
-    "RD_75": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "AuxRadarUnit"
-    ],
-    "Patriot cp": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "AuxRadarUnit"
-    ],
-    "NASAMS_Radar_MPQ64F1": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "EngagesWeapons",
-      "SearchRadar"
-    ],
-    "S-300PS 54K6 cp": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "AuxRadarUnit"
-    ],
-    "Patriot AMG": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "AuxRadarUnit"
-    ],
-    "Patriot EPP": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "AuxRadarUnit"
-    ],
-    "Patriot ECS": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "AuxRadarUnit"
-    ],
-    "NASAMS_Command_Post": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "AuxRadarUnit"
-    ],
-    "S-300PS 40B6M tr": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "TrackRadar"
-    ],
-    "S-300PS 5H63C 30H6_tr": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "TrackRadar",
-      "EngagesWeapons"
-    ],
-    "S-300PS 40B6MD sr": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "SearchRadar"
-    ],
-    "S-300PS 64H6E sr": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "SearchRadar"
-    ],
-    "Patriot str": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "SearchRadar",
-      "TrackRadar",
-      "EngagesWeapons"
-    ],
-    "NASAMS_LN_C": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "Launcher",
-      "EngagesWeapons"
-    ],
-    "Patriot ln": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "Launcher",
-      "EngagesWeapons"
-    ],
-    "S-300PS 5P85C ln": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "Launcher",
-      "EngagesWeapons"
-    ],
-    "S-300PS 5P85D ln": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "Launcher",
-      "EngagesWeapons"
-    ],
     "S_75M_Volhov": [
       "SAM",
       "LR",
@@ -2285,13 +2175,14 @@
       "nolos": true
     }
   },
- "extra_fixed_wing_objectives": [
-    "Sayqal",
-    "Kiryat Shmona",
-	"Haifa",
+  "extra_fixed_wing_objectives": [
+    "Muwaffaq-Salti",
+    "Abu al-Duhur",
+	"Kharab Ishk",
 	"Minakh",
-	"Abu al-Duhur"
-    ],
+	"Kiryat Shmona",
+	"Sayqal"
+  ],
   "jtac_priority": [
     [
       "SAM",

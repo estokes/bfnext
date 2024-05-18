@@ -175,7 +175,7 @@ impl ActionArgs {
         match action.clone() {
             ActionKind::Tanker(c) => Ok(Self::Tanker(pos(db, lua, side, c, s)?)),
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
-            ActionKind::CruiseMissile(c, q) => {
+            ActionKind::CruiseMissile(_, q) => {
                 Ok(Self::CruiseMissile(pos_group(db, lua, side, (), s)?, q))
             }
             ActionKind::CruiseMissileSpawn(c) => {
@@ -1029,11 +1029,11 @@ impl Db {
     fn cruise_missile_attack<'lua>(
         &mut self,
         spctx: &SpawnCtx,
-        idx: &MizIndex,
+        _idx: &MizIndex,
         side: Side,
         ucid: Option<Ucid>,
-        name: String,
-        action: Action,
+        _name: String,
+        _action: Action,
         args: WithPosAndGroup<()>,
         quantity: i64,
         cost: u32,
@@ -1070,53 +1070,48 @@ impl Db {
             quantity = ammo_state
         };
 
-        let mission_set: Vec<Task> = {
-            let mut task_vec: Vec<Task> = Vec::new();
-            let lcd = [
-                (4, WeaponExpend::Four),
-                (2, WeaponExpend::Two),
-                (1, WeaponExpend::One),
-            ];
+        let mut main_task = vec![];
 
-            for d in lcd {
-                if quantity == d.0 {
-                    let attack_params = AttackParams {
-                        weapon_type: Some(0x200000),
-                        expend: Some(d.1),
-                        direction: None,
-                        altitude: None,
-                        attack_qty_limit: None,
-                        attack_qty: Some(1),
-                        group_attack:None,
-                        altitude_enabled: None,
-                        direction_enabled: None,
-                    };
+        let lcd = [
+            (4, WeaponExpend::Four),
+            (2, WeaponExpend::Two),
+            (1, WeaponExpend::One),
+        ];
+        for d in lcd {
+            if quantity == d.0 {
+                let attack_params = AttackParams {
+                    weapon_type: Some(2097152),
+                    expend: Some(d.1),
+                    direction: Some(0.),
+                    altitude: Some(8000.),
+                    attack_qty_limit: Some(false),
+                    attack_qty: Some(1),
+                    group_attack: Some(false),
+                    altitude_enabled: Some(false),
+                    direction_enabled: Some(false),
+                    point: Some(LuaVec2::new(attack_pos.x, attack_pos.y)),
+                    x: Some(attack_pos.x),
+                    y: Some(attack_pos.y),
+                };
 
-                    if let Some(ucid) = ucid.as_ref() {
-                        let player = self.player(ucid).ok_or(anyhow!("no player for {ucid}"))?;
-                        let cost = ((cost as i32) * (quantity as i32 - 1));
-                        if player.points >= cost {
-                            self.adjust_points(ucid, -cost, &format!("cruise missile expenditure"))
-                        } else {
-                            bail!("not enough points to fulfill request")
-                        }
+                if let Some(ucid) = ucid.as_ref() {
+                    let player = self.player(ucid).ok_or(anyhow!("no player for {ucid}"))?;
+                    let cost = (cost as i32) * (quantity as i32 - 1);
+                    if player.points >= cost {
+                        self.adjust_points(ucid, -cost, &format!("cruise missile expenditure"))
+                    } else {
+                        bail!("not enough points to fulfill request")
                     }
-
-                    let task = Task::Bombing {
-                        point: LuaVec2::new(attack_pos.x, attack_pos.y),
-                        params: attack_params,
-                    };
-
-                    task_vec.push(task);
-                    break;
                 }
+
+                let task = Task::Bombing {
+                    params: attack_params,
+                };
+                main_task.push(task);
+                break;
             }
+        }
 
-            task_vec
-        };
-
-        let init_task = vec![];
-        let main_task = vec![Task::ComboTask(mission_set)];
         let pos = self
             .unit(
                 self.group(&args.group)?
@@ -1141,7 +1136,7 @@ impl Db {
                 ActionKind::CruiseMissileSpawn(_) => true,
                 _ => false,
             },
-            move || dcso3::controller::Task::ComboTask(init_task.clone()),
+            move || Task::ComboTask(vec![]),
             move || main_task.clone(),
         )?;
 
@@ -1777,7 +1772,7 @@ impl Db {
                 for t in main_task() {
                     tlist.push(t);
                 }
-                tlist.push(orbit.clone());
+               tlist.push(orbit.clone());
                 Ok(vec![
                     wpt!("ip", spawn_point, init_task()),
                     wpt!("point1", point1, Task::ComboTask(tlist)),

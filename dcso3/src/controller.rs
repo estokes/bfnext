@@ -42,12 +42,12 @@ string_enum!(PointType, u8, [
 ]);
 
 string_enum!(WeaponExpend, u8, [
-    Quarter => "Quarter",
-    Two => "Two",
-    One => "One",
-    Four => "Four",
-    Half => "Half",
-    All => "All"
+    Quarter => "QUARTER",
+    Two => "TWO",
+    One => "ONE",
+    Four => "FOUR",
+    Half => "HALF",
+    All => "ALL"
 ]);
 
 string_enum!(OrbitPattern, u8, [
@@ -98,6 +98,9 @@ simple_enum!(FACCallsign, u8, [
 #[derive(Debug, Clone)]
 pub struct AttackParams {
     pub weapon_type: Option<u64>, // weapon flag(s)
+    pub point: Option<LuaVec2>,
+    pub x: Option<f64>,
+    pub y: Option<f64>,
     pub expend: Option<WeaponExpend>,
     pub direction: Option<f64>, // in radians
     pub direction_enabled: Option<bool>,
@@ -133,40 +136,50 @@ impl<'lua> FromLua<'lua> for AttackParams {
             group_attack: tbl.raw_get("groupAttack")?,
             altitude_enabled: tbl.raw_get("altitudeEnabled")?,
             direction_enabled: tbl.raw_get("directionEnabled")?,
+            point: tbl.raw_get("point")?,
+            x: tbl.raw_get("x")?,
+            y: tbl.raw_get("y")?,
         })
     }
 }
 
 impl AttackParams {
     fn push_tbl(&self, tbl: &LuaTable) -> LuaResult<()> {
-        if let Some(wt) = self.weapon_type {
-            tbl.raw_set("weaponType", wt)?
-        }
-        if let Some(exp) = &self.expend {
-            tbl.raw_set("expend", exp.clone())?
-        }
-        if let Some(dir) = self.direction {
-            tbl.raw_set("direction", dir)?
-        }
-        if let Some(alt) = self.altitude {
-            tbl.raw_set("altitudeEnabled", true)?;
-            tbl.raw_set("altitude", alt)?;
-        }
+        // if let Some(wt) = self.weapon_type {
+        //     tbl.raw_set("weaponType", wt)?
+        // }
+        // if let Some(exp) = &self.expend {
+        //     tbl.raw_set("expend", exp.to_owned())?
+        // }
+        // if let Some(dir) = self.direction {
+        //     tbl.raw_set("direction", dir)?
+        // }
+        // if let Some(alt) = self.altitude {
+        //     tbl.raw_set("altitude", alt)?;
+        // }
         if let Some(qty) = self.attack_qty {
-            tbl.raw_set("attackQtyLimit", true)?;
             tbl.raw_set("attackQty", qty)?;
         }
-        if let Some(alt_enabled) = self.altitude_enabled {
-            tbl.raw_set("altitudeEnabled", alt_enabled)?;
+        // if let Some(alt_enabled) = self.altitude_enabled {
+        //     tbl.raw_set("altitudeEnabled", alt_enabled)?;
+        // }
+        // if let Some(qty_limit) = self.attack_qty_limit {
+        //     tbl.raw_set("attackQtyLimit", qty_limit)?;
+        // }
+        // if let Some(grp) = self.group_attack {
+        //     tbl.raw_set("groupAttack", grp)?;
+        // }
+        // if let Some(dir_enabled) = self.direction_enabled {
+        //     tbl.raw_set("directionEnabled", dir_enabled)?;
+        // }
+        // if let Some(point) = self.point {
+        //     tbl.raw_set("point", point)?;
+        // }
+        if let Some(x) = self.x {
+            tbl.raw_set("x", x)?;
         }
-        if let Some(qty_limit) = self.attack_qty_limit {
-            tbl.raw_set("attackQtyLimit", qty_limit)?;
-        }
-        if let Some(grp) = self.group_attack {
-            tbl.raw_set("groupAttack", grp)?;
-        }
-        if let Some(dir_enabled) = self.direction_enabled {
-            tbl.raw_set("directionEnabled", dir_enabled)?;
+        if let Some(y) = self.y {
+            tbl.raw_set("y", y)?;
         }
         Ok(())
     }
@@ -444,7 +457,6 @@ pub enum Task<'lua> {
         params: AttackParams,
     },
     Bombing {
-        point: LuaVec2,
         params: AttackParams,
     },
     Strafing {
@@ -597,7 +609,6 @@ impl<'lua> FromLua<'lua> for Task<'lua> {
                 params: FromLua::from_lua(Value::Table(params), lua)?,
             }),
             "Bombing" => Ok(Self::Bombing {
-                point: params.raw_get("point")?,
                 params: FromLua::from_lua(Value::Table(params), lua)?,
             }),
             "Strafing" => Ok(Self::Strafing {
@@ -774,9 +785,8 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
                 params.raw_set("unitId", unit)?;
                 atp.push_tbl(&params)?;
             }
-            Self::Bombing { point, params: atp } => {
+            Self::Bombing {params: atp } => {
                 root.raw_set("id", "Bombing")?;
-                params.raw_set("point", point)?;
                 atp.push_tbl(&params)?;
             }
             Self::Strafing {

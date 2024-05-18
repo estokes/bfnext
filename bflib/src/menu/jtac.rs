@@ -217,7 +217,7 @@ fn jtac_cruise_missile_get_ammo(lua: MizLua, arg: ArgTriple<Ucid, DbGid, bool>) 
     let msg = format_compact!(
         "{} {} | Missiles Remaining: {}/12",
         aircraft.typ,
-        aircraft.id,
+        arg.snd,
         ammo_state
     );
     ctx.db.ephemeral.msgs().panel_to_unit(10, false, puid, msg);
@@ -280,56 +280,18 @@ fn jtac_cruise_missile_get_ammo_return_i64(
 }
 
 fn jtac_cruise_missile_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let db = &ctx.db;
-    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
-    let mut min_dist: Option<f64> = None;
     let quant = arg.trd as i64;
-    let mut final_gid: Option<db::group::GroupId> = None;
-
-    for gid in &db.persisted.actions {
-        let aircraft = db.unit(
-            db.group(gid)?
-                .units
-                .into_iter()
-                .next()
-                .ok_or(anyhow!("no unit!"))?,
-        )?;
-        let dist = na::distance(&aircraft.pos.into(), &jtac.location().pos.into());
-
-        min_dist = match min_dist {
-            Some(c) => {
-                if dist < c {
-                    final_gid = Some(*gid);
-                    Some(dist)
-                } else {
-                    final_gid = Some(*gid);
-                    Some(c)
-                }
-            }
-            None => {
-                final_gid = Some(*gid);
-                Some(dist)
-            }
-        };
-    }
-
-    match min_dist {
-        Some(_) => {
-            call_cruise_missile_strike(
-                lua,
-                "cruise-missile".to_owned().into(),
-                ArgQuad {
-                    fst: arg.fst,
-                    snd: arg.fth,
-                    trd: quant,
-                    fth: final_gid.ok_or(anyhow!("no bomber to use for mission!"))?,
-                },
-            )?;
-            Ok(())
-        }
-        None => bail!("no bombers available!"),
-    }
+    call_cruise_missile_strike(
+        lua,
+        "cruise-missile".to_owned().into(),
+        ArgQuad {
+            fst: arg.fst,
+            snd: arg.fth,
+            trd: quant,
+            fth: arg.snd,
+        },
+    )?;
+    Ok(())
 }
 
 fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
@@ -615,6 +577,7 @@ fn add_cruise_missile_menu_for_jtac(
     let mc = MissionCommands::singleton(lua)?;
     let root = mc.add_submenu_for_group(mizgid, "Cruise Missiles".into(), Some(root.clone()))?;
     for gid in aircraft {
+        info!("{gid}");
         let root =
             mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
         mc.add_command_for_group(
@@ -731,6 +694,7 @@ fn call_cruise_missile_strike(
     let jtac = get_jtac(&ctx.jtac, &arg.fst)?;
     let q = arg.trd;
     let gid = arg.fth;
+    info!(" calling strike in jtac.rs for: {gid}");
     let tgt = jtac.target().clone().ok_or(anyhow!("no jtac target!"))?;
 
     let ammo_state: i64 = match jtac_cruise_missile_get_ammo_return_i64(

@@ -1,5 +1,5 @@
 [Unit]
-Description=Start up Caucasus 00s
+Description=Start up Caucasus 90s
 
 [Service]
 After=tigervnc.service

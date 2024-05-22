@@ -124,6 +124,7 @@
         "Tu-22M3": 36000,
         "KC130": 0,
         "KC-135": 0,
+		"F-4E-45MC": 21600,
         "MosquitoFBMkVI": 9000
     },
     "threatened_cooldown": 300,
@@ -172,7 +173,8 @@
         "Mirage-F1EE": "Intercept",
         "F-15ESE": "Standard",
         "AV8BNA": "Attack",
-        "MosquitoFBMkVI": "Logistics"
+        "MosquitoFBMkVI": "Logistics",
+		"F-4E-45MC": "Intercept"
     },
     "default_lives": {
         "Standard": [
@@ -1581,6 +1583,9 @@
         "J-11A": [
             "Aircraft"
         ],
+		"F-4E-45MC": [
+		    "Aircraft"
+		],	
         "TV tower": [
             "Unarmed"
         ],

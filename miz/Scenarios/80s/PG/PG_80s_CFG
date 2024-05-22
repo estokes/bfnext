@@ -108,6 +108,7 @@
     "AH-64D_BLK_II": 14400,
     "UH-1H": 9000,
     "L-39ZA": 9000,
+	"F-4E-45MC": 21600,
 	"MosquitoFBMkVI": 9000,
     "F-5E-3": 14400,
     "Yak-52": 0,
@@ -170,6 +171,7 @@
     "Mi-24P": "Attack",
     "JF-17": "Attack",
     "Su-25": "Attack",
+	"F-4E-45MC": "Intercept",
     "Mirage-F1EE": "Intercept",
     "F-15ESE": "Standard",
     "AV8BNA": "Attack"
@@ -1578,6 +1580,9 @@
     "J-11A": [
       "Aircraft"
     ],
+	"F-4E-45MC": [
+		    "Aircraft"
+		],	
     "TV tower": [
       "Unarmed"
     ],

@@ -84,6 +84,7 @@
     "MiG-29S": 21600,
     "L-39C": 9000,
     "F-14A-135-GR": 21600,
+	"F-4E-45MC": 21600,
     "TF-51D": 0,
     "MiG-21Bis": 14400,
     "F-16C_50": 36000,
@@ -147,6 +148,7 @@
     "MiG-19P": "Intercept",
     "M-2000C": "Standard",
     "Mi-8MT": "Logistics",
+	"F-4E-45MC": "Intercept",
     "Ka-50_3": "Attack",
     "F-15C": "Standard",
     "Ka-50": "Attack",
@@ -1630,6 +1632,9 @@
     "M-2000C": [
       "Aircraft"
     ],
+	"F-4E-45MC": [
+	 "Aircraft"
+	],
     "Tor 9A331": [
       "SAM",
       "MR",

@@ -21,7 +21,7 @@ use dcso3::{
     controller::{MissionPoint, PointType},
     country::Country,
     env::miz::{Group, Miz, Property, Skill, TriggerZoneTyp},
-    normal2, pointing_towards2, LuaVec2, Quad2, Sequence, String, Vector2,
+    normal2, path, pointing_towards2, DcsTableExt, LuaVec2, Quad2, Sequence, String, Vector2,
 };
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value};
@@ -214,7 +214,7 @@ impl Display for LuaSerVal {
                         } else {
                             write!(f, "[{k}] = {v},\n").unwrap();
                         }
-                    }
+                    };
                 }
                 let mut seq_max: Option<i64> = None;
                 write!(f, "\n")?;
@@ -231,7 +231,7 @@ impl Display for LuaSerVal {
                 tbl.for_each(|k: Value, v: Value| {
                     if let Some(max) = seq_max {
                         if k.is_integer() && k.as_integer().unwrap() <= max {
-                            return Ok(())
+                            return Ok(());
                         }
                     }
                     write_elt!(k, v);
@@ -671,6 +671,39 @@ impl VehicleTemplates {
     }
 
     fn generate_slots(&self, lua: &Lua, base: &mut LoadedMiz) -> Result<()> {
+        fn set_dl_mizuid(unit: &Table) -> Result<()> {
+            if let Ok(Some(dl)) = unit.raw_get::<_, Option<Table>>("datalinks") {
+                let uid = unit.raw_get::<_, i64>("unitId")?;
+                let mut ok = false;
+                if let Ok(ownship) =
+                    dl.raw_get_path::<Table>(&path!["Link16", "network", "teamMembers", 1])
+                {
+                    ownship.raw_set("missionUnitId", uid)?;
+                    ok = true;
+                }
+                if let Ok(presets) =
+                    dl.raw_get_path::<Sequence<Table>>(&path!["IDM", "network", "presets"])
+                {
+                    for preset in presets {
+                        let preset = preset?;
+                        if let Ok(ownship) = preset.raw_get_path::<Table>(&path!["members", 1]) {
+                            ownship.raw_set("missionUnitId", uid)?;
+                            ok = true;
+                        }
+                    }
+                }
+                if let Ok(ownship) =
+                    dl.raw_get_path::<Table>(&path!["SADL", "network", "teamMembers", 1])
+                {
+                    ownship.raw_set("missionUnitId", uid)?;
+                    ok = true;
+                }
+                if !ok {
+                    bail!("unknown data link pattern, can't find ownship")
+                }
+            }
+            Ok(())
+        }
         let idx = base.mission.index()?;
         let mut templates = HashMap::default();
         let mut uid = idx.max_uid();
@@ -802,6 +835,7 @@ impl VehicleTemplates {
                             u.set_id(uid)?;
                             u.set_heading(posgen.azumith())?;
                             u.set_pos(pos)?;
+                            set_dl_mizuid(&u).with_context(|| format_compact!("unit {u:?}"))?;
                             uid.next();
                         }
                         gid.next();

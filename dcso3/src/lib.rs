@@ -800,6 +800,10 @@ impl<'a> IntoIterator for &'a Path {
 }
 
 impl Path {
+    pub fn new() -> Self {
+        Self(vec![])
+    }
+
     pub fn push<T: Into<PathElt>>(&mut self, t: T) {
         self.0.push(t.into())
     }
@@ -819,6 +823,15 @@ impl Path {
     pub fn get(&self, i: usize) -> Option<&PathElt> {
         self.0.get(i)
     }
+}
+
+#[macro_export]
+macro_rules! path {
+    ($($v:expr),*) => {{
+        let mut path = dcso3::Path::new();
+        $(path.push($v));*;
+        path
+    }}
 }
 
 pub trait DcsTableExt<'lua> {
@@ -858,6 +871,8 @@ where
         }
     }
 }
+
+
 
 impl<'lua> DcsTableExt<'lua> for mlua::Table<'lua> {
     fn raw_get_path<T>(&self, path: &Path) -> Result<T>

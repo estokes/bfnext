@@ -34,4 +34,5 @@ if test "$SUCCESS" == "y"; then
     ln -s "$NEXT" ~/current
     echo "symlinks updated, servers will use the new version on the next restart"
     echo "don't forget to unsanitize the lua environment!!!!"
+    mousepad "~/current/DCS\ World\ Server/Scripts/MissionScripting.lua"
 fi

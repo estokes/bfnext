@@ -29,13 +29,13 @@ cfg =
         ["allow_trial_only_clients"] = false,
         ["allow_dynamic_radio"] = false,
     }, -- end of ["advanced"]
-    ["port"] = 10309,
+    ["port"] = 10312,
     ["mode"] = 0,
     ["bind_address"] = "135.125.189.202",
     ["isPublic"] = true,
     ["missionList"] = 
     {
-        [1] = "C:\\users\\dcs\\Saved Games\\caucasus_80s\\Missions\\Operation Fowl Intent - 80s.miz",
+        [1] = "C:\\users\\dcs\\Saved Games\\sinai_80s\\Missions\\Operation Fowl Intent - 80s.miz",
     }, -- end of ["missionList"]
     ["password"] = "",
     ["listLoop"] = false,

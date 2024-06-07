@@ -89,7 +89,8 @@
     "F-16C_50": 36000,
     "MiG-19P": 9000,
     "M-2000C": 21600,
-    "Mi-8MT": 9000,
+    "OH58D": 9000,
+	"Mi-8MT": 9000,
     "Ka-50_3": 14400,
     "F-15C": 36000,
     "Ka-50": 14400,
@@ -144,7 +145,8 @@
     "F-14A-135-GR": "Standard",
     "TF-51D": "Recon",
     "MiG-21Bis": "Intercept",
-    "F-16C_50": "Attack",
+    "OH58D": "Attack",
+	"F-16C_50": "Attack",
     "MiG-19P": "Intercept",
     "M-2000C": "Standard",
     "Mi-8MT": "Logistics",
@@ -1595,6 +1597,10 @@
     "L-39C": [
       "Aircraft"
     ],
+	"OH58D": [
+	  "Aircraft",
+	  "Helicopter"
+	],
 	"MosquitoFBMkVI": [
 	  "Aircraft"
 	],

@@ -89,7 +89,8 @@
         "F-16C_50": 36000,
         "MiG-19P": 9000,
         "M-2000C": 21600,
-        "Mi-8MT": 9000,
+        "OH58D": 9000,
+		"Mi-8MT": 9000,
         "Ka-50_3": 14400,
         "F-15C": 36000,
         "Ka-50": 14400,
@@ -157,7 +158,8 @@
         "AJS37": "Attack",
         "Mirage-F1CE": "Intercept",
         "Su-33": "Standard",
-        "Su-27": "Standard",
+        "OH58D": "Attack",
+		"Su-27": "Standard",
         "F-14B": "Standard",
         "Su-25T": "Attack",
         "A-10C_2": "Attack",
@@ -1656,6 +1658,10 @@
             "Aircraft",
             "Helicopter"
         ],
+		"OH58D": [
+		    "Aircraft",
+			"Helicopter"
+	    ],
         "FARP Ammo Dump Coating": [
             "Logistics",
             "Unarmed"

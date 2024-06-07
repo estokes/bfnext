@@ -90,7 +90,8 @@
     "F-16C_50": 36000,
     "MiG-19P": 9000,
     "M-2000C": 21600,
-    "Mi-8MT": 9000,
+    "OH58D": 9000,
+	"Mi-8MT": 9000,
     "Ka-50_3": 14400,
     "F-15C": 36000,
     "Ka-50": 14400,
@@ -149,7 +150,8 @@
     "Mi-8MT": "Logistics",
     "Ka-50_3": "Attack",
     "F-15C": "Standard",
-    "Ka-50": "Attack",
+    "OH58D": "Attack",
+	"Ka-50": "Attack",
     "FA-18C_hornet": "Standard",
     "A-10C": "Attack",
     "SA342M": "Logistics",
@@ -1731,6 +1733,10 @@
       "RadarGuided",
       "SearchRadar"
     ],
+	"OH58D": [
+	  "Aircraft",
+	  "Helicopter"
+	],
     "S_75M_Volhov": [
       "SAM",
       "LR",

@@ -82,7 +82,8 @@
     "MiG-29A": 21600,
     "J-11A": 36000,
     "MiG-29S": 21600,
-    "L-39C": 9000,
+    "OH58D": 9000,
+	"L-39C": 9000,
     "F-14A-135-GR": 21600,
 	"F-4E-45MC": 21600,
     "TF-51D": 0,
@@ -149,7 +150,8 @@
     "M-2000C": "Standard",
     "Mi-8MT": "Logistics",
 	"F-4E-45MC": "Intercept",
-    "Ka-50_3": "Attack",
+    "OH58D": "Attack",
+	"Ka-50_3": "Attack",
     "F-15C": "Standard",
     "Ka-50": "Attack",
     "FA-18C_hornet": "Standard",
@@ -1653,6 +1655,10 @@
       "Aircraft",
       "Helicopter"
     ],
+	"OH58D": [
+	  "Aircraft",
+	  "Helicopter"
+	],
     "FARP Ammo Dump Coating": [
       "Logistics",
       "Unarmed"

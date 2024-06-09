@@ -415,7 +415,7 @@
                 },
                 "cost": 100,
                 "penalty": 100,
-                "limit": null
+                "limit": 2
             }
         },
         "Blue": {
@@ -648,7 +648,7 @@
                 },
                 "cost": 100,
                 "penalty": 100,
-                "limit": null
+                "limit": 2
             }
         }
     },

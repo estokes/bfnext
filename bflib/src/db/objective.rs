@@ -983,11 +983,10 @@ impl Db {
                                     na::distance_squared(&u.pos.into(), &obj.pos.into()) <= r2
                                 });
                             if in_range {
-                                captured.entry(*oid).or_default().push((
-                                    group.side,
-                                    player.clone(),
-                                    *gid,
-                                ));
+                                captured
+                                    .entry(*oid)
+                                    .or_default()
+                                    .push((group.side, *player, *gid));
                             }
                         }
                         DeployKind::Crate { .. }
@@ -1005,11 +1004,13 @@ impl Db {
             if gids.iter().all(|(s, _, _)| side == s) {
                 let obj = objective_mut!(self, oid)?;
                 let name = obj.name.clone();
+                let previous_owner = obj.owner;
+                let new_owner = *side;
                 obj.spawned = false;
                 obj.threatened = true;
                 obj.last_threatened_ts = now;
                 obj.last_activate = now;
-                obj.owner = *side;
+                obj.owner = new_owner;
                 actually_captured.push((*side, oid));
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
                     for uid in &group!(self, gid)?.units {
@@ -1054,10 +1055,12 @@ impl Db {
                         ucids.push(ucid);
                     }
                 }
-                if let Some(points) = self.ephemeral.cfg.points.as_ref() {
-                    let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
-                    for ucid in ucids {
-                        self.adjust_points(&ucid, ppp, &format!("for capturing {name}"));
+                if previous_owner != new_owner {
+                    if let Some(points) = self.ephemeral.cfg.points.as_ref() {
+                        let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
+                        for ucid in ucids {
+                            self.adjust_points(&ucid, ppp, &format!("for capturing {name}"));
+                        }
                     }
                 }
                 let obj = objective!(self, oid)?;

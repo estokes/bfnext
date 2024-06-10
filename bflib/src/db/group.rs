@@ -63,6 +63,7 @@ pub enum DeployKind {
     },
     Troop {
         player: Ucid,
+        origin: Option<ObjectiveId>,
         #[serde(default)]
         moved_by: Option<(Ucid, u32)>,
         spec: Troop,
@@ -82,6 +83,7 @@ pub enum DeployKind {
         time: DateTime<Utc>,
         destination: Option<Vector2>,
         rtb: Option<Vector2>,
+        origin: Option<ObjectiveId>,
     },
 }
 
@@ -279,6 +281,7 @@ impl Db {
                 player,
                 spec,
                 moved_by,
+                origin: _
             } => {
                 let name = self.persisted.players[player].name.clone();
                 let resp = moved_by

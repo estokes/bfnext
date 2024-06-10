@@ -295,7 +295,7 @@ impl Db {
                     None => match self.ephemeral.cargo.get(&slot) {
                         None => None,
                         Some(cargo) => {
-                            for (_, tr) in &cargo.troops {
+                            for (_, _, tr) in &cargo.troops {
                                 if let Some(jt) = &tr.jtac {
                                     return Some(JtDesc {
                                         pos,

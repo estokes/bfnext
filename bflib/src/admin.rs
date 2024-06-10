@@ -389,6 +389,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         player: ifo.ucid.clone(),
                         moved_by: None,
                         spec: spec.clone(),
+                        origin: None,
                     };
                     ctx.db
                         .add_and_queue_group(

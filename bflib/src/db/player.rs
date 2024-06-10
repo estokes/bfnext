@@ -194,7 +194,8 @@ impl Db {
                                 player,
                                 spec: _,
                                 moved_by: _,
-                            } => Some(player.clone()),
+                                origin: _,
+                            } => Some(*player),
                             DeployKind::Action { player, .. } => player.clone(),
                             DeployKind::Crate { .. } | DeployKind::Objective => None,
                         })

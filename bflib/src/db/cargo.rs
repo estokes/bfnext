@@ -91,7 +91,7 @@ impl fmt::Display for Unpakistan {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cargo {
-    pub troops: SmallVec<[(Ucid, Troop); 1]>,
+    pub troops: SmallVec<[(Ucid, Option<ObjectiveId>, Troop); 1]>,
     pub crates: SmallVec<[(ObjectiveId, Crate); 1]>,
 }
 
@@ -115,7 +115,7 @@ impl Cargo {
             .fold(0, |acc, (_, cr)| acc + cr.weight as i64);
         self.troops
             .iter()
-            .fold(cr, |acc, (_, tr)| acc + tr.weight as i64)
+            .fold(cr, |acc, (_, _, tr)| acc + tr.weight as i64)
     }
 }
 
@@ -1046,7 +1046,7 @@ impl Db {
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
         let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
-        let _ = self.point_near_logistics(side, point)?;
+        let (origin, _) = self.point_near_logistics(side, point)?;
         let troop_cfg = self
             .ephemeral
             .deployable_idx
@@ -1077,7 +1077,7 @@ impl Db {
             bail!("you already have a full load onboard")
         }
         let weight = cargo.weight();
-        cargo.troops.push((ucid.clone(), troop_cfg.clone()));
+        cargo.troops.push((ucid.clone(), Some(origin), troop_cfg.clone()));
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, weight as i64)?;
@@ -1109,7 +1109,7 @@ impl Db {
             Ok(_) | Err(_) => (),
         }
         let cargo = self.ephemeral.cargo.get(slot).unwrap();
-        let (_, troop_cfg) = cargo.troops.last().unwrap();
+        let (_, _, troop_cfg) = cargo.troops.last().unwrap();
         let (n, oldest) = self.number_troops_deployed(side, troop_cfg.name.as_str())?;
         let to_delete = if n < troop_cfg.limit as usize {
             None
@@ -1125,7 +1125,7 @@ impl Db {
             }
         };
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
-        let (ucid, troop_cfg) = cargo.troops.pop().unwrap();
+        let (ucid, origin, troop_cfg) = cargo.troops.pop().unwrap();
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
@@ -1138,6 +1138,7 @@ impl Db {
             player: ucid.clone(),
             moved_by: None,
             spec: troop_cfg.clone(),
+            origin
         };
         let spctx = SpawnCtx::new(lua)?;
         if let Some(gid) = to_delete {
@@ -1158,7 +1159,7 @@ impl Db {
                 .get_mut(slot)
                 .unwrap()
                 .troops
-                .push((ucid, troop_cfg));
+                .push((ucid, origin, troop_cfg));
             return Err(e);
         }
         Ok(troop_cfg)
@@ -1181,7 +1182,7 @@ impl Db {
             bail!("you are not close enough to friendly logistics to return troops")
         }
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
-        let (ucid, troop_cfg) = cargo.troops.pop().unwrap();
+        let (ucid, _, troop_cfg) = cargo.troops.pop().unwrap();
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
@@ -1193,7 +1194,7 @@ impl Db {
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
         let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
-        let (gid, ucid, troop_cfg) = {
+        let (gid, ucid, origin, troop_cfg) = {
             let max_dist = (self.ephemeral.cfg.crate_load_distance as f64).powi(2);
             self.persisted
                 .troops
@@ -1203,6 +1204,7 @@ impl Db {
                     if let DeployKind::Troop {
                         spec,
                         player,
+                        origin,
                         moved_by: _,
                     } = &g.origin
                     {
@@ -1215,7 +1217,7 @@ impl Db {
                                     na::distance_squared(&u.pos.into(), &point.into()) <= max_dist
                                 });
                             if in_range {
-                                return Some((gid, player.clone(), spec.clone()));
+                                return Some((gid, *player, *origin, spec.clone()));
                             }
                         }
                     }
@@ -1229,7 +1231,7 @@ impl Db {
         {
             bail!("you already have a full load onboard")
         }
-        cargo.troops.push((ucid, troop_cfg.clone()));
+        cargo.troops.push((ucid, origin, troop_cfg.clone()));
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;

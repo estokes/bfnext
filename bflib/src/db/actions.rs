@@ -1293,6 +1293,7 @@ impl Db {
             time: Utc::now(),
             destination,
             rtb: Some(pos),
+            origin: Some(obj.id),
         };
         let gid = self
             .add_group(
@@ -1774,6 +1775,7 @@ impl Db {
         troop: String,
         side: Side,
         ucid: Ucid,
+        origin: ObjectiveId,
     ) -> Result<()> {
         let troop_cfg = self
             .ephemeral
@@ -1793,6 +1795,7 @@ impl Db {
             player: ucid.clone(),
             moved_by: None,
             spec: troop_cfg.clone(),
+            origin: Some(origin),
         };
         let spctx = SpawnCtx::new(lua)?;
         let (n, oldest) = self.number_troops_deployed(side, troop_cfg.name.as_str())?;
@@ -1837,7 +1840,8 @@ impl Db {
         let mut to_repair: SmallVec<[(Vector2, Side); 2]> = smallvec![];
         let mut to_transfer: SmallVec<[(Vector2, Vector2, Side); 2]> = smallvec![];
         let mut to_deploy: SmallVec<[(Vector2, String, Side, Ucid); 2]> = smallvec![];
-        let mut to_paratroop: SmallVec<[(Vector2, String, Side, Ucid); 2]> = smallvec![];
+        let mut to_paratroop: SmallVec<[(Vector2, String, Side, Ucid, ObjectiveId); 2]> =
+            smallvec![];
         macro_rules! at_dest {
             ($group:expr, $dest:expr, $radius:expr) => {{
                 let r2 = f64::powi($radius, 2);
@@ -1863,6 +1867,7 @@ impl Db {
                 destination,
                 rtb,
                 player,
+                origin,
                 ..
             } = &mut group.origin
             {
@@ -1921,7 +1926,10 @@ impl Db {
                                     .as_ref()
                                     .map(|u| u.clone())
                                     .ok_or_else(|| anyhow!("paratroop missions require a ucid"))?;
-                                to_paratroop.push((target, t.name.clone(), group.side, ucid));
+                                let origin = (*origin).ok_or_else(|| {
+                                    anyhow!("objective origin is required for paratroops")
+                                })?;
+                                to_paratroop.push((target, t.name.clone(), group.side, ucid, origin));
                             }
                         }
                         if destination.is_none() {
@@ -2028,8 +2036,10 @@ impl Db {
                 );
             }
         }
-        for (dst, troop, side, ucid) in to_paratroop {
-            if let Err(e) = self.paratroops_to_point(lua, idx, dst, troop, side, ucid.clone()) {
+        for (dst, troop, side, ucid, origin) in to_paratroop {
+            if let Err(e) =
+                self.paratroops_to_point(lua, idx, dst, troop, side, ucid.clone(), origin)
+            {
                 self.ephemeral.panel_to_player(
                     &self.persisted,
                     10,

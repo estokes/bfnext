@@ -963,7 +963,8 @@ impl Db {
         lua: MizLua,
         now: DateTime<Utc>,
     ) -> Result<SmallVec<[(Side, ObjectiveId); 1]>> {
-        let mut captured: FxHashMap<ObjectiveId, Vec<(Side, Ucid, GroupId)>> = FxHashMap::default();
+        let mut captured: FxHashMap<ObjectiveId, Vec<(Side, Ucid, Option<ObjectiveId>, GroupId)>> =
+            FxHashMap::default();
         for (oid, obj) in &self.persisted.objectives {
             if obj.captureable() {
                 let r2 = obj.radius.powi(2);
@@ -973,6 +974,7 @@ impl Db {
                         DeployKind::Troop {
                             spec,
                             player,
+                            origin,
                             moved_by: _,
                         } if spec.can_capture => {
                             let in_range = group
@@ -986,7 +988,7 @@ impl Db {
                                 captured
                                     .entry(*oid)
                                     .or_default()
-                                    .push((group.side, *player, *gid));
+                                    .push((group.side, *player, *origin, *gid));
                             }
                         }
                         DeployKind::Crate { .. }
@@ -1000,8 +1002,8 @@ impl Db {
         }
         let mut actually_captured = smallvec![];
         for (oid, gids) in captured {
-            let (side, _, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
-            if gids.iter().all(|(s, _, _)| side == s) {
+            let (side, _, _, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
+            if gids.iter().all(|(s, _, _, _)| side == s) {
                 let obj = objective_mut!(self, oid)?;
                 let name = obj.name.clone();
                 let previous_owner = obj.owner;
@@ -1048,19 +1050,19 @@ impl Db {
                 self.deliver_supplies_from_logistics_hubs()
                     .context("delivering supplies")?;
                 let mut ucids: SmallVec<[Ucid; 4]> = smallvec![];
-                for (_, ucid, gid) in gids {
+                for (_, ucid, troop_origin, gid) in gids {
                     self.delete_group(&gid)
                         .context("deleting capturing troops")?;
-                    if !ucids.contains(&ucid) {
-                        ucids.push(ucid);
+                    if previous_owner != new_owner || troop_origin != Some(oid) {
+                        if !ucids.contains(&ucid) {
+                            ucids.push(ucid);
+                        }
                     }
                 }
-                if previous_owner != new_owner {
-                    if let Some(points) = self.ephemeral.cfg.points.as_ref() {
-                        let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
-                        for ucid in ucids {
-                            self.adjust_points(&ucid, ppp, &format!("for capturing {name}"));
-                        }
+                if let Some(points) = self.ephemeral.cfg.points.as_ref() {
+                    let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
+                    for ucid in ucids {
+                        self.adjust_points(&ucid, ppp, &format!("for capturing {name}"));
                     }
                 }
                 let obj = objective!(self, oid)?;

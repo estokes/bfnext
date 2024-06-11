@@ -799,9 +799,6 @@ impl Db {
                         }
                         penalty_lives -= *player_lives as u32;
                         *player_lives = 0;
-                        if penalty_lives == 0 {
-                            break false;
-                        }
                         match life_type.up() {
                             None => break deplane_possible,
                             Some(lt) => {

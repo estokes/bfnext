@@ -741,39 +741,97 @@ impl Db {
         &mut self,
         shooter: Ucid,
         total_points: u32,
-        victim_info: &Option<(String, Option<LifeType>)>,
+        victim_info: &Option<(Ucid, String, Option<LifeType>)>,
     ) -> CompactString {
         let player = &mut self.persisted.players[&shooter];
+        let window = self
+            .ephemeral
+            .cfg
+            .points
+            .as_ref()
+            .map(|p| p.tk_window as i64)
+            .unwrap_or(0);
+        let now = Utc::now();
         match &victim_info {
             None => {
-                player.points -= total_points as i32;
+                let penalty: u32 = player
+                    .ai_team_kills
+                    .into_iter()
+                    .map(|ts| total_points >> ((now - *ts).num_hours() / window))
+                    .sum();
+                player.points -= (total_points + penalty) as i32;
+                player.ai_team_kills.insert_cow(now);
                 let tp = player.points;
                 format_compact!("{tp}(-{total_points}) points, you have killed a friendly unit")
             }
-            Some((victim, Some(life_type))) => {
-                let (_, player_lives) = player.lives.get_or_insert_cow(*life_type, || {
-                    (Utc::now(), self.ephemeral.cfg.default_lives[&life_type].0)
-                });
-                let mut lost = false;
-                if *player_lives > 0 {
-                    lost = true;
-                    *player_lives -= 1;
-                }
+            Some((_, victim, None)) => {
                 player.points -= total_points as i32;
-                let tp = player.points;
-                self.ephemeral.dirty();
-                let lost = if lost {
-                    format_compact!("\nYou have lost a {life_type} life")
-                } else {
-                    format_compact!("")
-                };
                 format_compact!(
-                    "{tp}(-{total_points}) points, you have team killed {victim}.{}",
-                    lost
+                    "{}(-{total_points})you have team killed {victim} on the ground",
+                    player.points
                 )
             }
-            Some((victim, None)) => {
-                format_compact!("you have team killed {victim} on the ground")
+            Some((victim_ucid, victim, Some(life_type))) => {
+                let (penalty_points, penalty_lives): (u32, f32) = player
+                    .player_team_kills
+                    .into_iter()
+                    .fold((total_points, 1.), |(pp, pl), (ts, _)| {
+                        let windows = (now - *ts).num_hours() / window;
+                        let pp = pp + (total_points >> windows);
+                        let pl = pl + (1. / (max(1, windows * 2) as f32));
+                        (pp, pl)
+                    });
+                let deplane_possible = penalty_lives > 1.5;
+                let mut penalty_lives = penalty_lives.round() as u32;
+                let mut lost: SmallVec<[(LifeType, u8); 5]> = smallvec![];
+                let mut life_type = *life_type;
+                let deplane = loop {
+                    let (_, player_lives) = player.lives.get_or_insert_cow(life_type, || {
+                        (Utc::now(), self.ephemeral.cfg.default_lives[&life_type].0)
+                    });
+                    if *player_lives as u32 >= penalty_lives {
+                        lost.push((life_type, penalty_lives as u8));
+                        *player_lives -= penalty_lives as u8;
+                        break false;
+                    } else {
+                        if *player_lives > 0 {
+                            lost.push((life_type, *player_lives));
+                        }
+                        penalty_lives -= *player_lives as u32;
+                        *player_lives = 0;
+                        if penalty_lives == 0 {
+                            break false;
+                        }
+                        match life_type.up() {
+                            None => break deplane_possible,
+                            Some(lt) => {
+                                life_type = lt;
+                            }
+                        }
+                    }
+                };
+                player.points -= penalty_points as i32;
+                player.player_team_kills.insert_cow(now, *victim_ucid);
+                let tp = player.points;
+                self.ephemeral.dirty();
+                use std::fmt::Write;
+                let mut msg = CompactString::from("");
+                write!(
+                    msg,
+                    "{tp}(-{penalty_points}) points, you have team killed {victim}.\n",
+                )
+                .unwrap();
+                if lost.len() > 0 {
+                    write!(msg, "\nYou have lost\n").unwrap();
+                    for (ty, n) in lost {
+                        write!(msg, "{n} {ty} life\n").unwrap()
+                    }
+                };
+                if deplane {
+                    write!(msg, "Shortly you will be deplaned, your death may be monitored for quality assurance purposes, have a nice day").unwrap();
+                    self.ephemeral.force_player_to_spectators(&shooter);
+                }
+                msg
             }
         }
     }
@@ -829,8 +887,8 @@ impl Db {
             let victim_info = dead
                 .victim_ucid
                 .as_ref()
-                .and_then(|i| self.persisted.players.get(i))
-                .map(|p| (p.name.clone(), p.airborne));
+                .and_then(|i| self.persisted.players.get(i).map(|p| (*i, p)))
+                .map(|(i, p)| (i, p.name.clone(), p.airborne));
             for ucid in hit_by {
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                     let msg = if player.side != dead.victim_side {
@@ -838,7 +896,7 @@ impl Db {
                         let tp = player.points;
                         match &victim_info {
                             None => format_compact!("{tp}(+{pps}) points"),
-                            Some((victim, _)) => {
+                            Some((_, victim, _)) => {
                                 format_compact!("{tp}(+{pps}) points, killed {}", victim)
                             }
                         }

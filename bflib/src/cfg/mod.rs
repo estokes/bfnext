@@ -239,6 +239,28 @@ impl fmt::Display for LifeType {
     }
 }
 
+impl LifeType {
+    pub fn up(&self) -> Option<LifeType> {
+        match self {
+            LifeType::Recon => Some(LifeType::Logistics),
+            LifeType::Logistics => Some(LifeType::Intercept),
+            LifeType::Intercept => Some(LifeType::Attack),
+            LifeType::Attack => Some(LifeType::Standard),
+            LifeType::Standard => None,
+        }
+    }
+
+    pub fn down(&self) -> Option<LifeType> {
+        match self {
+            LifeType::Recon => None,
+            LifeType::Logistics => Some(LifeType::Recon),
+            LifeType::Intercept => Some(LifeType::Logistics),
+            LifeType::Attack => Some(LifeType::Attack),
+            LifeType::Standard => Some(LifeType::Attack),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PersistTyp {
     /// The deployable persists until it is destroyed
@@ -408,6 +430,10 @@ impl WarehouseConfig {
     }
 }
 
+fn default_tk_window() -> u32 {
+    24
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PointsCfg {
@@ -418,6 +444,8 @@ pub struct PointsCfg {
     pub logistics_repair: u32,
     pub logistics_transfer: u32,
     pub capture: u32,
+    #[serde(default = "default_tk_window")]
+    pub tk_window: u32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -435,7 +463,7 @@ pub struct AiPlaneCfg {
     pub altitude_typ: AltType,
     pub speed: f64,
     #[serde(default)]
-    pub freq: Option<i64>
+    pub freq: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1747,6 +1747,7 @@ impl Default for Cfg {
                 logistics_repair: 25,
                 logistics_transfer: 15,
                 capture: 15,
+                tk_window: 5,
             }),
             warehouse: Some(WarehouseConfig {
                 hub_max: 25,

@@ -250,6 +250,7 @@ impl LifeType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn down(&self) -> Option<LifeType> {
         match self {
             LifeType::Recon => None,

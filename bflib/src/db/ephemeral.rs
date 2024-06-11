@@ -533,6 +533,13 @@ impl Ephemeral {
             .push(ucid.clone())
     }
 
+    pub fn force_player_to_spectators_at(&mut self, ucid: &Ucid, ts: DateTime<Utc>) {
+        self.force_to_spectators
+            .entry(ts)
+            .or_default()
+            .push(ucid.clone())
+    }
+
     pub(super) fn player_deslot(
         &mut self,
         per: &Persisted,

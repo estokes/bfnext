@@ -835,7 +835,8 @@ impl Db {
                     )
                     .unwrap();
                     write!(msg, "have a nice day").unwrap();
-                    self.ephemeral.force_player_to_spectators(&shooter);
+                    self.ephemeral
+                        .force_player_to_spectators_at(&shooter, now + Duration::seconds(30));
                 }
                 msg
             }

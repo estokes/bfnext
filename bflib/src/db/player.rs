@@ -828,7 +828,13 @@ impl Db {
                     }
                 };
                 if deplane {
-                    write!(msg, "Shortly you will be deplaned, your death may be monitored for quality assurance purposes, have a nice day").unwrap();
+                    write!(msg, "Shortly you will be deplaned\n").unwrap();
+                    write!(
+                        msg,
+                        "your death may be monitored for quality assurance purposes\n"
+                    )
+                    .unwrap();
+                    write!(msg, "have a nice day").unwrap();
                     self.ephemeral.force_player_to_spectators(&shooter);
                 }
                 msg

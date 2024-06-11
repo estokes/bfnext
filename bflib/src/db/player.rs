@@ -26,7 +26,7 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
-use compact_str::format_compact;
+use compact_str::{format_compact, CompactString};
 use dcso3::{
     airbase::Airbase,
     coalition::Side,
@@ -85,6 +85,10 @@ pub struct Player {
     pub airborne: Option<LifeType>,
     #[serde(default)]
     pub points: i32,
+    #[serde(default)]
+    pub ai_team_kills: Set<DateTime<Utc>>,
+    #[serde(default)]
+    pub player_team_kills: Map<DateTime<Utc>, Ucid>,
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
     #[serde(skip)]
@@ -459,6 +463,8 @@ impl Db {
                         current_slot: None,
                         changing_slots: false,
                         jtac_or_spectators: true,
+                        ai_team_kills: Set::new(),
+                        player_team_kills: Map::new(),
                     },
                 );
                 self.ephemeral.dirty();
@@ -731,6 +737,47 @@ impl Db {
         self.player_deslot(ucid);
     }
 
+    fn apply_teamkill_penalty(
+        &mut self,
+        shooter: Ucid,
+        total_points: u32,
+        victim_info: &Option<(String, Option<LifeType>)>,
+    ) -> CompactString {
+        let player = &mut self.persisted.players[&shooter];
+        match &victim_info {
+            None => {
+                player.points -= total_points as i32;
+                let tp = player.points;
+                format_compact!("{tp}(-{total_points}) points, you have killed a friendly unit")
+            }
+            Some((victim, Some(life_type))) => {
+                let (_, player_lives) = player.lives.get_or_insert_cow(*life_type, || {
+                    (Utc::now(), self.ephemeral.cfg.default_lives[&life_type].0)
+                });
+                let mut lost = false;
+                if *player_lives > 0 {
+                    lost = true;
+                    *player_lives -= 1;
+                }
+                player.points -= total_points as i32;
+                let tp = player.points;
+                self.ephemeral.dirty();
+                let lost = if lost {
+                    format_compact!("\nYou have lost a {life_type} life")
+                } else {
+                    format_compact!("")
+                };
+                format_compact!(
+                    "{tp}(-{total_points}) points, you have team killed {victim}.{}",
+                    lost
+                )
+            }
+            Some((victim, None)) => {
+                format_compact!("you have team killed {victim} on the ground")
+            }
+        }
+    }
+
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
         let mut hit_by: SmallVec<[&Ucid; 16]> = smallvec![];
         let non_self_shots = || {
@@ -796,38 +843,7 @@ impl Db {
                             }
                         }
                     } else {
-                        match &victim_info {
-                            None => {
-                                player.points -= total_points as i32;
-                                let tp = player.points;
-                                format_compact!(
-                                    "{tp}(-{total_points}) points, you have killed a friendly unit"
-                                )
-                            }
-                            Some((victim, Some(life_type))) => {
-                                let (_, player_lives) =
-                                    player.lives.get_or_insert_cow(*life_type, || {
-                                        (Utc::now(), self.ephemeral.cfg.default_lives[&life_type].0)
-                                    });
-                                let mut lost = false;
-                                if *player_lives > 0 {
-                                    lost = true;
-                                    *player_lives -= 1;
-                                }
-                                player.points -= total_points as i32;
-                                let tp = player.points;
-                                self.ephemeral.dirty();
-                                let lost = if lost {
-                                    format_compact!("\nYou have lost a {life_type} life")
-                                } else {
-                                    format_compact!("")
-                                };
-                                format_compact!("{tp}(-{total_points}) points, you have team killed {victim}.{}", lost)
-                            }
-                            Some((victim, None)) => {
-                                format_compact!("you have team killed {victim} on the ground")
-                            }
-                        }
+                        self.apply_teamkill_penalty(*ucid, total_points, &victim_info)
                     };
                     debug!("{ucid} kill message: {msg}");
                     self.ephemeral

@@ -83,6 +83,7 @@ pub enum DeployKind {
         time: DateTime<Utc>,
         destination: Option<Vector2>,
         rtb: Option<Vector2>,
+        #[serde(default)]
         origin: Option<ObjectiveId>,
     },
 }

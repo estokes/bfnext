@@ -26,7 +26,11 @@ fi
 rm -rf "$NEXT"
 cp -al "$CURRENT" "$NEXT"
 
-wine "${NEXT}/DCS World Server/bin/DCS_updater.exe" update
+if test $# -eq 0; then
+    wine "${NEXT}/DCS World Server/bin/DCS_updater.exe" update
+else
+    wine "${NEXT}/DCS World Server/bin/DCS_updater.exe" $@
+fi
 
 read -p "Was the update successful (y/n)?" SUCCESS
 if test "$SUCCESS" == "y"; then

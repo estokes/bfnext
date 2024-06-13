@@ -759,7 +759,8 @@ impl Db {
                     .into_iter()
                     .map(|ts| total_points >> ((now - *ts).num_hours() / window))
                     .sum();
-                player.points -= (total_points + penalty) as i32;
+                let total_points = total_points + penalty;
+                player.points -= total_points as i32;
                 player.ai_team_kills.insert_cow(now);
                 let tp = player.points;
                 format_compact!("{tp}(-{total_points}) points, you have killed a friendly unit")

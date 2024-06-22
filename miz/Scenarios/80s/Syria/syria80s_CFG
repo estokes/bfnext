@@ -85,6 +85,8 @@
     "L-39C": 9000,
     "F-14A-135-GR": 21600,
     "TF-51D": 0,
+	"OH58D": 9000,
+	"F-4E-45MC": 21600,
     "MiG-21Bis": 14400,
     "F-16C_50": 36000,
     "MiG-19P": 9000,
@@ -148,6 +150,8 @@
     "M-2000C": "Standard",
     "Mi-8MT": "Logistics",
     "Ka-50_3": "Attack",
+	"F-4E-45MC": "Intercept",
+	"OH58D": "Attack",
     "F-15C": "Standard",
     "Ka-50": "Attack",
     "FA-18C_hornet": "Standard",
@@ -2050,6 +2054,13 @@
       "Aircraft",
       "Helicopter"
     ],
+    "F-4E-45MC": [
+	  "Aircraft"
+	],
+	"OH58D": [
+	  "Aircraft",
+	  "Helicopter"
+	],
     "FARP Fuel Depot": [
       "Logistics",
       "Unarmed"

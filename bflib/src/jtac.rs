@@ -254,7 +254,7 @@ pub struct Jtac {
     location: JtacLocation,
     priority: Vec<UnitTags>,
     target: Option<JtacTarget>,
-    autoshift: bool,
+    autoshift: Option<usize>,
     ir_pointer: bool,
     code: u16,
     last_smoke: DateTime<Utc>,
@@ -280,7 +280,7 @@ impl Jtac {
             priority,
             location: JtacLocation::new(db, pos),
             target: None,
-            autoshift: true,
+            autoshift: None,
             ir_pointer: false,
             code: 1688,
             last_smoke: DateTime::<Utc>::default(),
@@ -380,7 +380,8 @@ impl Jtac {
         write!(
             msg,
             "\n\nautoshift: {}, ir_pointer: {}",
-            self.autoshift, self.ir_pointer
+            self.autoshift.is_none(),
+            self.ir_pointer
         )?;
         write!(msg, "\nfilter: [")?;
         let len = self.filter.len();
@@ -560,10 +561,9 @@ impl Jtac {
         if self.contacts.is_empty() {
             return Ok(false);
         }
-        self.autoshift = false;
-        let i = match &self.target {
-            None => 0,
-            Some(target) => match self.contacts.get_index_of(&target.id) {
+        let i = match (self.autoshift, &self.target) {
+            (None, None) => 0,
+            (None, Some(target)) => match self.contacts.get_index_of(&target.id) {
                 None => 0,
                 Some(i) => {
                     if i < self.contacts.len() - 1 {
@@ -573,7 +573,15 @@ impl Jtac {
                     }
                 }
             },
+            (Some(i), _) => {
+                if i < self.contacts.len() - 1 {
+                    i + 1
+                } else {
+                    0
+                }
+            }
         };
+        self.autoshift = Some(i);
         self.set_target(db, lua, i).context("setting target")
     }
 
@@ -601,7 +609,7 @@ impl Jtac {
         };
         self.contacts
             .sort_by(|_, ct0, _, ct1| priority(ct0.tags).cmp(&priority(ct1.tags)));
-        if self.autoshift && !self.contacts.is_empty() {
+        if self.autoshift.is_none() && !self.contacts.is_empty() {
             return self.set_target(db, lua, 0).context("setting target");
         }
         Ok(false)
@@ -737,11 +745,18 @@ impl Jtac {
     }
 
     pub fn toggle_auto_shift(&mut self, db: &Db, lua: MizLua) -> Result<()> {
-        self.autoshift = !self.autoshift;
-        if self.autoshift {
-            self.set_target(db, lua, 0)?;
-        } else {
-            self.remove_target(db, lua)?
+        match self.autoshift {
+            None => match self.target.as_ref() {
+                None => self.autoshift = Some(0),
+                Some(t) => match self.contacts.get_index_of(&t.id) {
+                    None => self.autoshift = Some(0),
+                    Some(i) => self.autoshift = Some(i),
+                },
+            },
+            Some(_) => {
+                self.autoshift = None;
+                self.set_target(db, lua, 0)?;
+            }
         }
         Ok(())
     }
@@ -783,7 +798,7 @@ impl Jtac {
     }
 
     pub fn autoshift(&self) -> bool {
-        self.autoshift
+        self.autoshift.is_none()
     }
 
     pub fn ir_pointer(&self) -> bool {

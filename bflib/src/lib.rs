@@ -59,7 +59,7 @@ use dcso3::{
 use ewr::Ewr;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexSet;
-use jtac::Jtacs;
+use jtac::{JtId, Jtacs};
 use landcache::LandCache;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
@@ -204,6 +204,12 @@ impl LoadState {
 }
 
 #[derive(Debug, Default)]
+struct JtacSlotIfo {
+    subscribed_objectives: FxHashSet<ObjectiveId>,
+    pinned: FxHashSet<JtId>,
+}
+
+#[derive(Debug, Default)]
 struct Context {
     sortie: String,
     miz_state_path: PathBuf,
@@ -224,7 +230,7 @@ struct Context {
     last_slow_timed_events: DateTime<Utc>,
     last_unit_position: usize,
     last_player_position: usize,
-    subscribed_jtac_menus: FxHashMap<SlotId, FxHashSet<ObjectiveId>>,
+    subscribed_jtac_menus: FxHashMap<SlotId, JtacSlotIfo>,
     subscribed_action_menus: FxHashSet<SlotId>,
     connected: Connected,
     landcache: LandCache,
@@ -843,11 +849,42 @@ fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
                 for (_, player, _) in ctx.db.instanced_players() {
                     if player.side == side {
                         if let Some((slot, _)) = player.current_slot.as_ref() {
-                            if let Some(subd) = ctx.subscribed_jtac_menus.get(&slot) {
-                                if oids.iter().any(|oid| subd.contains(oid)) {
-                                    ctx.subscribed_jtac_menus.remove(&slot);
-                                    dirty_slots.push(*slot)
+                            let mut dead: SmallVec<[JtId; 4]> = smallvec![];
+                            let mut expunge = false;
+                            if let Some(subd) = ctx.subscribed_jtac_menus.get_mut(&slot) {
+                                let pinned: SmallVec<[ObjectiveId; 16]> = subd
+                                    .pinned
+                                    .iter()
+                                    .filter_map(|jt| match ctx.jtac.get(jt) {
+                                        Ok(jt) => Some(jt.location().oid),
+                                        Err(_) => {
+                                            dead.push(*jt);
+                                            None
+                                        }
+                                    })
+                                    .collect();
+                                for oid in &oids {
+                                    if subd.subscribed_objectives.contains(oid) {
+                                        if !dirty_slots.contains(slot) {
+                                            dirty_slots.push(*slot);
+                                        }
+                                    }
+                                    if !pinned.contains(oid) {
+                                        subd.subscribed_objectives.remove(oid);
+                                    }
                                 }
+                                expunge = subd.subscribed_objectives.is_empty();
+                            }
+                            if dead.len() > 0 {
+                                let dead = dead.drain(..);
+                                if let Some(subd) = ctx.subscribed_jtac_menus.get_mut(slot) {
+                                    for jtid in dead {
+                                        subd.pinned.remove(&jtid);
+                                    }
+                                }
+                            }
+                            if expunge {
+                                ctx.subscribed_jtac_menus.remove(slot);
                             }
                         }
                     }

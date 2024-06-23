@@ -499,6 +499,12 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
     Ok(())
 }
 
+fn toggle_pin_jtac(lua: MizLua, arg: ArgTuple<SlotId, JtId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    ctx.subscribed_jtac_menus.entry(arg.fst).or_default().pinned.insert(arg.snd);
+    init_jtac_menu_for_slot(ctx, lua, &arg.fst)
+}
+
 pub(super) fn add_menu_for_jtac(
     db: &Db,
     side: Side,
@@ -507,7 +513,9 @@ pub(super) fn add_menu_for_jtac(
     mizgid: GroupId,
     jtac: &Jtac,
     ucid: &Ucid,
+    slot: SlotId,
 ) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
     let mc = MissionCommands::singleton(lua)?;
     let name = match jtac.gid() {
         JtId::Group(gid) => match db.group(&gid) {
@@ -544,6 +552,21 @@ pub(super) fn add_menu_for_jtac(
         }
     };
     let root = mc.add_submenu_for_group(mizgid, name.into(), Some(root))?;
+    let pinned = ctx
+        .subscribed_jtac_menus
+        .get(&slot)
+        .map(|subd| subd.pinned.contains(&jtac.gid()))
+        .unwrap_or(false);
+    mc.add_command_for_group(
+        mizgid,
+        if pinned { "Pin".into() } else { "Unpin".into() },
+        Some(root.clone()),
+        toggle_pin_jtac,
+        ArgTuple {
+            fst: slot,
+            snd: jtac.gid(),
+        },
+    )?;
     mc.add_command_for_group(
         mizgid,
         "Status".into(),
@@ -688,6 +711,7 @@ fn add_jtacs_by_location(
         ctx.subscribed_jtac_menus
             .entry(slot)
             .or_default()
+            .subscribed_objectives
             .insert(arg.trd);
         let mc = MissionCommands::singleton(lua)?;
         let name = ctx.db.objective(&arg.trd)?.name.clone();
@@ -711,6 +735,7 @@ fn add_jtacs_by_location(
                     arg.snd,
                     jtac,
                     &arg.fst,
+                    slot,
                 )?;
                 n += 1
             }
@@ -732,8 +757,9 @@ fn jtac_refresh_locations(lua: MizLua, arg: Ucid) -> Result<()> {
     Ok(())
 }
 
-fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
+fn add_jtac_locations(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
+    let slot = arg.trd;
     let mc = MissionCommands::singleton(lua)?;
     let player = ctx
         .db
@@ -750,6 +776,15 @@ fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
         arg.fst,
     )?;
     let mut n = 0;
+    macro_rules! handle_submenu {
+        () => {
+            if n >= 8 {
+                root = mc.add_submenu_for_group(arg.snd, "NEXT>>".into(), Some(root.clone()))?;
+                n = 0;
+            }
+            n += 1;
+        };
+    }
     for jtac in ctx.jtac.jtacs() {
         if jtac.side() == player.side {
             let (near, oid) = match ctx
@@ -764,14 +799,26 @@ fn add_jtac_locations(lua: MizLua, arg: ArgTuple<Ucid, GroupId>) -> Result<()> {
                     continue;
                 }
             };
-            if !roots.contains(&near) {
+            let pinned = ctx
+                .subscribed_jtac_menus
+                .get(&slot)
+                .map(|subd| subd.pinned.contains(&jtac.gid()))
+                .unwrap_or(false);
+            if pinned {
+                handle_submenu!();
+                add_menu_for_jtac(
+                    &ctx.db,
+                    player.side,
+                    root.clone(),
+                    lua,
+                    arg.snd,
+                    jtac,
+                    &arg.fst,
+                    slot,
+                )?;
+            } else if !roots.contains(&near) {
                 roots.push(near.clone());
-                if n >= 8 {
-                    root =
-                        mc.add_submenu_for_group(arg.snd, "NEXT>>".into(), Some(root.clone()))?;
-                    n = 0;
-                }
-                n += 1;
+                handle_submenu!();
                 mc.add_command_for_group(
                     arg.snd,
                     format_compact!("{near}>>").into(),
@@ -809,9 +856,10 @@ pub(crate) fn init_jtac_menu_for_slot(ctx: &mut Context, lua: MizLua, slot: &Slo
         "JTAC>>".into(),
         None,
         add_jtac_locations,
-        ArgTuple {
+        ArgTriple {
             fst: *ucid,
             snd: si.miz_gid,
+            trd: *slot,
         },
     )?;
     Ok(())

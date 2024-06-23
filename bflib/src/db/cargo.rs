@@ -59,9 +59,9 @@ pub struct NearbyCrate<'a> {
 
 #[derive(Debug, Clone)]
 pub enum Unpakistan {
-    Unpacked(String, GroupId),
-    UnpackedFarp(String, ObjectiveId),
-    Repaired(String, GroupId),
+    Unpacked(String),
+    UnpackedFarp(String),
+    Repaired(String),
     RepairedBase(String, u8),
     TransferedSupplies(String, String),
 }
@@ -75,12 +75,12 @@ pub enum Oldest {
 impl fmt::Display for Unpakistan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unpacked(unit, _) => write!(f, "unpacked a {unit}"),
-            Self::UnpackedFarp(loc, _) => write!(
+            Self::Unpacked(unit) => write!(f, "unpacked a {unit}"),
+            Self::UnpackedFarp(loc) => write!(
                 f,
                 "unpacked {loc}, units will spawn in 60 seconds get clear"
             ),
-            Self::Repaired(unit, _) => write!(f, "repaired a {unit}"),
+            Self::Repaired(unit) => write!(f, "repaired a {unit}"),
             Self::RepairedBase(base, logi) => write!(f, "repaired logistics at {base} to %{logi}"),
             Self::TransferedSupplies(from, to) => {
                 write!(f, "transfered supplies from {from} to {to}")
@@ -843,7 +843,7 @@ impl Db {
                                     self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
                                 self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
                                 let name = objective!(self, oid)?.name.clone();
-                                return Ok(Unpakistan::UnpackedFarp(name, oid));
+                                return Ok(Unpakistan::UnpackedFarp(name));
                             }
                             None => {
                                 let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
@@ -854,7 +854,7 @@ impl Db {
                                     moved_by: None,
                                     spec: spec.clone(),
                                 };
-                                let gid = self.add_and_queue_group(
+                                let _gid = self.add_and_queue_group(
                                     &spctx,
                                     idx,
                                     st.side,
@@ -872,7 +872,7 @@ impl Db {
                                     -(spec.cost as i32),
                                     &format_compact!("for {dep} unpack"),
                                 );
-                                return Ok(Unpakistan::Unpacked(dep, gid));
+                                return Ok(Unpakistan::Unpacked(dep));
                             }
                         },
                     }
@@ -897,7 +897,7 @@ impl Db {
                     }
                     self.ephemeral.push_spawn(gid);
                     self.ephemeral.dirty();
-                    return Ok(Unpakistan::Repaired(dep, gid));
+                    return Ok(Unpakistan::Repaired(dep));
                 }
             }
         }

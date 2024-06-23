@@ -858,7 +858,7 @@ impl Ephemeral {
                 .spawn(template)
                 .with_context(|| format_compact!("spawning template {}", group.template_name))?;
             match &spawned {
-                Spawned::Static(_) => (),
+                Spawned::Static => (),
                 Spawned::Group(g) => {
                     let oid = g.object_id()?;
                     self.object_id_by_gid.insert(group.id, oid.clone());

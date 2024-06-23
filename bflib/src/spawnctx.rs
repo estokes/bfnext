@@ -105,7 +105,7 @@ pub enum Despawn {
 #[derive(Debug, Clone)]
 pub enum Spawned<'lua> {
     Group(Group<'lua>),
-    Static(Static<'lua>),
+    Static,
 }
 
 impl<'lua> SpawnCtx<'lua> {
@@ -199,13 +199,12 @@ impl<'lua> SpawnCtx<'lua> {
                     .first()
                     .context("getting first unit in static group")?
                     .clone();
-                Ok(Spawned::Static(
-                    self.coalition
-                        .add_static_object(template.country, unit)
-                        .with_context(|| {
-                            format_compact!("spawning static object from template {:?}", template)
-                        })?,
-                ))
+                self.coalition
+                    .add_static_object(template.country, unit)
+                    .with_context(|| {
+                        format_compact!("spawning static object from template {:?}", template)
+                    })?;
+                Ok(Spawned::Static)
             }
         }
     }

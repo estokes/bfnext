@@ -88,6 +88,8 @@
     "MiG-21Bis": 14400,
     "F-16C_50": 36000,
     "MiG-19P": 9000,
+	"OH58D": 9000,
+	"F-4E-45MC": 21600,
     "M-2000C": 21600,
     "Mi-8MT": 9000,
     "Ka-50_3": 14400,
@@ -137,6 +139,8 @@
     "C-101CC": "Recon",
     "MiG-29A": "Standard",
     "J-11A": "Standard",
+	"F-4E-45MC": "Intercept",
+	"OH58D": "Attack",
     "MiG-29S": "Standard",
     "L-39C": "Recon",
     "F-14A-135-GR": "Standard",
@@ -1904,6 +1908,13 @@
       "Logistics",
       "Unarmed"
     ],
+    "F-4E-45MC": [
+	  "Aircraft"
+	],
+	"OH58D": [
+	  "Aircraft",
+	  "Helicopter"
+	],	
     "Kub 2P25 ln": [
       "SAM",
       "MR",

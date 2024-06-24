@@ -420,6 +420,7 @@ fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> 
         }
         SlotAuth::Yes => {
             ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
+            ctx.subscribed_jtac_menus.remove(&slot);
             Ok(true)
         }
     }

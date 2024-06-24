@@ -14,8 +14,6 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use std::sync::Arc;
-
 use super::{ArgQuad, ArgTriple, ArgTuple};
 use crate::{
     cfg::{ActionKind, UnitTag, Vehicle},
@@ -42,6 +40,7 @@ use dcso3::{
 use enumflags2::{BitFlag, BitFlags};
 use log::error;
 use smallvec::{smallvec, SmallVec};
+use std::sync::Arc;
 
 fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
@@ -501,7 +500,12 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
 
 fn toggle_pin_jtac(lua: MizLua, arg: ArgTuple<SlotId, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    ctx.subscribed_jtac_menus.entry(arg.fst).or_default().pinned.insert(arg.snd);
+    let subd = ctx.subscribed_jtac_menus.entry(arg.fst).or_default();
+    if subd.pinned.contains(&arg.snd) {
+        subd.pinned.remove(&arg.snd);
+    } else {
+        subd.pinned.insert(arg.snd);
+    }
     init_jtac_menu_for_slot(ctx, lua, &arg.fst)
 }
 
@@ -517,6 +521,11 @@ pub(super) fn add_menu_for_jtac(
 ) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let mc = MissionCommands::singleton(lua)?;
+    let pinned = ctx
+        .subscribed_jtac_menus
+        .get(&slot)
+        .map(|subd| subd.pinned.contains(&jtac.gid()))
+        .unwrap_or(false);
     let name = match jtac.gid() {
         JtId::Group(gid) => match db.group(&gid) {
             Err(_) => format_compact!("{gid}"),
@@ -551,15 +560,14 @@ pub(super) fn add_menu_for_jtac(
             format_compact!("sl{sl}({typ} {name})")
         }
     };
-    let root = mc.add_submenu_for_group(mizgid, name.into(), Some(root))?;
-    let pinned = ctx
-        .subscribed_jtac_menus
-        .get(&slot)
-        .map(|subd| subd.pinned.contains(&jtac.gid()))
-        .unwrap_or(false);
+    let root = mc.add_submenu_for_group(mizgid, name.clone().into(), Some(root))?;
     mc.add_command_for_group(
         mizgid,
-        if pinned { "Pin".into() } else { "Unpin".into() },
+        if !pinned {
+            "Pin".into()
+        } else {
+            "Unpin".into()
+        },
         Some(root.clone()),
         toggle_pin_jtac,
         ArgTuple {
@@ -842,13 +850,12 @@ pub(crate) fn init_jtac_menu_for_slot(ctx: &mut Context, lua: MizLua, slot: &Slo
         Some(ucid) => ucid,
         None => return Ok(()),
     };
-    let mc = MissionCommands::singleton(lua)?;
     let si = ctx
         .db
         .ephemeral
         .get_slot_info(slot)
         .context("getting slot info")?;
-    ctx.subscribed_jtac_menus.remove(slot);
+    let mc = MissionCommands::singleton(lua)?;
     mc.remove_command_for_group(si.miz_gid, GroupCommandItem::from(vec!["JTAC>>".into()]))?;
     mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["JTAC".into()]))?;
     mc.add_command_for_group(

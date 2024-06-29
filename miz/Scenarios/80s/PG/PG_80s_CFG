@@ -1921,6 +1921,12 @@
       "RadarGuided",
       "Launcher"
     ],
+	"5p73 s-125 ln": [
+	  "SAM",
+	  "MR",
+	  "RadarGuided",
+	  "Launcher"
+	],
     "1L13 EWR": [
       "EWR",
       "Unarmed"
@@ -2022,6 +2028,12 @@
       "RadarGuided",
       "TrackRadar"
     ],
+	"snr s-125 tr": [
+	 "SAM",
+	 "LR",
+	 "RadarGuided",
+	 "TrackRadar"
+	],
     "Soldier RPG": [
       "Infantry",
       "MR",

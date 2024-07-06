@@ -1834,6 +1834,18 @@
       "LightCannon",
       "Driveable"
     ],
+	"snr s-125 tr": [
+	 "SAM",
+	 "LR",
+	 "RadarGuided",
+	 "TrackRadar"
+	],
+	"5p73 s-125 ln": [
+	  "SAM",
+	  "MR",
+	  "RadarGuided",
+	  "Launcher"
+	],
     "p-19 s-125 sr": [
       "SAM",
       "LR",

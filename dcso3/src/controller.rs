@@ -1105,6 +1105,9 @@ impl<'lua> IntoLua<'lua> for Task<'lua> {
             }
         }
         root.raw_set("params", params)?;
+
+        dbg!("{:?}", Value::Table(root.clone()).clone().into_lua(lua));
+
         Ok(Value::Table(root))
     }
 }

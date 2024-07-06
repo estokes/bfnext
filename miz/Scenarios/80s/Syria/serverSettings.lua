@@ -39,7 +39,7 @@ cfg =
     }, -- end of ["missionList"]
     ["password"] = "",
     ["listLoop"] = false,
-    ["name"] = "The Coop - Modern",
+    ["name"] = "The Coop - 80s",
     ["require_pure_scripts"] = true,
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,

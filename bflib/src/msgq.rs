@@ -57,6 +57,7 @@ pub enum MsgTyp {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum Msg {
     Message {
         typ: MsgTyp,
@@ -92,6 +93,10 @@ pub enum Msg {
     SetMarkupFillColor {
         id: MarkId,
         color: Color,
+    },
+    SetMarkupText {
+        id: MarkId,
+        text: String,
     },
 }
 
@@ -144,9 +149,9 @@ impl MsgQ {
                             true
                         }
                     }
-                    Msg::SetMarkupColor { id, .. } | Msg::SetMarkupFillColor { id, .. } => {
-                        *id != did
-                    }
+                    Msg::SetMarkupColor { id, .. }
+                    | Msg::SetMarkupFillColor { id, .. }
+                    | Msg::SetMarkupText { id, .. } => *id != did,
                 },
             })
         };
@@ -304,6 +309,7 @@ impl MsgQ {
         }))
     }
 
+    #[allow(dead_code)]
     pub fn rect_to_all(
         &mut self,
         to: SideFilter,
@@ -342,8 +348,13 @@ impl MsgQ {
         self.0[2].push_back(Cmd::Send(Msg::SetMarkupColor { id, color }))
     }
 
+    #[allow(dead_code)]
     pub fn set_markup_fill_color(&mut self, id: MarkId, color: Color) {
         self.0[2].push_back(Cmd::Send(Msg::SetMarkupFillColor { id, color }))
+    }
+
+    pub fn set_markup_text(&mut self, id: MarkId, text: String) {
+        self.0[2].push_back(Cmd::Send(Msg::SetMarkupText { id, text }))
     }
 
     pub fn process(&mut self, max_rate: usize, net: &Net, act: &Action) {
@@ -419,6 +430,7 @@ impl MsgQ {
                 Cmd::Send(Msg::SetMarkupFillColor { id, color }) => {
                     act.set_markup_fill_color(id, color)
                 }
+                Cmd::Send(Msg::SetMarkupText { id, text }) => act.set_markup_text(id, text),
             };
             if let Err(e) = res {
                 error!("could not send message {:?}", e)

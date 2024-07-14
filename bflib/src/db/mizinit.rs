@@ -196,7 +196,7 @@ impl Db {
                 continue;
             }
             let id = unit.slot()?;
-            let pos = slot.pos()?;
+            let pos = unit.pos()?;
             let obj = {
                 let mut iter = self.persisted.objectives.into_iter();
                 loop {

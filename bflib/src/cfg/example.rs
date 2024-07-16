@@ -1731,6 +1731,7 @@ impl Default for Cfg {
             max_msgs_per_second: 3,
             repair_time: 1800,
             repair_crate: default_repair_crate(),
+            name_filter: Some("^[a-zA-Z0-9<>|= ]+$".try_into().unwrap()),
             shutdown: Some(10),
             rules: Rules {
                 actions: Rule::AlwaysAllowed,

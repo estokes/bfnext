@@ -312,6 +312,12 @@ fn on_player_try_connect(
     if let Some(msg) = ctx.load_state.login_ok() {
         return Ok(Some(msg));
     }
+    if let Some(filter) = &ctx.db.ephemeral.cfg.name_filter {
+        if !filter.check(&name) {
+            let msg = format_compact!("name must match {}", filter.as_str());
+            return Ok(Some(msg.into()));
+        }
+    }
     if let Some((until, _)) = ctx.db.ephemeral.cfg.banned.get(&ucid) {
         match until {
             None => return Ok(Some("you are banned forever".into())),

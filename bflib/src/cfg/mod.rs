@@ -21,6 +21,7 @@ use dcso3::{coalition::Side, controller::AltType, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
+use regex::Regex;
 use serde_derive::{Deserialize, Serialize};
 use std::{
     borrow::Borrow,
@@ -556,6 +557,35 @@ pub struct Rules {
     pub ca: Rule,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "&str", into = "String")]
+pub struct NameFilter(Regex);
+
+impl TryFrom<&str> for NameFilter {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self> {
+        Ok(Self(Regex::new(value)?))
+    }
+}
+
+impl Into<String> for NameFilter {
+    fn into(self) -> String {
+        self.0.as_str().into()
+    }
+}
+
+impl NameFilter {
+    /// Check if a name is allowed
+    pub fn check(&self, name: &str) -> bool {
+        self.0.is_match(name)
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 fn default_msgs_per_second() -> usize {
     5
 }
@@ -576,6 +606,9 @@ pub struct Cfg {
     /// who can do what
     #[serde(default)]
     pub rules: Rules,
+    /// Because DCS. Reject names that don't match this regex
+    #[serde(default)]
+    pub name_filter: Option<NameFilter>,
     /// The maximum number of messages, including markup, we will push to dcs
     /// per second.
     #[serde(default = "default_msgs_per_second")]

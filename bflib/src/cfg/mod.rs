@@ -558,8 +558,16 @@ pub struct Rules {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(try_from = "&str", into = "String")]
+#[serde(try_from = "String", into = "String")]
 pub struct NameFilter(Regex);
+
+impl TryFrom<String> for NameFilter {
+    type Error = anyhow::Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        Ok(Self(Regex::new(&value)?))
+    }
+}
 
 impl TryFrom<&str> for NameFilter {
     type Error = anyhow::Error;

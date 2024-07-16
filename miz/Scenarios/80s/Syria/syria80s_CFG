@@ -13,6 +13,7 @@
     "jtac": "AlwaysAllowed",
     "ca": "AlwaysAllowed"
   },
+  "name_filter": "^[a-zA-Z0-9<>|= ]+$",
   "shutdown": 5,
   "points": {
     "new_player_join": 10,

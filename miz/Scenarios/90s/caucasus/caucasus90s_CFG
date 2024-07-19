@@ -2093,6 +2093,13 @@
             "Launcher",
             "EngagesWeapons"
         ],
+		"NASAMS_LN_B": [
+        "SAM",
+        "MR",
+        "RadarGuided",
+        "Launcher",
+        "EngagesWeapons"
+        ],
         "Patriot ln": [
             "SAM",
             "LR",

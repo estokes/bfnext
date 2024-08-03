@@ -1130,7 +1130,7 @@
                     {
                         "name": "Roland",
                         "weight": 800,
-                        "required": 4,
+                        "required": 2,
                         "pos_unit": null,
                         "max_drop_height_agl": 10,
                         "max_drop_speed": 50
@@ -1265,7 +1265,7 @@
                     {
                         "name": "Flakpanzergepard Crate",
                         "weight": 800,
-                        "required": 4,
+                        "required": 2,
                         "pos_unit": null,
                         "max_drop_height_agl": 20,
                         "max_drop_speed": 350

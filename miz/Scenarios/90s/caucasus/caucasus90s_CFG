@@ -850,6 +850,31 @@
                 "ewr": null,
                 "jtac": null
             },
+			            {
+                "path": [
+                    "AAA",
+                    "KS19 Battery"
+                ],
+                "template": "DEPKS19",
+                "persist": "Forever",
+                "limit": 4,
+                "limit_enforce": "DeleteOldest",
+                "crates": [
+                    {
+                        "name": "KS19 Battery",
+                        "weight": 1500,
+                        "required": 3,
+                        "pos_unit": null,
+                        "max_drop_height_agl": 10,
+                        "max_drop_speed": 50
+                    }
+                ],
+                "repair_crate": null,
+                "logistics": null,
+                "cost": 50,
+                "ewr": null,
+                "jtac": null
+            },
             {
                 "path": [
                     "AAA",
@@ -1277,6 +1302,31 @@
                 "ewr": null,
                 "jtac": null
             },
+			            {
+                "path": [
+                    "AAA",
+                    "C-RAM"
+                ],
+                "template": "DEPCRAM",
+                "persist": "Forever",
+                "limit": 4,
+                "limit_enforce": "DeleteOldest",
+                "crates": [
+                    {
+                        "name": "C Crate",
+                        "weight": 800,
+                        "required": 3,
+                        "pos_unit": null,
+                        "max_drop_height_agl": 20,
+                        "max_drop_speed": 350
+                    }
+                ],
+                "repair_crate": null,
+                "logistics": null,
+                "cost": 50,
+                "ewr": null,
+                "jtac": null
+            },
             {
                 "path": [
                     "AAA",
@@ -1620,6 +1670,13 @@
             "LR",
             "Driveable"
         ],
+		"HEMTT_C-RAM_Phalanx": [
+            "AAA",
+            "MR",
+            "RadarGuided",
+            "Driveable",
+            "EngagesWeapons"
+    ],
         "Hawk ln": [
             "SAM",
             "LR",
@@ -1687,6 +1744,14 @@
             "Launcher"
         ],
         "T-80UD": [
+            "Armor",
+            "MR",
+            "ATGM",
+            "HeavyCannon",
+            "SmallArms",
+            "Driveable"
+        ],
+		"T-90": [
             "Armor",
             "MR",
             "ATGM",
@@ -1776,6 +1841,41 @@
             "Driveable"
         ],
         "M1134 Stryker ATGM": [
+            "APC",
+            "MR",
+            "ATGM",
+            "SmallArms",
+            "Driveable"
+        ],
+		"M1128 Stryker MGS": [
+            "APC",
+            "MR",
+            "ATGM",
+            "SmallArms",
+            "Driveable"
+        ],
+		"Marder": [
+            "APC",
+            "MR",
+            "ATGM",
+            "SmallArms",
+            "Driveable"
+        ],
+		"BMP-2": [
+            "APC",
+            "MR",
+            "ATGM",
+            "SmallArms",
+            "Driveable"
+        ],
+		"BTR-82A": [
+            "APC",
+            "MR",
+            "ATGM",
+            "SmallArms",
+            "Driveable"
+        ],
+		"VAB_Mephisto": [
             "APC",
             "MR",
             "ATGM",
@@ -1936,6 +2036,14 @@
             "SmallArms",
             "Driveable"
         ],
+		"M1A2C_SEP_V3": [
+            "Armor",
+            "MR",
+            "HeavyCannon",
+            "SmallArms",
+            "Driveable"
+        ],
+		
         "M 818": [
             "Logistics",
             "Unarmed",
@@ -1958,6 +2066,13 @@
             "LightCannon",
             "Driveable"
         ],
+		"BTR_D": [
+            "APC",
+            "MR",
+            "ATGM",
+            "LightCannon",
+            "Driveable"
+        ],
         "Ka-50": [
             "Aircraft",
             "Helicopter"
@@ -1969,6 +2084,10 @@
             "ControlUnit"
         ],
         "S-60_Type59_Artillery": [
+            "AAA",
+            "LR"
+        ],
+		"KS-19": [
             "AAA",
             "LR"
         ],
@@ -2081,6 +2200,12 @@
         "Patriot str": [
             "SAM",
             "LR",
+            "RadarGuided",
+            "SearchRadar",
+            "TrackRadar",
+            "EngagesWeapons"
+        ],
+		"SON_9": [
             "RadarGuided",
             "SearchRadar",
             "TrackRadar",

@@ -832,7 +832,7 @@ impl Ephemeral {
                         unit.raw_remove("unitId")?;
                         unit.set_pos(su.pos)?;
                         unit.set_alt(su.position.p.y)?;
-                        unit.set_heading(su.heading)?;
+                        unit.set_heading(unit.heading()? + su.heading)?;
                         unit.set_name(su.name.clone())?;
                         i += 1;
                     }

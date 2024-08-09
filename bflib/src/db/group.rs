@@ -107,7 +107,7 @@ pub struct SpawnedUnit {
     #[serde(skip)]
     pub moved: Option<DateTime<Utc>>,
     #[serde(skip)]
-    pub airborne_velocity: Option<Vector3>
+    pub airborne_velocity: Option<Vector3>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -282,7 +282,7 @@ impl Db {
                 player,
                 spec,
                 moved_by,
-                origin: _
+                origin: _,
             } => {
                 let name = self.persisted.players[player].name.clone();
                 let resp = moved_by
@@ -412,11 +412,14 @@ impl Db {
                 .map(|d| d.sqrt())
                 .unwrap_or(0.)
         }
-        struct GroupPosition {
-            positions: VecDeque<Vector2>,
-            by_type: FxHashMap<String, VecDeque<Vector2>>,
+        struct UnitPosition {
             heading: f64,
+            position: Vector2,
             altitude: Option<f64>,
+        }
+        struct GroupPosition {
+            positions: VecDeque<UnitPosition>,
+            by_type: FxHashMap<String, VecDeque<UnitPosition>>,
         }
         fn compute_unit_positions(
             spctx: &SpawnCtx,
@@ -427,7 +430,14 @@ impl Db {
             let mut positions = template
                 .units()?
                 .into_iter()
-                .map(|u| Ok(u?.pos()?))
+                .map(|u| {
+                    let u = u?;
+                    Ok(UnitPosition {
+                        heading: u.heading()?,
+                        position: u.pos()?,
+                        altitude: u.alt().unwrap_or(None),
+                    })
+                })
                 .collect::<Result<VecDeque<_>>>()?;
             match location {
                 SpawnLoc::InAir {
@@ -436,9 +446,19 @@ impl Db {
                     altitude,
                     speed: _,
                 } => {
-                    let group_center = centroid2d(positions.iter().map(|p| *p));
+                    let group_center = centroid2d(positions.iter().map(|p| p.position));
+                    let group_altitude = {
+                        let (sum, i) = positions
+                            .iter()
+                            .filter_map(|p| p.altitude)
+                            .fold((0., 0.), |(sum, i), a| (sum + a, i + 1.));
+                        sum / i
+                    };
                     for p in positions.iter_mut() {
-                        *p = *p - group_center + pos;
+                        p.position = p.position - group_center + pos;
+                        if let Some(a) = p.altitude {
+                            p.altitude = Some(a - group_altitude + altitude);
+                        }
                     }
                     rotate2d(heading, positions.make_contiguous());
                     Ok(GroupPosition {
@@ -712,7 +732,12 @@ impl Db {
         Ok(gid)
     }
 
-    pub(crate) fn unit_born(&mut self, lua: MizLua, unit: &Unit, connected: &Connected) -> Result<Option<SlotId>> {
+    pub(crate) fn unit_born(
+        &mut self,
+        lua: MizLua,
+        unit: &Unit,
+        connected: &Connected,
+    ) -> Result<Option<SlotId>> {
         let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
@@ -725,7 +750,7 @@ impl Db {
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
-            return Ok(None)
+            return Ok(None);
         }
         let slot = unit.slot()?;
         if let Some(si) = self.ephemeral.slot_info.get(&slot) {
@@ -741,7 +766,7 @@ impl Db {
             };
             self.player_entered_slot(lua, id, unit, slot, si.objective, ucid)
                 .context("entering player into slot")?;
-            return Ok(Some(slot))
+            return Ok(Some(slot));
         }
         Ok(None)
     }

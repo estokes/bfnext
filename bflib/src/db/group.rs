@@ -35,7 +35,7 @@ use dcso3::{
     land::{Land, SurfaceType},
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
-    rotate2d,
+    rotate2d, rotate2d_gen,
     static_object::{ClassStatic, StaticObject},
     trigger::MarkId,
     unit::{ClassUnit, Unit},
@@ -460,7 +460,7 @@ impl Db {
                             p.altitude = Some(a - group_altitude + altitude);
                         }
                     }
-                    rotate2d(heading, positions.make_contiguous());
+                    rotate2d_gen(heading, positions.make_contiguous(), |p| &mut p.position);
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),

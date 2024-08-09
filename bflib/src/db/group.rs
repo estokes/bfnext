@@ -565,7 +565,7 @@ impl Db {
                             None => positions.push_back(UnitPosition {
                                 position: position - group_center + pos,
                                 heading: change_heading(heading, group_heading),
-                                altitude,
+                                altitude: None,
                             }),
                             Some(pos) => {
                                 by_type

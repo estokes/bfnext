@@ -470,6 +470,7 @@ impl Db {
                 SpawnLoc::AtPosWithCenter { pos, center } => {
                     for p in positions.iter_mut() {
                         p.position = p.position - center + pos;
+                        p.altitude = None;
                     }
                     Ok(GroupPosition {
                         positions,
@@ -485,6 +486,7 @@ impl Db {
                     for p in positions.iter_mut() {
                         p.position = p.position - group_center + pos;
                         p.heading = change_heading(p.heading, group_heading);
+                        p.altitude = None;
                     }
                     rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
                         &mut p.position
@@ -516,6 +518,7 @@ impl Db {
                     for p in positions.iter_mut() {
                         p.position = p.position + offset_magnitude * offset_direction;
                         p.heading = change_heading(p.heading, group_heading);
+                        p.altitude = None;
                     }
                     Ok(GroupPosition {
                         positions,
@@ -553,7 +556,6 @@ impl Db {
                         let unit = unit?;
                         let typ = unit.typ()?;
                         let heading = unit.heading()?;
-                        let altitude = unit.alt().unwrap_or(None);
                         let position = unit.pos()?;
                         let group_center = match center_by_typ.get(&typ) {
                             None => group_center,
@@ -572,7 +574,7 @@ impl Db {
                                     .push_back(UnitPosition {
                                         position: position - group_center + *pos,
                                         heading: change_heading(heading, group_heading),
-                                        altitude,
+                                        altitude: None,
                                     })
                             }
                         }

@@ -28,14 +28,14 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    atomic_id, azumith3d, centroid2d, centroid3d,
+    atomic_id, azumith3d, centroid2d, centroid3d, change_heading,
     coalition::Side,
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
-    rotate2d, rotate2d_gen,
+    rotate2d_gen,
     static_object::{ClassStatic, StaticObject},
     trigger::MarkId,
     unit::{ClassUnit, Unit},
@@ -456,6 +456,7 @@ impl Db {
                     };
                     for p in positions.iter_mut() {
                         p.position = p.position - group_center + pos;
+                        p.heading = change_heading(p.heading, heading);
                         if let Some(a) = p.altitude {
                             p.altitude = Some(a - group_altitude + altitude);
                         }
@@ -464,36 +465,33 @@ impl Db {
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),
-                        heading,
-                        altitude: Some(altitude),
                     })
                 }
                 SpawnLoc::AtPosWithCenter { pos, center } => {
                     for p in positions.iter_mut() {
-                        *p = *p - center + pos;
+                        p.position = p.position - center + pos;
                     }
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),
-                        heading: 0.,
-                        altitude: None,
                     })
                 }
                 SpawnLoc::AtTrigger {
                     name,
                     group_heading,
                 } => {
-                    let group_center = centroid2d(positions.iter().map(|p| *p));
+                    let group_center = centroid2d(positions.iter().map(|p| p.position));
                     let pos = spctx.get_trigger_zone(idx, name.as_str())?.pos()?;
                     for p in positions.iter_mut() {
-                        *p = *p - group_center + pos;
+                        p.position = p.position - group_center + pos;
+                        p.heading = change_heading(p.heading, group_heading);
                     }
-                    rotate2d(group_heading, positions.make_contiguous());
+                    rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
+                        &mut p.position
+                    });
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),
-                        heading: group_heading,
-                        altitude: None,
                     })
                 }
                 SpawnLoc::AtPos {
@@ -501,21 +499,27 @@ impl Db {
                     offset_direction,
                     group_heading,
                 } => {
-                    let group_center = centroid2d(positions.iter().map(|p| *p));
-                    let radius = distance(group_center, f64::max, positions.iter());
+                    let group_center = centroid2d(positions.iter().map(|p| p.position));
+                    let radius = distance(
+                        group_center,
+                        f64::max,
+                        positions.iter().map(|p| &p.position),
+                    );
                     for p in positions.iter_mut() {
-                        *p = *p - group_center + pos + radius * offset_direction;
+                        p.position = p.position - group_center + pos + radius * offset_direction;
                     }
-                    rotate2d(group_heading, positions.make_contiguous());
-                    let offset_magnitude = 20. - distance(pos, f64::min, positions.iter());
+                    rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
+                        &mut p.position
+                    });
+                    let offset_magnitude =
+                        20. - distance(pos, f64::min, positions.iter().map(|p| &p.position));
                     for p in positions.iter_mut() {
-                        *p = *p + offset_magnitude * offset_direction
+                        p.position = p.position + offset_magnitude * offset_direction;
+                        p.heading = change_heading(p.heading, group_heading);
                     }
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),
-                        heading: group_heading,
-                        altitude: None,
                     })
                 }
                 SpawnLoc::AtPosWithComponents {
@@ -523,7 +527,7 @@ impl Db {
                     group_heading,
                     component_pos,
                 } => {
-                    let group_center = centroid2d(positions.iter().map(|p| *p));
+                    let group_center = centroid2d(positions.iter().map(|p| p.position));
                     let center_by_typ: FxHashMap<String, Vector2> = {
                         let mut tbl = FxHashMap::default();
                         for unit in template.units()? {
@@ -542,47 +546,59 @@ impl Db {
                             .map(|(k, (n, v))| (k, v / (n as f64)))
                             .collect()
                     };
-                    let mut final_position_by_type: FxHashMap<String, VecDeque<Vector2>> =
+                    let mut by_type: FxHashMap<String, VecDeque<UnitPosition>> =
                         FxHashMap::default();
                     positions.clear();
                     for unit in template.units()? {
                         let unit = unit?;
                         let typ = unit.typ()?;
+                        let heading = unit.heading()?;
+                        let altitude = unit.alt().unwrap_or(None);
+                        let position = unit.pos()?;
                         let group_center = match center_by_typ.get(&typ) {
                             None => group_center,
                             Some(pos) => *pos,
                         };
                         match component_pos.get(&typ) {
-                            None => positions.push_back(unit.pos()? - group_center + pos),
-                            Some(pos) => final_position_by_type
-                                .entry(typ.clone())
-                                .or_default()
-                                .push_back(unit.pos()? - group_center + *pos),
+                            None => positions.push_back(UnitPosition {
+                                position: position - group_center + pos,
+                                heading: change_heading(heading, group_heading),
+                                altitude,
+                            }),
+                            Some(pos) => {
+                                by_type
+                                    .entry(typ.clone())
+                                    .or_default()
+                                    .push_back(UnitPosition {
+                                        position: position - group_center + *pos,
+                                        heading: change_heading(heading, group_heading),
+                                        altitude,
+                                    })
+                            }
                         }
                     }
-                    rotate2d(group_heading, positions.make_contiguous());
-                    for positions in final_position_by_type.values_mut() {
-                        rotate2d(group_heading, positions.make_contiguous());
+                    rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
+                        &mut p.position
+                    });
+                    for positions in by_type.values_mut() {
+                        rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
+                            &mut p.position
+                        });
                     }
-                    Ok(GroupPosition {
-                        positions,
-                        by_type: final_position_by_type,
-                        heading: group_heading,
-                        altitude: None,
-                    })
+                    Ok(GroupPosition { positions, by_type })
                 }
             }
         }
         fn check_water(
             land: &Land,
-            positions: &VecDeque<Vector2>,
-            positions_by_typ: &FxHashMap<String, VecDeque<Vector2>>,
+            positions: &VecDeque<UnitPosition>,
+            positions_by_typ: &FxHashMap<String, VecDeque<UnitPosition>>,
         ) -> Result<()> {
             for pos in positions
                 .iter()
                 .chain(positions_by_typ.values().flat_map(|v| v.iter()))
             {
-                match land.get_surface_type(LuaVec2(*pos))? {
+                match land.get_surface_type(LuaVec2(pos.position))? {
                     SurfaceType::Land | SurfaceType::Road | SurfaceType::Runway => (),
                     SurfaceType::ShallowWater | SurfaceType::Water => {
                         bail!("you can't spawn units in water")
@@ -636,12 +652,12 @@ impl Db {
             };
             let position = {
                 let mut p = Position3::default();
-                p.p.x = pos.x;
-                p.p.y = match gpos.altitude {
-                    None => land.get_height(LuaVec2(pos))?,
+                p.p.x = pos.position.x;
+                p.p.y = match pos.altitude {
+                    None => land.get_height(LuaVec2(pos.position))?,
                     Some(alt) => alt,
                 };
-                p.p.z = pos.y;
+                p.p.z = pos.position.y;
                 p
             };
             let spawned_unit = SpawnedUnit {
@@ -653,11 +669,11 @@ impl Db {
                 name: unit_name.clone(),
                 template_name,
                 spawn_position: position,
-                spawn_pos: pos,
-                spawn_heading: gpos.heading,
+                spawn_pos: pos.position,
+                spawn_heading: pos.heading,
                 position,
-                pos,
-                heading: gpos.heading,
+                pos: pos.position,
+                heading: pos.heading,
                 dead: false,
                 moved: None,
                 airborne_velocity: None,

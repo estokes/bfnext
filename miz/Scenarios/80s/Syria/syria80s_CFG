@@ -86,13 +86,14 @@
     "L-39C": 9000,
     "F-14A-135-GR": 21600,
     "TF-51D": 0,
-	"OH58D": 9000,
-	"F-4E-45MC": 21600,
+    "OH58D": 9000,
+    "F-4E-45MC": 21600,
     "MiG-21Bis": 14400,
     "F-16C_50": 36000,
     "MiG-19P": 9000,
     "M-2000C": 21600,
     "Mi-8MT": 9000,
+    "CH-47Fbl1": 9000,
     "Ka-50_3": 14400,
     "F-15C": 36000,
     "Ka-50": 14400,
@@ -111,7 +112,7 @@
     "AH-64D_BLK_II": 14400,
     "UH-1H": 9000,
     "L-39ZA": 9000,
-	"MosquitoFBMkVI": 9000,
+    "MosquitoFBMkVI": 9000,
     "F-5E-3": 14400,
     "Yak-52": 0,
     "Mi-24P": 14400,
@@ -137,7 +138,7 @@
   "max_crates": 4,
   "life_types": {
     "MB-339A": "Recon",
-	"MosquitoFBMkVI": "Recon",
+    "MosquitoFBMkVI": "Recon",
     "C-101CC": "Recon",
     "MiG-29A": "Standard",
     "J-11A": "Standard",
@@ -150,9 +151,10 @@
     "MiG-19P": "Intercept",
     "M-2000C": "Standard",
     "Mi-8MT": "Logistics",
+    "CH-47Fbl1": "Logistics",
     "Ka-50_3": "Attack",
-	"F-4E-45MC": "Intercept",
-	"OH58D": "Attack",
+    "F-4E-45MC": "Intercept",
+    "OH58D": "Attack",
     "F-15C": "Standard",
     "Ka-50": "Attack",
     "FA-18C_hornet": "Standard",
@@ -669,11 +671,11 @@
       "crate_slots": 1,
       "total_slots": 1
     },
-	"MosquitoFBMkVI": {
-	  "troop_slots": 1,
-	  "crate_slots": 1,
-	  "total_slots": 2
-	},  
+    "MosquitoFBMkVI": {
+      "troop_slots": 1,
+      "crate_slots": 1,
+      "total_slots": 2
+    },
     "UH-1H": {
       "troop_slots": 1,
       "crate_slots": 1,
@@ -681,8 +683,13 @@
     },
     "Mi-8MT": {
       "troop_slots": 2,
-      "crate_slots": 1,
+      "crate_slots": 2,
       "total_slots": 2
+    },
+    "CH-47Fbl1": {
+      "troop_slots": 4,
+      "crate_slots": 4,
+      "total_slots": 4
     },
     "SA342L": {
       "troop_slots": 1,
@@ -1129,7 +1136,7 @@
         "crates": [
           {
             "name": "Roland",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1156,7 +1163,7 @@
         "crates": [
           {
             "name": "Hawk Launcher",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": "Hawk ln",
             "max_drop_height_agl": 10,
@@ -1164,7 +1171,7 @@
           },
           {
             "name": "Hawk Search Radar",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": "Hawk sr",
             "max_drop_height_agl": 10,
@@ -1172,7 +1179,7 @@
           },
           {
             "name": "Hawk Track Radar",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": "Hawk tr",
             "max_drop_height_agl": 10,
@@ -1180,7 +1187,7 @@
           },
           {
             "name": "Hawk CC",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": "Hawk pcp",
             "max_drop_height_agl": 10,
@@ -1189,7 +1196,7 @@
         ],
         "repair_crate": {
           "name": "Hawk Repair",
-          "weight": 800,
+          "weight": 1500,
           "required": 1,
           "pos_unit": null,
           "max_drop_height_agl": 10,
@@ -1214,7 +1221,7 @@
         "crates": [
           {
             "name": "Avenger Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1239,7 +1246,7 @@
         "crates": [
           {
             "name": "Linebacker Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1264,7 +1271,7 @@
         "crates": [
           {
             "name": "Flakpanzergepard Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1289,7 +1296,7 @@
         "crates": [
           {
             "name": "Vulkan Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1314,7 +1321,7 @@
         "crates": [
           {
             "name": "Firtina Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1339,7 +1346,7 @@
         "crates": [
           {
             "name": "Bradley Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1366,7 +1373,7 @@
         "crates": [
           {
             "name": "Leopard Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1393,7 +1400,7 @@
         "crates": [
           {
             "name": "Ammo Truck Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1418,7 +1425,7 @@
         "crates": [
           {
             "name": "FPS-117 Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1444,7 +1451,7 @@
         "crates": [
           {
             "name": "FARP Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1530,7 +1537,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 500,
+        "weight": 800,
         "cost": 0,
         "jtac": {
           "range": 8000
@@ -1543,7 +1550,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 500,
+        "weight": 1000,
         "cost": 2,
         "jtac": {
           "range": 8000
@@ -1556,7 +1563,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 500,
+        "weight": 1200,
         "cost": 5,
         "jtac": {
           "range": 8000
@@ -1595,9 +1602,9 @@
     "L-39C": [
       "Aircraft"
     ],
-	"MosquitoFBMkVI": [
-	  "Aircraft"
-	],
+    "MosquitoFBMkVI": [
+      "Aircraft"
+    ],
     "Hawk sr": [
       "SAM",
       "LR",
@@ -1835,18 +1842,18 @@
       "LightCannon",
       "Driveable"
     ],
-	"snr s-125 tr": [
-	 "SAM",
-	 "LR",
-	 "RadarGuided",
-	 "TrackRadar"
-	],
-	"5p73 s-125 ln": [
-	  "SAM",
-	  "MR",
-	  "RadarGuided",
-	  "Launcher"
-	],
+    "snr s-125 tr": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "TrackRadar"
+    ],
+    "5p73 s-125 ln": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "Launcher"
+    ],
     "p-19 s-125 sr": [
       "SAM",
       "LR",
@@ -1906,6 +1913,10 @@
       "SearchRadar"
     ],
     "Mi-8MT": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "CH-47Fbl1": [
       "Aircraft",
       "Helicopter"
     ],
@@ -2068,12 +2079,12 @@
       "Helicopter"
     ],
     "F-4E-45MC": [
-	  "Aircraft"
-	],
-	"OH58D": [
-	  "Aircraft",
-	  "Helicopter"
-	],
+      "Aircraft"
+    ],
+    "OH58D": [
+      "Aircraft",
+      "Helicopter"
+    ],
     "FARP Fuel Depot": [
       "Logistics",
       "Unarmed"
@@ -2087,9 +2098,9 @@
     "F-14B": [
       "Aircraft"
     ],
-	"F-14A-135-GR": [
-	  "Aircraft"
-	],
+    "F-14A-135-GR": [
+      "Aircraft"
+    ],
     "FA-18C_hornet": [
       "Aircraft"
     ],
@@ -2186,10 +2197,10 @@
       "range": 16000,
       "nolos": true
     },
-	"MosquitoFBMkVI": {
-	  "range": 16000,
-	  "nolos" : true
-	},  
+    "MosquitoFBMkVI": {
+      "range": 16000,
+      "nolos": true
+    },
     "MB-339A": {
       "range": 16000,
       "nolos": true
@@ -2202,10 +2213,10 @@
   "extra_fixed_wing_objectives": [
     "Muwaffaq-Salti",
     "Abu al-Duhur",
-	"Kharab Ishk",
-	"Minakh",
-	"Kiryat Shmona",
-	"Sayqal"
+    "Kharab Ishk",
+    "Minakh",
+    "Kiryat Shmona",
+    "Sayqal"
   ],
   "jtac_priority": [
     [

@@ -28,14 +28,14 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    atomic_id, azumith3d, centroid2d, centroid3d,
+    atomic_id, azumith3d, centroid2d, centroid3d, change_heading,
     coalition::Side,
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
-    rotate2d,
+    rotate2d_gen,
     static_object::{ClassStatic, StaticObject},
     trigger::MarkId,
     unit::{ClassUnit, Unit},
@@ -107,7 +107,7 @@ pub struct SpawnedUnit {
     #[serde(skip)]
     pub moved: Option<DateTime<Utc>>,
     #[serde(skip)]
-    pub airborne_velocity: Option<Vector3>
+    pub airborne_velocity: Option<Vector3>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -282,7 +282,7 @@ impl Db {
                 player,
                 spec,
                 moved_by,
-                origin: _
+                origin: _,
             } => {
                 let name = self.persisted.players[player].name.clone();
                 let resp = moved_by
@@ -412,11 +412,14 @@ impl Db {
                 .map(|d| d.sqrt())
                 .unwrap_or(0.)
         }
-        struct GroupPosition {
-            positions: VecDeque<Vector2>,
-            by_type: FxHashMap<String, VecDeque<Vector2>>,
+        struct UnitPosition {
             heading: f64,
+            position: Vector2,
             altitude: Option<f64>,
+        }
+        struct GroupPosition {
+            positions: VecDeque<UnitPosition>,
+            by_type: FxHashMap<String, VecDeque<UnitPosition>>,
         }
         fn compute_unit_positions(
             spctx: &SpawnCtx,
@@ -427,7 +430,14 @@ impl Db {
             let mut positions = template
                 .units()?
                 .into_iter()
-                .map(|u| Ok(u?.pos()?))
+                .map(|u| {
+                    let u = u?;
+                    Ok(UnitPosition {
+                        heading: u.heading()?,
+                        position: u.pos()?,
+                        altitude: u.alt().unwrap_or(None),
+                    })
+                })
                 .collect::<Result<VecDeque<_>>>()?;
             match location {
                 SpawnLoc::InAir {
@@ -436,44 +446,54 @@ impl Db {
                     altitude,
                     speed: _,
                 } => {
-                    let group_center = centroid2d(positions.iter().map(|p| *p));
+                    let group_center = centroid2d(positions.iter().map(|p| p.position));
+                    let group_altitude = {
+                        let (sum, i) = positions
+                            .iter()
+                            .filter_map(|p| p.altitude)
+                            .fold((0., 0.), |(sum, i), a| (sum + a, i + 1.));
+                        sum / i
+                    };
                     for p in positions.iter_mut() {
-                        *p = *p - group_center + pos;
+                        p.position = p.position - group_center + pos;
+                        p.heading = change_heading(p.heading, heading);
+                        if let Some(a) = p.altitude {
+                            p.altitude = Some(a - group_altitude + altitude);
+                        }
                     }
-                    rotate2d(heading, positions.make_contiguous());
+                    rotate2d_gen(heading, positions.make_contiguous(), |p| &mut p.position);
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),
-                        heading,
-                        altitude: Some(altitude),
                     })
                 }
                 SpawnLoc::AtPosWithCenter { pos, center } => {
                     for p in positions.iter_mut() {
-                        *p = *p - center + pos;
+                        p.position = p.position - center + pos;
+                        p.altitude = None;
                     }
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),
-                        heading: 0.,
-                        altitude: None,
                     })
                 }
                 SpawnLoc::AtTrigger {
                     name,
                     group_heading,
                 } => {
-                    let group_center = centroid2d(positions.iter().map(|p| *p));
+                    let group_center = centroid2d(positions.iter().map(|p| p.position));
                     let pos = spctx.get_trigger_zone(idx, name.as_str())?.pos()?;
                     for p in positions.iter_mut() {
-                        *p = *p - group_center + pos;
+                        p.position = p.position - group_center + pos;
+                        p.heading = change_heading(p.heading, group_heading);
+                        p.altitude = None;
                     }
-                    rotate2d(group_heading, positions.make_contiguous());
+                    rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
+                        &mut p.position
+                    });
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),
-                        heading: group_heading,
-                        altitude: None,
                     })
                 }
                 SpawnLoc::AtPos {
@@ -481,21 +501,28 @@ impl Db {
                     offset_direction,
                     group_heading,
                 } => {
-                    let group_center = centroid2d(positions.iter().map(|p| *p));
-                    let radius = distance(group_center, f64::max, positions.iter());
+                    let group_center = centroid2d(positions.iter().map(|p| p.position));
+                    let radius = distance(
+                        group_center,
+                        f64::max,
+                        positions.iter().map(|p| &p.position),
+                    );
                     for p in positions.iter_mut() {
-                        *p = *p - group_center + pos + radius * offset_direction;
+                        p.position = p.position - group_center + pos + radius * offset_direction;
                     }
-                    rotate2d(group_heading, positions.make_contiguous());
-                    let offset_magnitude = 20. - distance(pos, f64::min, positions.iter());
+                    rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
+                        &mut p.position
+                    });
+                    let offset_magnitude =
+                        20. - distance(pos, f64::min, positions.iter().map(|p| &p.position));
                     for p in positions.iter_mut() {
-                        *p = *p + offset_magnitude * offset_direction
+                        p.position = p.position + offset_magnitude * offset_direction;
+                        p.heading = change_heading(p.heading, group_heading);
+                        p.altitude = None;
                     }
                     Ok(GroupPosition {
                         positions,
                         by_type: FxHashMap::default(),
-                        heading: group_heading,
-                        altitude: None,
                     })
                 }
                 SpawnLoc::AtPosWithComponents {
@@ -503,7 +530,7 @@ impl Db {
                     group_heading,
                     component_pos,
                 } => {
-                    let group_center = centroid2d(positions.iter().map(|p| *p));
+                    let group_center = centroid2d(positions.iter().map(|p| p.position));
                     let center_by_typ: FxHashMap<String, Vector2> = {
                         let mut tbl = FxHashMap::default();
                         for unit in template.units()? {
@@ -522,47 +549,58 @@ impl Db {
                             .map(|(k, (n, v))| (k, v / (n as f64)))
                             .collect()
                     };
-                    let mut final_position_by_type: FxHashMap<String, VecDeque<Vector2>> =
+                    let mut by_type: FxHashMap<String, VecDeque<UnitPosition>> =
                         FxHashMap::default();
                     positions.clear();
                     for unit in template.units()? {
                         let unit = unit?;
                         let typ = unit.typ()?;
+                        let heading = unit.heading()?;
+                        let position = unit.pos()?;
                         let group_center = match center_by_typ.get(&typ) {
                             None => group_center,
                             Some(pos) => *pos,
                         };
                         match component_pos.get(&typ) {
-                            None => positions.push_back(unit.pos()? - group_center + pos),
-                            Some(pos) => final_position_by_type
-                                .entry(typ.clone())
-                                .or_default()
-                                .push_back(unit.pos()? - group_center + *pos),
+                            None => positions.push_back(UnitPosition {
+                                position: position - group_center + pos,
+                                heading: change_heading(heading, group_heading),
+                                altitude: None,
+                            }),
+                            Some(pos) => {
+                                by_type
+                                    .entry(typ.clone())
+                                    .or_default()
+                                    .push_back(UnitPosition {
+                                        position: position - group_center + *pos,
+                                        heading: change_heading(heading, group_heading),
+                                        altitude: None,
+                                    })
+                            }
                         }
                     }
-                    rotate2d(group_heading, positions.make_contiguous());
-                    for positions in final_position_by_type.values_mut() {
-                        rotate2d(group_heading, positions.make_contiguous());
+                    rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
+                        &mut p.position
+                    });
+                    for positions in by_type.values_mut() {
+                        rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
+                            &mut p.position
+                        });
                     }
-                    Ok(GroupPosition {
-                        positions,
-                        by_type: final_position_by_type,
-                        heading: group_heading,
-                        altitude: None,
-                    })
+                    Ok(GroupPosition { positions, by_type })
                 }
             }
         }
         fn check_water(
             land: &Land,
-            positions: &VecDeque<Vector2>,
-            positions_by_typ: &FxHashMap<String, VecDeque<Vector2>>,
+            positions: &VecDeque<UnitPosition>,
+            positions_by_typ: &FxHashMap<String, VecDeque<UnitPosition>>,
         ) -> Result<()> {
             for pos in positions
                 .iter()
                 .chain(positions_by_typ.values().flat_map(|v| v.iter()))
             {
-                match land.get_surface_type(LuaVec2(*pos))? {
+                match land.get_surface_type(LuaVec2(pos.position))? {
                     SurfaceType::Land | SurfaceType::Road | SurfaceType::Runway => (),
                     SurfaceType::ShallowWater | SurfaceType::Water => {
                         bail!("you can't spawn units in water")
@@ -616,12 +654,12 @@ impl Db {
             };
             let position = {
                 let mut p = Position3::default();
-                p.p.x = pos.x;
-                p.p.y = match gpos.altitude {
-                    None => land.get_height(LuaVec2(pos))?,
+                p.p.x = pos.position.x;
+                p.p.y = match pos.altitude {
+                    None => land.get_height(LuaVec2(pos.position))?,
                     Some(alt) => alt,
                 };
-                p.p.z = pos.y;
+                p.p.z = pos.position.y;
                 p
             };
             let spawned_unit = SpawnedUnit {
@@ -633,11 +671,11 @@ impl Db {
                 name: unit_name.clone(),
                 template_name,
                 spawn_position: position,
-                spawn_pos: pos,
-                spawn_heading: gpos.heading,
+                spawn_pos: pos.position,
+                spawn_heading: pos.heading,
                 position,
-                pos,
-                heading: gpos.heading,
+                pos: pos.position,
+                heading: pos.heading,
                 dead: false,
                 moved: None,
                 airborne_velocity: None,
@@ -712,7 +750,12 @@ impl Db {
         Ok(gid)
     }
 
-    pub(crate) fn unit_born(&mut self, lua: MizLua, unit: &Unit, connected: &Connected) -> Result<Option<SlotId>> {
+    pub(crate) fn unit_born(
+        &mut self,
+        lua: MizLua,
+        unit: &Unit,
+        connected: &Connected,
+    ) -> Result<Option<SlotId>> {
         let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
@@ -725,7 +768,7 @@ impl Db {
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
-            return Ok(None)
+            return Ok(None);
         }
         let slot = unit.slot()?;
         if let Some(si) = self.ephemeral.slot_info.get(&slot) {
@@ -741,7 +784,7 @@ impl Db {
             };
             self.player_entered_slot(lua, id, unit, slot, si.objective, ucid)
                 .context("entering player into slot")?;
-            return Ok(Some(slot))
+            return Ok(Some(slot));
         }
         Ok(None)
     }

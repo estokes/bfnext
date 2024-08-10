@@ -872,8 +872,6 @@ where
     }
 }
 
-
-
 impl<'lua> DcsTableExt<'lua> for mlua::Table<'lua> {
     fn raw_get_path<T>(&self, path: &Path) -> Result<T>
     where
@@ -1229,7 +1227,7 @@ impl<'lua, T: FromLua<'lua> + 'lua> Sequence<'lua, T> {
     }
 }
 
-impl<'lua, T: FromLua<'lua>  + IntoLua<'lua> + 'lua> Sequence<'lua, T> {
+impl<'lua, T: FromLua<'lua> + IntoLua<'lua> + 'lua> Sequence<'lua, T> {
     pub fn push(&self, t: T) -> Result<()> {
         Ok(self.t.push(t)?)
     }
@@ -1293,14 +1291,16 @@ pub fn centroid3d(points: impl IntoIterator<Item = Vector3>) -> Vector3 {
     sum / (n as f64)
 }
 
-/// Rotate a collection of points in 2d space around their center point
-/// keeping the relative orientations of the points constant. The angle
-/// is in radians.
-pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
-    let centroid = centroid2d(points.into_iter().map(|p| *p));
+/// Rotate a collection of points in 2d space around their center
+/// point keeping the relative orientations of the points
+/// constant. The angle is in radians. General about the underlying
+/// point container type
+pub fn rotate2d_gen<T, F: Fn(&mut T) -> &mut Vector2>(angle: f64, points: &mut [T], f: F) {
+    let centroid = centroid2d(points.into_iter().map(|t| *f(t)));
     let sin = angle.sin();
     let cos = angle.cos();
-    for p in points {
+    for t in points {
+        let p = f(t);
         *p -= centroid;
         let x = p.x;
         let y = p.y;
@@ -1308,6 +1308,13 @@ pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
         p.y = x * sin + y * cos;
         *p += centroid
     }
+}
+
+/// Rotate a collection of points in 2d space around their center point
+/// keeping the relative orientations of the points constant. The angle
+/// is in radians.
+pub fn rotate2d(angle: f64, points: &mut [Vector2]) {
+    rotate2d_gen(angle, points, |x| x)
 }
 
 /// return a unit vector pointing in the specified direction. angle is in radians

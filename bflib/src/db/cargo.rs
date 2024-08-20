@@ -1076,11 +1076,10 @@ impl Db {
         {
             bail!("you already have a full load onboard")
         }
-        let weight = cargo.weight();
         cargo.troops.push((ucid.clone(), Some(origin), troop_cfg.clone()));
         Trigger::singleton(lua)?
             .action()?
-            .set_unit_internal_cargo(unit_name, weight as i64)?;
+            .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;
         self.adjust_points(
             &ucid,
             -(troop_cfg.cost as i32),

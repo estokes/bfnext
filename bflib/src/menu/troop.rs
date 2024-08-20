@@ -63,7 +63,7 @@ fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
             ctx.db
                 .ephemeral
                 .msgs()
-                .panel_to_group(10, false, arg.fst, format_compact!("{e}"))
+                .panel_to_group(10, false, arg.fst, format_compact!("{e:?}"))
         }
     }
     Ok(())

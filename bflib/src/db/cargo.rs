@@ -247,9 +247,7 @@ impl Db {
                         player.points,
                         dep.cost
                     );
-                    self.ephemeral
-                        .msgs()
-                        .panel_to_group(10, false, gid, msg);
+                    self.ephemeral.msgs().panel_to_group(10, false, gid, msg);
                 }
             }
         }
@@ -1076,11 +1074,12 @@ impl Db {
         {
             bail!("you already have a full load onboard")
         }
-        let weight = cargo.weight();
-        cargo.troops.push((ucid.clone(), Some(origin), troop_cfg.clone()));
+        cargo
+            .troops
+            .push((ucid.clone(), Some(origin), troop_cfg.clone()));
         Trigger::singleton(lua)?
             .action()?
-            .set_unit_internal_cargo(unit_name, weight as i64)?;
+            .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;
         self.adjust_points(
             &ucid,
             -(troop_cfg.cost as i32),
@@ -1138,7 +1137,7 @@ impl Db {
             player: ucid.clone(),
             moved_by: None,
             spec: troop_cfg.clone(),
-            origin
+            origin,
         };
         let spctx = SpawnCtx::new(lua)?;
         if let Some(gid) = to_delete {

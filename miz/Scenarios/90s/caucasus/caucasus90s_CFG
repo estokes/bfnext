@@ -376,11 +376,11 @@
       "move": {
         "kind": {
           "Move": {
-            "troop": 2000,
-            "deployable": 2000
+            "troop": 25000,
+            "deployable": 50000
           }
         },
-        "cost": 10,
+        "cost": 2,
         "penalty": 10,
         "limit": null
       },
@@ -839,7 +839,7 @@
         ],
         "template": "DEPSA8",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 6,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -864,7 +864,7 @@
         ],
         "template": "DEPKS19",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 6,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -914,7 +914,7 @@
         ],
         "template": "DEPSHILKA",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -964,7 +964,7 @@
         ],
         "template": "DEPSA13",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -989,7 +989,7 @@
         ],
         "template": "DEPMSTA",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 15,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1014,7 +1014,7 @@
         ],
         "template": "DEPT72",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1041,7 +1041,7 @@
         ],
         "template": "DEPBMP3",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1093,7 +1093,7 @@
         ],
         "template": "DEP1L13",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1241,7 +1241,7 @@
         ],
         "template": "DEPAVENGER",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1266,7 +1266,7 @@
         ],
         "template": "DEPLINEBACKER",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1341,7 +1341,7 @@
         ],
         "template": "DEPVULKAN",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1366,7 +1366,7 @@
         ],
         "template": "DEPFIRTINA",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 15,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1391,7 +1391,7 @@
         ],
         "template": "DEPBRADLEY",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1418,7 +1418,7 @@
         ],
         "template": "DEPLEOPARD",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1445,7 +1445,7 @@
         ],
         "template": "DEPBAMMO",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1470,7 +1470,7 @@
         ],
         "template": "DEPFPS117",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1533,7 +1533,7 @@
         "template": "RSTANDARDTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 10,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "weight": 800,
         "cost": 0,
@@ -1546,7 +1546,7 @@
         "template": "RATTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 10,
+        "limit": 30,
         "limit_enforce": "DeleteOldest",
         "weight": 1000,
         "cost": 2,
@@ -1559,7 +1559,7 @@
         "template": "RMORTARTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 10,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "weight": 1200,
         "cost": 5,
@@ -1572,7 +1572,7 @@
         "template": "RIGLATROOP",
         "persist": "Forever",
         "can_capture": false,
-        "limit": 10,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
         "cost": 25,
@@ -1585,7 +1585,7 @@
         "template": "BSTANDARDTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 10,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "weight": 800,
         "cost": 0,
@@ -1598,7 +1598,7 @@
         "template": "BATTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 10,
+        "limit": 30,
         "limit_enforce": "DeleteOldest",
         "weight": 1000,
         "cost": 2,
@@ -1611,7 +1611,7 @@
         "template": "BMORTARTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 10,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "weight": 1200,
         "cost": 5,
@@ -1624,7 +1624,7 @@
         "template": "BSTINGERTROOP",
         "persist": "Forever",
         "can_capture": false,
-        "limit": 10,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "weight": 500,
         "cost": 25,

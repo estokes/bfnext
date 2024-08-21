@@ -135,7 +135,7 @@
   "crate_spread": 500,
   "artillery_mission_range": 15000,
   "side_switches": 1,
-  "max_crates": 4,
+  "max_crates": 6,
   "life_types": {
     "MB-339A": "Recon",
     "C-101CC": "Recon",
@@ -609,8 +609,8 @@
       "move": {
         "kind": {
           "Move": {
-            "troop": 2000,
-            "deployable": 2000
+            "troop": 25000,
+            "deployable": 50000
           }
         },
         "cost": 10,
@@ -1007,6 +1007,56 @@
         "ewr": null,
         "jtac": null
       },
+	  {
+        "path": [
+          "Ground Units",
+          "AT Armor"
+        ],
+        "template": "DEPRAT",
+        "persist": "Forever",
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "AT Crate",
+            "weight": 1500,
+            "required": 3,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 80,
+        "ewr": null,
+        "jtac": null
+      },
+	  {
+        "path": [
+          "Ground Units",
+          "Armor Group"
+        ],
+        "template": "DEPRARMOR",
+        "persist": "Forever",
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Armor Crate",
+            "weight": 1500,
+            "required": 6,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 250,
+        "ewr": null,
+        "jtac": null
+      },
       {
         "path": [
           "Ground Units",
@@ -1381,6 +1431,56 @@
         "repair_crate": null,
         "logistics": null,
         "cost": 25,
+        "ewr": null,
+        "jtac": null
+      },
+	  {
+        "path": [
+          "Ground Units",
+          "AT Armour"
+        ],
+        "template": "DEPBAT",
+        "persist": "Forever",
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "AT Crate",
+            "weight": 1500,
+            "required": 3,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 80,
+        "ewr": null,
+        "jtac": null
+      },
+	  {
+        "path": [
+          "Ground Units",
+          "Armor Group"
+        ],
+        "template": "DEPBARMOR",
+        "persist": "Forever",
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Armor Crate",
+            "weight": 1500,
+            "required": 6,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 250,
         "ewr": null,
         "jtac": null
       },
@@ -1852,6 +1952,13 @@
       "MR",
       "ATGM",
       "SmallArms",
+      "Driveable"
+    ],
+	"M1045 HMMWV TOW": [
+      "APC",
+      "MR",
+      "ATGM",
+      "LightCannon",
       "Driveable"
     ],
     "M1128 Stryker MGS": [

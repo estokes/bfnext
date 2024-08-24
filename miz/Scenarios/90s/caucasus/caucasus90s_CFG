@@ -613,7 +613,7 @@
             "deployable": 50000
           }
         },
-        "cost": 10,
+        "cost": 2,
         "penalty": 10,
         "limit": null
       },

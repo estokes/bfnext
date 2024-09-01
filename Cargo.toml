@@ -46,5 +46,5 @@ zstd = { version = "0.13" }
 
 [workspace]
 resolver = "2"
-members = ["dcso3", "bflib", "bfdb"]
+members = ["dcso3", "bflib", "bfdb", "bfcore"]
 exclude = ["bftools"]

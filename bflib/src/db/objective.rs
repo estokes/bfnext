@@ -584,7 +584,7 @@ impl Db {
             (obj.kind.clone(), health, logi)
         };
         if let ObjectiveKind::Farp { .. } = &kind {
-            if health == 0 {
+            if logi == 0 {
                 self.delete_objective(oid)?;
             }
         }

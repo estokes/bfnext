@@ -135,7 +135,7 @@ impl ObjGroupClass {
 impl From<&str> for ObjGroupClass {
     fn from(value: &str) -> Self {
         match value {
-            "BLOGI" | "RLOGI" | "NLOGI" | "LOGI" => ObjGroupClass::Logi,
+            "BLOGI" | "RLOGI" | "NLOGI" | "LOGI" | "BDEPFARP" | "RDEPFARP" => ObjGroupClass::Logi,
             "BSERVICES" | "RSERVICES" | "NSERVICES" | "SERVICES" => ObjGroupClass::Services,
             s => {
                 if s.starts_with("BAAA")
@@ -584,7 +584,7 @@ impl Db {
             (obj.kind.clone(), health, logi)
         };
         if let ObjectiveKind::Farp { .. } = &kind {
-            if logi == 0 {
+            if health == 0 {
                 self.delete_objective(oid)?;
             }
         }

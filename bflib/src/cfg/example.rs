@@ -471,7 +471,7 @@ fn default_red_deployables() -> Vec<Deployable> {
                     "DEPRFARPPAD3".into(),
                 ],
                 ammo_template: "DEPRFARPAMMO".into(),
-                fuel_template: "DEPRFARPFUEL".into(),
+                fuel_template: "RFLOGI".into(),
                 barracks_template: "DEPRFARPTENT".into(),
             }),
             ewr: None,

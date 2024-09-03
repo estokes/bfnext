@@ -18,7 +18,7 @@ use dcso3::{
     coalition::Side,
     env::miz::{GroupId, UnitId},
     net::{Net, PlayerId},
-    trigger::{Action, ArrowSpec, CircleSpec, MarkId, RectSpec, SideFilter, TextSpec},
+    trigger::{Action, ArrowSpec, CircleSpec, MarkId, QuadSpec, RectSpec, SideFilter, TextSpec},
     Color, LuaVec3, String, Vector2, Vector3,
 };
 use log::error;
@@ -73,6 +73,12 @@ pub enum Msg {
         id: MarkId,
         to: SideFilter,
         spec: RectSpec,
+        message: Option<String>,
+    },
+    Quad {
+        id: MarkId,
+        to: SideFilter,
+        spec: QuadSpec,
         message: Option<String>,
     },
     Text {
@@ -140,6 +146,7 @@ impl MsgQ {
                     Msg::Message { .. } => true,
                     Msg::Circle { id, .. }
                     | Msg::Rect { id, .. }
+                    | Msg::Quad { id, .. }
                     | Msg::Text { id, .. }
                     | Msg::Arrow { id, .. } => {
                         if *id == did {
@@ -325,6 +332,21 @@ impl MsgQ {
         }))
     }
 
+    pub fn quad_to_all(
+        &mut self,
+        to: SideFilter,
+        id: MarkId,
+        spec: QuadSpec,
+        message: Option<String>,
+    ) {
+        self.0[2].push_back(Cmd::Send(Msg::Quad {
+            id,
+            to,
+            spec,
+            message,
+        }))
+    }
+
     pub fn text_to_all(&mut self, to: SideFilter, id: MarkId, spec: TextSpec) {
         self.0[1].push_back(Cmd::Send(Msg::Text { id, to, spec }))
     }
@@ -419,6 +441,12 @@ impl MsgQ {
                     spec,
                     message,
                 }) => act.rect_to_all(to, id, spec, message),
+                Cmd::Send(Msg::Quad {
+                    id,
+                    to,
+                    spec,
+                    message,
+                }) => act.quad_to_all(to, id, spec, message),
                 Cmd::Send(Msg::Text { id, to, spec }) => act.text_to_all(to, id, spec),
                 Cmd::Send(Msg::Arrow {
                     id,

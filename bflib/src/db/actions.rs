@@ -1068,8 +1068,8 @@ impl Db {
         action: Action,
         args: WithFromTo<AiPlaneCfg>,
     ) -> Result<()> {
-        let from = objective!(self, args.from)?.pos;
-        let to = objective!(self, args.to)?.pos;
+        let from = objective!(self, args.from)?.zone.pos();
+        let to = objective!(self, args.to)?.zone.pos();
         self.add_and_spawn_ai_air(
             perf,
             spctx,
@@ -1101,7 +1101,7 @@ impl Db {
         action: Action,
         args: WithObj<AiPlaneCfg>,
     ) -> Result<()> {
-        let pos = objective!(self, args.oid)?.pos;
+        let pos = objective!(self, args.oid)?.zone.pos();
         self.add_and_spawn_ai_air(
             perf,
             spctx,
@@ -1274,10 +1274,10 @@ impl Db {
                                 .contains(&o.name)
                     }
                 }
-                && na::distance_squared(&args.pos.into(), &o.pos.into()) > 100_000_000.
+                && na::distance_squared(&args.pos.into(), &o.zone.pos().into()) > 100_000_000.
         })
         .ok_or_else(|| anyhow!("no objectives available for the ai mission"))?;
-        let pos = obj.pos;
+        let pos = obj.zone.pos();
         let sloc = SpawnLoc::InAir {
             pos,
             heading,

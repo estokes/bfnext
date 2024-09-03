@@ -155,7 +155,7 @@ macro_rules! atomic_id {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Quad2 {
     pub p0: LuaVec2,
     pub p1: LuaVec2,
@@ -233,6 +233,10 @@ impl Quad2 {
                 }
             },
         )
+    }
+
+    pub fn center(&self) -> Vector2 {
+        centroid2d([self.p0.0, self.p1.0, self.p2.0, self.p3.0])
     }
 }
 

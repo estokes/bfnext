@@ -327,6 +327,17 @@ impl Db {
         spctx: &SpawnCtx,
     ) -> Result<()> {
         debug!("init slots");
+        // check for objectives using the old pos + radius format and convert them to zone
+        for (_id, obj) in self.persisted.objectives.iter_mut_cow() {
+            if obj.zone == Zone::default() {
+                let pos = obj.pos.unwrap_or_else(Vector2::default);
+                let radius = obj.radius.unwrap_or(0.);
+                obj.zone = Zone::Circle { pos, radius };
+                obj.pos = None;
+                obj.radius = None;
+                self.ephemeral.dirty = true;
+            }
+        }
         for side in Side::ALL {
             let coa = miz.coalition(side)?;
             for country in coa.countries()? {

@@ -221,7 +221,7 @@ impl ObjGroup {
 
 atomic_id!(ObjectiveId);
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Zone {
     Circle { pos: Vector2, radius: f64 },
     Quad { pos: Vector2, points: Quad2 },

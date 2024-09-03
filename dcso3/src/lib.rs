@@ -155,7 +155,7 @@ macro_rules! atomic_id {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Quad2 {
     pub p0: LuaVec2,
     pub p1: LuaVec2,

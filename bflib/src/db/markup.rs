@@ -186,7 +186,7 @@ impl ObjectiveMarkup {
             None,
         );
         match obj.zone {
-            Zone::Circle { pos, radius } => {
+            Zone::Circle { pos: _, radius } => {
                 msgq.circle_to_all(
                     all_spec,
                     t.capturable_ring,
@@ -201,7 +201,7 @@ impl ObjectiveMarkup {
                     None,
                 );
             }
-            Zone::Quad { pos, points } => {
+            Zone::Quad { pos: _, points } => {
                 msgq.quad_to_all(
                     all_spec,
                     t.capturable_ring,

@@ -28,6 +28,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
+use bfcore::db::objective::{ObjectiveId, ObjectiveKind};
 use anyhow::{anyhow, Context, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
@@ -52,49 +53,6 @@ use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, str::FromStr, sync::Arc};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ObjectiveKind {
-    Airbase,
-    Fob,
-    Logistics,
-    Farp {
-        spec: Deployable,
-        pad_template: String,
-    },
-}
-
-impl ObjectiveKind {
-    pub fn is_airbase(&self) -> bool {
-        match self {
-            Self::Airbase => true,
-            Self::Farp { .. } | Self::Fob | Self::Logistics => false,
-        }
-    }
-
-    pub fn is_farp(&self) -> bool {
-        match self {
-            Self::Farp { .. } => true,
-            Self::Airbase | Self::Fob | Self::Logistics => false,
-        }
-    }
-
-    pub fn is_hub(&self) -> bool {
-        match self {
-            Self::Logistics => true,
-            Self::Airbase | Self::Farp { .. } | Self::Fob => false,
-        }
-    }
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::Airbase => "Airbase",
-            Self::Fob => "FOB",
-            Self::Farp { .. } => "FARP",
-            Self::Logistics => "Logistics Hub",
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ObjGroupClass {
@@ -218,8 +176,6 @@ impl ObjGroup {
         }
     }
 }
-
-atomic_id!(ObjectiveId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Zone {

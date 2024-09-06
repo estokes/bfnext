@@ -1,0 +1,20 @@
+[package]
+name = "bfprotocols"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
+dcso3 = { version = "0.1", path = "../dcso3" }
+smallvec = { workspace = true }
+serde = { workspace = true }
+serde_derive = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+fxhash = { workspace = true }
+anyhow = { workspace = true }
+compact_str = { workspace = true }
+enumflags2 = { workspace = true }
+indexmap = { workspace = true }
+regex = { workspace = true }
+paste = { workspace = true }

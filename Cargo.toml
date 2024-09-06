@@ -5,7 +5,10 @@ opt-level = 3
 lto = true
 debug = false
 
-# for dev
+# for quick dev
+# currently mlua only performs it's special linking steps on a release build
+# so you can't use a debug build and get a usable dll. This profile will build
+# a lot faster if you want to do iterative testing.
 #[profile.release]
 #opt-level = 3
 #lto = "thin"
@@ -46,5 +49,5 @@ zstd = { version = "0.13" }
 
 [workspace]
 resolver = "2"
-members = ["dcso3", "bflib", "bfdb", "bfcore"]
+members = ["dcso3", "bflib", "bfdb", "bfprotocols"]
 exclude = ["bftools"]

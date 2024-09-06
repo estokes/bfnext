@@ -240,7 +240,7 @@ impl Db {
             .objectives
             .into_iter()
             .fold(false, |res, (_, obj)| {
-                res || (obj.owner == player.side && obj.is_in_circle(position))
+                res || (obj.owner == player.side && obj.zone.contains(position))
             });
         if is_on_owned_objective {
             // paranoia
@@ -281,7 +281,7 @@ impl Db {
             .objectives
             .into_iter()
             .find_map(|(oid, obj)| {
-                if obj.owner == player.side && obj.is_in_circle(position) {
+                if obj.owner == player.side && obj.zone.contains(position) {
                     Some(*oid)
                 } else {
                     None
@@ -637,10 +637,7 @@ impl Db {
             .persisted
             .objectives
             .into_iter()
-            .find(|(_, obj)| {
-                let radius2 = obj.radius.powi(2);
-                na::distance_squared(&point.into(), &obj.pos.into()) <= radius2
-            })
+            .find(|(_, obj)| obj.zone.contains(point))
             .map(|(oid, _)| *oid);
         player.current_slot = Some((
             slot,

@@ -15,18 +15,28 @@ for more details.
 */
 
 use super::{
-    ephemeral::SlotInfo, group::{DeployKind, GroupId}, objective::ObjGroup, Db, Map
+    ephemeral::SlotInfo,
+    group::{DeployKind, GroupId},
+    objective::ObjGroup,
+    Db, Map,
 };
 use crate::{
-    cfg::{Cfg, Vehicle}, db::{
+    cfg::{Cfg, Vehicle},
+    db::{
         logistics::Warehouse,
-        objective::{Objective, ObjectiveId, ObjectiveKind},
-    }, group, landcache::LandCache, maybe, objective, objective_mut, perf::PerfInner, spawnctx::{SpawnCtx, SpawnLoc}
+        objective::{Objective, ObjectiveId, ObjectiveKind, Zone},
+    },
+    group,
+    landcache::LandCache,
+    maybe, objective, objective_mut,
+    perf::PerfInner,
+    spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
+    centroid2d,
     coalition::Side,
     controller::PointType,
     env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
@@ -83,18 +93,24 @@ impl Db {
             bail!("invalid objective type for {name}, expected AB, FO, of LO")
         };
         let id = ObjectiveId::new();
-        let radius = match zone.typ()? {
-            TriggerZoneTyp::Quad(_) => bail!("zone volume type quad isn't supported yet"),
-            TriggerZoneTyp::Circle { radius } => radius,
+        let zone = match zone.typ()? {
+            TriggerZoneTyp::Quad(points) => Zone::Quad {
+                pos: centroid2d([points.p0.0, points.p1.0, points.p2.0, points.p3.0]),
+                points,
+            },
+            TriggerZoneTyp::Circle { radius } => Zone::Circle {
+                pos: zone.pos()?,
+                radius,
+            },
         };
-        let pos = zone.pos()?;
         let obj = Objective {
             id,
             spawned: false,
             enabled: false,
             threatened: false,
-            pos,
-            radius,
+            pos: None,
+            radius: None,
+            zone,
             name: name.clone(),
             kind,
             owner,
@@ -139,8 +155,7 @@ impl Db {
                 match iter.next() {
                     None => bail!("group {:?} isn't associated with an objective", name),
                     Some((id, obj)) => {
-                        if na::distance_squared(&pos.into(), &obj.pos.into()) <= obj.radius.powi(2)
-                        {
+                        if obj.zone.contains(pos) {
                             break *id;
                         }
                     }
@@ -206,7 +221,7 @@ impl Db {
                             return Ok(());
                         }
                         Some((id, obj)) => {
-                            if na::distance(&pos.into(), &obj.pos.into()) <= obj.radius {
+                            if obj.zone.contains(pos) {
                                 break *id;
                             }
                         }
@@ -312,6 +327,17 @@ impl Db {
         spctx: &SpawnCtx,
     ) -> Result<()> {
         debug!("init slots");
+        // check for objectives using the old pos + radius format and convert them to zone
+        for (_id, obj) in self.persisted.objectives.iter_mut_cow() {
+            if obj.zone == Zone::default() {
+                let pos = obj.pos.unwrap_or_else(Vector2::default);
+                let radius = obj.radius.unwrap_or(0.);
+                obj.zone = Zone::Circle { pos, radius };
+                obj.pos = None;
+                obj.radius = None;
+                self.ephemeral.dirty = true;
+            }
+        }
         for side in Side::ALL {
             let coa = miz.coalition(side)?;
             for country in coa.countries()? {
@@ -353,15 +379,16 @@ impl Db {
             }
             debug!("respawning farps");
             for (_, obj) in self.persisted.objectives.iter_mut_cow() {
-                let alt = land.get_height(LuaVec2(obj.pos))? + 50.;
-                obj.threat_pos3 = Vector3::new(obj.pos.x, alt, obj.pos.y);
+                let pos = obj.zone.pos();
+                let alt = land.get_height(LuaVec2(pos))? + 50.;
+                obj.threat_pos3 = Vector3::new(pos.x, alt, pos.y);
                 if let ObjectiveKind::Farp {
                     spec: _,
                     pad_template,
                 } = &obj.kind
                 {
                     spctx
-                        .move_farp_pad(idx, obj.owner, &pad_template, obj.pos)
+                        .move_farp_pad(idx, obj.owner, &pad_template, pos)
                         .context("moving farp pad")?;
                     self.ephemeral.set_pad_template_used(pad_template.clone());
                 }
@@ -410,7 +437,11 @@ impl Db {
                             .insert(*uid);
                     }
                     DeployKind::Objective => {
-                        let oid = maybe!(self.persisted.objectives_by_group, unit.group, "objective group")?;
+                        let oid = maybe!(
+                            self.persisted.objectives_by_group,
+                            unit.group,
+                            "objective group"
+                        )?;
                         let obj = objective!(self, oid)?;
                         if obj.owner == group.side {
                             self.ephemeral

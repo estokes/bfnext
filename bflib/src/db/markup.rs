@@ -15,14 +15,14 @@ for more details.
 */
 
 use super::{
-    objective::{Objective, ObjectiveKind},
+    objective::{Objective, ObjectiveKind, Zone},
     persisted::Persisted,
 };
 use crate::{cfg::Cfg, msgq::MsgQ};
 use compact_str::format_compact;
 use dcso3::{
     coalition::Side,
-    trigger::{ArrowSpec, CircleSpec, LineType, MarkId, SideFilter, TextSpec},
+    trigger::{ArrowSpec, CircleSpec, LineType, MarkId, QuadSpec, SideFilter, TextSpec},
     Color, LuaVec3, Vector3,
 };
 use smallvec::SmallVec;
@@ -136,20 +136,42 @@ impl ObjectiveMarkup {
         t.supply = obj.supply;
         t.fuel = obj.fuel;
         t.name = format_compact!("{} {}", obj.name, obj.kind.name()).into();
-        let pos3 = Vector3::new(obj.pos.x, 0., obj.pos.y);
-        msgq.circle_to_all(
-            all_spec,
-            t.owner_ring,
-            CircleSpec {
-                center: LuaVec3(pos3),
-                radius: obj.radius,
-                color: text_color(1.),
-                fill_color: Color::white(0.),
-                line_type: LineType::Dashed,
-                read_only: true,
-            },
-            None,
-        );
+        let opos = obj.zone.pos();
+        let pos3 = Vector3::new(opos.x, 0., opos.y);
+        match obj.zone {
+            Zone::Circle { radius, .. } => {
+                msgq.circle_to_all(
+                    all_spec,
+                    t.owner_ring,
+                    CircleSpec {
+                        center: LuaVec3(pos3),
+                        radius,
+                        color: text_color(1.),
+                        fill_color: Color::white(0.),
+                        line_type: LineType::Dashed,
+                        read_only: true,
+                    },
+                    None,
+                );
+            }
+            Zone::Quad { points, .. } => {
+                msgq.quad_to_all(
+                    all_spec,
+                    t.owner_ring,
+                    QuadSpec {
+                        p0: LuaVec3(Vector3::new(points.p0.x, 0., points.p0.y)),
+                        p1: LuaVec3(Vector3::new(points.p1.x, 0., points.p1.y)),
+                        p2: LuaVec3(Vector3::new(points.p2.x, 0., points.p2.y)),
+                        p3: LuaVec3(Vector3::new(points.p3.x, 0., points.p3.y)),
+                        color: text_color(1.),
+                        fill_color: Color::white(0.),
+                        line_type: LineType::Dashed,
+                        read_only: true,
+                    },
+                    None,
+                );
+            }
+        }
         msgq.circle_to_all(
             all_spec,
             t.threatened_ring,
@@ -163,19 +185,40 @@ impl ObjectiveMarkup {
             },
             None,
         );
-        msgq.circle_to_all(
-            all_spec,
-            t.capturable_ring,
-            CircleSpec {
-                center: LuaVec3(pos3),
-                radius: obj.radius as f64 * 0.9,
-                color: Color::white(if obj.captureable() { 0.75 } else { 0. }),
-                fill_color: Color::white(0.),
-                line_type: LineType::Solid,
-                read_only: true,
-            },
-            None,
-        );
+        match obj.zone {
+            Zone::Circle { pos: _, radius } => {
+                msgq.circle_to_all(
+                    all_spec,
+                    t.capturable_ring,
+                    CircleSpec {
+                        center: LuaVec3(pos3),
+                        radius: radius as f64 * 0.9,
+                        color: Color::white(if obj.captureable() { 0.75 } else { 0. }),
+                        fill_color: Color::white(0.),
+                        line_type: LineType::Solid,
+                        read_only: true,
+                    },
+                    None,
+                );
+            }
+            Zone::Quad { pos: _, points } => {
+                msgq.quad_to_all(
+                    all_spec,
+                    t.capturable_ring,
+                    QuadSpec {
+                        p0: LuaVec3(Vector3::new(points.p0.x, 0., points.p0.y)),
+                        p1: LuaVec3(Vector3::new(points.p1.x, 0., points.p1.y)),
+                        p2: LuaVec3(Vector3::new(points.p2.x, 0., points.p2.y)),
+                        p3: LuaVec3(Vector3::new(points.p3.x, 0., points.p3.y)),
+                        color: Color::white(if obj.captureable() { 0.75 } else { 0. }),
+                        fill_color: Color::white(0.),
+                        line_type: LineType::Solid,
+                        read_only: true,
+                    },
+                    None,
+                );
+            }
+        }
         msgq.text_to_all(
             all_spec,
             t.label,
@@ -199,14 +242,15 @@ impl ObjectiveMarkup {
         match obj.kind {
             ObjectiveKind::Airbase | ObjectiveKind::Farp { .. } | ObjectiveKind::Fob => (),
             ObjectiveKind::Logistics => {
-                let pos = obj.pos;
+                let pos = obj.zone.pos();
                 for oid in &obj.warehouse.destination {
                     let id = MarkId::new();
                     let dobj = &persisted.objectives[oid];
-                    let dir = (dobj.pos - pos).normalize();
-                    let spos = pos + dir * obj.radius * 1.1;
-                    let rdir = (pos - dobj.pos).normalize();
-                    let dpos = dobj.pos + rdir * dobj.radius * 1.1;
+                    let dpos = dobj.zone.pos();
+                    let dir = (dpos - pos).normalize();
+                    let spos = pos + dir * obj.zone.radius() * 1.1;
+                    let rdir = (pos - dpos).normalize();
+                    let dpos = dpos + rdir * dobj.zone.radius() * 1.1;
                     msgq.arrow_to(
                         if dobj.is_farp() {
                             dobj.owner.into()

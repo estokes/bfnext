@@ -77,7 +77,7 @@ impl<'lua> FromLua<'lua> for Property {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum TriggerZoneTyp {
     Circle { radius: f64 },
     Quad(Quad2),

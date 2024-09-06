@@ -43,7 +43,7 @@ use dcso3::{
     net::Ucid,
     object::DcsObject,
     warehouse::LiquidType,
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
+    LuaVec2, LuaVec3, MizLua, Quad2, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -221,12 +221,66 @@ impl ObjGroup {
 
 atomic_id!(ObjectiveId);
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum Zone {
+    Circle { pos: Vector2, radius: f64 },
+    Quad { pos: Vector2, points: Quad2 },
+}
+
+impl Default for Zone {
+    fn default() -> Self {
+        Self::Circle {
+            pos: Vector2::zeros(),
+            radius: 0.,
+        }
+    }
+}
+
+impl Zone {
+    pub fn contains(&self, pos: Vector2) -> bool {
+        match self {
+            Self::Circle {
+                pos: center,
+                radius,
+            } => na::distance_squared(&(*center).into(), &pos.into()) <= radius.powi(2),
+            Self::Quad { points, .. } => points.contains(LuaVec2(pos)),
+        }
+    }
+
+    pub fn pos(&self) -> Vector2 {
+        match self {
+            Self::Circle { pos, .. } => *pos,
+            Self::Quad { pos, .. } => *pos,
+        }
+    }
+
+    // returns the radius of the smallest circle that contains the zone
+    pub fn radius(&self) -> f64 {
+        match self {
+            Self::Circle { radius, .. } => *radius,
+            Self::Quad { pos, points } => [points.p0, points.p1, points.p2, points.p3]
+                .into_iter()
+                .fold(0., |max, p| {
+                    let d = na::distance_squared(&p.0.into(), &(*pos).into());
+                    if d > max {
+                        d
+                    } else {
+                        max
+                    }
+                })
+                .sqrt(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Objective {
     pub id: ObjectiveId,
     pub name: String,
-    pub(super) pos: Vector2,
-    pub(super) radius: f64,
+    // deprecated, remove after transition
+    pub(super) pos: Option<Vector2>,
+    // deprecated, remove after transition
+    pub(super) radius: Option<f64>,
     pub owner: Side,
     pub(super) kind: ObjectiveKind,
     pub(super) groups: Map<Side, Set<GroupId>>,
@@ -241,6 +295,8 @@ pub struct Objective {
     pub(super) last_change_ts: DateTime<Utc>,
     #[serde(default)]
     pub(super) warehouse: Warehouse,
+    #[serde(default)]
+    pub(super) zone: Zone,
     #[serde(skip)]
     pub(super) spawned: bool,
     #[serde(skip)]
@@ -252,10 +308,6 @@ pub struct Objective {
 }
 
 impl Objective {
-    pub fn is_in_circle(&self, pos: Vector2) -> bool {
-        na::distance_squared(&self.pos.into(), &pos.into()) <= self.radius.powi(2)
-    }
-
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
@@ -330,7 +382,7 @@ impl Db {
                     if !p(obj) {
                         (cur_dist, cur_obj)
                     } else {
-                        let dist = na::distance_squared(&pos.into(), &obj.pos.into());
+                        let dist = na::distance_squared(&obj.zone.pos().into(), &pos.into());
                         if dist < cur_dist {
                             (dist, Some(obj))
                         } else {
@@ -338,7 +390,7 @@ impl Db {
                         }
                     }
                 });
-        obj.map(|obj| (dist.sqrt(), azumith2d_to(obj.pos, pos), obj))
+        obj.map(|obj| (dist.sqrt(), azumith2d_to(obj.zone.pos(), pos), obj))
     }
 
     fn compute_objective_status(&self, obj: &Objective) -> Result<(u8, u8)> {
@@ -518,8 +570,9 @@ impl Db {
                 spec: spec.clone(),
                 pad_template: pad_template.clone(),
             },
-            pos,
-            radius: 2000.,
+            pos: None,
+            radius: None,
+            zone: Zone::Circle { pos, radius: 2000. },
             owner: side,
             health: 100,
             logi: 100,
@@ -584,7 +637,7 @@ impl Db {
             (obj.kind.clone(), health, logi)
         };
         if let ObjectiveKind::Farp { .. } = &kind {
-            if health == 0 {
+            if logi == 0 {
                 self.delete_objective(oid)?;
             }
         }
@@ -691,7 +744,7 @@ impl Db {
                     } else {
                         ground_cull_distance
                     };
-                    let dist = na::distance_squared(&obj.pos.into(), &unit.pos.into());
+                    let dist = na::distance_squared(&obj.zone.pos().into(), &unit.pos.into());
                     if dist <= cull_dist {
                         *spawn = true;
                         if air {
@@ -725,9 +778,10 @@ impl Db {
                             Vector2::new(pos60.x, pos60.z),
                         )
                     };
-                    let dist = na::distance_squared(&obj.pos.into(), &ppos.into());
-                    let fdist30 = na::distance_squared(&obj.pos.into(), &future_ppos30.into());
-                    let fdist60 = na::distance_squared(&obj.pos.into(), &future_ppos60.into());
+                    let obj_pos = obj.zone.pos();
+                    let dist = na::distance_squared(&obj_pos.into(), &ppos.into());
+                    let fdist30 = na::distance_squared(&obj_pos.into(), &future_ppos30.into());
+                    let fdist60 = na::distance_squared(&obj_pos.into(), &future_ppos60.into());
                     if dist <= cull_distance || fdist30 <= cull_distance || fdist60 <= cull_distance
                     {
                         *spawn = true;
@@ -781,7 +835,6 @@ impl Db {
             }
             if !obj.spawned && spawn {
                 obj.spawned = true;
-                let radius2 = obj.radius.powi(2);
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
                     let group = group!(self, gid)?;
                     let farp = obj.kind.is_farp();
@@ -789,7 +842,7 @@ impl Db {
                     if !farp && !services {
                         for uid in &group.units {
                             let unit = unit_mut!(self, uid)?;
-                            if na::distance_squared(&unit.pos.into(), &obj.pos.into()) > radius2 {
+                            if !obj.zone.contains(unit.pos) {
                                 unit.pos = unit.spawn_pos;
                                 unit.position = unit.spawn_position;
                             }
@@ -967,7 +1020,6 @@ impl Db {
             FxHashMap::default();
         for (oid, obj) in &self.persisted.objectives {
             if obj.captureable() {
-                let r2 = obj.radius.powi(2);
                 for gid in &self.persisted.troops {
                     let group = group!(self, gid)?;
                     match &group.origin {
@@ -981,9 +1033,7 @@ impl Db {
                                 .units
                                 .into_iter()
                                 .filter_map(|uid| self.persisted.units.get(uid))
-                                .any(|u| {
-                                    na::distance_squared(&u.pos.into(), &obj.pos.into()) <= r2
-                                });
+                                .any(|u| obj.zone.contains(u.pos));
                             if in_range {
                                 captured
                                     .entry(*oid)

@@ -180,10 +180,7 @@ impl Db {
             .objectives
             .into_iter()
             .find_map(|(oid, obj)| {
-                if obj.owner == side
-                    && obj.logi() > 0
-                    && na::distance_squared(&obj.pos.into(), &point.into()) <= obj.radius.powi(2)
-                {
+                if obj.owner == side && obj.logi() > 0 && obj.zone.contains(point) {
                     return Some((oid, obj));
                 }
                 None
@@ -639,7 +636,7 @@ impl Db {
                 }
                 check |= logistics || obj.owner == side;
                 check && (logistics || obj.threatened) && {
-                    let dist = na::distance_squared(&obj.pos.into(), &centroid.into());
+                    let dist = na::distance_squared(&obj.zone.pos().into(), &centroid.into());
                     dist <= excl_dist_sq
                 }
             })
@@ -662,10 +659,7 @@ impl Db {
                         None => error!("missing group {:?}", cr.group),
                     }
                 }
-                if obj.owner == side && !is_origin && {
-                    let dist = na::distance_squared(&obj.pos.into(), &centroid.into());
-                    dist <= obj.radius.powi(2)
-                } {
+                if obj.owner == side && !is_origin && obj.zone.contains(centroid) {
                     Some(*oid)
                 } else {
                     None

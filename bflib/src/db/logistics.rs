@@ -327,10 +327,11 @@ impl Db {
                     airbase
                         .auto_capture(false)
                         .context("setting airbase autocapture")?;
-                    let oid = self.persisted.objectives.into_iter().find(|(_, obj)| {
-                        let radius2 = obj.radius.powi(2);
-                        na::distance_squared(&pos.into(), &obj.pos.into()) <= radius2
-                    });
+                    let oid = self
+                        .persisted
+                        .objectives
+                        .into_iter()
+                        .find(|(_, obj)| obj.zone.contains(pos));
                     let w = airbase
                         .get_warehouse()
                         .context("getting airbase warehouse")?;
@@ -594,7 +595,8 @@ impl Db {
                 if logi.owner != obj.owner {
                     acc
                 } else {
-                    let dist = na::distance_squared(&obj.pos.into(), &logi.pos.into());
+                    let dist =
+                        na::distance_squared(&obj.zone.pos().into(), &logi.zone.pos().into());
                     match acc {
                         Err(e) => Err(e),
                         Ok(None) => Ok(Some((dist, *id))),

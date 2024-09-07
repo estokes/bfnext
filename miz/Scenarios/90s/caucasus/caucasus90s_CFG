@@ -890,7 +890,7 @@
         ],
         "template": "DEPZU23",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 25,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {

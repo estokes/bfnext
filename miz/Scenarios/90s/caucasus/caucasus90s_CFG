@@ -865,7 +865,7 @@
         ],
         "template": "DEPKS19",
         "persist": "Forever",
-        "limit": 6,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -879,7 +879,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 50,
+        "cost": 25,
         "ewr": null,
         "jtac": null
       },

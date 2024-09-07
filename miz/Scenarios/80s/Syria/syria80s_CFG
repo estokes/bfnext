@@ -683,9 +683,9 @@
       "total_slots": 2
     },
     "Mi-8MT": {
-      "troop_slots": 2,
-      "crate_slots": 2,
-      "total_slots": 2
+      "troop_slots": 3,
+      "crate_slots": 3,
+      "total_slots": 3
     },
     "CH-47Fbl1": {
       "troop_slots": 4,
@@ -865,7 +865,7 @@
         ],
         "template": "DEPZU23",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 25,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {

@@ -1,8 +1,8 @@
 [Unit]
+After=tigervnc.service
 Description=Start up Caucasus 80s
 
 [Service]
-After=tigervnc.service
 Type=simple
 User=dcs
 Environment="DISPLAY=:1"

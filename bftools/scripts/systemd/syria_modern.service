@@ -1,8 +1,8 @@
 [Unit]
+After=tigervnc.service
 Description=Start up Syria modern
 
 [Service]
-After=tigervnc.service
 Type=simple
 User=dcs
 Environment="DISPLAY=:1"

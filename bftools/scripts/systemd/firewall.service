@@ -1,8 +1,8 @@
 [Unit]
+After=network-online.target
 Description=Start the firewall
 
 [Service]
-After=network-online.target
 Type=oneshot
 ExecStart=/etc/firewall start
 

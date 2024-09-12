@@ -1,8 +1,8 @@
 [Unit]
+After=firewall.service
 Description=Start the tigervnc server
 
 [Service]
-After=firewall.service
 Type=simple
 User=dcs
 ExecStart=/usr/bin/tigervncserver :1 -geometry 1920x1080 -localhost yes -fg

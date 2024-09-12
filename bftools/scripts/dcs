@@ -3,7 +3,7 @@
 trap quit SIGINT SIGTERM SIGQUIT
 
 if test -z "$1" -o -z "$2" -o -z "$3"; then
-    echo "usage: dcs <name> <git-path> <miz-name> <srs>"
+    echo "usage: dcs <name> <git-path> <miz-name> <srs> [<cbt>]"
     exit 1
 fi
 
@@ -30,6 +30,17 @@ else
     echo "usage: dcs <name> <git-path> <miz-name> <srs>"
     echo "expected true or false for srs"
     exit 5
+fi
+
+CBT=false
+if test "$5" == "true"; then
+    CBT=true
+elif test "$5" == "false"; then
+    CBT=false
+else
+    echo "usage: dcs <name> <git-path> <miz-name> <srs> <cbt>"
+    echo "expected true or false for cbt"
+    exit 6
 fi
 
 BLOCK=120
@@ -166,9 +177,16 @@ function run_dcs() {
     while true; do
         update_from_git
         # Symlink to the latest version of DCS
-        if test -d ~/current; then
-            rm "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
-            cp -d ~/current "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
+        if test $CBT == "true"; then
+            if test -d ~/testing; then
+                rm "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
+                cp -d ~/testing "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
+            fi
+        else
+            if test -d ~/current; then
+                rm "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
+                cp -d ~/current "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
+            fi
         fi
         PORT=$(dcs_port)
         cd "$DCS"

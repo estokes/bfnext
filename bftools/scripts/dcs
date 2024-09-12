@@ -178,11 +178,13 @@ function run_dcs() {
         update_from_git
         # Symlink to the latest version of DCS
         if test $CBT == "true"; then
+            BINDIR=bin-mt
             if test -d ~/testing; then
                 rm "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
                 cp -d ~/testing "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
             fi
         else
+            BINDIR=bin
             if test -d ~/current; then
                 rm "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
                 cp -d ~/current "${HOME}/.wine_${NAME}/drive_c/Program Files/Eagle Dynamics"
@@ -194,7 +196,7 @@ function run_dcs() {
         unblock_incoming $PORT &
         PID=$!
         ST=$(date +%s)
-        WINEPREFIX="${HOME}/.wine_${NAME}" WINEDLLOVERRIDES='wbemprox=n' wine bin/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
+        WINEPREFIX="${HOME}/.wine_${NAME}" WINEDLLOVERRIDES='wbemprox=n' wine ${BINDIR}/DCS_server.exe -w "$NAME" >>"${DATA}/Logs/winedcs.log" 2>&1
         EN=$(date +%s)
         if test $((EN - ST)) -lte $((BLOCK + 10)); then
             # cancel unblock if DCS dies before it runs

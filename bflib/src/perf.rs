@@ -15,9 +15,13 @@ for more details.
 */
 
 use chrono::prelude::*;
+use fxhash::FxHashSet;
 use hdrhistogram::Histogram;
 use log::info;
+use dcso3::String;
 use std::sync::Arc;
+
+use crate::db::objective::ObjectiveId;
 
 #[derive(Debug, Clone)]
 pub struct PerfInner {
@@ -46,6 +50,7 @@ pub struct PerfInner {
     pub logistics_deliver: Histogram<u64>,
     pub logistics_sync_from: Histogram<u64>,
     pub logistics_sync_to: Histogram<u64>,
+    pub logistics_items: FxHashSet<(String, ObjectiveId)>,
 }
 
 #[derive(Debug)]
@@ -94,6 +99,7 @@ impl Default for Perf {
                 logistics_deliver: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 logistics_sync_from: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 logistics_sync_to: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                logistics_items: FxHashSet::default(),
             }),
             frame: Arc::new(Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap()),
         }
@@ -160,6 +166,7 @@ impl Perf {
         log_histogram(&self.inner.logistics_deliver, "logistics_deliver: ");
         log_histogram(&self.inner.logistics_sync_from, "logistics_sfrom:   ");
         log_histogram(&self.inner.logistics_sync_to, "logistics_sto:     ");
-        log_histogram(&self.frame, "frame:             ")
+        log_histogram(&self.frame, "frame:             ");
+        info!("logistics items:   {}", self.inner.logistics_items.len());
     }
 }

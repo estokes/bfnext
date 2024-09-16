@@ -24,7 +24,7 @@ use crate::{
     cfg::Vehicle,
     db::objective::ObjectiveKind,
     maybe, objective, objective_mut,
-    perf::{record_perf, PerfInner},
+    perf::{record_perf, Perf, PerfInner},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -155,7 +155,10 @@ pub struct Warehouse {
 }
 
 fn sync_obj_to_warehouse(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
+    let perf = unsafe { Perf::get_mut() };
+    let perf = Arc::make_mut(&mut perf.inner);
     for (item, inv) in &obj.warehouse.equipment {
+        perf.logistics_items.insert((item.clone(), obj.id));
         warehouse
             .set_item(item.clone(), inv.stored)
             .context("setting item")?

@@ -156,11 +156,9 @@ pub struct Warehouse {
 
 fn sync_obj_to_warehouse(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
     for (item, inv) in &obj.warehouse.equipment {
-        if warehouse.get_item_count(item.clone())? != inv.stored {
-            warehouse
-                .set_item(item.clone(), inv.stored)
-                .context("setting item")?
-        }
+        warehouse
+            .set_item(item.clone(), inv.stored)
+            .context("setting item")?
     }
     for (name, inv) in &obj.warehouse.liquids {
         warehouse

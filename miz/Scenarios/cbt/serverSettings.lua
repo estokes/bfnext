@@ -37,7 +37,7 @@ cfg =
     {
         [1] = "C:\\users\\dcs\\Saved Games\\cbt\\Missions\\Operation Fowl Intent - 90s.miz",
     }, -- end of ["missionList"]
-    ["password"] = "",
+    ["password"] = "abc123",
     ["listLoop"] = false,
     ["name"] = "The Coop - CBT",
     ["require_pure_scripts"] = true,

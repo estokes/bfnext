@@ -31,6 +31,8 @@ pub struct PerfInner {
     pub dcs_hooks: Histogram<u64>,
     pub unit_positions: Histogram<u64>,
     pub player_positions: Histogram<u64>,
+    pub get_position: Histogram<u64>,
+    pub get_position_frame: Histogram<u64>,
     pub ewr_tracks: Histogram<u64>,
     pub ewr_reports: Histogram<u64>,
     pub unit_culling: Histogram<u64>,
@@ -50,6 +52,7 @@ pub struct PerfInner {
     pub logistics_deliver: Histogram<u64>,
     pub logistics_sync_from: Histogram<u64>,
     pub logistics_sync_to: Histogram<u64>,
+    // CR evilkipper: remove this once the warehouse client/server desync bug is fixed
     pub logistics_items: FxHashSet<(String, ObjectiveId)>,
 }
 
@@ -80,6 +83,8 @@ impl Default for Perf {
                 dcs_hooks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 unit_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 player_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                get_position: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                get_position_frame: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 ewr_tracks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 ewr_reports: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 unit_culling: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),

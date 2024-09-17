@@ -20,9 +20,7 @@ use super::{
     Db, Map, Set,
 };
 use crate::{
-    cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
-    maybe, maybe_mut, objective_mut,
-    shots::Dead,
+    cfg::{LifeType, PointsCfg, UnitTag, Vehicle}, maybe, maybe_mut, objective_mut, perf::{record_perf, PerfInner}, shots::Dead
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -507,6 +505,7 @@ impl Db {
 
     pub fn update_player_positions<'a>(
         &mut self,
+        perf: &mut PerfInner,
         lua: MizLua,
         now: DateTime<Utc>,
         ids: impl IntoIterator<Item = &'a Ucid>,
@@ -523,10 +522,14 @@ impl Db {
                         };
                         match instance {
                             Ok(instance) => {
+                                let ts = Utc::now();
                                 let pos = instance.get_position()?;
+                                record_perf(&mut perf.get_position, ts);
                                 if (inst.position.p.0 - pos.p.0).magnitude_squared() > 1.0 {
-                                    inst.position = instance.get_position()?;
+                                    inst.position = pos;
+                                    let ts = Utc::now();
                                     inst.velocity = instance.get_velocity()?.0;
+                                    record_perf(&mut perf.get_velocity, ts);
                                     inst.in_air = instance.in_air()?;
                                     inst.moved = Some(now);
                                 }
@@ -548,6 +551,7 @@ impl Db {
 
     pub fn update_player_positions_incremental(
         &mut self,
+        perf: &mut PerfInner,
         lua: MizLua,
         now: DateTime<Utc>,
         i: usize,
@@ -559,7 +563,7 @@ impl Db {
                 .into_iter()
                 .map(|(_, ucid)| *ucid)
                 .collect();
-            let dead = self.update_player_positions(lua, now, &players)?;
+            let dead = self.update_player_positions(perf, lua, now, &players)?;
             Ok((stop, dead))
         } else {
             Ok((0, vec![]))
@@ -657,6 +661,7 @@ impl Db {
 
     pub fn player_left_unit(
         &mut self,
+        perf: &mut PerfInner,
         lua: MizLua,
         now: DateTime<Utc>,
         unit: &Unit,
@@ -665,7 +670,7 @@ impl Db {
         let mut dead = vec![];
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
             let uid = *uid;
-            match self.update_unit_positions(lua, now, &[uid]) {
+            match self.update_unit_positions(perf, lua, now, &[uid]) {
                 Ok(v) => dead = v,
                 Err(e) => error!("could not sync final CA unit position {e}"),
             }

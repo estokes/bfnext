@@ -483,6 +483,7 @@ fn unit_killed(
 
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
+    let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     match &ev {
         Event::MarkAdded(e) | Event::MarkChange(e) | Event::MarkRemoved(e)
             if e.initiator.is_none() =>
@@ -524,7 +525,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         }
                     }
                 }
-                if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &unit) {
+                if let Err(e) = ctx.db.player_left_unit(perf, lua, start_ts, &unit) {
                     error!("player left unit failed {:?} {:?}", unit, e)
                 }
             }
@@ -647,10 +648,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         },
         _ => (),
     }
-    record_perf(
-        &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_events,
-        start_ts,
-    );
+    record_perf(&mut perf.dcs_events, start_ts);
     Ok(())
 }
 
@@ -999,7 +997,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     force_players_to_spectators(ctx, &net, ts);
     match ctx
         .db
-        .update_unit_positions_incremental(lua, ts, ctx.last_unit_position)
+        .update_unit_positions_incremental(perf, lua, ts, ctx.last_unit_position)
     {
         Err(e) => error!("could not update unit positions {e}"),
         Ok((i, dead)) => {
@@ -1015,7 +1013,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     match ctx
         .db
-        .update_player_positions_incremental(lua, ts, ctx.last_player_position)
+        .update_player_positions_incremental(perf, lua, ts, ctx.last_player_position)
     {
         Err(e) => error!("could not update player positions {e}"),
         Ok((i, dead)) => {
@@ -1057,7 +1055,10 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.advise_capturable, now);
     let now = Utc::now();
-    match ctx.jtac.update_target_positions(lua, now, &mut ctx.db) {
+    match ctx
+        .jtac
+        .update_target_positions(perf, lua, now, &mut ctx.db)
+    {
         Err(e) => error!("error updating jtac target positions {:?}", e),
         Ok(dead) => {
             for id in dead {

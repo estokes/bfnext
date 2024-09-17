@@ -15,10 +15,10 @@ for more details.
 */
 
 use chrono::prelude::*;
+use dcso3::String;
 use fxhash::FxHashSet;
 use hdrhistogram::Histogram;
 use log::info;
-use dcso3::String;
 use std::sync::Arc;
 
 use crate::db::objective::ObjectiveId;
@@ -32,7 +32,7 @@ pub struct PerfInner {
     pub unit_positions: Histogram<u64>,
     pub player_positions: Histogram<u64>,
     pub get_position: Histogram<u64>,
-    pub get_position_frame: Histogram<u64>,
+    pub get_velocity: Histogram<u64>,
     pub ewr_tracks: Histogram<u64>,
     pub ewr_reports: Histogram<u64>,
     pub unit_culling: Histogram<u64>,
@@ -84,7 +84,7 @@ impl Default for Perf {
                 unit_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 player_positions: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 get_position: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-                get_position_frame: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                get_velocity: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 ewr_tracks: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 ewr_reports: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 unit_culling: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
@@ -152,6 +152,8 @@ impl Perf {
         log_histogram(&self.inner.dcs_hooks, "dcs hooks:         ");
         log_histogram(&self.inner.unit_positions, "unit positions:    ");
         log_histogram(&self.inner.player_positions, "player positions:  ");
+        log_histogram(&self.inner.get_position, "get position:      ");
+        log_histogram(&self.inner.get_velocity, "get velocity:      ");
         log_histogram(&self.inner.ewr_tracks, "ewr tracks:        ");
         log_histogram(&self.inner.ewr_reports, "ewr reports:       ");
         log_histogram(&self.inner.unit_culling, "unit culling:      ");

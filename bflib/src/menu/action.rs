@@ -2,13 +2,19 @@ use std::sync::Arc;
 
 use super::{ArgPent, ArgQuad, ArgTriple};
 use crate::{
-    cfg::{Action, ActionKind}, db::{
+    db::{
         actions::{ActionArgs, ActionCmd, WithObj, WithPos, WithPosAndGroup},
         group::{DeployKind, GroupId as DbGid},
-        objective::ObjectiveId,
-    }, perf::{Perf, PerfInner}, spawnctx::SpawnCtx, Context
+    },
+    perf::{Perf, PerfInner},
+    spawnctx::SpawnCtx,
+    Context,
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use bfprotocols::{
+    cfg::{Action, ActionKind},
+    db::objective::ObjectiveId,
+};
 use compact_str::format_compact;
 use dcso3::{
     coalition::Side,
@@ -531,7 +537,11 @@ pub(crate) fn init_action_menu_for_slot(
     ucid: &Ucid,
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-    let si = ctx.db.ephemeral.get_slot_info(slot).context("getting slot info")?;
+    let si = ctx
+        .db
+        .ephemeral
+        .get_slot_info(slot)
+        .context("getting slot info")?;
     ctx.subscribed_action_menus.remove(slot);
     mc.remove_command_for_group(si.miz_gid, GroupCommandItem::from(vec!["Actions>>".into()]))?;
     mc.remove_submenu_for_group(si.miz_gid, GroupSubMenu::from(vec!["Actions".into()]))?;

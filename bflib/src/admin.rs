@@ -16,10 +16,8 @@ for more details.
 
 use crate::{
     bg::Task,
-    cfg::Cfg,
     db::{
         group::{DeployKind, GroupId},
-        objective::ObjectiveId,
         Db, Set,
     },
     msgq::MsgTyp,
@@ -28,6 +26,7 @@ use crate::{
     Context,
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
+use bfprotocols::{cfg::Cfg, db::objective::ObjectiveId};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{

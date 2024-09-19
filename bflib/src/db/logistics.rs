@@ -16,17 +16,19 @@ for more details.
 
 use super::{
     ephemeral::{Equipment, LogiStage, Production},
-    objective::{Objective, ObjectiveId},
+    objective::Objective,
     Db, Map, Set,
 };
 use crate::{
     admin::WarehouseKind,
-    cfg::Vehicle,
-    db::objective::ObjectiveKind,
     maybe, objective, objective_mut,
     perf::{record_perf, Perf, PerfInner},
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::Vehicle,
+    db::objective::{ObjectiveId, ObjectiveKind},
+};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{

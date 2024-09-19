@@ -17,17 +17,20 @@ for more details.
 use super::{
     ephemeral::DeployableIndex,
     group::{GroupId, SpawnedGroup},
-    objective::{Objective, ObjectiveId, ObjectiveKind},
+    objective::Objective,
     Db,
 };
 use crate::{
-    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     db::group::DeployKind,
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
 use anyhow::{anyhow, bail, Result};
+use bfprotocols::{
+    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
+    db::objective::{ObjectiveId, ObjectiveKind},
+};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{

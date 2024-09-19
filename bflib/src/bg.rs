@@ -14,8 +14,9 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use crate::{cfg::Cfg, db::persisted::Persisted, Perf};
+use crate::{db::persisted::Persisted, Perf};
 use anyhow::{anyhow, Result};
+use bfprotocols::cfg::Cfg;
 use bytes::{BufMut, Bytes, BytesMut};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
@@ -211,7 +212,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                     Ok(encoded) => encoded,
                     Err(e) => {
                         error!("failed to encode save state {e:?}");
-                        continue
+                        continue;
                     }
                 };
                 drop(db); // don't hold the db reference any longer than necessary
@@ -219,7 +220,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                     Ok(()) => (),
                     Err(e) => error!("failed to save state to {path:?}, {e:?}"),
                 }
-            },
+            }
             Task::ResetState(path) => match fs::remove_file(&path) {
                 Ok(()) => (),
                 Err(e) => error!("failed to reset state {path:?}, {e:?}"),

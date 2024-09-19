@@ -16,15 +16,11 @@ for more details.
 
 extern crate nalgebra as na;
 use self::{group::DeployKind, persisted::Persisted};
-use crate::{
-    cfg::{
-        Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg,
-        Troop,
-    },
-    db::ephemeral::Ephemeral,
-    jtac::JtId,
-};
+use crate::{db::ephemeral::Ephemeral, jtac::JtId};
 use anyhow::{anyhow, Result};
+use bfprotocols::cfg::{
+    Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg, Troop,
+};
 use dcso3::{
     centroid3d,
     coalition::Side,

@@ -16,11 +16,9 @@ for more details.
 
 use super::{ArgQuad, ArgTriple, ArgTuple};
 use crate::{
-    cfg::{ActionKind, UnitTag, Vehicle},
     db::{
         actions::{ActionArgs, ActionCmd, WithJtac},
         group::{DeployKind, GroupId as DbGid},
-        objective::ObjectiveId,
         Db,
     },
     jtac::{AdjustmentDir, JtId, Jtac, Jtacs},
@@ -29,6 +27,10 @@ use crate::{
     Context,
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use bfprotocols::{
+    cfg::{ActionKind, UnitTag, Vehicle},
+    db::objective::ObjectiveId,
+};
 use compact_str::format_compact;
 use dcso3::{
     coalition::Side,

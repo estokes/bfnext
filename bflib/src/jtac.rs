@@ -15,16 +15,18 @@ for more details.
 */
 
 use crate::{
-    cfg::{UnitTag, UnitTags, Vehicle},
     db::{
         group::{GroupId, SpawnedUnit, UnitId},
-        objective::ObjectiveId,
         player::InstancedPlayer,
         Db, JtDesc,
     },
     landcache::LandCache,
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::{UnitTag, UnitTags, Vehicle},
+    db::objective::ObjectiveId,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{

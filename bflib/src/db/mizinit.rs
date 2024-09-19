@@ -21,10 +21,9 @@ use super::{
     Db, Map,
 };
 use crate::{
-    cfg::{Cfg, Vehicle},
     db::{
         logistics::Warehouse,
-        objective::{Objective, ObjectiveId, ObjectiveKind, Zone},
+        objective::{Objective, Zone},
     },
     group,
     landcache::LandCache,
@@ -33,6 +32,10 @@ use crate::{
     spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::{Cfg, Vehicle},
+    db::objective::{ObjectiveId, ObjectiveKind},
+};
 use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{

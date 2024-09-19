@@ -20,10 +20,9 @@ mod ewr;
 pub mod jtac;
 mod troop;
 
-use std::sync::Arc;
-
-use crate::{cfg::Cfg, db::Db, Context};
+use crate::{db::Db, Context};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
+use bfprotocols::cfg::Cfg;
 use compact_str::format_compact;
 use dcso3::{
     as_tbl,
@@ -36,6 +35,7 @@ use dcso3::{
 };
 use log::debug;
 use mlua::{prelude::*, Value};
+use std::sync::Arc;
 
 #[derive(Debug)]
 struct ArgTuple<T, U> {

@@ -16,7 +16,6 @@ for more details.
 
 mod admin;
 mod bg;
-mod cfg;
 mod chatcmd;
 mod db;
 mod ewr;
@@ -29,14 +28,17 @@ mod shots;
 mod spawnctx;
 
 extern crate nalgebra as na;
-use crate::{cfg::Cfg, db::player::SlotAuth, perf::record_perf};
+use crate::{db::player::SlotAuth, perf::record_perf};
 use admin::{run_admin_commands, AdminCommand};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
-use cfg::LifeType;
+use bfprotocols::{
+    cfg::{Cfg, LifeType},
+    db::objective::ObjectiveId,
+};
 use chatcmd::run_action_commands;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::{objective::ObjectiveId, player::TakeoffRes, Db};
+use db::{player::TakeoffRes, Db};
 use dcso3::{
     coalition::Side,
     env::{

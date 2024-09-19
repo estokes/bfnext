@@ -21,20 +21,22 @@ use super::{
     Db, Map, Set,
 };
 use crate::{
-    cfg::{Deployable, DeployableLogistics, UnitTag},
     group, group_health, group_mut,
     landcache::LandCache,
     maybe, objective, objective_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
-use bfcore::db::objective::{ObjectiveId, ObjectiveKind};
 use anyhow::{anyhow, Context, Result};
+use bfprotocols::{
+    cfg::{Deployable, DeployableLogistics, UnitTag},
+    db::objective::{ObjectiveId, ObjectiveKind},
+};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
-    atomic_id, azumith2d_to, centroid2d,
+    azumith2d_to, centroid2d,
     coalition::Side,
     coord::Coord,
     cvt_err,

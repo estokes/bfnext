@@ -14,17 +14,17 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{
-    objective::{ObjGroupClass, ObjectiveId},
-    Db, Set,
-};
+use super::{objective::ObjGroupClass, Db, Set};
 use crate::{
-    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     group, group_by_name, group_health, group_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut, Connected,
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
+    db::objective::ObjectiveId,
+};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{

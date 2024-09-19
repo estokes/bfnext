@@ -18,20 +18,23 @@ use super::{
     cargo::Cargo,
     group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
     markup::ObjectiveMarkup,
-    objective::{Objective, ObjectiveId},
+    objective::Objective,
     persisted::Persisted,
 };
 use crate::{
-    cfg::{
-        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
-        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
-    },
     maybe,
     msgq::MsgQ,
     perf::{record_perf, PerfInner},
     spawnctx::{Despawn, SpawnCtx, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::{
+        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
+    },
+    db::objective::ObjectiveId,
+};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{

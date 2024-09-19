@@ -1,6 +1,5 @@
 use crate::{
     admin::{self, AdminCommand},
-    cfg::{Action, ActionKind},
     db::{
         actions::ActionCmd,
         group::{DeployKind, GroupId},
@@ -12,6 +11,7 @@ use crate::{
     spawnctx::SpawnCtx,
     Context,
 };
+use bfprotocols::cfg::{Action, ActionKind};
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};

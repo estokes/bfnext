@@ -16,7 +16,6 @@ for more details.
 
 use super::{
     group::{DeployKind, GroupId},
-    objective::ObjectiveId,
     Db, Map, Set,
 };
 use crate::{
@@ -25,6 +24,10 @@ use crate::{
     shots::Dead,
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
+    db::objective::ObjectiveId,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{

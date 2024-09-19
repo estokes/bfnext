@@ -1,14 +1,6 @@
-use super::{
-    group::GroupId,
-    objective::{Objective, ObjectiveId},
-    Db, Map,
-};
+use super::{group::GroupId, objective::Objective, Db, Map};
 use crate::{
     admin,
-    cfg::{
-        Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg, DroneCfg,
-        LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
-    },
     db::{cargo::Oldest, group::DeployKind},
     group, group_mut,
     jtac::{JtId, Jtacs},
@@ -18,6 +10,13 @@ use crate::{
     unit,
 };
 use anyhow::{anyhow, bail, Context, Ok, Result};
+use bfprotocols::{
+    cfg::{
+        Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg, DroneCfg,
+        LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
+    },
+    db::objective::ObjectiveId,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
@@ -1929,7 +1928,13 @@ impl Db {
                                 let origin = (*origin).ok_or_else(|| {
                                     anyhow!("objective origin is required for paratroops")
                                 })?;
-                                to_paratroop.push((target, t.name.clone(), group.side, ucid, origin));
+                                to_paratroop.push((
+                                    target,
+                                    t.name.clone(),
+                                    group.side,
+                                    ucid,
+                                    origin,
+                                ));
                             }
                         }
                         if destination.is_none() {

@@ -206,6 +206,7 @@ async fn write_stat(file: &mut File, buf: &mut BytesMut, stat: StatKind) {
         error!("could not format log item {stat:?}: {e:?}");
         return;
     }
+    buf.put_u8(0xA);
     if let Err(e) = file.write_all_buf(&mut buf.split()).await {
         error!("could not write stat {stat:?}: {e:?}")
     }

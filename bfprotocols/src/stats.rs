@@ -18,7 +18,9 @@ use smallvec::SmallVec;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum StatKind {
-    NewRound,
+    NewRound {
+        sortie: String,
+    },
     RoundEnd {
         winner: Option<Side>,
     },

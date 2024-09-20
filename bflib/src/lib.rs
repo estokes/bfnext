@@ -33,8 +33,9 @@ use admin::{run_admin_commands, AdminCommand};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use bfprotocols::{
     cfg::{Cfg, LifeType},
-    db::objective::ObjectiveId,
+    db::objective::ObjectiveId, stats::StatKind,
 };
+use bg::Task;
 use chatcmd::run_action_commands;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -1141,6 +1142,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     if !path.exists() {
         debug!("saved state doesn't exist, starting from default");
         let cfg = Cfg::load(&path)?;
+        ctx.do_bg_task(Task::Stat(StatKind::NewRound { sortie: ctx.sortie.clone() }));
         ctx.db = Db::init(lua, cfg, &ctx.idx, &miz).context("initalizing the mission")?;
     } else {
         debug!("saved state exists, loading it");

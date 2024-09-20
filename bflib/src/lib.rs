@@ -75,6 +75,7 @@ use tokio::sync::mpsc::UnboundedSender;
 #[derive(Debug)]
 struct PlayerInfo {
     name: String,
+    addr: Option<String>,
     ucid: Ucid,
 }
 
@@ -83,6 +84,7 @@ struct Connected {
     info_by_player_id: FxHashMap<PlayerId, PlayerInfo>,
     id_by_ucid: FxHashMap<Ucid, PlayerId>,
     id_by_name: FxHashMap<String, PlayerId>,
+    id_by_addr: FxHashMap<Option<String>, PlayerId>,
 }
 
 impl Connected {
@@ -110,23 +112,26 @@ impl Connected {
                 .ucid()?
                 .ok_or_else(|| anyhow!("player {:?} has no ucid", ifo))?;
             let name = ifo.name()?;
+            let addr = ifo.ip()?;
             info!("player name: '{}', id: {:?}, ucid: {:?}", name, id, ucid);
-            self.player_connected(id, PlayerInfo { name, ucid })?;
+            self.player_connected(id, PlayerInfo { name, addr, ucid })?;
             Ok(&self.info_by_player_id[&id])
         }
     }
 
     pub fn player_connected(&mut self, id: PlayerId, ifo: PlayerInfo) -> Result<()> {
         if let Some(id) = self.id_by_ucid.remove(&ifo.ucid) {
-            if let Some(ifo) = self.info_by_player_id.remove(&id) {
-                self.id_by_name.remove(&ifo.name);
-            }
+            self.player_disconnected(id);
         }
         if self.id_by_name.contains_key(&ifo.name) {
             bail!("your callsign is already taken by another player")
         }
+        if self.id_by_addr.contains_key(&ifo.addr) {
+            bail!("another player is already connected from your ip address")
+        }
         self.id_by_ucid.insert(ifo.ucid, id);
         self.id_by_name.insert(ifo.name.clone(), id);
+        self.id_by_addr.insert(ifo.addr.clone(), id);
         self.info_by_player_id.insert(id, ifo);
         Ok(())
     }
@@ -135,6 +140,7 @@ impl Connected {
         self.info_by_player_id.remove(&id).map(|ifo| {
             self.id_by_name.remove(&ifo.name);
             self.id_by_ucid.remove(&ifo.ucid);
+            self.id_by_addr.remove(&ifo.addr);
             ifo
         })
     }
@@ -345,6 +351,7 @@ fn on_player_try_connect(
         id,
         PlayerInfo {
             name: name.clone(),
+            addr: Some(addr),
             ucid,
         },
     ) {

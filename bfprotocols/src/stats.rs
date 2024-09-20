@@ -5,10 +5,7 @@ use crate::{
 };
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side,
-    coord::LLPos,
-    net::{SlotId, Ucid},
-    String,
+    coalition::Side, coord::LLPos, net::{SlotId, Ucid}, String, Vector3
 };
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -47,10 +44,12 @@ pub enum StatKind {
     },
     Deploy {
         ucid: Ucid,
+        pos: LLPos,
         deployable: Deployable,
     },
     Troop {
         ucid: Ucid,
+        pos: LLPos,
         troop: Troop,
     },
     ObjectiveStatus {
@@ -75,6 +74,12 @@ pub enum StatKind {
         slot: SlotId,
         aircraft: Option<Vehicle>,
     },
+    Position {
+        ucid: Ucid,
+        pos: LLPos,
+        altitude: f32,
+        velocity: Vector3,
+    },
     Takeoff {
         ucid: Ucid,
         aircraft: Vehicle,
@@ -88,4 +93,8 @@ pub enum StatKind {
         team_kill: bool,
         points: SmallVec<[(Ucid, usize); 2]>,
     },
+    Bind {
+        ucid: Ucid,
+        id: String,
+    }
 }

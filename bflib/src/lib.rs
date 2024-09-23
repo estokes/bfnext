@@ -1076,7 +1076,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = ctx.db.logistics_step(lua, perf, ts) {
         error!("error running logistics events {e:?}")
     }
-    if let Err(e) = run_admin_commands(ctx, lua) {
+    if let Err(e) = run_admin_commands(ctx, perf, lua) {
         error!("failed to run admin commands {e:?}")
     }
     if let Err(e) = run_action_commands(ctx, perf, lua) {

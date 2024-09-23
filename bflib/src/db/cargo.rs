@@ -24,6 +24,7 @@ use crate::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     db::group::DeployKind,
     group, maybe, objective,
+    perf::PerfInner,
     spawnctx::{SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
@@ -441,7 +442,13 @@ impl Db {
         Ok((n, oldest))
     }
 
-    pub fn unpakistan(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Unpakistan> {
+    pub fn unpakistan(
+        &mut self,
+        lua: MizLua,
+        perf: &mut PerfInner,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<Unpakistan> {
         #[derive(Clone)]
         struct Cifo {
             pos: Vector2,
@@ -832,7 +839,7 @@ impl Db {
                                     self.delete_group(&cr.group)?
                                 }
                                 let oid =
-                                    self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
+                                    self.add_farp(perf, &spctx, idx, st.side, centroid, &spec, parts)?;
                                 self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name));

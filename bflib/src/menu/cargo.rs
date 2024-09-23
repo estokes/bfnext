@@ -21,6 +21,7 @@ use crate::{
         self,
         cargo::{Cargo, Oldest, SlotStats},
     },
+    perf::Perf,
     Context,
 };
 use anyhow::{Context as ErrContext, Result};
@@ -33,12 +34,13 @@ use dcso3::{
     MizLua, String,
 };
 use fxhash::FxHashMap;
-use std::collections::hash_map::Entry;
+use std::{collections::hash_map::Entry, sync::Arc};
 
 fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
+    let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
-    match ctx.db.unpakistan(lua, &ctx.idx, &slot) {
+    match ctx.db.unpakistan(lua, perf, &ctx.idx, &slot) {
         Ok(unpakistan) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} {unpakistan}");

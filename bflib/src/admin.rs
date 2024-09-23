@@ -23,6 +23,7 @@ use crate::{
         Db, Set,
     },
     msgq::MsgTyp,
+    perf::PerfInner,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
     Context,
@@ -308,7 +309,13 @@ impl FromStr for AdminCommand {
     }
 }
 
-fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Result<()> {
+fn admin_spawn(
+    ctx: &mut Context,
+    perf: &mut PerfInner,
+    lua: MizLua,
+    id: PlayerId,
+    key: String,
+) -> Result<()> {
     let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
     let act = Trigger::singleton(lua)?.action()?;
     let spctx = SpawnCtx::new(lua)?;
@@ -420,7 +427,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                     match &spec.logistics {
                         Some(parts) => {
                             ctx.db
-                                .add_farp(&spctx, &ctx.idx, side, pos, &spec, parts)
+                                .add_farp(perf, &spctx, &ctx.idx, side, pos, &spec, parts)
                                 .context("adding farp")?;
                         }
                         None => {
@@ -752,7 +759,11 @@ fn remark(ctx: &mut Context, objective: &String) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
+pub(super) fn run_admin_commands(
+    ctx: &mut Context,
+    perf: &mut PerfInner,
+    lua: MizLua,
+) -> Result<()> {
     let mut cmds = mem::take(&mut ctx.admin_commands);
     for (id, cmd) in cmds.drain(..) {
         macro_rules! reply {
@@ -823,7 +834,7 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 }
             }
             AdminCommand::Spawn { key } => {
-                if let Err(e) = admin_spawn(ctx, lua, id, key) {
+                if let Err(e) = admin_spawn(ctx, perf, lua, id, key) {
                     reply!("could not spawn {:?}", e)
                 }
             }

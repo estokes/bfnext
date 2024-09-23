@@ -42,6 +42,8 @@ pub struct PerfInner {
     pub spawn_queue: Histogram<u64>,
     pub spawn: Histogram<u64>,
     pub despawn: Histogram<u64>,
+    pub add_group: Histogram<u64>,
+    pub add_static_object: Histogram<u64>,
     pub advise_captured: Histogram<u64>,
     pub advise_capturable: Histogram<u64>,
     pub jtac_target_positions: Histogram<u64>,
@@ -93,6 +95,8 @@ impl Default for Perf {
                 do_repairs: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 spawn_queue: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 spawn: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                add_group: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+                add_static_object: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 despawn: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 advise_captured: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
                 advise_capturable: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
@@ -152,8 +156,8 @@ impl Perf {
         log_histogram(&self.inner.dcs_hooks, "dcs hooks:         ");
         log_histogram(&self.inner.unit_positions, "unit positions:    ");
         log_histogram(&self.inner.player_positions, "player positions:  ");
-        log_histogram(&self.inner.get_position, "get position:      ");
-        log_histogram(&self.inner.get_velocity, "get velocity:      ");
+        log_histogram(&self.inner.get_position, "get_position:      ");
+        log_histogram(&self.inner.get_velocity, "get_velocity:      ");
         log_histogram(&self.inner.ewr_tracks, "ewr tracks:        ");
         log_histogram(&self.inner.ewr_reports, "ewr reports:       ");
         log_histogram(&self.inner.unit_culling, "unit culling:      ");
@@ -163,6 +167,8 @@ impl Perf {
         log_histogram(&self.inner.spawn_queue, "spawn queue:       ");
         log_histogram(&self.inner.spawn, "spawn:             ");
         log_histogram(&self.inner.despawn, "despawn:           ");
+        log_histogram(&self.inner.add_group, "add_group:         ");
+        log_histogram(&self.inner.add_static_object, "add_static_object: ");
         log_histogram(&self.inner.advise_captured, "advise captured:   ");
         log_histogram(&self.inner.advise_capturable, "advise capturable: ");
         log_histogram(&self.inner.jtac_target_positions, "jtac target pos:   ");

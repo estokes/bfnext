@@ -158,6 +158,7 @@ impl<'lua> SpawnCtx<'lua> {
 
     pub fn move_farp_pad(
         &self,
+        perf: &mut PerfInner,
         idx: &MizIndex,
         side: Side,
         pad_template: &str,
@@ -178,18 +179,23 @@ impl<'lua> SpawnCtx<'lua> {
             drop(pad_unit);
             pad
         };
-        self.spawn(pad).context("moving the pad")
+        self.spawn(perf, pad).context("moving the pad")
     }
 
-    pub fn spawn(&self, template: GroupInfo<'lua>) -> Result<Spawned<'lua>> {
+    pub fn spawn(&self, perf: &mut PerfInner, template: GroupInfo<'lua>) -> Result<Spawned<'lua>> {
         match GroupCategory::from_kind(template.category) {
-            Some(category) => Ok(Spawned::Group(
-                self.coalition
-                    .add_group(template.country, category, template.group.clone())
-                    .with_context(|| {
-                        format_compact!("spawning group from template {:?}", template)
-                    })?,
-            )),
+            Some(category) => {
+                let ts = Utc::now();
+                let res = Ok(Spawned::Group(
+                    self.coalition
+                        .add_group(template.country, category, template.group.clone())
+                        .with_context(|| {
+                            format_compact!("spawning group from template {:?}", template)
+                        })?,
+                ));
+                record_perf(&mut perf.add_group, ts);
+                res
+            }
             None => {
                 // static objects are not fed to addStaticObject as groups
                 let unit: miz::Unit<'lua> = template
@@ -199,11 +205,13 @@ impl<'lua> SpawnCtx<'lua> {
                     .first()
                     .context("getting first unit in static group")?
                     .clone();
+                let ts = Utc::now();
                 self.coalition
                     .add_static_object(template.country, unit)
                     .with_context(|| {
                         format_compact!("spawning static object from template {:?}", template)
                     })?;
+                record_perf(&mut perf.add_static_object, ts);
                 Ok(Spawned::Static)
             }
         }

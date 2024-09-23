@@ -33,7 +33,8 @@ use admin::{run_admin_commands, AdminCommand};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use bfprotocols::{
     cfg::{Cfg, LifeType},
-    db::objective::ObjectiveId, stats::StatKind,
+    db::objective::ObjectiveId,
+    stats::StatKind,
 };
 use bg::Task;
 use chatcmd::run_action_commands;
@@ -271,7 +272,7 @@ impl Context {
         *Self::get_mut() = Self::default();
     }
 
-    fn do_bg_task(&mut self, task: bg::Task) {
+    fn do_bg_task(&self, task: bg::Task) {
         if let Some(to_bg) = &self.to_background {
             match to_bg.send(task) {
                 Ok(()) => (),
@@ -825,7 +826,7 @@ fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) {
                 .panel_to_all(60, true, "The server will restart in one minute")
         }
         if now > asd.when {
-            let _ = admin::admin_shutdown(ctx, lua, false);
+            let _ = admin::admin_shutdown(ctx, lua, None);
         }
     }
 }
@@ -1139,14 +1140,17 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     };
     debug!("path to saved state is {:?}", path);
     info!("initializing db");
+    let to_bg = ctx.to_background.as_ref().unwrap().clone();
     if !path.exists() {
         debug!("saved state doesn't exist, starting from default");
         let cfg = Cfg::load(&path)?;
-        ctx.do_bg_task(Task::Stat(StatKind::NewRound { sortie: ctx.sortie.clone() }));
-        ctx.db = Db::init(lua, cfg, &ctx.idx, &miz).context("initalizing the mission")?;
+        ctx.do_bg_task(Task::Stat(StatKind::NewRound {
+            sortie: ctx.sortie.clone(),
+        }));
+        ctx.db = Db::init(lua, cfg, &ctx.idx, &miz, to_bg).context("initalizing the mission")?;
     } else {
         debug!("saved state exists, loading it");
-        ctx.db = Db::load(&miz, &ctx.idx, &path).context("loading the saved state")?;
+        ctx.db = Db::load(&miz, &ctx.idx, to_bg, &path).context("loading the saved state")?;
     }
     ctx.shutdown = ctx
         .db
@@ -1154,6 +1158,9 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         .cfg
         .shutdown
         .map(|hrs| AutoShutdown::new(Utc::now() + Duration::hours(hrs as i64)));
+    ctx.do_bg_task(Task::Stat(StatKind::SessionStart {
+        stop: ctx.shutdown.map(|a| a.when),
+    }));
     info!("spawning units");
     ctx.respawn_groups(lua, &miz)
         .context("setting up the mission after load")?;

@@ -16,17 +16,18 @@ for more details.
 
 extern crate nalgebra as na;
 use self::{group::DeployKind, persisted::Persisted};
-use crate::{db::ephemeral::Ephemeral, jtac::JtId};
+use crate::{bg::Task, db::ephemeral::Ephemeral, jtac::JtId};
 use anyhow::{anyhow, Result};
-use bfprotocols::cfg::{
+use bfprotocols::{cfg::{
     Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg, Troop,
-};
+}, stats::Stat};
 use dcso3::{
     centroid3d,
     coalition::Side,
     env::miz::{Miz, MizIndex},
     Vector3,
 };
+use tokio::sync::mpsc::UnboundedSender;
 use std::{fs::File, path::Path};
 
 pub mod actions;
@@ -170,7 +171,7 @@ pub struct Db {
 }
 
 impl Db {
-    pub fn load(miz: &Miz, idx: &MizIndex, path: &Path) -> Result<Self> {
+    pub fn load(miz: &Miz, idx: &MizIndex, to_bg: UnboundedSender<Task>, path: &Path) -> Result<Self> {
         let file = File::open(&path)
             .map_err(|e| anyhow!("failed to open save file {:?}, {:?}", path, e))?;
         let file = zstd::stream::Decoder::new(file)?;
@@ -180,12 +181,14 @@ impl Db {
             persisted,
             ephemeral: Ephemeral::default(),
         };
-        db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?)?;
+        Stat::setseq(db.persisted.seq);
+        db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?, to_bg)?;
         Ok(db)
     }
 
     pub fn maybe_snapshot(&mut self) -> Option<Persisted> {
         if self.ephemeral.take_dirty() {
+            self.persisted.seq = Stat::seq();
             Some(self.persisted.clone())
         } else {
             None

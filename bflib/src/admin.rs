@@ -26,7 +26,7 @@ use crate::{
     Context,
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
-use bfprotocols::{cfg::Cfg, db::objective::ObjectiveId};
+use bfprotocols::{cfg::Cfg, db::objective::ObjectiveId, stats::StatKind};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
@@ -140,7 +140,9 @@ pub enum AdminCommand {
     Remark {
         objective: String,
     },
-    Reset,
+    Reset {
+        winner: Option<Side>,
+    },
     Shutdown,
 }
 
@@ -171,7 +173,7 @@ impl AdminCommand {
             "delete <groupid>: delete deployed group, now with 100% less mess",
             "deslot <player>: force <player> to spectators",
             "remark <obj>: force refresh the markup on objective",
-            "reset: shutdown the server and reset the campaign state",
+            "reset [winner]: shutdown the server and reset the campaign state",
             "shutdown: shutdown the server"
         ]
     }
@@ -299,8 +301,13 @@ impl FromStr for AdminCommand {
             Ok(Self::Remark {
                 objective: s.into(),
             })
-        } else if s == "reset" {
-            Ok(Self::Reset)
+        } else if let Some(s) = s.strip_prefix("reset") {
+            let winner = if s == "" {
+                None
+            } else {
+                Some(Side::from_str(s)?)
+            };
+            Ok(Self::Reset { winner })
         } else {
             bail!("unknown command {s}")
         }
@@ -663,16 +670,20 @@ fn admin_reset_lives(ctx: &mut Context, player: &String) -> Result<()> {
     ctx.db.player_reset_lives(&ucid)
 }
 
-pub(super) fn admin_shutdown(ctx: &mut Context, lua: MizLua, reset: bool) -> Result<()> {
+pub(super) fn admin_shutdown(ctx: &mut Context, lua: MizLua, reset: Option<Option<Side>>) -> Result<()> {
     let wait = Arc::new((Mutex::new(false), Condvar::new()));
-    if reset {
-        ctx.do_bg_task(Task::ResetState(ctx.miz_state_path.clone()))
+    if let Some(winner) = reset {
+        ctx.do_bg_task(Task::ResetState(ctx.miz_state_path.clone()));
+        ctx.do_bg_task(Task::Stat(StatKind::SessionEnd));
+        ctx.do_bg_task(Task::Stat(StatKind::RoundEnd { winner }));
+        ctx.do_bg_task(Task::RotateStats);
     } else {
         return_lives(lua, ctx, DateTime::<Utc>::MAX_UTC);
         ctx.do_bg_task(Task::SaveState(
             ctx.miz_state_path.clone(),
             ctx.db.persisted.clone(),
         ));
+        ctx.do_bg_task(Task::Stat(StatKind::SessionEnd));
     }
     ctx.do_bg_task(Task::Sync(Arc::clone(&wait)));
     let &(ref lock, ref cvar) = &*wait;
@@ -888,7 +899,7 @@ pub(super) fn run_admin_commands(
                 Ok(()) => reply!("{player} lives reset"),
                 Err(e) => reply!("could not reset {player} lives {:?}", e),
             },
-            AdminCommand::Shutdown => match admin_shutdown(ctx, lua, false) {
+            AdminCommand::Shutdown => match admin_shutdown(ctx, lua, None) {
                 Ok(()) => reply!("shutting down"),
                 Err(e) => reply!("failed to shutdown {:?}", e),
             },
@@ -920,7 +931,7 @@ pub(super) fn run_admin_commands(
                 Ok(()) => reply!("{objective} remark queued"),
                 Err(e) => reply!("could not remark {objective} {e:?}"),
             },
-            AdminCommand::Reset => match admin_shutdown(ctx, lua, true) {
+            AdminCommand::Reset { winner } => match admin_shutdown(ctx, lua, Some(winner)) {
                 Ok(()) => reply!("the state has been reset"),
                 Err(e) => reply!("the state could not be reset {e:?}"),
             },

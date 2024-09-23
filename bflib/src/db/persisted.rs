@@ -49,6 +49,8 @@ pub struct Persisted {
     pub nukes_used: u32,
     #[serde(default)]
     pub logistics_ticks_since_delivery: u32,
+    #[serde(default)]
+    pub seq: u64,
 }
 
 impl Persisted {

@@ -21,6 +21,7 @@ use super::{
     Db, Map,
 };
 use crate::{
+    bg::Task,
     db::{
         logistics::Warehouse,
         objective::{Objective, Zone},
@@ -50,6 +51,7 @@ use enumflags2::BitFlags;
 use fxhash::FxHashSet;
 use log::{debug, error, info};
 use smallvec::SmallVec;
+use tokio::sync::mpsc::UnboundedSender;
 
 impl Db {
     /// objectives are just trigger zones named according to type codes
@@ -258,10 +260,16 @@ impl Db {
         Ok(())
     }
 
-    pub fn init(lua: MizLua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> Result<Self> {
+    pub fn init(
+        lua: MizLua,
+        cfg: Cfg,
+        idx: &MizIndex,
+        miz: &Miz,
+        to_bg: UnboundedSender<Task>,
+    ) -> Result<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
-        t.ephemeral.set_cfg(miz, idx, cfg)?;
+        t.ephemeral.set_cfg(miz, idx, cfg, to_bg)?;
         let mut objective_names = FxHashSet::default();
         for zone in miz.triggers()? {
             let zone = zone?;

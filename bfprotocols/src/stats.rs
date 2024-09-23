@@ -126,4 +126,8 @@ impl Stat {
     pub fn setseq(seq: u64) {
         SEQ.store(seq, Ordering::Relaxed);
     }
+
+    pub fn seq() -> u64 {
+        SEQ.load(Ordering::Relaxed)
+    }
 }

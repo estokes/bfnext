@@ -132,7 +132,7 @@ pub fn log_histogram(h: &Histogram<u64>, name: &str, ns: bool) {
     let d = if ns { 1 } else { 1000 };
     let unit = if ns { "ns" } else { "us" };
     let n = h.len();
-    let mean = h.mean();
+    let mean = h.mean().trunc() as u64 / d;
     let twenty_five = h.value_at_quantile(0.25) / d;
     let fifty = h.value_at_quantile(0.5) / d;
     let ninety = h.value_at_quantile(0.9) / d;

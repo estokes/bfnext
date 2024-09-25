@@ -1,5 +1,10 @@
 ## 0.1.6
 
+- add optional DCS api performance stats tracking. Enable the feature
+  "perf" and the perf::Perf struct will contain hdrhistograms of the
+  time various important DCS api calls take
+
+
 ## 0.1.5
 
 - work around a DCS bug that causes isExist to return true on dead

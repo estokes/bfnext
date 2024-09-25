@@ -139,7 +139,7 @@ pub fn log_histogram(h: &Histogram<u64>, name: &str, ns: bool) {
     let ninety_nine = h.value_at_quantile(0.99) / d;
     let ninety_nine_nine = h.value_at_quantile(0.999) / d;
     info!(
-        "{name} n: {n:>5}, mean: {mean:>5}{unit}, 25th: {twenty_five:>5}{unit}, 50th: {fifty:>5}{unit}, 90th: {ninety:>5}{unit}, 99th: {ninety_nine:>6}{unit}, 99.9th: {ninety_nine_nine:>6}{unit}"
+        "{name} n: {n:>6}, mean: {mean:>5}{unit}, 25th: {twenty_five:>5}{unit}, 50th: {fifty:>5}{unit}, 90th: {ninety:>5}{unit}, 99th: {ninety_nine:>6}{unit}, 99.9th: {ninety_nine_nine:>6}{unit}"
     );
 }
 

@@ -16,7 +16,7 @@ use crate::{
     env::miz::UnitId,
     net::SlotId,
     object::{DcsObject, DcsOid},
-    simple_enum, wrapped_table, LuaEnv, LuaVec2, LuaVec3, MizLua, Position3, Sequence,
+    record_perf, simple_enum, wrapped_table, LuaEnv, LuaVec2, LuaVec3, MizLua, Position3, Sequence,
 };
 use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
@@ -44,7 +44,10 @@ impl<'lua> Ammo<'lua> {
     }
 
     pub fn display_name(&self) -> Result<String> {
-        Ok(self.t.raw_get::<_, LuaTable>("desc")?.raw_get("displayName")?)
+        Ok(self
+            .t
+            .raw_get::<_, LuaTable>("desc")?
+            .raw_get("displayName")?)
     }
 }
 
@@ -54,11 +57,17 @@ impl<'lua> Unit<'lua> {
     pub fn get_by_name(lua: MizLua<'lua>, name: &str) -> Result<Unit<'lua>> {
         let globals = lua.inner().globals();
         let unit = as_tbl("Unit", None, globals.raw_get("Unit")?)?;
-        Ok(unit.call_function("getByName", name)?)
+        Ok(record_perf!(
+            unit_get_by_name,
+            unit.call_function("getByName", name)?
+        ))
     }
 
     pub fn is_exist(&self) -> Result<bool> {
-        Ok(self.t.call_method("isExist", ())?)
+        Ok(record_perf!(
+            unit_is_exist,
+            self.t.call_method("isExist", ())?
+        ))
     }
 
     pub fn destroy(self) -> Result<()> {
@@ -78,11 +87,14 @@ impl<'lua> Unit<'lua> {
     }
 
     pub fn get_point(&self) -> Result<LuaVec3> {
-        Ok(self.t.call_method("getPoint", ())?)
+        Ok(record_perf!(get_point, self.t.call_method("getPoint", ())?))
     }
 
     pub fn get_position(&self) -> Result<Position3> {
-        Ok(self.t.call_method("getPosition", ())?)
+        Ok(record_perf!(
+            get_position,
+            self.t.call_method("getPosition", ())?
+        ))
     }
 
     pub fn get_ground_position(&self) -> Result<LuaVec2> {
@@ -91,11 +103,14 @@ impl<'lua> Unit<'lua> {
     }
 
     pub fn get_velocity(&self) -> Result<LuaVec3> {
-        Ok(self.t.call_method("getVelocity", ())?)
+        Ok(record_perf!(
+            get_velocity,
+            self.t.call_method("getVelocity", ())?
+        ))
     }
 
     pub fn in_air(&self) -> Result<bool> {
-        Ok(self.t.call_method("inAir", ())?)
+        Ok(record_perf!(in_air, self.t.call_method("inAir", ())?))
     }
 
     pub fn is_active(&self) -> Result<bool> {
@@ -155,7 +170,7 @@ impl<'lua> Unit<'lua> {
     }
 
     pub fn get_ammo(&self) -> Result<Sequence<'lua, Ammo<'lua>>> {
-        Ok(self.t.call_method("getAmmo", ())?)
+        Ok(record_perf!(get_ammo, self.t.call_method("getAmmo", ())?))
     }
 }
 

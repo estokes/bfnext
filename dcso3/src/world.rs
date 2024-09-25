@@ -157,7 +157,7 @@ impl<'lua> World<'lua> {
                     }
                 })?,
         )?;
-        self.t.call_function("addEventHandler", tbl.clone())?;
+        self.t.call_function::<_, ()>("addEventHandler", tbl.clone())?;
         globals.raw_set(id.key(), tbl)?;
         Ok(id)
     }
@@ -167,7 +167,7 @@ impl<'lua> World<'lua> {
         let key = id.key();
         let handler = globals.raw_get(key.clone())?;
         let handler = as_tbl("EventHandler", None, handler)?;
-        self.t.call_function("removeEventHandler", handler)?;
+        self.t.call_function::<_, ()>("removeEventHandler", handler)?;
         globals.raw_remove(key)?;
         Ok(())
     }

@@ -20,7 +20,7 @@ use super::{
     static_object::StaticObject,
     unit::Unit,
 };
-use crate::{simple_enum, wrapped_table, LuaEnv, MizLua, Sequence};
+use crate::{record_perf, simple_enum, wrapped_table, LuaEnv, MizLua, Sequence};
 use anyhow::{anyhow, bail, Result};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
@@ -96,9 +96,11 @@ impl<'lua> Coalition<'lua> {
         category: GroupCategory,
         data: env::miz::Group<'lua>,
     ) -> Result<Group<'lua>> {
-        Ok(self
-            .t
-            .call_function("addGroup", (country, category, data))?)
+        Ok(record_perf!(
+            add_group,
+            self.t
+                .call_function("addGroup", (country, category, data))?
+        ))
     }
 
     pub fn add_static_object(
@@ -106,7 +108,10 @@ impl<'lua> Coalition<'lua> {
         country: Country,
         data: env::miz::Unit<'lua>,
     ) -> Result<Static<'lua>> {
-        let tbl: LuaTable = self.t.call_function("addStaticObject", (country, data))?;
+        let tbl: LuaTable = record_perf!(
+            add_static_object,
+            self.t.call_function("addStaticObject", (country, data))?
+        );
         let mt = tbl
             .get_metatable()
             .ok_or_else(|| anyhow!("returned static object has no meta table"))?;

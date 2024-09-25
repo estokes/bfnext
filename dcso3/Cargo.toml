@@ -12,6 +12,10 @@ readme = "README.md"
 keywords = ["DCS", "gamedev"]
 categories = ["api-bindings", "game-development"]
 
+[features]
+default = []
+perf = []
+
 [dependencies]
 mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
 serde = { workspace = true }
@@ -25,3 +29,5 @@ log = { workspace = true }
 paste = { workspace = true }
 anyhow = { workspace = true }
 fixedstr = { workspace = true }
+hdrhistogram = { workspace = true }
+chrono = { workspace = true }

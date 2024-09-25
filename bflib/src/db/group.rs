@@ -21,7 +21,6 @@ use super::{
 use crate::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     group, group_by_name, group_health, group_mut,
-    perf::{record_perf, PerfInner},
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut, Connected,
 };
@@ -925,7 +924,6 @@ impl Db {
 
     pub fn update_unit_positions_incremental(
         &mut self,
-        perf: &mut PerfInner,
         lua: MizLua,
         now: DateTime<Utc>,
         mut last: usize,
@@ -939,7 +937,7 @@ impl Db {
                 uids.push(elts[last]);
                 last += 1;
             }
-            Ok((last, self.update_unit_positions(perf, lua, now, &uids)?))
+            Ok((last, self.update_unit_positions(lua, now, &uids)?))
         } else {
             Ok((0, vec![]))
         }
@@ -947,7 +945,6 @@ impl Db {
 
     pub fn update_unit_positions(
         &mut self,
-        perf: &mut PerfInner,
         lua: MizLua,
         now: DateTime<Utc>,
         units: &[UnitId],
@@ -978,9 +975,7 @@ impl Db {
                     continue;
                 }
             };
-            let ts = Utc::now();
             let pos = instance.get_position()?;
-            record_perf(&mut perf.get_position, ts);
             let spunit = unit_mut!(self, uid)?;
             if (spunit.position.p.0 - pos.p.0).magnitude_squared() > 1.0 {
                 moved.push(spunit.group);

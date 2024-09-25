@@ -388,7 +388,7 @@ impl Db {
                 } = &obj.kind
                 {
                     spctx
-                        .move_farp_pad(perf, idx, obj.owner, &pad_template, pos)
+                        .move_farp_pad(idx, obj.owner, &pad_template, pos)
                         .context("moving farp pad")?;
                     self.ephemeral.set_pad_template_used(pad_template.clone());
                 }

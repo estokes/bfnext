@@ -8,7 +8,7 @@ name = "bflib"
 crate-type = ["cdylib"]
 
 [dependencies]
-dcso3 = { version = "0.1", path = "../dcso3" }
+dcso3 = { version = "0.1", path = "../dcso3", features = ["perf"] }
 chrono = { workspace = true }
 mlua = { version = "0.9.8", features = ["lua51", "module", "serialize"] }
 serde = { workspace = true }

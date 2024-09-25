@@ -23,7 +23,6 @@ use crate::{
         Db, Set,
     },
     msgq::MsgTyp,
-    perf::PerfInner,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
     Context,
@@ -311,7 +310,6 @@ impl FromStr for AdminCommand {
 
 fn admin_spawn(
     ctx: &mut Context,
-    perf: &mut PerfInner,
     lua: MizLua,
     id: PlayerId,
     key: String,
@@ -427,7 +425,7 @@ fn admin_spawn(
                     match &spec.logistics {
                         Some(parts) => {
                             ctx.db
-                                .add_farp(perf, &spctx, &ctx.idx, side, pos, &spec, parts)
+                                .add_farp(&spctx, &ctx.idx, side, pos, &spec, parts)
                                 .context("adding farp")?;
                         }
                         None => {
@@ -761,7 +759,6 @@ fn remark(ctx: &mut Context, objective: &String) -> Result<()> {
 
 pub(super) fn run_admin_commands(
     ctx: &mut Context,
-    perf: &mut PerfInner,
     lua: MizLua,
 ) -> Result<()> {
     let mut cmds = mem::take(&mut ctx.admin_commands);
@@ -834,7 +831,7 @@ pub(super) fn run_admin_commands(
                 }
             }
             AdminCommand::Spawn { key } => {
-                if let Err(e) = admin_spawn(ctx, perf, lua, id, key) {
+                if let Err(e) = admin_spawn(ctx, lua, id, key) {
                     reply!("could not spawn {:?}", e)
                 }
             }

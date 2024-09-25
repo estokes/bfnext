@@ -290,7 +290,10 @@ impl Context {
     fn log_perf(&mut self, now: DateTime<Utc>) {
         if now - self.last_perf_log > Duration::seconds(60) {
             self.last_perf_log = now;
-            self.do_bg_task(bg::Task::LogPerf(unsafe { Perf::get_mut() }.clone()));
+            self.do_bg_task(bg::Task::LogPerf(
+                unsafe { Perf::get_mut() }.clone(),
+                unsafe { dcso3::perf::Perf::get_mut() }.clone(),
+            ));
             info!("landcache {}", self.landcache.stats())
         }
     }
@@ -525,7 +528,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         }
                     }
                 }
-                if let Err(e) = ctx.db.player_left_unit(perf, lua, start_ts, &unit) {
+                if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &unit) {
                     error!("player left unit failed {:?} {:?}", unit, e)
                 }
             }
@@ -997,7 +1000,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     force_players_to_spectators(ctx, &net, ts);
     match ctx
         .db
-        .update_unit_positions_incremental(perf, lua, ts, ctx.last_unit_position)
+        .update_unit_positions_incremental(lua, ts, ctx.last_unit_position)
     {
         Err(e) => error!("could not update unit positions {e}"),
         Ok((i, dead)) => {
@@ -1013,7 +1016,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let ts = Utc::now();
     match ctx
         .db
-        .update_player_positions_incremental(perf, lua, ts, ctx.last_player_position)
+        .update_player_positions_incremental(lua, ts, ctx.last_player_position)
     {
         Err(e) => error!("could not update player positions {e}"),
         Ok((i, dead)) => {
@@ -1057,7 +1060,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     let now = Utc::now();
     match ctx
         .jtac
-        .update_target_positions(perf, lua, now, &mut ctx.db)
+        .update_target_positions(lua, now, &mut ctx.db)
     {
         Err(e) => error!("error updating jtac target positions {:?}", e),
         Ok(dead) => {
@@ -1076,7 +1079,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = ctx.db.logistics_step(lua, perf, ts) {
         error!("error running logistics events {e:?}")
     }
-    if let Err(e) = run_admin_commands(ctx, perf, lua) {
+    if let Err(e) = run_admin_commands(ctx, lua) {
         error!("failed to run admin commands {e:?}")
     }
     if let Err(e) = run_action_commands(ctx, perf, lua) {

@@ -22,7 +22,7 @@ use crate::{
         player::InstancedPlayer,
         Db, JtDesc,
     },
-    landcache::LandCache, perf::PerfInner,
+    landcache::LandCache,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -1025,7 +1025,6 @@ impl Jtacs {
 
     pub fn update_target_positions(
         &mut self,
-        perf: &mut PerfInner,
         lua: MizLua,
         now: DateTime<Utc>,
         db: &mut Db,
@@ -1039,10 +1038,10 @@ impl Jtacs {
             }
         }
         let mut dead = db
-            .update_unit_positions(perf, lua, now, &units)
+            .update_unit_positions(lua, now, &units)
             .context("updating the position of jtac targets")?;
         dead.extend(
-            db.update_player_positions(perf, lua, now, &players)
+            db.update_player_positions(lua, now, &players)
                 .context("updating the position of player jtac targets")?
                 .into_iter(),
         );

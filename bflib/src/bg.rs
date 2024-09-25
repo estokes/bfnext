@@ -179,7 +179,7 @@ pub(super) enum Task {
     ResetState(PathBuf),
     SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
-    LogPerf(Perf),
+    LogPerf(Perf, dcso3::perf::Perf),
     Sync(Arc<(Mutex<bool>, Condvar)>),
 }
 
@@ -229,7 +229,10 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                 Err(e) => error!("failed to save config {e:?}"),
             },
             Task::WriteLog(mut buf) => log_file.write_all_buf(&mut buf).await.unwrap(),
-            Task::LogPerf(perf) => perf.log(),
+            Task::LogPerf(perf, api_perf) => {
+                perf.log();
+                api_perf.log();
+            },
             Task::Sync(a) => {
                 let &(ref lock, ref cvar) = &*a;
                 let mut synced = lock.lock();

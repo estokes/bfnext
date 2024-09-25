@@ -855,7 +855,7 @@ impl Ephemeral {
                 format_compact!("removing junk before spawn of {}", group.template_name)
             })?;
             let spawned = spctx
-                .spawn(perf, template)
+                .spawn(template)
                 .with_context(|| format_compact!("spawning template {}", group.template_name))?;
             match &spawned {
                 Spawned::Static => (),

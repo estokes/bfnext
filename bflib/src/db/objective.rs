@@ -21,7 +21,12 @@ use super::{
     Db, Map, Set,
 };
 use crate::{
-    cfg::{Deployable, DeployableLogistics, UnitTag}, group, group_health, group_mut, landcache::LandCache, maybe, objective, objective_mut, perf::PerfInner, spawnctx::{Despawn, SpawnCtx, SpawnLoc}, unit, unit_mut
+    cfg::{Deployable, DeployableLogistics, UnitTag},
+    group, group_health, group_mut,
+    landcache::LandCache,
+    maybe, objective, objective_mut,
+    spawnctx::{Despawn, SpawnCtx, SpawnLoc},
+    unit, unit_mut,
 };
 use anyhow::{anyhow, Context, Result};
 use chrono::{prelude::*, Duration};
@@ -463,7 +468,6 @@ impl Db {
 
     pub fn add_farp(
         &mut self,
-        perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -505,7 +509,7 @@ impl Db {
             .ok_or_else(|| anyhow!("not enough farp pads available to build this farp"))?;
         // move the pad to the new location
         spctx
-            .move_farp_pad(perf, idx, side, pad_template.as_str(), pos)
+            .move_farp_pad(idx, side, pad_template.as_str(), pos)
             .context("moving farp pad")?;
         // delay the spawn of the other components so the unpacker can
         // get out of the way

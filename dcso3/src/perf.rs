@@ -114,10 +114,10 @@ impl Perf {
     pub fn log(&self) {
         log_histogram(&self.get_position, "Unit.getPosition:          ", false);
         log_histogram(&self.get_velocity, "Unit.getVelocity:          ", false);
-        log_histogram(&self.unit_get_by_name, "Unit.getByName:            ", true);
+        log_histogram(&self.unit_get_by_name, "Unit.getByName:            ", false);
         log_histogram(&self.unit_get_desc, "Unit.getDesc:              ", false);
-        log_histogram(&self.unit_is_exist, "Unit.isExist:              ", true);
-        log_histogram(&self.in_air, "Unit.inAir:                ", true);
+        log_histogram(&self.unit_is_exist, "Unit.isExist:              ", false);
+        log_histogram(&self.in_air, "Unit.inAir:                ", false);
         log_histogram(&self.get_ammo, "Unit.getAmmo:              ", false);
         log_histogram(&self.add_group, "Coalition.addGroup:        ", false);
         log_histogram(

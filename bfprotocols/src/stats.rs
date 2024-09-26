@@ -43,6 +43,11 @@ pub enum StatKind {
         id: ObjectiveId,
         ucid: Ucid,
     },
+    SupplyTransfer {
+        from: ObjectiveId,
+        to: ObjectiveId,
+        ucid: Ucid,
+    },
     Action {
         by: Ucid,
         action: Action,

@@ -21,6 +21,7 @@ use super::{
     Db,
 };
 use crate::{
+    bg::Task,
     db::group::DeployKind,
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -30,18 +31,20 @@ use anyhow::{anyhow, bail, Result};
 use bfprotocols::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     db::objective::{ObjectiveId, ObjectiveKind},
+    stats::StatKind,
 };
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     azumith2d, azumith2d_to, azumith3d, centroid2d,
     coalition::Side,
+    coord::Coord,
     env::miz::{Miz, MizIndex, UnitInfo},
     land::Land,
     net::{SlotId, Ucid},
     radians_to_degrees,
     trigger::Trigger,
-    LuaVec2, MizLua, Position3, String, Vector2,
+    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
@@ -444,12 +447,7 @@ impl Db {
         Ok((n, oldest))
     }
 
-    pub fn unpakistan(
-        &mut self,
-        lua: MizLua,
-        idx: &MizIndex,
-        slot: &SlotId,
-    ) -> Result<Unpakistan> {
+    pub fn unpakistan(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Unpakistan> {
         #[derive(Clone)]
         struct Cifo {
             pos: Vector2,
@@ -777,6 +775,10 @@ impl Db {
                 } else {
                     self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
+                    self.ephemeral.do_bg(Task::Stat(StatKind::Repair {
+                        id: oid,
+                        ucid: st.ucid,
+                    }));
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_repair) {
                         self.adjust_points(&st.ucid, amount as i32, "for logistics repair");
                     }
@@ -802,6 +804,11 @@ impl Db {
                 {
                     self.transfer_supplies(lua, from, to)?;
                     self.delete_group(&gid)?;
+                    self.ephemeral.do_bg(Task::Stat(StatKind::SupplyTransfer {
+                        from,
+                        to,
+                        ucid: st.ucid,
+                    }));
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_transfer) {
                         self.adjust_points(&st.ucid, amount as i32, "for supply transfer");
                     }
@@ -834,47 +841,64 @@ impl Db {
                     let spctx = SpawnCtx::new(lua)?;
                     match enforce_deploy_limits(self, st.side, &spec, &dep, &st.ucid) {
                         Err(e) => reasons.push(format_compact!("{e}")),
-                        Ok(()) => match &spec.logistics {
-                            Some(parts) => {
-                                for cr in have.values().flat_map(|c| c.iter()) {
-                                    self.delete_group(&cr.group)?
+                        Ok(()) => {
+                            self.ephemeral.do_bg(Task::Stat(StatKind::Deploy {
+                                ucid: st.ucid,
+                                pos: Coord::singleton(lua)?
+                                    .lo_to_ll(LuaVec3(Vector3::new(centroid.x, 0., centroid.y)))?,
+                                deployable: spec.clone(),
+                            }));
+                            match &spec.logistics {
+                                Some(parts) => {
+                                    for cr in have.values().flat_map(|c| c.iter()) {
+                                        self.delete_group(&cr.group)?
+                                    }
+                                    let oid = self.add_farp(
+                                        lua, &spctx, idx, st.side, centroid, &spec, parts,
+                                    )?;
+                                    self.adjust_points(
+                                        &st.ucid,
+                                        -(spec.cost as i32),
+                                        "for farp spawn",
+                                    );
+                                    let name = objective!(self, oid)?.name.clone();
+                                    return Ok(Unpakistan::UnpackedFarp(name));
                                 }
-                                let oid =
-                                    self.add_farp(lua, &spctx, idx, st.side, centroid, &spec, parts)?;
-                                self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
-                                let name = objective!(self, oid)?.name.clone();
-                                return Ok(Unpakistan::UnpackedFarp(name));
-                            }
-                            None => {
-                                let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
-                                let spawnloc =
-                                    compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
-                                let origin = DeployKind::Deployed {
-                                    player: st.ucid.clone(),
-                                    moved_by: None,
-                                    spec: spec.clone(),
-                                };
-                                let _gid = self.add_and_queue_group(
-                                    &spctx,
-                                    idx,
-                                    st.side,
-                                    spawnloc,
-                                    &*spec.template,
-                                    origin,
-                                    BitFlags::empty(),
-                                    None,
-                                )?;
-                                for cr in have.values().flat_map(|c| c.iter()) {
-                                    self.delete_group(&cr.group)?
+                                None => {
+                                    let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
+                                    let spawnloc = compute_positions(
+                                        self,
+                                        &have,
+                                        centroid,
+                                        azumith3d(pos.x.0),
+                                    )?;
+                                    let origin = DeployKind::Deployed {
+                                        player: st.ucid.clone(),
+                                        moved_by: None,
+                                        spec: spec.clone(),
+                                    };
+                                    let _gid = self.add_and_queue_group(
+                                        &spctx,
+                                        idx,
+                                        st.side,
+                                        spawnloc,
+                                        &*spec.template,
+                                        origin,
+                                        BitFlags::empty(),
+                                        None,
+                                    )?;
+                                    for cr in have.values().flat_map(|c| c.iter()) {
+                                        self.delete_group(&cr.group)?
+                                    }
+                                    self.adjust_points(
+                                        &st.ucid,
+                                        -(spec.cost as i32),
+                                        &format_compact!("for {dep} unpack"),
+                                    );
+                                    return Ok(Unpakistan::Unpacked(dep));
                                 }
-                                self.adjust_points(
-                                    &st.ucid,
-                                    -(spec.cost as i32),
-                                    &format_compact!("for {dep} unpack"),
-                                );
-                                return Ok(Unpakistan::Unpacked(dep));
                             }
-                        },
+                        }
                     }
                 }
             }

@@ -36,14 +36,12 @@ pub enum StatKind {
     },
     Capture {
         id: ObjectiveId,
-        ucid: Ucid,
+        ucids: SmallVec<[Ucid; 4]>,
         side: Side,
-        points: usize,
     },
     Repair {
         id: ObjectiveId,
         ucid: Ucid,
-        points: usize,
     },
     Action {
         by: Ucid,
@@ -59,18 +57,25 @@ pub enum StatKind {
         pos: LLPos,
         troop: Troop,
     },
-    ObjectiveStatus {
+    ObjectiveHealth {
         id: ObjectiveId,
+        last_change: DateTime<Utc>,
         health: u8,
         logi: u8,
+    },
+    ObjectiveSupply {
+        id: ObjectiveId,
         supply: u8,
         fuel: u8,
+    },
+    ObjectiveDestroyed {
+        id: ObjectiveId,
     },
     PlayerRegister {
         name: String,
         ucid: Ucid,
         side: Side,
-        points: usize,
+        initial_points: usize,
     },
     PlayerSideswitch {
         ucid: Ucid,
@@ -98,7 +103,16 @@ pub enum StatKind {
     Kill {
         shots: Dead,
         team_kill: bool,
-        points: SmallVec<[(Ucid, usize); 2]>,
+    },
+    Points {
+        ucid: Ucid,
+        points: i32,
+        reason: String
+    },
+    PointsTransfer {
+        from: Ucid,
+        to: Ucid,
+        points: u32,
     },
     Bind {
         ucid: Ucid,

@@ -121,7 +121,7 @@ pub(super) struct Production {
 pub struct Ephemeral {
     pub(super) dirty: bool,
     pub cfg: Arc<Cfg>,
-    pub to_bg: Option<UnboundedSender<Task>>,
+    to_bg: Option<UnboundedSender<Task>>,
     pub(super) players_by_slot: IndexMap<SlotId, Ucid, FxBuildHasher>,
     pub(super) cargo: FxHashMap<SlotId, Cargo>,
     pub(super) deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,

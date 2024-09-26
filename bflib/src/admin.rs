@@ -314,12 +314,7 @@ impl FromStr for AdminCommand {
     }
 }
 
-fn admin_spawn(
-    ctx: &mut Context,
-    lua: MizLua,
-    id: PlayerId,
-    key: String,
-) -> Result<()> {
+fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Result<()> {
     let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
     let act = Trigger::singleton(lua)?.action()?;
     let spctx = SpawnCtx::new(lua)?;
@@ -431,7 +426,7 @@ fn admin_spawn(
                     match &spec.logistics {
                         Some(parts) => {
                             ctx.db
-                                .add_farp(&spctx, &ctx.idx, side, pos, &spec, parts)
+                                .add_farp(lua, &spctx, &ctx.idx, side, pos, &spec, parts)
                                 .context("adding farp")?;
                         }
                         None => {
@@ -670,7 +665,11 @@ fn admin_reset_lives(ctx: &mut Context, player: &String) -> Result<()> {
     ctx.db.player_reset_lives(&ucid)
 }
 
-pub(super) fn admin_shutdown(ctx: &mut Context, lua: MizLua, reset: Option<Option<Side>>) -> Result<()> {
+pub(super) fn admin_shutdown(
+    ctx: &mut Context,
+    lua: MizLua,
+    reset: Option<Option<Side>>,
+) -> Result<()> {
     let wait = Arc::new((Mutex::new(false), Condvar::new()));
     if let Some(winner) = reset {
         ctx.do_bg_task(Task::ResetState(ctx.miz_state_path.clone()));
@@ -767,10 +766,7 @@ fn remark(ctx: &mut Context, objective: &String) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn run_admin_commands(
-    ctx: &mut Context,
-    lua: MizLua,
-) -> Result<()> {
+pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     let mut cmds = mem::take(&mut ctx.admin_commands);
     for (id, cmd) in cmds.drain(..) {
         macro_rules! reply {

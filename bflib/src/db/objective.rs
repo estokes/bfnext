@@ -21,6 +21,7 @@ use super::{
     Db, Map, Set,
 };
 use crate::{
+    bg::Task,
     group, group_health, group_mut,
     landcache::LandCache,
     maybe, objective, objective_mut,
@@ -31,6 +32,7 @@ use anyhow::{anyhow, Context, Result};
 use bfprotocols::{
     cfg::{Deployable, DeployableLogistics, UnitTag},
     db::objective::{ObjectiveId, ObjectiveKind},
+    stats::StatKind,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
@@ -420,12 +422,15 @@ impl Db {
         self.persisted.farps.remove_cow(oid);
         self.ephemeral.airbase_by_oid.remove(oid);
         self.ephemeral.remove_objective_markup(oid);
+        self.ephemeral
+            .do_bg(Task::Stat(StatKind::ObjectiveDestroyed { id: *oid }));
         self.ephemeral.dirty();
         Ok(())
     }
 
     pub fn add_farp(
         &mut self,
+        lua: MizLua,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -551,6 +556,14 @@ impl Db {
                 self.persisted.objectives_by_group.insert_cow(*gid, oid);
             }
         }
+        let pos = obj.zone.pos();
+        let llpos = Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
+        self.ephemeral.do_bg(Task::Stat(StatKind::Objective {
+            id: obj.id,
+            kind: obj.kind.clone(),
+            owner: obj.owner,
+            pos: llpos,
+        }));
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.persisted.farps.insert_cow(oid);
@@ -594,6 +607,12 @@ impl Db {
             obj.last_change_ts = now;
             (obj.kind.clone(), health, logi)
         };
+        self.ephemeral.do_bg(Task::Stat(StatKind::ObjectiveHealth {
+            id: *oid,
+            last_change: now,
+            health,
+            logi,
+        }));
         if let ObjectiveKind::Farp { .. } = &kind {
             if logi == 0 {
                 self.delete_objective(oid)?;
@@ -1067,10 +1086,15 @@ impl Db {
                         }
                     }
                 }
+                self.ephemeral.do_bg(Task::Stat(StatKind::Capture {
+                    id: oid,
+                    side: new_owner,
+                    ucids: ucids.clone(),
+                }));
                 if let Some(points) = self.ephemeral.cfg.points.as_ref() {
                     let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
-                    for ucid in ucids {
-                        self.adjust_points(&ucid, ppp, &format!("for capturing {name}"));
+                    for ucid in &ucids {
+                        self.adjust_points(ucid, ppp, &format!("for capturing {name}"));
                     }
                 }
                 let obj = objective!(self, oid)?;

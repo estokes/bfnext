@@ -840,7 +840,7 @@ impl Db {
                                     self.delete_group(&cr.group)?
                                 }
                                 let oid =
-                                    self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
+                                    self.add_farp(lua, &spctx, idx, st.side, centroid, &spec, parts)?;
                                 self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name));

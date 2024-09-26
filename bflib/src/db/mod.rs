@@ -20,7 +20,7 @@ use crate::{bg::Task, db::ephemeral::Ephemeral, jtac::JtId};
 use anyhow::{anyhow, Result};
 use bfprotocols::{cfg::{
     Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg, Troop,
-}, stats::Stat};
+}, db::objective::ObjectiveId, stats::Stat};
 use dcso3::{
     centroid3d,
     coalition::Side,
@@ -182,6 +182,7 @@ impl Db {
             ephemeral: Ephemeral::default(),
         };
         Stat::setseq(db.persisted.seq);
+        ObjectiveId::setseq(db.persisted.oid);
         db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?, to_bg)?;
         Ok(db)
     }
@@ -189,6 +190,7 @@ impl Db {
     pub fn maybe_snapshot(&mut self) -> Option<Persisted> {
         if self.ephemeral.take_dirty() {
             self.persisted.seq = Stat::seq();
+            self.persisted.oid = ObjectiveId::seq();
             Some(self.persisted.clone())
         } else {
             None

@@ -51,6 +51,8 @@ pub struct Persisted {
     pub logistics_ticks_since_delivery: u32,
     #[serde(default)]
     pub seq: u64,
+    #[serde(default)]
+    pub oid: i64,
 }
 
 impl Persisted {

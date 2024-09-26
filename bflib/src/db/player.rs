@@ -18,11 +18,7 @@ use super::{
     group::{DeployKind, GroupId},
     Db, Map, Set,
 };
-use crate::{
-    cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
-    maybe, maybe_mut, objective_mut,
-    shots::Dead,
-};
+use crate::{maybe, maybe_mut, objective_mut, shots::Dead};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},

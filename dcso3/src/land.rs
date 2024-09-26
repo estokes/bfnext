@@ -12,7 +12,7 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use super::{as_tbl, cvt_err, LuaVec3};
-use crate::{simple_enum, wrapped_table, LuaEnv, LuaVec2, MizLua, Sequence};
+use crate::{record_perf, simple_enum, wrapped_table, LuaEnv, LuaVec2, MizLua, Sequence};
 use anyhow::Result;
 use mlua::{prelude::*, Value};
 use na::Vector2;
@@ -41,7 +41,7 @@ impl<'lua> Land<'lua> {
     }
 
     pub fn get_height(&self, p: LuaVec2) -> Result<f64> {
-        Ok(self.t.call_function("getHeight", p)?)
+        Ok(record_perf!(land_get_height, self.t.call_function("getHeight", p)?))
     }
 
     pub fn get_surface_height_with_seabed(&self, p: LuaVec2) -> Result<(f64, f64)> {
@@ -53,7 +53,7 @@ impl<'lua> Land<'lua> {
     }
 
     pub fn is_visible(&self, origin: LuaVec3, destination: LuaVec3) -> Result<bool> {
-        Ok(self.t.call_function("isVisible", (origin, destination))?)
+        Ok(record_perf!(land_is_visible, self.t.call_function("isVisible", (origin, destination))?))
     }
 
     pub fn get_ip(&self, origin: LuaVec3, direction: LuaVec3, distance: f64) -> Result<LuaVec3> {

@@ -58,6 +58,8 @@ pub struct PerfInner {
     pub unit_is_exist: Histogram<u64>,
     pub unit_get_by_name: Histogram<u64>,
     pub unit_get_desc: Histogram<u64>,
+    pub land_is_visible: Histogram<u64>,
+    pub land_get_height: Histogram<u64>,
 }
 
 #[derive(Debug)]
@@ -92,6 +94,8 @@ impl Default for Perf {
             unit_is_exist: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             unit_get_by_name: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             unit_get_desc: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            land_is_visible: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            land_get_height: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
         }))
     }
 }
@@ -125,6 +129,8 @@ impl Perf {
             "Coalition.addStaticObject: ",
             false,
         );
+        log_histogram(&self.add_group, "Land.isVisible:            ", false);
+        log_histogram(&self.add_group, "Land.getHeight:            ", false);
     }
 }
 

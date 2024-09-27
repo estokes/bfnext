@@ -129,8 +129,8 @@ impl Perf {
             "Coalition.addStaticObject: ",
             false,
         );
-        log_histogram(&self.add_group, "Land.isVisible:            ", false);
-        log_histogram(&self.add_group, "Land.getHeight:            ", false);
+        log_histogram(&self.land_is_visible, "Land.isVisible:            ", false);
+        log_histogram(&self.land_get_height, "Land.getHeight:            ", false);
     }
 }
 

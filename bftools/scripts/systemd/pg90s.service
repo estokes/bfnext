@@ -1,0 +1,12 @@
+[Unit]
+After=tigervnc.service
+Description=Start up PG 90s
+
+[Service]
+Type=simple
+User=dcs
+Environment="DISPLAY=:1"
+ExecStart=/home/dcs/bin/dcs pg_90s miz/Scenarios/90s/PG PG.miz true
+
+[Install]
+WantedBy=multi-user.target

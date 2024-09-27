@@ -1136,7 +1136,7 @@
         "crates": [
           {
             "name": "Roland",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1163,7 +1163,7 @@
         "crates": [
           {
             "name": "Hawk Launcher",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": "Hawk ln",
             "max_drop_height_agl": 10,
@@ -1171,7 +1171,7 @@
           },
           {
             "name": "Hawk Search Radar",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": "Hawk sr",
             "max_drop_height_agl": 10,
@@ -1179,7 +1179,7 @@
           },
           {
             "name": "Hawk Track Radar",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": "Hawk tr",
             "max_drop_height_agl": 10,
@@ -1187,7 +1187,7 @@
           },
           {
             "name": "Hawk CC",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": "Hawk pcp",
             "max_drop_height_agl": 10,
@@ -1196,7 +1196,7 @@
         ],
         "repair_crate": {
           "name": "Hawk Repair",
-          "weight": 800,
+          "weight": 1500,
           "required": 1,
           "pos_unit": null,
           "max_drop_height_agl": 10,
@@ -1221,7 +1221,7 @@
         "crates": [
           {
             "name": "Avenger Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1246,7 +1246,7 @@
         "crates": [
           {
             "name": "Linebacker Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1271,7 +1271,7 @@
         "crates": [
           {
             "name": "Flakpanzergepard Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1296,7 +1296,7 @@
         "crates": [
           {
             "name": "Vulkan Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1321,7 +1321,7 @@
         "crates": [
           {
             "name": "Firtina Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1346,7 +1346,7 @@
         "crates": [
           {
             "name": "Bradley Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1373,7 +1373,7 @@
         "crates": [
           {
             "name": "Leopard Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1400,7 +1400,7 @@
         "crates": [
           {
             "name": "Ammo Truck Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 20,
@@ -1425,7 +1425,7 @@
         "crates": [
           {
             "name": "FPS-117 Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 1,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1451,7 +1451,7 @@
         "crates": [
           {
             "name": "FARP Crate",
-            "weight": 800,
+            "weight": 1500,
             "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 10,
@@ -1537,7 +1537,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 500,
+        "weight": 800,
         "cost": 0,
         "jtac": {
           "range": 8000
@@ -1550,7 +1550,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 500,
+        "weight": 1000,
         "cost": 2,
         "jtac": {
           "range": 8000
@@ -1563,7 +1563,7 @@
         "can_capture": true,
         "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 500,
+        "weight": 1200,
         "cost": 5,
         "jtac": {
           "range": 8000

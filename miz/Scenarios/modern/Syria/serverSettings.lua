@@ -29,7 +29,7 @@ cfg =
         ["allow_trial_only_clients"] = false,
         ["allow_dynamic_radio"] = false,
     }, -- end of ["advanced"]
-    ["port"] = 10308,
+    ["port"] = 10317,
     ["mode"] = 0,
     ["bind_address"] = "135.125.189.202",
     ["isPublic"] = true,

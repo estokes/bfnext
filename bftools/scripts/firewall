@@ -7,6 +7,10 @@ DCS_PORT3=10311
 DCS_PORT4=10312
 DCS_PORT5=10313
 DCS_PORT6=10314
+DCS_PORT7=10315
+DCS_PORT8=10316
+DCS_PORT9=10317
+DCS_PORT10=10318
 SRS_PORT0=5002
 SRS_PORT1=5003
 SRS_PORT2=5004
@@ -14,6 +18,10 @@ SRS_PORT3=5005
 SRS_PORT4=5006
 SRS_PORT5=5007
 SRS_PORT6=5008
+SRS_PORT7=5009
+SRS_PORT8=5010
+SRS_PORT9=5011
+SRS_PORT10=5012
 WAN=eno1
 PATH=/sbin:${PATH}
 
@@ -39,6 +47,14 @@ function start() {
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT5 -j ACCEPT
     iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT6 -j ACCEPT
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT6 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT7 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT7 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT8 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT8 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT9 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT9 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT10 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT10 -j ACCEPT
 
     # SRS Server
     iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT0 -j ACCEPT
@@ -55,6 +71,14 @@ function start() {
     iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT5 -j ACCEPT
     iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT6 -j ACCEPT
     iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT6 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT7 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT7 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT8 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT8 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT9 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT9 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT10 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT10 -j ACCEPT
 
     # SSH
     iptables -A INPUT -i $WAN -p tcp --dport 22 -j ACCEPT

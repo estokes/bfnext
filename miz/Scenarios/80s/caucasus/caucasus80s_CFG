@@ -59,7 +59,7 @@
       },
       "Blue": {
         "name": "Supply Transfer",
-        "weight": 800,
+        "weight": 1500,
         "required": 1,
         "pos_unit": null,
         "max_drop_height_agl": 10,

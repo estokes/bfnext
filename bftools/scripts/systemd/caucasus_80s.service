@@ -6,7 +6,7 @@ Description=Start up Caucasus 80s
 Type=simple
 User=dcs
 Environment="DISPLAY=:1"
-ExecStart=/home/dcs/bin/dcs caucasus_80s miz/Scenarios/80s/caucasus Caucasus.miz true
+ExecStart=/home/dcs/bin/dcs caucasus_80s miz/Scenarios/80s/caucasus Caucasus.miz true false
 
 [Install]
 WantedBy=multi-user.target

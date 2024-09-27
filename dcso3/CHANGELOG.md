@@ -1,3 +1,7 @@
+## 0.1.7
+
+- add stats for Land.isVisible and Land.getHeight
+
 ## 0.1.6
 
 - add optional DCS api performance stats tracking. Enable the feature

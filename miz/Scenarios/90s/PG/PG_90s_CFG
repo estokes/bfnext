@@ -660,7 +660,7 @@
     "MosquitoFBMkVI": {
       "troop_slots": 1,
       "crate_slots": 1,
-      "total_slots": 1
+      "total_slots": 2
     },
     "MB-339A": {
       "troop_slots": 0,
@@ -995,6 +995,31 @@
         "crates": [
           {
             "name": "MSTA Crate",
+            "weight": 1500,
+            "required": 2,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 25,
+        "ewr": null,
+        "jtac": null
+      },
+	  {
+        "path": [
+          "Ground Units",
+          "Hilux"
+        ],
+        "template": "DEPRHILUX",
+        "persist": "Forever",
+        "limit": 15,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Hilux Crate",
             "weight": 1500,
             "required": 2,
             "pos_unit": null,
@@ -1422,6 +1447,31 @@
         "crates": [
           {
             "name": "Firtina Crate",
+            "weight": 1500,
+            "required": 2,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 25,
+        "ewr": null,
+        "jtac": null
+      },
+	  {
+        "path": [
+          "Ground Units",
+          "Hilux"
+        ],
+        "template": "DEPBHILUX",
+        "persist": "Forever",
+        "limit": 15,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Hilux Crate",
             "weight": 1500,
             "required": 2,
             "pos_unit": null,
@@ -2488,6 +2538,12 @@
       "Aircraft"
     ],
     "SAU Msta": [
+      "Armor",
+      "Artillery",
+      "SmallArms",
+      "Driveable"
+    ],
+	"HL_B8M1": [
       "Armor",
       "Artillery",
       "SmallArms",

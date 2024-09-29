@@ -60,6 +60,11 @@ pub struct PerfInner {
     pub unit_get_desc: Histogram<u64>,
     pub land_is_visible: Histogram<u64>,
     pub land_get_height: Histogram<u64>,
+    pub timer_schedule_function: Histogram<u64>,
+    pub timer_remove_function: Histogram<u64>,
+    pub timer_get_time: Histogram<u64>,
+    pub timer_get_abs_time: Histogram<u64>,
+    pub timer_get_time0: Histogram<u64>,
 }
 
 #[derive(Debug)]
@@ -96,6 +101,11 @@ impl Default for Perf {
             unit_get_desc: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             land_is_visible: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
             land_get_height: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            timer_schedule_function: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            timer_remove_function: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            timer_get_time: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            timer_get_abs_time: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
+            timer_get_time0: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
         }))
     }
 }
@@ -131,13 +141,31 @@ impl Perf {
         );
         log_histogram(&self.land_is_visible, "Land.isVisible:            ", false);
         log_histogram(&self.land_get_height, "Land.getHeight:            ", false);
+        log_histogram(
+            &self.timer_schedule_function,
+            "Timer.scheduleFunction:    ",
+            false,
+        );
+        log_histogram(
+            &self.timer_remove_function,
+            "Timer.removeFunction:      ",
+            false,
+        );
+        log_histogram(&self.timer_get_time, "Timer.getTime:             ", false);
+        log_histogram(
+            &self.timer_get_abs_time,
+            "Timer.getAbsTime:          ",
+            false,
+        );
+        log_histogram(&self.timer_get_time0, "Timer.getTime0:            ", false);
     }
 }
 
 pub fn log_histogram(h: &Histogram<u64>, name: &str, ns: bool) {
+    let n = h.len();
+    if n == 0 { return }
     let d = if ns { 1 } else { 1000 };
     let unit = if ns { "ns" } else { "us" };
-    let n = h.len();
     let mean = h.mean().trunc() as u64 / d;
     let twenty_five = h.value_at_quantile(0.25) / d;
     let fifty = h.value_at_quantile(0.5) / d;

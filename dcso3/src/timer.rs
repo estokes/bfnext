@@ -11,7 +11,7 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.
 */
 
-use crate::{as_tbl, cvt_err, wrap_f, wrapped_table, LuaEnv, MizLua, Time};
+use crate::{as_tbl, cvt_err, record_perf, wrap_f, wrapped_table, LuaEnv, MizLua, Time};
 use anyhow::Result;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -43,15 +43,24 @@ impl<'lua> Timer<'lua> {
     }
 
     pub fn get_time(&self) -> Result<Time> {
-        Ok(self.t.call_function("getTime", ())?)
+        Ok(record_perf!(
+            timer_get_time,
+            self.t.call_function("getTime", ())?
+        ))
     }
 
     pub fn get_abs_time(&self) -> Result<Time> {
-        Ok(self.t.call_function("getAbsTime", ())?)
+        Ok(record_perf!(
+            timer_get_abs_time,
+            self.t.call_function("getAbsTime", ())?
+        ))
     }
 
     pub fn get_time0(&self) -> Result<Time> {
-        Ok(self.t.call_function("getTime0", ())?)
+        Ok(record_perf!(
+            timer_get_time0,
+            self.t.call_function("getTime0", ())?
+        ))
     }
 
     pub fn schedule_function<T, F>(&self, when: Time, arg: T, f: F) -> Result<FunId>
@@ -64,14 +73,23 @@ impl<'lua> Timer<'lua> {
             .create_function(move |lua, (arg, time): (T, Time)| {
                 wrap_f("scheduled function", MizLua(lua), |lua| f(lua, arg, time))
             })?;
-        Ok(self.t.call_function("scheduleFunction", (f, arg, when))?)
+        Ok(record_perf!(
+            timer_schedule_function,
+            self.t.call_function("scheduleFunction", (f, arg, when))?
+        ))
     }
 
     pub fn remove_function(&self, id: FunId) -> Result<()> {
-        Ok(self.t.call_function("removeFunction", id)?)
+        Ok(record_perf!(
+            timer_remove_function,
+            self.t.call_function("removeFunction", id)?
+        ))
     }
 
-    pub fn set_function_fime(&self, id: FunId, when: f64) -> Result<()> {
-        Ok(self.t.call_function("removeFunction", (id, when))?)
+    pub fn set_function_time(&self, id: FunId, when: f64) -> Result<()> {
+        Ok(record_perf!(
+            timer_remove_function,
+            self.t.call_function("removeFunction", (id, when))?
+        ))
     }
 }

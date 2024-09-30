@@ -14,11 +14,6 @@ debug = false
 #lto = "thin"
 #debug = false
 
-[profile.dev]
-opt-level = "s"
-lto = "thin"
-debug = 1
-
 [workspace.dependencies]
 anyhow = "1"
 bytes = "1"

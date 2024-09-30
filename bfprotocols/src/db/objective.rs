@@ -2,19 +2,8 @@ use crate::cfg::Deployable;
 use dcso3::{atomic_id, String};
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use std::sync::atomic::Ordering;
 
 atomic_id!(ObjectiveId);
-
-impl ObjectiveId {
-    pub fn setseq(i: i64) {
-        MAX_OBJECTIVEID_ID.store(i, Ordering::Relaxed)
-    }
-
-    pub fn seq() -> i64 {
-        MAX_OBJECTIVEID_ID.load(Ordering::Relaxed)
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectiveKind {

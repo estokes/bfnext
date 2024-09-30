@@ -1,19 +1,31 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use crate::{
-    cfg::{Action, Deployable, Troop, Vehicle},
-    db::objective::{ObjectiveId, ObjectiveKind},
+    cfg::{Action, Deployable, LifeType, Troop, UnitTags, Vehicle},
+    db::{
+        group::UnitId,
+        objective::{ObjectiveId, ObjectiveKind},
+    },
     shots::Dead,
 };
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side,
-    coord::LLPos,
-    net::{SlotId, Ucid},
-    String, Vector3,
+    coalition::Side, coord::LLPos, net::{SlotId, Ucid}, warehouse::LiquidType, String, Vector3
 };
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Unit {
+    typ: Vehicle,
+    tags: UnitTags,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Pos {
+    pos: LLPos,
+    altitude: f32,
+    velocity: Vector3,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -36,7 +48,7 @@ pub enum StatKind {
     },
     Capture {
         id: ObjectiveId,
-        ucids: SmallVec<[Ucid; 4]>,
+        ucids: SmallVec<[Ucid; 1]>,
         side: Side,
     },
     Repair {
@@ -47,6 +59,11 @@ pub enum StatKind {
         from: ObjectiveId,
         to: ObjectiveId,
         ucid: Ucid,
+    },
+    Inventory {
+        id: ObjectiveId,
+        equipment: Vec<(String, u32)>,
+        liquids: Vec<(LiquidType, u32)>
     },
     Action {
         by: Ucid,
@@ -89,21 +106,41 @@ pub enum StatKind {
     Slot {
         ucid: Ucid,
         slot: SlotId,
-        aircraft: Option<Vehicle>,
+        typ: Option<Unit>,
     },
-    Position {
-        ucid: Option<Ucid>,
-        pos: LLPos,
-        altitude: f32,
-        velocity: Vector3,
+    Deslot {
+        ucid: Ucid,
+    },
+    Unit {
+        id: UnitId,
+        typ: Unit,
+    },
+    PlayerPosition {
+        id: SlotId,
+        pos: Pos,
+    },
+    UnitPosition {
+        id: UnitId,
+        pos: Pos,
+    },
+    PlayerDetected {
+        id: SlotId,
+        detected: bool
+    },
+    UnitDetected {
+        id: UnitId,
+        detected: bool,
     },
     Takeoff {
-        ucid: Ucid,
-        aircraft: Vehicle,
+        id: SlotId,
     },
     Land {
+        id: SlotId,
+    },
+    Life {
         ucid: Ucid,
-        life_returned: bool,
+        typ: LifeType,
+        n: i8,
     },
     Kill {
         shots: Dead,
@@ -112,7 +149,7 @@ pub enum StatKind {
     Points {
         ucid: Ucid,
         points: i32,
-        reason: String
+        reason: String,
     },
     PointsTransfer {
         from: Ucid,

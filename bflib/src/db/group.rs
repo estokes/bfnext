@@ -21,6 +21,7 @@ use crate::{
     unit, unit_by_name, unit_mut, Connected,
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::db::group::{GroupId, UnitId};
 use bfprotocols::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     db::objective::ObjectiveId,
@@ -28,7 +29,7 @@ use bfprotocols::{
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    atomic_id, azumith3d, centroid2d, centroid3d, change_heading,
+    azumith3d, centroid2d, centroid3d, change_heading,
     coalition::Side,
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
@@ -44,13 +45,9 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{error, warn};
-use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, collections::VecDeque};
-
-atomic_id!(GroupId);
-atomic_id!(UnitId);
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {

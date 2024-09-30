@@ -124,14 +124,14 @@ macro_rules! atomic_id {
             }
 
             impl<'lua> mlua::FromLua<'lua> for $name {
-                fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+                fn from_lua(value: mlua::Value<'lua>, lua: &'lua mlua::Lua) -> mlua::prelude::LuaResult<Self> {
                     let i = i64::from_lua(value, lua)?;
                     Ok($name(i))
                 }
             }
 
             impl<'lua> mlua::IntoLua<'lua> for $name {
-                fn into_lua(self, lua: &'lua Lua) -> LuaResult<Value<'lua>> {
+                fn into_lua(self, lua: &'lua mlua::Lua) -> mlua::prelude::LuaResult<mlua::Value<'lua>> {
                     self.0.into_lua(lua)
                 }
             }
@@ -150,6 +150,14 @@ macro_rules! atomic_id {
                             None
                         }
                     });
+                }
+
+                pub fn setseq(i: i64) {
+                    [<MAX_ $name:upper _ID>].store(i, std::sync::atomic::Ordering::Relaxed)
+                }
+
+                pub fn seq() -> i64 {
+                    [<MAX_ $name:upper _ID>].load(std::sync::atomic::Ordering::Relaxed)
                 }
             }
         }

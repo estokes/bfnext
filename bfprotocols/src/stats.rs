@@ -1,14 +1,18 @@
 use crate::{
     cfg::{Action, Deployable, LifeType, Troop, UnitTags, Vehicle},
     db::{
-        group::UnitId,
+        group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
     },
     shots::Dead,
 };
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side, coord::LLPos, net::{SlotId, Ucid}, warehouse::LiquidType, String, Vector3
+    coalition::Side,
+    coord::LLPos,
+    net::{SlotId, Ucid},
+    warehouse::LiquidType,
+    String, Vector3,
 };
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -63,7 +67,7 @@ pub enum StatKind {
     Inventory {
         id: ObjectiveId,
         equipment: Vec<(String, u32)>,
-        liquids: Vec<(LiquidType, u32)>
+        liquids: Vec<(LiquidType, u32)>,
     },
     Action {
         by: Ucid,
@@ -73,6 +77,7 @@ pub enum StatKind {
         ucid: Ucid,
         pos: LLPos,
         deployable: Deployable,
+        gid: GroupId,
     },
     Troop {
         ucid: Ucid,
@@ -113,6 +118,7 @@ pub enum StatKind {
     },
     Unit {
         id: UnitId,
+        gid: GroupId,
         typ: Unit,
     },
     PlayerPosition {
@@ -125,7 +131,7 @@ pub enum StatKind {
     },
     PlayerDetected {
         id: SlotId,
-        detected: bool
+        detected: bool,
     },
     UnitDetected {
         id: UnitId,

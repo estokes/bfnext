@@ -1,4 +1,4 @@
-use super::{group::GroupId, objective::Objective, Db, Map};
+use super::{objective::Objective, Db, Map};
 use crate::{
     admin,
     db::{cargo::Oldest, group::DeployKind},
@@ -15,7 +15,7 @@ use bfprotocols::{
         Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg, DroneCfg,
         LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
-    db::objective::ObjectiveId,
+    db::{group::GroupId, objective::ObjectiveId},
 };
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;

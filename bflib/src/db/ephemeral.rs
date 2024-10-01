@@ -16,7 +16,7 @@ for more details.
 
 use super::{
     cargo::Cargo,
-    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+    group::{SpawnedGroup, SpawnedUnit},
     markup::ObjectiveMarkup,
     objective::Objective,
     persisted::Persisted,
@@ -34,7 +34,10 @@ use bfprotocols::{
         ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
         DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
     },
-    db::objective::ObjectiveId,
+    db::{
+        group::{GroupId, UnitId},
+        objective::ObjectiveId,
+    },
 };
 use chrono::prelude::*;
 use compact_str::format_compact;

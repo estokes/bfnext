@@ -14,12 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{
-    ephemeral::SlotInfo,
-    group::{DeployKind, GroupId},
-    objective::ObjGroup,
-    Db, Map,
-};
+use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db, Map};
 use crate::{
     bg::Task,
     db::{
@@ -35,7 +30,10 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{Cfg, Vehicle},
-    db::objective::{ObjectiveId, ObjectiveKind},
+    db::{
+        group::GroupId,
+        objective::{ObjectiveId, ObjectiveKind},
+    },
     stats::StatKind,
 };
 use chrono::prelude::*;

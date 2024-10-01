@@ -14,12 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{
-    ephemeral::DeployableIndex,
-    group::{GroupId, SpawnedGroup},
-    objective::Objective,
-    Db,
-};
+use super::{ephemeral::DeployableIndex, group::SpawnedGroup, objective::Objective, Db};
 use crate::{
     bg::Task,
     db::group::DeployKind,
@@ -30,7 +25,10 @@ use crate::{
 use anyhow::{anyhow, bail, Result};
 use bfprotocols::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
-    db::objective::{ObjectiveId, ObjectiveKind},
+    db::{
+        group::GroupId,
+        objective::{ObjectiveId, ObjectiveKind},
+    },
     stats::StatKind,
 };
 use chrono::prelude::*;

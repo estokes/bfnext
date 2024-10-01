@@ -4,7 +4,7 @@ use super::{ArgPent, ArgQuad, ArgTriple};
 use crate::{
     db::{
         actions::{ActionArgs, ActionCmd, WithObj, WithPos, WithPosAndGroup},
-        group::{DeployKind, GroupId as DbGid},
+        group::{DeployKind},
     },
     perf::{Perf, PerfInner},
     spawnctx::SpawnCtx,
@@ -13,7 +13,7 @@ use crate::{
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use bfprotocols::{
     cfg::{Action, ActionKind},
-    db::objective::ObjectiveId,
+    db::{objective::ObjectiveId, group::GroupId as DbGid},
 };
 use compact_str::format_compact;
 use dcso3::{

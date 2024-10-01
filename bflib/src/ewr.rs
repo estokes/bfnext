@@ -16,13 +16,13 @@ for more details.
 
 use crate::{
     db::{
-        group::GroupId,
         player::{InstancedPlayer, Player},
         Db,
     },
     landcache::LandCache,
 };
 use anyhow::Result;
+use bfprotocols::db::group::GroupId;
 use chrono::prelude::*;
 use dcso3::{
     azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid, radians_to_degrees, MizLua,

@@ -1,6 +1,5 @@
 use crate::cfg::Deployable;
 use dcso3::{atomic_id, String};
-use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 
 atomic_id!(ObjectiveId);

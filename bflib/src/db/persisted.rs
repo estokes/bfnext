@@ -15,12 +15,15 @@ for more details.
 */
 
 use super::{
-    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+    group::{SpawnedGroup, SpawnedUnit},
     objective::Objective,
     player::Player,
     Map, Set,
 };
-use bfprotocols::db::objective::ObjectiveId;
+use bfprotocols::db::{
+    group::{GroupId, UnitId},
+    objective::ObjectiveId,
+};
 use dcso3::{coalition::Side, net::Ucid, String};
 use serde_derive::{Deserialize, Serialize};
 

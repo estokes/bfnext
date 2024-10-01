@@ -16,17 +16,18 @@ for more details.
 
 use crate::{
     bg::Task,
-    db::{
-        group::{DeployKind, GroupId},
-        Db, Set,
-    },
+    db::{group::DeployKind, Db, Set},
     msgq::MsgTyp,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
     Context,
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
-use bfprotocols::{cfg::Cfg, db::objective::ObjectiveId, stats::StatKind};
+use bfprotocols::{
+    cfg::Cfg,
+    db::{group::GroupId, objective::ObjectiveId},
+    stats::StatKind,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{

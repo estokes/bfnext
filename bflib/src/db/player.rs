@@ -14,15 +14,13 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{
-    group::{DeployKind, GroupId},
-    Db, Map, Set,
-};
-use crate::{maybe, maybe_mut, objective_mut, shots::Dead};
+use super::{group::DeployKind, Db, Map, Set};
+use crate::{maybe, maybe_mut, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
-    db::objective::ObjectiveId,
+    db::{group::GroupId, objective::ObjectiveId},
+    shots::Dead,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};

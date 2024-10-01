@@ -1,18 +1,17 @@
 use crate::{
     admin::{self, AdminCommand},
-    db::{
-        actions::ActionCmd,
-        group::{DeployKind, GroupId},
-        player::RegErr,
-    },
+    db::{actions::ActionCmd, group::DeployKind, player::RegErr},
     lives,
     msgq::MsgTyp,
     perf::PerfInner,
     spawnctx::SpawnCtx,
     Context,
 };
-use bfprotocols::cfg::{Action, ActionKind};
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use bfprotocols::{
+    cfg::{Action, ActionKind},
+    db::group::GroupId,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -238,7 +237,7 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
                         player,
                         spec,
                         moved_by: _,
-                        origin: _
+                        origin: _,
                     } => {
                         let player = player.clone();
                         let points = (spec.cost as f32 / 2.).ceil() as i32;

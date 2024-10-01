@@ -16,7 +16,7 @@ for more details.
 
 use super::{
     ephemeral::LogiStage,
-    group::{DeployKind, GroupId, SpawnedUnit, UnitId},
+    group::{DeployKind, SpawnedUnit},
     logistics::{Inventory, Warehouse},
     Db, Map, Set,
 };
@@ -31,7 +31,10 @@ use crate::{
 use anyhow::{anyhow, Context, Result};
 use bfprotocols::{
     cfg::{Deployable, DeployableLogistics, UnitTag},
-    db::objective::{ObjectiveId, ObjectiveKind},
+    db::{
+        group::{GroupId, UnitId},
+        objective::{ObjectiveId, ObjectiveKind},
+    },
     stats::StatKind,
 };
 use chrono::{prelude::*, Duration};
@@ -1076,7 +1079,7 @@ impl Db {
                 self.setup_supply_lines().context("setup supply lines")?;
                 self.deliver_supplies_from_logistics_hubs()
                     .context("delivering supplies")?;
-                let mut ucids: SmallVec<[Ucid; 4]> = smallvec![];
+                let mut ucids: SmallVec<[Ucid; 1]> = smallvec![];
                 for (_, ucid, troop_origin, gid) in gids {
                     self.delete_group(&gid)
                         .context("deleting capturing troops")?;

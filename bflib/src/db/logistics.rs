@@ -902,6 +902,8 @@ impl Db {
 
     fn update_supply_status(&mut self) -> Result<()> {
         for (_, obj) in self.persisted.objectives.iter_mut_cow() {
+            let current_supply = obj.supply;
+            let current_fuel = obj.fuel;
             let mut n = 0;
             let mut sum: u32 = 0;
             for (_, inv) in &obj.warehouse.equipment {
@@ -920,6 +922,13 @@ impl Db {
                 }
             }
             obj.fuel = if n == 0 { 0 } else { (sum / n) as u8 };
+            if current_supply != obj.supply || current_fuel != obj.fuel {
+                self.ephemeral.do_bg(Task::Stat(StatKind::ObjectiveSupply {
+                    id: obj.id,
+                    supply: obj.supply,
+                    fuel: obj.fuel,
+                }));
+            }
         }
         self.ephemeral.dirty();
         Ok(())

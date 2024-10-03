@@ -1166,7 +1166,7 @@ impl Db {
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
         }
-        if let Err(e) = self.add_and_queue_group(
+        match self.add_and_queue_group(
             &spctx,
             idx,
             side,
@@ -1176,15 +1176,26 @@ impl Db {
             BitFlags::empty(),
             None,
         ) {
-            self.ephemeral
-                .cargo
-                .get_mut(slot)
-                .unwrap()
-                .troops
-                .push((ucid, origin, troop_cfg));
-            return Err(e);
+            Ok(gid) => {
+                self.ephemeral.do_bg(Task::Stat(StatKind::DeployTroop {
+                    gid,
+                    pos: Coord::singleton(lua)?
+                        .lo_to_ll(LuaVec3(Vector3::new(point.x, 0., point.y)))?,
+                    troop: troop_cfg.clone(),
+                    ucid,
+                }));
+                Ok(troop_cfg)
+            }
+            Err(e) => {
+                self.ephemeral
+                    .cargo
+                    .get_mut(slot)
+                    .unwrap()
+                    .troops
+                    .push((ucid, origin, troop_cfg));
+                Err(e)
+            }
         }
-        Ok(troop_cfg)
     }
 
     pub fn return_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {

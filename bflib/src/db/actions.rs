@@ -28,6 +28,7 @@ use dcso3::{
         ActionTyp, AiOption, AlarmState, AltType, Command, GroundOption, MissionPoint,
         OrbitPattern, PointType, Task, TurnMethod, VehicleFormation,
     },
+    coord::Coord,
     env::miz::MizIndex,
     group::Group,
     land::Land,
@@ -1677,7 +1678,7 @@ impl Db {
         Ok(())
     }
 
-    fn repair_target(&mut self, target: Vector2, side: Side) -> Result<()> {
+    fn repair_target(&mut self, target: Vector2, ucid: Option<Ucid>, side: Side) -> Result<()> {
         let (dist, _, obj) =
             Self::objective_near_point(&self.persisted.objectives, target, |o| o.owner == side)
                 .ok_or_else(|| anyhow!("no friendly objective near drop off point"))?;
@@ -1685,6 +1686,10 @@ impl Db {
             bail!("no friendly objective near drop off point")
         }
         let oid = obj.id;
+        if let Some(ucid) = ucid {
+            self.ephemeral
+                .do_bg(bg::Task::Stat(StatKind::Repair { id: oid, ucid }));
+        }
         self.repair_one_logi_step(side, Utc::now(), oid)?;
         Ok(())
     }
@@ -1694,6 +1699,7 @@ impl Db {
         lua: MizLua,
         src: Vector2,
         target: Vector2,
+        ucid: Option<Ucid>,
         side: Side,
     ) -> Result<()> {
         let (dist, _, src) =
@@ -1710,6 +1716,14 @@ impl Db {
         }
         let src = src.id;
         let tgt = tgt.id;
+        if let Some(ucid) = ucid {
+            self.ephemeral
+                .do_bg(bg::Task::Stat(StatKind::SupplyTransfer {
+                    from: src,
+                    to: tgt,
+                    ucid,
+                }));
+        }
         self.transfer_supplies(lua, src, tgt)
     }
 
@@ -1755,7 +1769,7 @@ impl Db {
             moved_by: None,
             spec: spec.clone(),
         };
-        self.add_and_queue_group(
+        let gid = self.add_and_queue_group(
             &spctx,
             idx,
             side,
@@ -1765,6 +1779,12 @@ impl Db {
             BitFlags::empty(),
             None,
         )?;
+        self.ephemeral.do_bg(bg::Task::Stat(StatKind::DeployGroup {
+            gid,
+            deployable: spec,
+            ucid,
+            pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
+        }));
         Ok(())
     }
 
@@ -1816,7 +1836,7 @@ impl Db {
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
         }
-        self.add_and_queue_group(
+        let gid = self.add_and_queue_group(
             &spctx,
             idx,
             side,
@@ -1826,6 +1846,12 @@ impl Db {
             BitFlags::empty(),
             None,
         )?;
+        self.ephemeral.do_bg(bg::Task::Stat(StatKind::DeployTroop {
+            troop: troop_cfg,
+            pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
+            ucid,
+            gid,
+        }));
         Ok(())
     }
 
@@ -1838,8 +1864,8 @@ impl Db {
     ) -> Result<()> {
         let mut to_delete: SmallVec<[GroupId; 4]> = smallvec![];
         let mut to_bomb: SmallVec<[(BomberCfg, Vector2, Side); 2]> = smallvec![];
-        let mut to_repair: SmallVec<[(Vector2, Side); 2]> = smallvec![];
-        let mut to_transfer: SmallVec<[(Vector2, Vector2, Side); 2]> = smallvec![];
+        let mut to_repair: SmallVec<[(Vector2, Option<Ucid>, Side); 2]> = smallvec![];
+        let mut to_transfer: SmallVec<[(Vector2, Vector2, Option<Ucid>, Side); 2]> = smallvec![];
         let mut to_deploy: SmallVec<[(Vector2, String, Side, Ucid); 2]> = smallvec![];
         let mut to_paratroop: SmallVec<[(Vector2, String, Side, Ucid, ObjectiveId); 2]> =
             smallvec![];
@@ -1903,7 +1929,7 @@ impl Db {
                         if let Some(target) = *destination {
                             if at_dest!(group, target, 800.) {
                                 destination.take();
-                                to_repair.push((target, group.side));
+                                to_repair.push((target, *player, group.side));
                                 to_delete.push(group.id);
                             }
                         }
@@ -1913,7 +1939,7 @@ impl Db {
                             if at_dest!(group, target, 800.) {
                                 destination.take();
                                 if let Some(rtb) = *rtb {
-                                    to_transfer.push((rtb, target, group.side));
+                                    to_transfer.push((rtb, target, *player, group.side));
                                     to_delete.push(group.id);
                                 }
                             }
@@ -1924,8 +1950,6 @@ impl Db {
                             if at_dest!(group, target, 800.) {
                                 destination.take();
                                 let ucid = player
-                                    .as_ref()
-                                    .map(|u| u.clone())
                                     .ok_or_else(|| anyhow!("paratroop missions require a ucid"))?;
                                 let origin = (*origin).ok_or_else(|| {
                                     anyhow!("objective origin is required for paratroops")
@@ -2023,8 +2047,8 @@ impl Db {
                 error!("bomb targets failed {e:?}")
             }
         }
-        for (target, side) in to_repair {
-            if let Err(e) = self.repair_target(target, side) {
+        for (target, ucid, side) in to_repair {
+            if let Err(e) = self.repair_target(target, ucid, side) {
                 self.ephemeral.msgs().panel_to_side(
                     10,
                     false,
@@ -2033,8 +2057,8 @@ impl Db {
                 );
             }
         }
-        for (src, target, side) in to_transfer {
-            if let Err(e) = self.transfer_to_target(lua, src, target, side) {
+        for (src, target, ucid, side) in to_transfer {
+            if let Err(e) = self.transfer_to_target(lua, src, target, ucid, side) {
                 self.ephemeral.msgs().panel_to_side(
                     10,
                     false,

@@ -16,15 +16,16 @@ for more details.
 
 use super::{objective::ObjGroupClass, Db, Set};
 use crate::{
-    group, group_by_name, group_health, group_mut,
-    spawnctx::{Despawn, SpawnCtx, SpawnLoc},
-    unit, unit_by_name, unit_mut, Connected,
+    bg::Task, group, group_by_name, group_health, group_mut, spawnctx::{Despawn, SpawnCtx, SpawnLoc}, unit, unit_by_name, unit_mut, Connected
 };
 use anyhow::{anyhow, bail, Context, Result};
-use bfprotocols::db::group::{GroupId, UnitId};
 use bfprotocols::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     db::objective::ObjectiveId,
+};
+use bfprotocols::{
+    db::group::{GroupId, UnitId},
+    stats::StatKind,
 };
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
@@ -377,6 +378,8 @@ impl Db {
                 }
             }
         }
+        self.ephemeral
+            .do_bg(Task::Stat(StatKind::GroupDeleted { id: *gid }));
         Ok(())
     }
 

@@ -67,17 +67,23 @@ pub enum StatKind {
     EquipmentInventory {
         id: ObjectiveId,
         item: String,
-        amount: u32
+        amount: u32,
     },
     LiquidInventory {
         id: ObjectiveId,
         item: LiquidType,
-        amount: u32
+        amount: u32,
     },
     Action {
         by: Ucid,
         gid: Option<GroupId>,
         action: Action,
+    },
+    DeployTroop {
+        ucid: Ucid,
+        pos: LLPos,
+        troop: Troop,
+        gid: GroupId,
     },
     DeployGroup {
         ucid: Ucid,
@@ -90,11 +96,6 @@ pub enum StatKind {
         pos: LLPos,
         deployable: Deployable,
         oid: ObjectiveId,
-    },
-    Troop {
-        ucid: Ucid,
-        pos: LLPos,
-        troop: Troop,
     },
     ObjectiveHealth {
         id: ObjectiveId,
@@ -132,6 +133,9 @@ pub enum StatKind {
         id: UnitId,
         gid: GroupId,
         typ: Unit,
+    },
+    GroupDeleted {
+        id: GroupId,
     },
     PlayerPosition {
         id: SlotId,

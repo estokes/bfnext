@@ -20,7 +20,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
     db::{group::GroupId, objective::ObjectiveId},
-    shots::Dead,
+    shots::{Dead, Who},
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -36,6 +36,13 @@ use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::cmp::{max, min};
+
+struct VictimInfo {
+    ucid: Ucid,
+    name: String,
+    ai_deployable: bool,
+    life_type: Option<LifeType>,
+}
 
 #[derive(Debug, Clone)]
 pub enum SlotAuth {
@@ -735,7 +742,7 @@ impl Db {
         &mut self,
         shooter: Ucid,
         total_points: u32,
-        victim_info: &Option<(Ucid, String, Option<LifeType>)>,
+        victim_info: &Option<VictimInfo>,
     ) -> CompactString {
         let player = &mut self.persisted.players[&shooter];
         let window = self
@@ -746,7 +753,7 @@ impl Db {
             .map(|p| p.tk_window as i64)
             .unwrap_or(0);
         let now = Utc::now();
-        match &victim_info {
+        match victim_info.as_ref() {
             None => {
                 let penalty: u32 = player
                     .ai_team_kills
@@ -759,14 +766,36 @@ impl Db {
                 let tp = player.points;
                 format_compact!("{tp}(-{total_points}) points, you have killed a friendly unit")
             }
-            Some((_, victim, None)) => {
+            Some(VictimInfo {
+                name,
+                life_type: None,
+                ai_deployable: false,
+                ucid: _,
+            }) => {
                 player.points -= total_points as i32;
                 format_compact!(
-                    "{}(-{total_points})you have team killed {victim} on the ground",
+                    "{}(-{total_points})you have team killed {name} on the ground",
                     player.points
                 )
             }
-            Some((victim_ucid, victim, Some(life_type))) => {
+            Some(VictimInfo {
+                name,
+                life_type: None,
+                ai_deployable: true,
+                ucid: _,
+            }) => {
+                player.points -= total_points as i32;
+                format_compact!(
+                    "{}(-{total_points})you have team killed {name}'s ai unit",
+                    player.points
+                )
+            }
+            Some(VictimInfo {
+                ucid,
+                name,
+                life_type: Some(life_type),
+                ..
+            }) => {
                 let (penalty_points, penalty_lives): (u32, f32) = player
                     .player_team_kills
                     .into_iter()
@@ -803,14 +832,14 @@ impl Db {
                     }
                 };
                 player.points -= penalty_points as i32;
-                player.player_team_kills.insert_cow(now, *victim_ucid);
+                player.player_team_kills.insert_cow(now, *ucid);
                 let tp = player.points;
                 self.ephemeral.dirty();
                 use std::fmt::Write;
                 let mut msg = CompactString::from("");
                 write!(
                     msg,
-                    "{tp}(-{penalty_points}) points, you have team killed {victim}.\n",
+                    "{tp}(-{penalty_points}) points, you have team killed {name}.\n",
                 )
                 .unwrap();
                 if lost.len() > 0 {
@@ -837,66 +866,79 @@ impl Db {
 
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
         let mut hit_by: SmallVec<[&Ucid; 16]> = smallvec![];
-        let non_self_shots = || {
+        let valid_shots = || {
+            // why are you hitting yourself
             dead.shots.iter().filter(|shot| {
-                (shot.target_gid.is_none() || shot.target_gid != shot.shooter_gid)
-                    && match dead.victim_ucid.as_ref() {
-                        None => true,
-                        Some(victim) => victim != &shot.shooter_ucid,
-                    }
+                shot.shooter.ucid().is_some()
+                    && shot.target.gid() != shot.shooter.gid()
+                    && shot.target.ucid() != shot.shooter.ucid()
             })
         };
-        for shot in non_self_shots() {
-            if shot.hit && !hit_by.contains(&&shot.shooter_ucid) {
-                hit_by.push(&shot.shooter_ucid);
+        for shot in valid_shots() {
+            let ucid = shot.shooter.ucid().unwrap();
+            if shot.hit && !hit_by.contains(&ucid) {
+                hit_by.push(ucid);
             }
         }
         if hit_by.is_empty() {
-            for shot in non_self_shots() {
-                if dead.time - shot.time <= Duration::minutes(3)
-                    && !hit_by.contains(&&shot.shooter_ucid)
-                {
-                    hit_by.push(&shot.shooter_ucid);
+            for shot in valid_shots() {
+                let ucid = shot.shooter.ucid().unwrap();
+                if dead.time - shot.time <= Duration::minutes(3) && !hit_by.contains(&ucid) {
+                    hit_by.push(ucid);
                 }
             }
         }
         if !hit_by.is_empty() {
-            let total_points = if dead.victim_ucid.is_some() {
-                cfg.air_kill
-            } else {
-                (&dead.shots)
-                    .into_iter()
-                    .find(|s| s.target_typ.trim() != "")
-                    .map(|s| &s.target_typ)
-                    .and_then(|typ| self.ephemeral.cfg.unit_classification.get(typ.as_str()))
-                    .map(|tags| {
-                        if tags.contains(UnitTag::LR | UnitTag::TrackRadar | UnitTag::SAM) {
-                            cfg.ground_kill + cfg.lr_sam_bonus
-                        } else if tags.contains(UnitTag::Aircraft)
-                            || tags.contains(UnitTag::Helicopter)
-                        {
-                            cfg.air_kill
-                        } else {
-                            cfg.ground_kill
-                        }
-                    })
-                    .unwrap_or(cfg.ground_kill)
-            };
+            let total_points = (&dead.shots)
+                .into_iter()
+                .find(|s| s.target_typ.trim() != "")
+                .map(|s| &s.target_typ)
+                .and_then(|typ| self.ephemeral.cfg.unit_classification.get(typ.as_str()))
+                .map(|tags| {
+                    if tags.contains(UnitTag::LR | UnitTag::TrackRadar | UnitTag::SAM) {
+                        cfg.ground_kill + cfg.lr_sam_bonus
+                    } else if tags.contains(UnitTag::Aircraft) || tags.contains(UnitTag::Helicopter)
+                    {
+                        cfg.air_kill
+                    } else {
+                        cfg.ground_kill
+                    }
+                })
+                .unwrap_or(cfg.ground_kill);
             let pps = (total_points as f32 / hit_by.len() as f32).ceil() as i32;
-            let victim_info = dead
-                .victim_ucid
-                .as_ref()
-                .and_then(|i| self.persisted.players.get(i).map(|p| (*i, p)))
-                .map(|(i, p)| (i, p.name.clone(), p.airborne));
+            let victim_info = match &dead.victim {
+                Who::Player { ucid, .. } => self.persisted.players.get(ucid).map(|p| VictimInfo {
+                    ucid: *ucid,
+                    name: p.name.clone(),
+                    life_type: p.airborne,
+                    ai_deployable: false,
+                }),
+                Who::AI { ucid: None, .. } => None,
+                Who::AI { ucid: Some(i), .. } => {
+                    self.persisted.players.get(i).map(|p| VictimInfo {
+                        ucid: *i,
+                        name: p.name.clone(),
+                        life_type: None,
+                        ai_deployable: true,
+                    })
+                }
+            };
             for ucid in hit_by {
                 if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
-                    let msg = if player.side != dead.victim_side {
+                    let msg = if player.side != *dead.victim.side() {
                         player.points += pps;
                         let tp = player.points;
                         match &victim_info {
                             None => format_compact!("{tp}(+{pps}) points"),
-                            Some((_, victim, _)) => {
-                                format_compact!("{tp}(+{pps}) points, killed {}", victim)
+                            Some(vi) => {
+                                if vi.ai_deployable {
+                                    format_compact!(
+                                        "{tp}(+{pps}) points, killed {}'s deployed ai unit",
+                                        vi.name
+                                    )
+                                } else {
+                                    format_compact!("{tp}(+{pps}) points, killed {}", vi.name)
+                                }
                             }
                         }
                     } else {

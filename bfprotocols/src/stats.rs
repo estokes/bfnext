@@ -73,11 +73,17 @@ pub enum StatKind {
         by: Ucid,
         action: Action,
     },
-    Deploy {
+    DeployGroup {
         ucid: Ucid,
         pos: LLPos,
         deployable: Deployable,
         gid: GroupId,
+    },
+    DeployFarp {
+        ucid: Ucid,
+        pos: LLPos,
+        deployable: Deployable,
+        oid: ObjectiveId,
     },
     Troop {
         ucid: Ucid,

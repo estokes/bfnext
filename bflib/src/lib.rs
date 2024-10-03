@@ -482,9 +482,7 @@ fn unit_killed(
     now: DateTime<Utc>,
 ) -> Result<()> {
     ctx.recently_landed.remove(&id);
-    if ctx.db.ephemeral.cfg.points.is_some() {
-        ctx.shots_out.dead(id.clone(), now);
-    }
+    ctx.shots_out.dead(id.clone(), now);
     if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
         error!("jtac unit dead failed for {:?} {:?}", id, e)
     }
@@ -527,13 +525,11 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::PlayerLeaveUnit(e) => {
             if let Some(unit) = e.initiator.and_then(|u| u.as_unit().ok()) {
                 let oid = unit.object_id()?;
-                if ctx.db.ephemeral.cfg.points.is_some() {
-                    if let Some(ucid) = ctx.db.player_in_unit(false, &oid) {
-                        if let Some(player) = ctx.db.player(&ucid) {
-                            if let Some((_, Some(inst))) = player.current_slot.as_ref() {
-                                if inst.landed_at_objective.is_none() {
-                                    ctx.shots_out.dead(oid, start_ts)
-                                }
+                if let Some(ucid) = ctx.db.player_in_unit(false, &oid) {
+                    if let Some(player) = ctx.db.player(&ucid) {
+                        if let Some((_, Some(inst))) = player.current_slot.as_ref() {
+                            if inst.landed_at_objective.is_none() {
+                                ctx.shots_out.dead(oid, start_ts)
                             }
                         }
                     }
@@ -546,18 +542,12 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Hit(e) | Event::Kill(e) => {
             if let Some(target) = e.target.as_ref().and_then(|t| t.as_unit().ok()) {
                 let dead = target.get_life()? < 1;
-                if ctx.db.ephemeral.cfg.points.is_some() {
-                    if let Some(shooter) = e.initiator.and_then(|u| u.as_unit().ok()) {
-                        if let Err(e) = ctx.shots_out.hit(
-                            &ctx.db,
-                            start_ts,
-                            dead,
-                            &target,
-                            &shooter,
-                            e.weapon_name,
-                        ) {
-                            error!("error processing hit event {:?}", e)
-                        }
+                if let Some(shooter) = e.initiator.and_then(|u| u.as_unit().ok()) {
+                    if let Err(e) =
+                        ctx.shots_out
+                            .hit(&ctx.db, start_ts, dead, &target, &shooter, e.weapon_name)
+                    {
+                        error!("error processing hit event {:?}", e)
                     }
                 }
                 if dead {
@@ -574,10 +564,8 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::Shot(e) => {
-            if ctx.db.ephemeral.cfg.points.is_some() {
-                if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, e) {
-                    error!("error processing shot event {:?}", e)
-                }
+            if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, e) {
+                error!("error processing shot event {:?}", e)
             }
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
@@ -937,9 +925,9 @@ fn run_slow_timed_events(
             }
         }
         return_lives(lua, ctx, ts);
-        if let Some(points) = ctx.db.ephemeral.cfg.points {
-            for dead in ctx.shots_out.bring_out_your_dead(ts) {
-                info!("kill {:?}", dead);
+        for dead in ctx.shots_out.bring_out_your_dead(ts) {
+            info!("kill {:?}", dead);
+            if let Some(points) = ctx.db.ephemeral.cfg.points {
                 ctx.db.award_kill_points(points, dead)
             }
         }
@@ -1068,10 +1056,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     }
     record_perf(&mut perf.advise_capturable, now);
     let now = Utc::now();
-    match ctx
-        .jtac
-        .update_target_positions(lua, now, &mut ctx.db)
-    {
+    match ctx.jtac.update_target_positions(lua, now, &mut ctx.db) {
         Err(e) => error!("error updating jtac target positions {:?}", e),
         Ok(dead) => {
             for id in dead {

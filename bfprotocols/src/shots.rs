@@ -27,6 +27,43 @@ pub enum Who {
     },
 }
 
+impl Who {
+    pub fn side(&self) -> &Side {
+        match self {
+            Self::AI { side, .. } => side,
+            Self::Player { side, .. } => side,
+        }
+    }
+
+    pub fn ucid(&self) -> Option<&Ucid> {
+        match self {
+            Self::AI { ucid, .. } => ucid.as_ref(),
+            Self::Player { ucid, .. } => Some(ucid),
+        }
+    }
+
+    pub fn gid(&self) -> Option<GroupId> {
+        match self {
+            Self::AI { gid, .. } => Some(*gid),
+            Self::Player { .. } => None,
+        }
+    }
+
+    pub fn uid(&self) -> Option<UnitId> {
+        match self {
+            Self::AI { uid, .. } => Some(*uid),
+            Self::Player { .. } => None,
+        }
+    }
+
+    pub fn uid_gid(&self) -> Option<(GroupId, UnitId)> {
+        match self {
+            Self::AI { gid, uid, .. } => Some((*gid, *uid)),
+            Self::Player { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dead {
     pub victim: Who,

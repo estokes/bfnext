@@ -839,64 +839,63 @@ impl Db {
                     let spctx = SpawnCtx::new(lua)?;
                     match enforce_deploy_limits(self, st.side, &spec, &dep, &st.ucid) {
                         Err(e) => reasons.push(format_compact!("{e}")),
-                        Ok(()) => {
-                            self.ephemeral.do_bg(Task::Stat(StatKind::Deploy {
-                                ucid: st.ucid,
-                                pos: Coord::singleton(lua)?
-                                    .lo_to_ll(LuaVec3(Vector3::new(centroid.x, 0., centroid.y)))?,
-                                deployable: spec.clone(),
-                            }));
-                            match &spec.logistics {
-                                Some(parts) => {
-                                    for cr in have.values().flat_map(|c| c.iter()) {
-                                        self.delete_group(&cr.group)?
-                                    }
-                                    let oid = self.add_farp(
-                                        lua, &spctx, idx, st.side, centroid, &spec, parts,
-                                    )?;
-                                    self.adjust_points(
-                                        &st.ucid,
-                                        -(spec.cost as i32),
-                                        "for farp spawn",
-                                    );
-                                    let name = objective!(self, oid)?.name.clone();
-                                    return Ok(Unpakistan::UnpackedFarp(name));
+                        Ok(()) => match &spec.logistics {
+                            Some(parts) => {
+                                for cr in have.values().flat_map(|c| c.iter()) {
+                                    self.delete_group(&cr.group)?
                                 }
-                                None => {
-                                    let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
-                                    let spawnloc = compute_positions(
-                                        self,
-                                        &have,
-                                        centroid,
-                                        azumith3d(pos.x.0),
-                                    )?;
-                                    let origin = DeployKind::Deployed {
-                                        player: st.ucid.clone(),
-                                        moved_by: None,
-                                        spec: spec.clone(),
-                                    };
-                                    let _gid = self.add_and_queue_group(
-                                        &spctx,
-                                        idx,
-                                        st.side,
-                                        spawnloc,
-                                        &*spec.template,
-                                        origin,
-                                        BitFlags::empty(),
-                                        None,
-                                    )?;
-                                    for cr in have.values().flat_map(|c| c.iter()) {
-                                        self.delete_group(&cr.group)?
-                                    }
-                                    self.adjust_points(
-                                        &st.ucid,
-                                        -(spec.cost as i32),
-                                        &format_compact!("for {dep} unpack"),
-                                    );
-                                    return Ok(Unpakistan::Unpacked(dep));
-                                }
+                                let oid = self
+                                    .add_farp(lua, &spctx, idx, st.side, centroid, &spec, parts)?;
+                                self.ephemeral.do_bg(Task::Stat(StatKind::DeployFarp {
+                                    oid,
+                                    ucid: st.ucid,
+                                    pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
+                                        centroid.x, 0., centroid.y,
+                                    )))?,
+                                    deployable: spec.clone(),
+                                }));
+                                self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
+                                let name = objective!(self, oid)?.name.clone();
+                                return Ok(Unpakistan::UnpackedFarp(name));
                             }
-                        }
+                            None => {
+                                let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
+                                let spawnloc =
+                                    compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
+                                let origin = DeployKind::Deployed {
+                                    player: st.ucid.clone(),
+                                    moved_by: None,
+                                    spec: spec.clone(),
+                                };
+                                let gid = self.add_and_queue_group(
+                                    &spctx,
+                                    idx,
+                                    st.side,
+                                    spawnloc,
+                                    &*spec.template,
+                                    origin,
+                                    BitFlags::empty(),
+                                    None,
+                                )?;
+                                for cr in have.values().flat_map(|c| c.iter()) {
+                                    self.delete_group(&cr.group)?
+                                }
+                                self.ephemeral.do_bg(Task::Stat(StatKind::DeployGroup {
+                                    gid,
+                                    ucid: st.ucid,
+                                    pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
+                                        centroid.x, 0., centroid.y,
+                                    )))?,
+                                    deployable: spec.clone(),
+                                }));
+                                self.adjust_points(
+                                    &st.ucid,
+                                    -(spec.cost as i32),
+                                    &format_compact!("for {dep} unpack"),
+                                );
+                                return Ok(Unpakistan::Unpacked(dep));
+                            }
+                        },
                     }
                 }
             }

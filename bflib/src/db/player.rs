@@ -15,7 +15,7 @@ for more details.
 */
 
 use super::{group::DeployKind, Db, Map, Set};
-use crate::{bg::Task, maybe, maybe_mut, objective_mut};
+use crate::{maybe, maybe_mut, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
@@ -449,8 +449,14 @@ impl Db {
             Some(p) if p.side != side => Err(RegErr::AlreadyRegistered(p.side_switches, p.side)),
             Some(_) => Err(RegErr::AlreadyOn(side)),
             None => {
+                let points = self
+                    .ephemeral
+                    .cfg
+                    .points
+                    .map(|p| p.new_player_join as i32)
+                    .unwrap_or(0);
                 self.persisted.players.insert_cow(
-                    ucid.clone(),
+                    ucid,
                     Player {
                         name: name.clone(),
                         alts: Set::from_iter([name.clone()]),
@@ -459,12 +465,7 @@ impl Db {
                         lives: Map::new(),
                         crates: Set::new(),
                         airborne: None,
-                        points: self
-                            .ephemeral
-                            .cfg
-                            .points
-                            .map(|p| p.new_player_join as i32)
-                            .unwrap_or(0),
+                        points,
                         current_slot: None,
                         changing_slots: false,
                         jtac_or_spectators: true,
@@ -472,6 +473,12 @@ impl Db {
                         player_team_kills: Map::new(),
                     },
                 );
+                self.ephemeral.stat(StatKind::PlayerRegister {
+                    initial_points: points,
+                    name,
+                    side,
+                    ucid,
+                });
                 self.ephemeral.dirty();
                 Ok(())
             }
@@ -481,6 +488,8 @@ impl Db {
     pub fn force_sideswitch_player(&mut self, ucid: &Ucid, side: Side) -> Result<()> {
         let player = maybe_mut!(self.persisted.players, ucid, "no such player")?;
         player.side = side;
+        self.ephemeral
+            .stat(StatKind::PlayerSideswitch { ucid: *ucid, side });
         self.ephemeral.dirty();
         Ok(())
     }
@@ -503,6 +512,8 @@ impl Db {
                         None => (),
                     }
                     player.side = side;
+                    self.ephemeral
+                        .stat(StatKind::PlayerSideswitch { ucid: *ucid, side });
                     self.ephemeral.dirty();
                     Ok(())
                 }
@@ -959,11 +970,11 @@ impl Db {
             let pp = player.points;
             if amount != 0 {
                 let m = format_compact!("{}({}) points {}", pp, amount, why);
-                self.ephemeral.do_bg(Task::Stat(StatKind::Points {
+                self.ephemeral.stat(StatKind::Points {
                     points: amount,
                     reason: m.clone().into(),
                     ucid: *ucid,
-                }));
+                });
                 self.ephemeral.panel_to_player(&self.persisted, 10, ucid, m);
                 self.ephemeral.dirty();
             }

@@ -1,6 +1,6 @@
 use super::{objective::Objective, Db, Map};
 use crate::{
-    admin, bg,
+    admin,
     db::{cargo::Oldest, group::DeployKind},
     group, group_mut,
     jtac::{JtId, Jtacs},
@@ -389,11 +389,11 @@ impl Db {
             },
         };
         if let Some(ucid) = ucid.as_ref() {
-            self.ephemeral.do_bg(bg::Task::Stat(StatKind::Action {
+            self.ephemeral.stat(StatKind::Action {
                 by: *ucid,
                 action,
                 gid,
-            }));
+            });
             self.adjust_points(
                 ucid,
                 -(cost as i32),
@@ -1687,8 +1687,7 @@ impl Db {
         }
         let oid = obj.id;
         if let Some(ucid) = ucid {
-            self.ephemeral
-                .do_bg(bg::Task::Stat(StatKind::Repair { id: oid, ucid }));
+            self.ephemeral.stat(StatKind::Repair { id: oid, ucid });
         }
         self.repair_one_logi_step(side, Utc::now(), oid)?;
         Ok(())
@@ -1717,12 +1716,11 @@ impl Db {
         let src = src.id;
         let tgt = tgt.id;
         if let Some(ucid) = ucid {
-            self.ephemeral
-                .do_bg(bg::Task::Stat(StatKind::SupplyTransfer {
-                    from: src,
-                    to: tgt,
-                    ucid,
-                }));
+            self.ephemeral.stat(StatKind::SupplyTransfer {
+                from: src,
+                to: tgt,
+                ucid,
+            });
         }
         self.transfer_supplies(lua, src, tgt)
     }
@@ -1779,12 +1777,12 @@ impl Db {
             BitFlags::empty(),
             None,
         )?;
-        self.ephemeral.do_bg(bg::Task::Stat(StatKind::DeployGroup {
+        self.ephemeral.stat(StatKind::DeployGroup {
             gid,
             deployable: spec,
             ucid,
             pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
-        }));
+        });
         Ok(())
     }
 
@@ -1846,12 +1844,12 @@ impl Db {
             BitFlags::empty(),
             None,
         )?;
-        self.ephemeral.do_bg(bg::Task::Stat(StatKind::DeployTroop {
+        self.ephemeral.stat(StatKind::DeployTroop {
             troop: troop_cfg,
             pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
             ucid,
             gid,
-        }));
+        });
         Ok(())
     }
 

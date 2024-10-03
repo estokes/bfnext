@@ -21,7 +21,6 @@ use super::{
     Db, Map, Set,
 };
 use crate::{
-    bg::Task,
     group, group_health, group_mut,
     landcache::LandCache,
     maybe, objective, objective_mut,
@@ -426,7 +425,7 @@ impl Db {
         self.ephemeral.airbase_by_oid.remove(oid);
         self.ephemeral.remove_objective_markup(oid);
         self.ephemeral
-            .do_bg(Task::Stat(StatKind::ObjectiveDestroyed { id: *oid }));
+            .stat(StatKind::ObjectiveDestroyed { id: *oid });
         self.ephemeral.dirty();
         Ok(())
     }
@@ -561,12 +560,12 @@ impl Db {
         }
         let pos = obj.zone.pos();
         let llpos = Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
-        self.ephemeral.do_bg(Task::Stat(StatKind::Objective {
+        self.ephemeral.stat(StatKind::Objective {
             id: obj.id,
             kind: obj.kind.clone(),
             owner: obj.owner,
             pos: llpos,
-        }));
+        });
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.persisted.farps.insert_cow(oid);
@@ -610,12 +609,12 @@ impl Db {
             obj.last_change_ts = now;
             (obj.kind.clone(), health, logi)
         };
-        self.ephemeral.do_bg(Task::Stat(StatKind::ObjectiveHealth {
+        self.ephemeral.stat(StatKind::ObjectiveHealth {
             id: *oid,
             last_change: now,
             health,
             logi,
-        }));
+        });
         if let ObjectiveKind::Farp { .. } = &kind {
             if logi == 0 {
                 self.delete_objective(oid)?;
@@ -1089,11 +1088,11 @@ impl Db {
                         }
                     }
                 }
-                self.ephemeral.do_bg(Task::Stat(StatKind::Capture {
+                self.ephemeral.stat(StatKind::Capture {
                     id: oid,
                     side: new_owner,
                     ucids: ucids.clone(),
-                }));
+                });
                 if let Some(points) = self.ephemeral.cfg.points.as_ref() {
                     let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
                     for ucid in &ucids {

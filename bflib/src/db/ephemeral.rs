@@ -37,7 +37,7 @@ use bfprotocols::{
     db::{
         group::{GroupId, UnitId},
         objective::ObjectiveId,
-    },
+    }, stats::StatKind,
 };
 use chrono::prelude::*;
 use compact_str::format_compact;
@@ -194,13 +194,17 @@ impl Default for Ephemeral {
 }
 
 impl Ephemeral {
-    pub fn do_bg(&self, task: Task) {
+    fn do_bg(&self, task: Task) {
         if let Some(to_bg) = &self.to_bg {
             match to_bg.send(task) {
                 Ok(()) => (),
                 Err(_) => panic!("background thread is dead"),
             }
         }
+    }
+
+    pub fn stat(&self, stat: StatKind) {
+        self.do_bg(Task::Stat(stat))
     }
 
     pub fn get_slot_info(&self, slot: &SlotId) -> Option<&SlotInfo> {

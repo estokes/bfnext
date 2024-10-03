@@ -115,7 +115,7 @@ pub enum StatKind {
         name: String,
         ucid: Ucid,
         side: Side,
-        initial_points: usize,
+        initial_points: i32,
     },
     PlayerSideswitch {
         ucid: Ucid,

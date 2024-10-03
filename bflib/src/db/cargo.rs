@@ -16,7 +16,6 @@ for more details.
 
 use super::{ephemeral::DeployableIndex, group::SpawnedGroup, objective::Objective, Db};
 use crate::{
-    bg::Task,
     db::group::DeployKind,
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -773,10 +772,10 @@ impl Db {
                 } else {
                     self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
-                    self.ephemeral.do_bg(Task::Stat(StatKind::Repair {
+                    self.ephemeral.stat(StatKind::Repair {
                         id: oid,
                         ucid: st.ucid,
-                    }));
+                    });
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_repair) {
                         self.adjust_points(&st.ucid, amount as i32, "for logistics repair");
                     }
@@ -802,11 +801,11 @@ impl Db {
                 {
                     self.transfer_supplies(lua, from, to)?;
                     self.delete_group(&gid)?;
-                    self.ephemeral.do_bg(Task::Stat(StatKind::SupplyTransfer {
+                    self.ephemeral.stat(StatKind::SupplyTransfer {
                         from,
                         to,
                         ucid: st.ucid,
-                    }));
+                    });
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_transfer) {
                         self.adjust_points(&st.ucid, amount as i32, "for supply transfer");
                     }
@@ -846,14 +845,14 @@ impl Db {
                                 }
                                 let oid = self
                                     .add_farp(lua, &spctx, idx, st.side, centroid, &spec, parts)?;
-                                self.ephemeral.do_bg(Task::Stat(StatKind::DeployFarp {
+                                self.ephemeral.stat(StatKind::DeployFarp {
                                     oid,
                                     ucid: st.ucid,
                                     pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
                                         centroid.x, 0., centroid.y,
                                     )))?,
                                     deployable: spec.clone(),
-                                }));
+                                });
                                 self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name));
@@ -880,14 +879,14 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                self.ephemeral.do_bg(Task::Stat(StatKind::DeployGroup {
+                                self.ephemeral.stat(StatKind::DeployGroup {
                                     gid,
                                     ucid: st.ucid,
                                     pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
                                         centroid.x, 0., centroid.y,
                                     )))?,
                                     deployable: spec.clone(),
-                                }));
+                                });
                                 self.adjust_points(
                                     &st.ucid,
                                     -(spec.cost as i32),
@@ -1177,13 +1176,13 @@ impl Db {
             None,
         ) {
             Ok(gid) => {
-                self.ephemeral.do_bg(Task::Stat(StatKind::DeployTroop {
+                self.ephemeral.stat(StatKind::DeployTroop {
                     gid,
                     pos: Coord::singleton(lua)?
                         .lo_to_ll(LuaVec3(Vector3::new(point.x, 0., point.y)))?,
                     troop: troop_cfg.clone(),
                     ucid,
-                }));
+                });
                 Ok(troop_cfg)
             }
             Err(e) => {

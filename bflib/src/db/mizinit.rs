@@ -136,12 +136,12 @@ impl Db {
         }
         let pos = zone.pos();
         let llpos = Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
-        self.ephemeral.do_bg(Task::Stat(StatKind::Objective {
+        self.ephemeral.stat(StatKind::Objective {
             id,
             kind: obj.kind.clone(),
             owner: obj.owner,
             pos: llpos,
-        }));
+        });
         self.persisted.objectives.insert_cow(id, obj);
         self.persisted.objectives_by_name.insert_cow(name, id);
         Ok(())

@@ -24,8 +24,28 @@ use indexmap::IndexMap;
 use log::{error, info};
 use std::sync::Arc;
 
+pub(crate) fn register_success(ctx: &mut Context, id: PlayerId, name: String, side: Side) {
+    let msg = String::from(format_compact!(
+        "Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!",
+        side
+    ));
+    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+    ctx.db.ephemeral.msgs().send(
+        MsgTyp::Chat(None),
+        format_compact!("{} has joined {:?} team", name, side),
+    );
+}
+
+pub(crate) fn register_already_on(ctx: &mut Context, id: PlayerId, side: Side) {
+    ctx.db.ephemeral.msgs().send(
+        MsgTyp::Chat(Some(id)),
+        format_compact!("you are already on {:?} team!", side),
+    )
+}
+
 fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     let ifo = ctx.connected.get_or_lookup_player_info(lua, id)?;
+    let name = ifo.name.clone();
     let side = if msg.eq_ignore_ascii_case("blue") {
         Side::Blue
     } else if msg.eq_ignore_ascii_case("red") {
@@ -37,18 +57,8 @@ fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) 
         .db
         .register_player(ifo.ucid.clone(), ifo.name.clone(), side)
     {
-        Ok(()) => {
-            let msg = String::from(format_compact!("Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!", side));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            ctx.db.ephemeral.msgs().send(
-                MsgTyp::Chat(None),
-                format_compact!("{} has joined {:?} team", ifo.name, side),
-            );
-        }
-        Err(RegErr::AlreadyOn(side)) => ctx.db.ephemeral.msgs().send(
-            MsgTyp::Chat(Some(id)),
-            format_compact!("you are already on {:?} team!", side),
-        ),
+        Ok(()) => register_success(ctx, id, name, side),
+        Err(RegErr::AlreadyOn(side)) => register_already_on(ctx, id, side),
         Err(RegErr::AlreadyRegistered(side_switches, orig_side)) => {
             let msg = String::from(match side_switches {
                 None => format_compact!("You are already on the {:?} team. You may switch sides by typing -switch {:?}.", orig_side, side),
@@ -60,6 +70,11 @@ fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) 
         }
     }
     Ok("".into())
+}
+
+pub(crate) fn sideswitch_success(ctx: &mut Context, name: String, side: Side) {
+    let msg = String::from(format_compact!("{} has switched to {:?}", name, side));
+    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(None), msg);
 }
 
 fn sideswitch_player(
@@ -82,8 +97,8 @@ fn sideswitch_player(
     };
     match ctx.db.sideswitch_player(&ifo.ucid, side) {
         Ok(()) => {
-            let msg = String::from(format_compact!("{} has switched to {:?}", ifo.name, side));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(None), msg);
+            let name = ifo.name.clone();
+            sideswitch_success(ctx, name, side);
         }
         Err(e) => ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), e),
     }

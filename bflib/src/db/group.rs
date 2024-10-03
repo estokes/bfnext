@@ -16,7 +16,9 @@ for more details.
 
 use super::{objective::ObjGroupClass, Db, Set};
 use crate::{
-    bg::Task, group, group_by_name, group_health, group_mut, spawnctx::{Despawn, SpawnCtx, SpawnLoc}, unit, unit_by_name, unit_mut, Connected
+    group, group_by_name, group_health, group_mut,
+    spawnctx::{Despawn, SpawnCtx, SpawnLoc},
+    unit, unit_by_name, unit_mut, Connected,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
@@ -378,8 +380,7 @@ impl Db {
                 }
             }
         }
-        self.ephemeral
-            .do_bg(Task::Stat(StatKind::GroupDeleted { id: *gid }));
+        self.ephemeral.stat(StatKind::GroupDeleted { id: *gid });
         Ok(())
     }
 

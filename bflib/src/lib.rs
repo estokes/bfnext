@@ -40,7 +40,10 @@ use bg::Task;
 use chatcmd::run_action_commands;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
-use db::{player::TakeoffRes, Db};
+use db::{
+    player::{RegErr, TakeoffRes},
+    Db,
+};
 use dcso3::{
     coalition::Side,
     env::{
@@ -74,7 +77,7 @@ use spawnctx::SpawnCtx;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PlayerInfo {
     name: String,
     addr: Option<String>,
@@ -391,9 +394,15 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
     }
 }
 
-fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> Result<bool> {
+fn try_occupy_slot(
+    ctx: &mut Context,
+    lua: HooksLua,
+    id: PlayerId,
+    ifo: PlayerInfo,
+    side: Side,
+    slot: SlotId,
+) -> Result<bool> {
     let now = Utc::now();
-    let ctx = unsafe { Context::get_mut() };
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::Denied => Ok(false),
         SlotAuth::NoLives(typ) => {
@@ -421,13 +430,21 @@ fn try_occupy_slot(id: PlayerId, ifo: &PlayerInfo, side: Side, slot: SlotId) -> 
             Ok(false)
         }
         SlotAuth::NotRegistered(side) => {
-            let msg = String::from(format_compact!(
-                "You must join {:?} to use this slot. Type {:?} in chat.",
-                side,
-                side
-            ));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            Ok(false)
+            let name = ifo.name.clone();
+            match ctx.db.register_player(ifo.ucid, name.clone(), side) {
+                Ok(()) => {
+                    chatcmd::register_success(ctx, id, name, side);
+                    try_occupy_slot(ctx, lua, id, ifo, side, slot)
+                }
+                Err(RegErr::AlreadyRegistered(_, _)) => {
+                    warn!("{:?} try_occupy_slot says NotRegistered but register_player says AlreadyRegistered", ifo.ucid);
+                    Ok(false)
+                }
+                Err(RegErr::AlreadyOn(_)) => {
+                    warn!("{:?} try_occupy_slot says NotRegistered but register_player says AlreadyOn", ifo.ucid);
+                    Ok(false)
+                }
+            }
         }
         SlotAuth::ObjectiveNotOwned(side) => {
             let msg = String::from(format_compact!(
@@ -459,14 +476,17 @@ fn on_player_try_change_slot(
             error!("failed to get player info for {:?} {:?}", id, e);
             Ok(Some(false))
         }
-        Ok(ifo) => match try_occupy_slot(id, &ifo, side, slot.clone()) {
-            Err(e) => {
-                error!("error checking slot {:?}", e);
-                Ok(Some(false))
+        Ok(ifo) => {
+            let ifo = ifo.clone();
+            match try_occupy_slot(ctx, lua, id, ifo, side, slot.clone()) {
+                Err(e) => {
+                    error!("error checking slot {:?}", e);
+                    Ok(Some(false))
+                }
+                Ok(false) => Ok(Some(false)),
+                Ok(true) => Ok(None),
             }
-            Ok(false) => Ok(Some(false)),
-            Ok(true) => Ok(None),
-        },
+        }
     };
     record_perf(
         &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,

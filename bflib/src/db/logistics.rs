@@ -21,7 +21,6 @@ use super::{
 };
 use crate::{
     admin::WarehouseKind,
-    bg::Task,
     maybe, objective, objective_mut,
     perf::{record_perf, Perf, PerfInner},
 };
@@ -123,20 +122,20 @@ impl Transfer {
             TransferItem::Equipment(name) => {
                 let d = &mut src.warehouse.equipment[name].stored;
                 *d -= self.amount;
-                db.ephemeral.do_bg(Task::Stat(StatKind::EquipmentInventory {
+                db.ephemeral.stat(StatKind::EquipmentInventory {
                     id: src.id,
                     item: name.clone(),
                     amount: *d,
-                }));
+                });
             }
             TransferItem::Liquid(name) => {
                 let d = &mut src.warehouse.liquids[name].stored;
                 *d -= self.amount;
-                db.ephemeral.do_bg(Task::Stat(StatKind::LiquidInventory {
+                db.ephemeral.stat(StatKind::LiquidInventory {
                     id: src.id,
                     item: *name,
                     amount: *d,
-                }));
+                });
             }
         }
         let dst = objective_mut!(db, self.target)?;
@@ -148,20 +147,20 @@ impl Transfer {
                     .get_or_default_cow(name.clone())
                     .stored;
                 *d += self.amount;
-                db.ephemeral.do_bg(Task::Stat(StatKind::EquipmentInventory {
+                db.ephemeral.stat(StatKind::EquipmentInventory {
                     id: dst.id,
                     item: name.clone(),
                     amount: *d,
-                }));
+                });
             }
             TransferItem::Liquid(name) => {
                 let d = &mut dst.warehouse.liquids.get_or_default_cow(*name).stored;
                 *d += self.amount;
-                db.ephemeral.do_bg(Task::Stat(StatKind::LiquidInventory {
+                db.ephemeral.stat(StatKind::LiquidInventory {
                     id: dst.id,
                     item: *name,
                     amount: *d,
-                }));
+                });
             }
         }
         Ok(())
@@ -923,11 +922,11 @@ impl Db {
             }
             obj.fuel = if n == 0 { 0 } else { (sum / n) as u8 };
             if current_supply != obj.supply || current_fuel != obj.fuel {
-                self.ephemeral.do_bg(Task::Stat(StatKind::ObjectiveSupply {
+                self.ephemeral.stat(StatKind::ObjectiveSupply {
                     id: obj.id,
                     supply: obj.supply,
                     fuel: obj.fuel,
-                }));
+                });
             }
         }
         self.ephemeral.dirty();

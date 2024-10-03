@@ -928,8 +928,9 @@ fn run_slow_timed_events(
         for dead in ctx.shots_out.bring_out_your_dead(ts) {
             info!("kill {:?}", dead);
             if let Some(points) = ctx.db.ephemeral.cfg.points {
-                ctx.db.award_kill_points(points, dead)
+                ctx.db.award_kill_points(points, &dead)
             }
+            ctx.do_bg_task(Task::Stat(StatKind::Kill(dead)));
         }
         let start_ts = Utc::now();
         if let Err(e) = ctx.db.maybe_do_repairs(ts) {

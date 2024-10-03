@@ -1,6 +1,6 @@
 use super::{objective::Objective, Db, Map};
 use crate::{
-    admin,
+    admin, bg,
     db::{cargo::Oldest, group::DeployKind},
     group, group_mut,
     jtac::{JtId, Jtacs},
@@ -16,6 +16,7 @@ use bfprotocols::{
         LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
     db::{group::GroupId, objective::ObjectiveId},
+    stats::StatKind,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
@@ -321,7 +322,8 @@ impl Db {
             }
         }
         let name = cmd.name.clone();
-        match cmd.args {
+        let action = cmd.action.clone();
+        let gid = match cmd.args {
             ActionArgs::Awacs(args) => self
                 .awacs(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling awacs")?,
@@ -384,8 +386,13 @@ impl Db {
                     .move_group(spctx, side, ucid, cmd.action.penalty.unwrap_or(0), args)
                     .context("moving unit")?,
             },
-        }
+        };
         if let Some(ucid) = ucid.as_ref() {
+            self.ephemeral.do_bg(bg::Task::Stat(StatKind::Action {
+                by: *ucid,
+                action,
+                gid,
+            }));
             self.adjust_points(
                 ucid,
                 -(cost as i32),
@@ -555,7 +562,7 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name).context("getting pos")?;
@@ -563,7 +570,8 @@ impl Db {
             .drone_mission(side, ucid, pos, args)
             .context("generate drone mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting ai mission")
+            .context("setting ai mission")?;
+        Ok(None)
     }
 
     fn drone(
@@ -576,8 +584,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<DroneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -604,8 +612,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_fighters_mission<'lua>(
@@ -652,7 +659,7 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
@@ -660,7 +667,8 @@ impl Db {
             .ai_fighters_mission(side, ucid, pos, args)
             .context("generate fighters mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting fighters mission")
+            .context("setting fighters mission")?;
+        Ok(None)
     }
 
     fn ai_fighters(
@@ -673,8 +681,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -698,8 +706,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_attackers_mission<'lua>(
@@ -749,7 +756,7 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
@@ -757,7 +764,8 @@ impl Db {
             .ai_attackers_mission(side, ucid, pos, args)
             .context("generate attackers mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting ai mission")
+            .context("setting ai mission")?;
+        Ok(None)
     }
 
     fn ai_attackers(
@@ -770,8 +778,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -795,8 +803,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn move_group(
@@ -806,7 +813,7 @@ impl Db {
         ucid: &Ucid,
         penalty: u32,
         args: WithPosAndGroup<MoveCfg>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let pos = self.group_center(&args.group)?;
         let group = group_mut!(self, args.group)?;
         if group.side != side {
@@ -917,7 +924,7 @@ impl Db {
                 },
             ],
         })?;
-        Ok(())
+        Ok(None)
     }
 
     fn tanker_mission<'lua>(
@@ -965,14 +972,15 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
             .tanker_mission(side, ucid, pos, args)
             .context("generate tanker mission")?;
-        self.set_ai_mission(spctx, gid, mission)
+        self.set_ai_mission(spctx, gid, mission)?;
+        Ok(None)
     }
 
     fn tanker(
@@ -985,8 +993,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1010,8 +1018,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn paratroops(
@@ -1024,8 +1031,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<DeployableCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1041,11 +1048,10 @@ impl Db {
             Some(args.pos),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
-    fn nuke(&mut self, spctx: &SpawnCtx, args: WithPos<NukeCfg>) -> Result<()> {
+    fn nuke(&mut self, spctx: &SpawnCtx, args: WithPos<NukeCfg>) -> Result<Option<GroupId>> {
         let land = Land::singleton(spctx.lua())?;
         let act = Trigger::singleton(spctx.lua())?.action()?;
         let alt = land.get_height(LuaVec2(args.pos))? + 500.;
@@ -1053,7 +1059,7 @@ impl Db {
         act.explosion(LuaVec3(pos), args.cfg.power as f32)?;
         self.persisted.nukes_used += 1;
         self.ephemeral.dirty();
-        Ok(())
+        Ok(None)
     }
 
     fn ai_logistics_transfer(
@@ -1066,10 +1072,10 @@ impl Db {
         name: String,
         action: Action,
         args: WithFromTo<AiPlaneCfg>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let from = objective!(self, args.from)?.zone.pos();
         let to = objective!(self, args.to)?.zone.pos();
-        self.add_and_spawn_ai_air(
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1085,8 +1091,7 @@ impl Db {
             Some(to),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_logistics_repair(
@@ -1099,9 +1104,9 @@ impl Db {
         name: String,
         action: Action,
         args: WithObj<AiPlaneCfg>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let pos = objective!(self, args.oid)?.zone.pos();
-        self.add_and_spawn_ai_air(
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1117,8 +1122,7 @@ impl Db {
             Some(pos),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_deploy(
@@ -1131,8 +1135,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<DeployableCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1148,8 +1152,7 @@ impl Db {
             Some(args.pos),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_point_to_point_mission<'lua>(
@@ -1217,14 +1220,14 @@ impl Db {
         name: String,
         action: Action,
         args: WithJtac<BomberCfg>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let jt = jtacs.get(&args.jtac)?;
         let tgt = jt
             .target()
             .as_ref()
             .map(|t| Vector2::new(t.pos.x, t.pos.z))
             .unwrap_or(jt.location().pos);
-        self.add_and_spawn_ai_air(
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1240,8 +1243,7 @@ impl Db {
             Some(tgt),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
     fn add_and_spawn_ai_air<'lua>(
@@ -1381,7 +1383,7 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
@@ -1389,7 +1391,8 @@ impl Db {
             .awacs_mission(side, ucid, pos, args)
             .context("generating awacs mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting ai mission")
+            .context("setting ai mission")?;
+        Ok(None)
     }
 
     fn awacs(
@@ -1402,8 +1405,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<AwacsCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1430,8 +1433,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_loiter_point_mission<'lua>(

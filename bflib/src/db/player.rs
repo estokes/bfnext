@@ -15,12 +15,13 @@ for more details.
 */
 
 use super::{group::DeployKind, Db, Map, Set};
-use crate::{maybe, maybe_mut, objective_mut};
+use crate::{bg::Task, maybe, maybe_mut, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
     db::{group::GroupId, objective::ObjectiveId},
     shots::{Dead, Who},
+    stats::StatKind,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -864,7 +865,7 @@ impl Db {
         }
     }
 
-    pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: Dead) {
+    pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: &Dead) {
         let mut hit_by: SmallVec<[&Ucid; 16]> = smallvec![];
         let valid_shots = || {
             // why are you hitting yourself
@@ -958,6 +959,11 @@ impl Db {
             let pp = player.points;
             if amount != 0 {
                 let m = format_compact!("{}({}) points {}", pp, amount, why);
+                self.ephemeral.do_bg(Task::Stat(StatKind::Points {
+                    points: amount,
+                    reason: m.clone().into(),
+                    ucid: *ucid,
+                }));
                 self.ephemeral.panel_to_player(&self.persisted, 10, ucid, m);
                 self.ephemeral.dirty();
             }

@@ -21,6 +21,7 @@ use super::{
 };
 use crate::{
     admin::WarehouseKind,
+    bg::Task,
     maybe, objective, objective_mut,
     perf::{record_perf, Perf, PerfInner},
 };
@@ -28,6 +29,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::Vehicle,
     db::objective::{ObjectiveId, ObjectiveKind},
+    stats::StatKind,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -118,22 +120,48 @@ impl Transfer {
     fn execute(&self, db: &mut Db) -> Result<()> {
         let src = objective_mut!(db, self.source)?;
         match &self.item {
-            TransferItem::Equipment(name) => src.warehouse.equipment[name].stored -= self.amount,
-            TransferItem::Liquid(name) => src.warehouse.liquids[name].stored -= self.amount,
+            TransferItem::Equipment(name) => {
+                let d = &mut src.warehouse.equipment[name].stored;
+                *d -= self.amount;
+                db.ephemeral.do_bg(Task::Stat(StatKind::EquipmentInventory {
+                    id: src.id,
+                    item: name.clone(),
+                    amount: *d,
+                }));
+            }
+            TransferItem::Liquid(name) => {
+                let d = &mut src.warehouse.liquids[name].stored;
+                *d -= self.amount;
+                db.ephemeral.do_bg(Task::Stat(StatKind::LiquidInventory {
+                    id: src.id,
+                    item: *name,
+                    amount: *d,
+                }));
+            }
         }
         let dst = objective_mut!(db, self.target)?;
         match &self.item {
             TransferItem::Equipment(name) => {
-                dst.warehouse
+                let d = &mut dst
+                    .warehouse
                     .equipment
                     .get_or_default_cow(name.clone())
-                    .stored += self.amount
+                    .stored;
+                *d += self.amount;
+                db.ephemeral.do_bg(Task::Stat(StatKind::EquipmentInventory {
+                    id: dst.id,
+                    item: name.clone(),
+                    amount: *d,
+                }));
             }
             TransferItem::Liquid(name) => {
-                dst.warehouse
-                    .liquids
-                    .get_or_default_cow(name.clone())
-                    .stored += self.amount
+                let d = &mut dst.warehouse.liquids.get_or_default_cow(*name).stored;
+                *d += self.amount;
+                db.ephemeral.do_bg(Task::Stat(StatKind::LiquidInventory {
+                    id: dst.id,
+                    item: *name,
+                    amount: *d,
+                }));
             }
         }
         Ok(())

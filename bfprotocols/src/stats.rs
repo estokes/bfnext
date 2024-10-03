@@ -64,13 +64,19 @@ pub enum StatKind {
         to: ObjectiveId,
         ucid: Ucid,
     },
-    Inventory {
+    EquipmentInventory {
         id: ObjectiveId,
-        equipment: Vec<(String, u32)>,
-        liquids: Vec<(LiquidType, u32)>,
+        item: String,
+        amount: u32
+    },
+    LiquidInventory {
+        id: ObjectiveId,
+        item: LiquidType,
+        amount: u32
     },
     Action {
         by: Ucid,
+        gid: Option<GroupId>,
         action: Action,
     },
     DeployGroup {
@@ -154,10 +160,7 @@ pub enum StatKind {
         typ: LifeType,
         n: i8,
     },
-    Kill {
-        shots: Dead,
-        team_kill: bool,
-    },
+    Kill(Dead),
     Points {
         ucid: Ucid,
         points: i32,

@@ -473,6 +473,9 @@ impl Db {
             }
             Ok(())
         };
+        queue_check_close_enemies().context("queuing unit pos checks")?;
+        self.cull_or_respawn_objectives(spctx.lua(), landcache, Utc::now())
+            .context("initial cull or respawn")?;
         // return lives to pilots who were airborne on the last restart
         let airborne_players = self
             .persisted
@@ -488,12 +491,13 @@ impl Db {
                 if *lives >= self.ephemeral.cfg.default_lives[&lt].0 {
                     player.lives.remove_cow(&lt);
                 }
-                self.ephemeral.dirty = true;
+                self.ephemeral.stat(StatKind::Life {
+                    id: ucid,
+                    lives: player.lives.clone()
+                });
+                self.ephemeral.dirty();
             }
         }
-        queue_check_close_enemies().context("queuing unit pos checks")?;
-        self.cull_or_respawn_objectives(spctx.lua(), landcache, Utc::now())
-            .context("initial cull or respawn")?;
         Ok(())
     }
 }

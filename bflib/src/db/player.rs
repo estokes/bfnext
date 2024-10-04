@@ -163,6 +163,10 @@ impl Db {
 
     pub fn player_reset_lives(&mut self, ucid: &Ucid) -> Result<()> {
         maybe_mut!(self.persisted.players, ucid, "player")?.lives = MapS::new();
+        self.ephemeral.stat(StatKind::Life {
+            id: *ucid,
+            lives: MapS::new()
+        });
         self.ephemeral.dirty();
         Ok(())
     }
@@ -886,6 +890,10 @@ impl Db {
                         }
                     }
                 };
+                self.ephemeral.stat(StatKind::Life {
+                    id: shooter,
+                    lives: player.lives.clone()
+                });
                 player.points -= penalty_points as i32;
                 player.player_team_kills.insert_cow(now, *ucid);
                 let tp = player.points;

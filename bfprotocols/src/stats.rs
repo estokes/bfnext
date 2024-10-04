@@ -17,12 +17,15 @@ use dcso3::{
 use enumflags2::bitflags;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{
+    fmt,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum EnId {
     Player(Ucid),
-    Unit(UnitId)
+    Unit(UnitId),
 }
 
 impl fmt::Display for EnId {
@@ -49,7 +52,7 @@ pub struct Pos {
 #[repr(u8)]
 pub enum DetectionSource {
     EWR,
-    Jtac
+    Jtac,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,7 +169,7 @@ pub enum StatKind {
     Detected {
         id: EnId,
         detected: bool,
-        source: DetectionSource
+        source: DetectionSource,
     },
     Takeoff {
         id: SlotId,

@@ -22,7 +22,7 @@ use crate::{
     landcache::LandCache,
 };
 use anyhow::Result;
-use bfprotocols::{db::group::UnitId, stats::StatKind};
+use bfprotocols::stats::{DetectionSource, EnId, StatKind};
 use chrono::prelude::*;
 use dcso3::{
     azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid, radians_to_degrees, MizLua,
@@ -31,12 +31,6 @@ use dcso3::{
 use fxhash::FxHashMap;
 use smallvec::{smallvec, SmallVec};
 use std::fmt;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum TrackId {
-    Player(Ucid),
-    Unit(UnitId),
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct GibBraa {
@@ -136,7 +130,7 @@ impl Default for PlayerState {
 
 #[derive(Debug, Clone, Default)]
 pub struct Ewr {
-    tracks: FxHashMap<Side, FxHashMap<TrackId, Track>>,
+    tracks: FxHashMap<Side, FxHashMap<EnId, Track>>,
     player_state: FxHashMap<Ucid, PlayerState>,
 }
 
@@ -149,13 +143,13 @@ impl Ewr {
         now: DateTime<Utc>,
     ) -> Result<()> {
         let land = Land::singleton(lua)?;
-        let aircraft: SmallVec<[(TrackId, Side, Position3, Vector3); 128]> = {
+        let aircraft: SmallVec<[(EnId, Side, Position3, Vector3); 128]> = {
             let players = db
                 .instanced_players()
                 .filter(|(_, _, inst)| inst.in_air)
                 .map(|(ucid, player, inst)| {
                     (
-                        TrackId::Player(*ucid),
+                        EnId::Player(*ucid),
                         player.side,
                         inst.position,
                         inst.velocity,
@@ -172,7 +166,7 @@ impl Ewr {
                         .filter_map(|uid| db.persisted.units.get(uid).map(|u| (*uid, u)))
                         .filter_map(|(uid, su)| {
                             su.airborne_velocity
-                                .map(|v| (TrackId::Unit(uid), sg.side, su.position, v))
+                                .map(|v| (EnId::Unit(uid), sg.side, su.position, v))
                         })
                 });
             players.chain(actions).collect()
@@ -206,15 +200,10 @@ impl Ewr {
             for (id, track) in tracks.iter_mut() {
                 if track.was_detected != track.detected {
                     track.was_detected = track.detected;
-                    db.ephemeral.stat(match id {
-                        TrackId::Player(ucid) => StatKind::PlayerDetected {
-                            id: *ucid,
-                            detected: track.was_detected,
-                        },
-                        TrackId::Unit(uid) => StatKind::UnitDetected {
-                            id: *uid,
-                            detected: track.was_detected,
-                        },
+                    db.ephemeral.stat(StatKind::Detected {
+                        id: *id,
+                        detected: track.was_detected,
+                        source: DetectionSource::EWR,
                     })
                 }
             }
@@ -252,7 +241,7 @@ impl Ewr {
         if !force && !state.enabled {
             return reports;
         }
-        let ownship = TrackId::Player(*ucid);
+        let ownship = EnId::Player(*ucid);
         tracks.retain(|tucid, track| {
             let age = (now - track.last).num_seconds();
             let include = (friendly && track.side == side) || (!friendly && track.side != side);

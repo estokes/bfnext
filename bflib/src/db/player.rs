@@ -21,12 +21,18 @@ use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
     db::{group::GroupId, objective::ObjectiveId},
     shots::{Dead, Who},
-    stats::{self, StatKind},
+    stats::{self, EnId, StatKind},
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    airbase::Airbase, coalition::Side, coord::Coord, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, unit::{ClassUnit, Unit}, MizLua, Position3, String, Vector2, Vector3
+    airbase::Airbase,
+    coalition::Side,
+    coord::Coord,
+    net::{SlotId, Ucid},
+    object::{DcsObject, DcsOid},
+    unit::{ClassUnit, Unit},
+    MizLua, Position3, String, Vector2, Vector3,
 };
 use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
@@ -553,13 +559,13 @@ impl Db {
                                     inst.moved = Some(now);
                                 }
                                 unit = Some(instance);
-                                self.ephemeral.stat(StatKind::PlayerPosition {
-                                    id: *slot,
+                                self.ephemeral.stat(StatKind::Position {
+                                    id: EnId::Player(*ucid),
                                     pos: stats::Pos {
                                         pos: coord.lo_to_ll(inst.position.p)?,
                                         altitude: inst.position.p.0.y as f32,
-                                        velocity: inst.velocity
-                                    }
+                                        velocity: inst.velocity,
+                                    },
                                 });
                             }
                             Err(e) => {

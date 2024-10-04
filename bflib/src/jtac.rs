@@ -151,7 +151,7 @@ pub struct Contact {
 
 #[derive(Debug, Clone)]
 pub struct JtacTarget {
-    pub id: CtId,
+    pub id: EnId,
     pub pos: Vector3,
     pub typ: Vehicle,
     source: DcsOid<ClassUnit>,
@@ -205,12 +205,12 @@ impl JtacLocation {
 }
 
 pub struct ContactsIter<'a> {
-    contacts: Vec<indexmap::map::Iter<'a, CtId, Contact>>,
+    contacts: Vec<indexmap::map::Iter<'a, EnId, Contact>>,
     i: usize,
 }
 
 impl<'a> Iterator for ContactsIter<'a> {
-    type Item = (&'a CtId, &'a Contact);
+    type Item = (&'a EnId, &'a Contact);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -239,7 +239,7 @@ impl<'a> Iterator for ContactsIter<'a> {
 pub struct Jtac {
     gid: JtId,
     side: Side,
-    contacts: IndexMap<CtId, Contact>,
+    contacts: IndexMap<EnId, Contact>,
     filter: BitFlags<UnitTag>,
     location: JtacLocation,
     priority: Vec<UnitTags>,
@@ -282,10 +282,10 @@ impl Jtac {
 
     pub fn status(&self, db: &Db, loc_by_code: &LocByCode) -> Result<CompactString> {
         use std::fmt::Write;
-        fn get_typ(db: &Db, id: &CtId) -> Result<Vehicle> {
+        fn get_typ(db: &Db, id: &EnId) -> Result<Vehicle> {
             Ok(match id {
-                CtId::Unit(uid) => db.unit(uid)?.typ.clone(),
-                CtId::Player(ucid) => db
+                EnId::Unit(uid) => db.unit(uid)?.typ.clone(),
+                EnId::Player(ucid) => db
                     .player(ucid)
                     .and_then(|p| p.current_slot.as_ref())
                     .and_then(|(_, i)| i.as_ref())
@@ -397,7 +397,7 @@ impl Jtac {
     }
 
     fn add_unit_contact(&mut self, unit: &SpawnedUnit) {
-        let ct = self.contacts.entry(CtId::Unit(unit.id)).or_default();
+        let ct = self.contacts.entry(EnId::Unit(unit.id)).or_default();
         ct.pos = unit.position.p.0;
         ct.last_move = unit.moved;
         ct.tags = unit.tags;
@@ -405,7 +405,7 @@ impl Jtac {
     }
 
     fn add_player_contact(&mut self, ucid: Ucid, inst: &InstancedPlayer) {
-        let ct = self.contacts.entry(CtId::Player(ucid)).or_default();
+        let ct = self.contacts.entry(EnId::Player(ucid)).or_default();
         ct.pos = inst.position.p.0;
     }
 
@@ -575,7 +575,7 @@ impl Jtac {
         self.set_target(db, lua, i).context("setting target")
     }
 
-    fn remove_contact(&mut self, lua: MizLua, db: &Db, id: &CtId) -> Result<bool> {
+    fn remove_contact(&mut self, lua: MizLua, db: &Db, id: &EnId) -> Result<bool> {
         if let Some(_) = self.contacts.swap_remove(id) {
             if let Some(target) = &self.target {
                 if &target.id == id {
@@ -699,7 +699,7 @@ impl Jtac {
     fn update_target_position(&mut self, lua: MizLua, db: &Db) -> Result<()> {
         if let Some(target) = &self.target {
             let (pos, velocity) = match &target.id {
-                CtId::Unit(uid) => {
+                EnId::Unit(uid) => {
                     let unit = db.unit(uid)?;
                     let v = db
                         .ephemeral
@@ -709,7 +709,7 @@ impl Jtac {
                         .unwrap_or(LuaVec3(Vector3::default()));
                     (unit.position.p.0, v.0)
                 }
-                CtId::Player(ucid) => {
+                EnId::Player(ucid) => {
                     let player = db
                         .player(ucid)
                         .ok_or_else(|| anyhow!("no such player {ucid}"))?;
@@ -813,7 +813,7 @@ struct Detected {
 #[derive(Debug, Clone, Default)]
 pub struct Jtacs {
     jtacs: FxHashMap<Side, FxHashMap<JtId, Jtac>>,
-    detected: FxHashMap<Side, FxHashMap<CtId, Detected>>,
+    detected: FxHashMap<Side, FxHashMap<EnId, Detected>>,
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
     code_by_location: LocByCode,
     menu_dirty: FxHashMap<Side, FxHashSet<ObjectiveId>>,
@@ -875,7 +875,7 @@ impl Jtacs {
         Ok(())
     }
 
-    pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = CtId> + 'a {
+    pub fn jtac_targets<'a>(&'a self) -> impl Iterator<Item = EnId> + 'a {
         self.jtacs.values().flat_map(|j| {
             j.values()
                 .filter_map(|jt| jt.target.as_ref().map(|target| target.id))
@@ -942,16 +942,16 @@ impl Jtacs {
         let ctid = db
             .ephemeral
             .player_in_unit(id)
-            .map(|ucid| CtId::Player(*ucid))
+            .map(|ucid| EnId::Player(*ucid))
             .or_else(|| {
                 db.ephemeral
                     .get_uid_by_object_id(id)
-                    .map(|uid| CtId::Unit(*uid))
+                    .map(|uid| EnId::Unit(*uid))
             });
         let jtid = {
             let sl = db.ephemeral.get_slot_by_object_id(id).map(|sl| *sl);
             match &ctid {
-                Some(CtId::Unit(uid)) => db.unit(uid).ok().map(|spu| JtId::Group(spu.group)),
+                Some(EnId::Unit(uid)) => db.unit(uid).ok().map(|spu| JtId::Group(spu.group)),
                 Some(_) | None => sl.map(|sl| JtId::Slot(sl)),
             }
         };
@@ -1030,8 +1030,8 @@ impl Jtacs {
         let mut players: SmallVec<[Ucid; 16]> = smallvec![];
         for id in self.jtac_targets() {
             match id {
-                CtId::Unit(uid) => units.push(uid),
-                CtId::Player(ucid) => players.push(ucid),
+                EnId::Unit(uid) => units.push(uid),
+                EnId::Player(ucid) => players.push(ucid),
             }
         }
         let mut dead = db
@@ -1067,8 +1067,8 @@ impl Jtacs {
         landcache: &mut LandCache,
         db: &Db,
         saw_jtacs: &mut SmallVec<[JtId; 32]>,
-        saw_units: &mut FxHashSet<CtId>,
-        lost_targets: &mut SmallVec<[(Side, JtId, Option<CtId>); 64]>,
+        saw_units: &mut FxHashSet<EnId>,
+        lost_targets: &mut SmallVec<[(Side, JtId, Option<EnId>); 64]>,
         jt: JtDesc,
     ) -> Result<()> {
         let JtDesc {
@@ -1138,7 +1138,7 @@ impl Jtacs {
             pos.y += 10.
         };
         for (unit, _) in db.instanced_units() {
-            let id = CtId::Unit(unit.id);
+            let id = EnId::Unit(unit.id);
             macro_rules! lost {
                 () => {{
                     match jtac.remove_contact(lua, db, &id) {
@@ -1184,7 +1184,7 @@ impl Jtacs {
             if player.side == jtac.side {
                 continue;
             }
-            let id = CtId::Player(*ucid);
+            let id = EnId::Player(*ucid);
             saw_units.insert(id);
             let detected = detected.entry(id).or_default();
             let tags = db.ephemeral.cfg.unit_classification[&inst.typ];
@@ -1224,8 +1224,8 @@ impl Jtacs {
         let land = Land::singleton(lua)?;
         self.prepare_detected();
         let mut saw_jtacs: SmallVec<[JtId; 32]> = smallvec![];
-        let mut saw_units: FxHashSet<CtId> = FxHashSet::default();
-        let mut lost_targets: SmallVec<[(Side, JtId, Option<CtId>); 64]> = smallvec![];
+        let mut saw_units: FxHashSet<EnId> = FxHashSet::default();
+        let mut lost_targets: SmallVec<[(Side, JtId, Option<EnId>); 64]> = smallvec![];
         for jt in db.jtacs() {
             self.update_jtac(
                 lua,
@@ -1270,7 +1270,7 @@ impl Jtacs {
             }
         }
         for detected in self.detected.values_mut() {
-            detected.retain(|(id, detected)| {
+            detected.retain(|id, detected| {
                 if !saw_units.contains(id) {
                     false
                 } else {

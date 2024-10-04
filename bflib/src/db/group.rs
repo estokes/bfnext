@@ -24,7 +24,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     db::objective::ObjectiveId,
-    stats,
+    stats::{self, EnId},
 };
 use bfprotocols::{
     db::group::{GroupId, UnitId},
@@ -1012,8 +1012,8 @@ impl Db {
                     spunit.airborne_velocity = None;
                     None
                 };
-                self.ephemeral.stat(StatKind::UnitPosition {
-                    id: *uid,
+                self.ephemeral.stat(StatKind::Position {
+                    id: EnId::Unit(*uid),
                     pos: stats::Pos {
                         pos: coord.lo_to_ll(pos.p)?,
                         altitude: pos.p.0.y as f32,

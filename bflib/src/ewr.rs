@@ -22,7 +22,7 @@ use crate::{
     landcache::LandCache,
 };
 use anyhow::Result;
-use bfprotocols::db::group::GroupId;
+use bfprotocols::{db::group::UnitId, stats::StatKind};
 use chrono::prelude::*;
 use dcso3::{
     azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid, radians_to_degrees, MizLua,
@@ -35,7 +35,7 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum TrackId {
     Player(Ucid),
-    Group(GroupId),
+    Unit(UnitId),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -101,6 +101,8 @@ struct Track {
     velocity: Vector3,
     last: DateTime<Utc>,
     side: Side,
+    was_detected: bool,
+    detected: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -167,19 +169,24 @@ impl Ewr {
                 .flat_map(|sg| {
                     sg.units
                         .into_iter()
-                        .filter_map(|uid| db.persisted.units.get(uid))
-                        .filter_map(|su| {
+                        .filter_map(|uid| db.persisted.units.get(uid).map(|u| (*uid, u)))
+                        .filter_map(|(uid, su)| {
                             su.airborne_velocity
-                                .map(|v| (TrackId::Group(sg.id), sg.side, su.position, v))
+                                .map(|v| (TrackId::Unit(uid), sg.side, su.position, v))
                         })
                 });
             players.chain(actions).collect()
         };
-        for (mut ewr_pos, side, ewr) in db.ewrs() {
+        for tracks in self.tracks.values_mut() {
+            for track in tracks.values_mut() {
+                track.detected = false;
+            }
+        }
+        for (mut ewr_pos, ewr_side, ewr) in db.ewrs() {
             let range = (ewr.range as f64).powi(2);
-            let tracks = self.tracks.entry(side).or_default();
+            let tracks = self.tracks.entry(ewr_side).or_default();
             ewr_pos.y += 10.; // factor in antenna height
-            for (id, side, pos, velocity) in &aircraft {
+            for (id, obj_side, pos, velocity) in &aircraft {
                 let track = tracks.entry(*id).or_default();
                 if track.last != now {
                     let dist = na::distance_squared(&ewr_pos.into(), &pos.p.0.into());
@@ -188,9 +195,27 @@ impl Ewr {
                             track.pos = *pos;
                             track.velocity = *velocity;
                             track.last = now;
-                            track.side = *side;
+                            track.side = *obj_side;
+                            track.detected |= ewr_side != *obj_side;
                         }
                     }
+                }
+            }
+        }
+        for tracks in self.tracks.values_mut() {
+            for (id, track) in tracks.iter_mut() {
+                if track.was_detected != track.detected {
+                    track.was_detected = track.detected;
+                    db.ephemeral.stat(match id {
+                        TrackId::Player(ucid) => StatKind::PlayerDetected {
+                            id: *ucid,
+                            detected: track.was_detected,
+                        },
+                        TrackId::Unit(uid) => StatKind::UnitDetected {
+                            id: *uid,
+                            detected: track.was_detected,
+                        },
+                    })
                 }
             }
         }

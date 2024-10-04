@@ -147,7 +147,7 @@ pub enum StatKind {
         pos: Pos,
     },
     PlayerDetected {
-        id: SlotId,
+        id: Ucid,
         detected: bool,
     },
     UnitDetected {

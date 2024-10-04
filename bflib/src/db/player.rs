@@ -21,7 +21,7 @@ use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
     db::{group::GroupId, objective::ObjectiveId},
     shots::{Dead, Who},
-    stats::StatKind,
+    stats::{self, StatKind},
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -47,7 +47,7 @@ struct VictimInfo {
 
 #[derive(Debug, Clone)]
 pub enum SlotAuth {
-    Yes,
+    Yes(Option<stats::Unit>),
     ObjectiveNotOwned(Side),
     ObjectiveHasNoLogistics,
     NoLives(LifeType),
@@ -343,14 +343,14 @@ impl Db {
             Some(player) => player,
             None => {
                 if slot.is_spectator() {
-                    return SlotAuth::Yes;
+                    return SlotAuth::Yes(None);
                 }
                 return SlotAuth::NotRegistered(slot_side);
             }
         };
         if slot.is_spectator() {
             player.jtac_or_spectators = true;
-            return SlotAuth::Yes;
+            return SlotAuth::Yes(None);
         }
         if slot_side != player.side {
             return SlotAuth::ObjectiveNotOwned(player.side);
@@ -360,7 +360,7 @@ impl Db {
             SlotId::Instructor(_, _) => {
                 if self.ephemeral.cfg.admins.contains_key(ucid) {
                     player.jtac_or_spectators = true;
-                    SlotAuth::Yes
+                    SlotAuth::Yes(None)
                 } else {
                     SlotAuth::Denied
                 }
@@ -370,7 +370,7 @@ impl Db {
             | SlotId::Observer(_, _) => {
                 if self.ephemeral.cfg.rules.ca.check(ucid) {
                     player.jtac_or_spectators = true;
-                    SlotAuth::Yes
+                    SlotAuth::Yes(None)
                 } else {
                     SlotAuth::Denied
                 }
@@ -381,7 +381,7 @@ impl Db {
                     None => {
                         player.changing_slots = true;
                         player.jtac_or_spectators = false;
-                        return SlotAuth::Yes; // it's a multicrew slot
+                        return SlotAuth::Yes(None); // it's a multicrew slot
                     }
                 };
                 let objective = match self.persisted.objectives.get(&sifo.objective) {
@@ -403,7 +403,16 @@ impl Db {
                         }
                         player.changing_slots = true;
                         player.jtac_or_spectators = false;
-                        break SlotAuth::Yes;
+                        break SlotAuth::Yes(Some(stats::Unit {
+                            typ: sifo.typ.clone(),
+                            tags: self
+                                .ephemeral
+                                .cfg
+                                .unit_classification
+                                .get(&sifo.typ)
+                                .map(|t| *t)
+                                .unwrap_or_default(),
+                        }));
                     };
                 }
                 loop {

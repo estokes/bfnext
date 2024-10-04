@@ -20,15 +20,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Unit {
-    typ: Vehicle,
-    tags: UnitTags,
+    pub typ: Vehicle,
+    pub tags: UnitTags,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pos {
-    pos: LLPos,
-    altitude: f32,
-    velocity: Vector3,
+    pub pos: LLPos,
+    pub altitude: f32,
+    pub velocity: Vector3,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

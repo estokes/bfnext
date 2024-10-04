@@ -454,9 +454,14 @@ fn try_occupy_slot(
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
             Ok(false)
         }
-        SlotAuth::Yes => {
+        SlotAuth::Yes(typ) => {
             ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
             ctx.subscribed_jtac_menus.remove(&slot);
+            ctx.do_bg_task(Task::Stat(StatKind::Slot {
+                slot,
+                ucid: ifo.ucid,
+                typ,
+            }));
             Ok(true)
         }
     }

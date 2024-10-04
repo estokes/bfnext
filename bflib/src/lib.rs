@@ -356,13 +356,17 @@ fn on_player_try_connect(
         id,
         PlayerInfo {
             name: name.clone(),
-            addr: Some(addr),
+            addr: Some(addr.clone()),
             ucid,
         },
     ) {
         return Ok(Some(String::from(format_compact!("{e}"))));
     }
     ctx.db.player_connected(ucid, name);
+    ctx.do_bg_task(Task::Stat(StatKind::Connect {
+        id: ucid,
+        addr,
+    }));
     record_perf(
         &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
         ts,

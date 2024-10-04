@@ -1,5 +1,6 @@
 use crate::{
     admin::{self, AdminCommand},
+    bg::Task,
     db::{actions::ActionCmd, group::DeployKind, player::RegErr},
     lives,
     msgq::MsgTyp,
@@ -11,6 +12,7 @@ use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use bfprotocols::{
     cfg::{Action, ActionKind},
     db::group::GroupId,
+    stats::StatKind,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -22,7 +24,8 @@ use dcso3::{
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use log::{error, info};
-use std::sync::Arc;
+use regex::Regex;
+use std::{sync::Arc, sync::OnceLock};
 
 pub(crate) fn register_success(ctx: &mut Context, id: PlayerId, name: String, side: Side) {
     let msg = String::from(format_compact!(
@@ -387,6 +390,38 @@ pub(super) fn run_action_commands(
     Ok(())
 }
 
+fn bind_command(ctx: &mut Context, id: PlayerId, s: &str) {
+    static RX: OnceLock<Regex> = OnceLock::new();
+    match ctx.connected.get(&id) {
+        None => ctx.db.ephemeral.msgs().send(
+            MsgTyp::Chat(Some(id)),
+            "You must register first. Type red or blue in chat",
+        ),
+        Some(ifo) => {
+            let rx = RX.get_or_init(|| {
+                Regex::new("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+                    .unwrap()
+            });
+            let s = s.trim();
+            if !rx.is_match(s) {
+                ctx.db
+                    .ephemeral
+                    .msgs()
+                    .send(MsgTyp::Chat(Some(id)), "Invalid token")
+            } else {
+                ctx.db
+                    .ephemeral
+                    .msgs()
+                    .send(MsgTyp::Chat(Some(id)), "Success");
+                ctx.do_bg_task(Task::Stat(StatKind::Bind {
+                    id: ifo.ucid,
+                    token: s.into(),
+                }))
+            }
+        }
+    }
+}
+
 fn help_command(ctx: &mut Context, id: PlayerId) {
     let admin = match ctx.connected.get(&id) {
         None => false,
@@ -402,6 +437,7 @@ fn help_command(ctx: &mut Context, id: PlayerId) {
         " -transfer <amount> <player>: transfer points to another player",
         " -delete <groupid>: delete a group you deployed for a partial refund",
         " -action <name> <args>: perform an action, -action help for a list of actions",
+        " -bind <token>: bind your ucid to the specified token (for the web gui)",
         " -help: show this help message",
     ] {
         ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
@@ -447,6 +483,9 @@ pub(super) fn process(
         Ok("".into())
     } else if let Some(s) = msg.strip_prefix("-delete ") {
         delete_command(ctx, id, s);
+        Ok("".into())
+    } else if let Some(s) = msg.strip_prefix("-bind ") {
+        bind_command(ctx, id, s);
         Ok("".into())
     } else if msg.starts_with("-help") {
         help_command(ctx, id);

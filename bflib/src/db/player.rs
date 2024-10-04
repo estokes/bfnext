@@ -151,6 +151,11 @@ impl Db {
                 );
                 self.ephemeral
                     .panel_to_player(&self.persisted, 10, target, msg);
+                self.ephemeral.stat(StatKind::PointsTransfer {
+                    from: *source,
+                    to: *target,
+                    points: amount,
+                });
                 self.ephemeral.dirty();
                 Ok(())
             }
@@ -165,7 +170,7 @@ impl Db {
         maybe_mut!(self.persisted.players, ucid, "player")?.lives = MapS::new();
         self.ephemeral.stat(StatKind::Life {
             id: *ucid,
-            lives: MapS::new()
+            lives: MapS::new(),
         });
         self.ephemeral.dirty();
         Ok(())
@@ -892,7 +897,7 @@ impl Db {
                 };
                 self.ephemeral.stat(StatKind::Life {
                     id: shooter,
-                    lives: player.lives.clone()
+                    lives: player.lives.clone(),
                 });
                 player.points -= penalty_points as i32;
                 player.player_team_kills.insert_cow(now, *ucid);

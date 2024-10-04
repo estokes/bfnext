@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
 dcso3 = { version = "0.1", path = "../dcso3" }
+immutable-chunkmap = { workspace = true }
 smallvec = { workspace = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }

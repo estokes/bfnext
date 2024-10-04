@@ -1,5 +1,5 @@
 use crate::{
-    cfg::{Action, Deployable, LifeType, Troop, UnitTags, Vehicle},
+    cfg::{Cfg, LifeType, UnitTags, Vehicle},
     db::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
@@ -21,6 +21,8 @@ use std::{
     fmt,
     sync::atomic::{AtomicU64, Ordering},
 };
+
+pub type MapS<K, V> = immutable_chunkmap::map::Map<K, V, 16>;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum EnId {
@@ -66,6 +68,7 @@ pub enum StatKind {
     },
     SessionStart {
         stop: Option<DateTime<Utc>>,
+        cfg: Box<Cfg>,
     },
     SessionEnd,
     Objective {
@@ -76,17 +79,17 @@ pub enum StatKind {
     },
     Capture {
         id: ObjectiveId,
-        ucids: SmallVec<[Ucid; 1]>,
+        by: SmallVec<[Ucid; 1]>,
         side: Side,
     },
     Repair {
         id: ObjectiveId,
-        ucid: Ucid,
+        by: Ucid,
     },
     SupplyTransfer {
         from: ObjectiveId,
         to: ObjectiveId,
-        ucid: Ucid,
+        by: Ucid,
     },
     EquipmentInventory {
         id: ObjectiveId,
@@ -101,25 +104,25 @@ pub enum StatKind {
     Action {
         by: Ucid,
         gid: Option<GroupId>,
-        action: Action,
+        action: String,
     },
     DeployTroop {
-        ucid: Ucid,
+        by: Ucid,
         pos: LLPos,
-        troop: Troop,
+        troop: String,
         gid: GroupId,
     },
     DeployGroup {
-        ucid: Ucid,
+        by: Ucid,
         pos: LLPos,
-        deployable: Deployable,
         gid: GroupId,
+        deployable: String,
     },
     DeployFarp {
-        ucid: Ucid,
+        by: Ucid,
         pos: LLPos,
-        deployable: Deployable,
         oid: ObjectiveId,
+        deployable: String,
     },
     ObjectiveHealth {
         id: ObjectiveId,
@@ -135,23 +138,30 @@ pub enum StatKind {
     ObjectiveDestroyed {
         id: ObjectiveId,
     },
-    PlayerRegister {
+    Register {
         name: String,
-        ucid: Ucid,
+        id: Ucid,
         side: Side,
         initial_points: i32,
     },
-    PlayerSideswitch {
-        ucid: Ucid,
+    Sideswitch {
+        id: Ucid,
         side: Side,
     },
+    Connect {
+        id: Ucid,
+        addr: String,
+    },
+    Disconnect {
+        id: Ucid,
+    },
     Slot {
-        ucid: Ucid,
+        id: Ucid,
         slot: SlotId,
         typ: Option<Unit>,
     },
     Deslot {
-        ucid: Ucid,
+        id: Ucid,
     },
     Unit {
         id: UnitId,
@@ -172,19 +182,18 @@ pub enum StatKind {
         source: DetectionSource,
     },
     Takeoff {
-        id: SlotId,
+        id: Ucid,
     },
     Land {
-        id: SlotId,
+        id: Ucid,
     },
     Life {
-        ucid: Ucid,
-        typ: LifeType,
-        n: i8,
+        id: Ucid,
+        lives: MapS<LifeType, (DateTime<Utc>, u8)>,
     },
     Kill(Dead),
     Points {
-        ucid: Ucid,
+        id: Ucid,
         points: i32,
         reason: String,
     },
@@ -194,8 +203,8 @@ pub enum StatKind {
         points: u32,
     },
     Bind {
-        ucid: Ucid,
-        id: String,
+        id: Ucid,
+        token: String,
     },
 }
 

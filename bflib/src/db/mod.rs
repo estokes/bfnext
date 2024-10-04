@@ -42,7 +42,12 @@ pub mod persisted;
 pub mod player;
 
 pub type Map<K, V> = immutable_chunkmap::map::Map<K, V, 256>;
+pub type MapM<K, V> = immutable_chunkmap::map::Map<K, V, 64>;
+pub type MapS<K, V> = immutable_chunkmap::map::Map<K, V, 16>;
+
 pub type Set<K> = immutable_chunkmap::set::Set<K, 256>;
+pub type SetM<K> = immutable_chunkmap::set::Set<K, 64>;
+pub type SetS<K> = immutable_chunkmap::set::Set<K, 16>;
 
 pub struct JtDesc {
     pub pos: Vector3,

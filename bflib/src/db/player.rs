@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{group::DeployKind, Db, Map, Set};
+use super::{group::DeployKind, Db, MapS, SetS};
 use crate::{maybe, maybe_mut, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
@@ -82,19 +82,19 @@ pub struct InstancedPlayer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
     pub name: String,
-    pub alts: Set<String>,
+    pub alts: SetS<String>,
     pub side: Side,
     pub side_switches: Option<u8>,
-    pub lives: Map<LifeType, (DateTime<Utc>, u8)>,
-    pub crates: Set<GroupId>,
+    pub lives: MapS<LifeType, (DateTime<Utc>, u8)>,
+    pub crates: SetS<GroupId>,
     #[serde(default)]
     pub airborne: Option<LifeType>,
     #[serde(default)]
     pub points: i32,
     #[serde(default)]
-    pub ai_team_kills: Set<DateTime<Utc>>,
+    pub ai_team_kills: SetS<DateTime<Utc>>,
     #[serde(default)]
-    pub player_team_kills: Map<DateTime<Utc>, Ucid>,
+    pub player_team_kills: MapS<DateTime<Utc>, Ucid>,
     #[serde(skip)]
     pub current_slot: Option<(SlotId, Option<InstancedPlayer>)>,
     #[serde(skip)]
@@ -112,7 +112,7 @@ impl Db {
                     .ephemeral
                     .player_deslot(&self.persisted, &slot, Some(*ucid));
             }
-            self.ephemeral.stat(StatKind::Deslot { ucid: *ucid });
+            self.ephemeral.stat(StatKind::Deslot { id: *ucid });
             self.ephemeral.dirty()
         }
     }
@@ -162,7 +162,7 @@ impl Db {
     }
 
     pub fn player_reset_lives(&mut self, ucid: &Ucid) -> Result<()> {
-        maybe_mut!(self.persisted.players, ucid, "player")?.lives = Map::new();
+        maybe_mut!(self.persisted.players, ucid, "player")?.lives = MapS::new();
         self.ephemeral.dirty();
         Ok(())
     }
@@ -226,11 +226,11 @@ impl Db {
             .slot_info
             .get(&slot)
             .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
-        let player = self
+        let (ucid, player) = self
             .ephemeral
             .players_by_slot
             .get(&slot)
-            .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
+            .and_then(|ucid| self.persisted.players.get_mut_cow(ucid).map(|p| (*ucid, p)))
             .ok_or_else(|| anyhow!("could not find player in slot {:?}", slot))?;
         let life_type = match self.ephemeral.cfg.life_types.get(&sifo.typ) {
             None => bail!("no life type for vehicle {:?}", sifo.typ),
@@ -242,6 +242,7 @@ impl Db {
         if let Some((_, Some(inst))) = &mut player.current_slot {
             inst.landed_at_objective = None;
         }
+        self.ephemeral.stat(StatKind::Takeoff { id: ucid });
         let is_on_owned_objective = self
             .persisted
             .objectives
@@ -256,6 +257,10 @@ impl Db {
             } else {
                 player.airborne = Some(life_type);
                 *player_lives -= 1;
+                self.ephemeral.stat(StatKind::Life {
+                    id: ucid,
+                    lives: player.lives.clone(),
+                });
             }
             self.ephemeral.dirty();
             Ok(TakeoffRes::TookLife(life_type))
@@ -269,11 +274,11 @@ impl Db {
             Some(sifo) => sifo,
             None => return None,
         };
-        let player = match self
+        let (ucid, player) = match self
             .ephemeral
             .players_by_slot
             .get(&slot)
-            .and_then(|ucid| self.persisted.players.get_mut_cow(ucid))
+            .and_then(|ucid| self.persisted.players.get_mut_cow(ucid).map(|p| (*ucid, p)))
         {
             Some(player) => player,
             None => return None,
@@ -294,6 +299,7 @@ impl Db {
                     None
                 }
             });
+        self.ephemeral.stat(StatKind::Land { id: ucid });
         if let Some(oid) = on_owned_objective {
             *player_lives += 1;
             player.airborne = None;
@@ -305,6 +311,10 @@ impl Db {
                 inst.position.p.z = position.y;
                 inst.landed_at_objective = Some(oid);
             }
+            self.ephemeral.stat(StatKind::Life {
+                id: ucid,
+                lives: player.lives.clone(),
+            });
             self.ephemeral.dirty();
             Some(life_type)
         } else {
@@ -327,9 +337,17 @@ impl Db {
                 lt_to_reset.push(*lt);
             }
         }
+        let mut reset = false;
         for lt in lt_to_reset {
             player.lives.remove_cow(&lt);
+            reset = true;
             self.ephemeral.dirty();
+        }
+        if reset {
+            self.ephemeral.stat(StatKind::Life {
+                id: *ucid,
+                lives: player.lives.clone(),
+            });
         }
         Ok(())
     }
@@ -428,6 +446,10 @@ impl Db {
                             );
                             if time - reset >= reset_after {
                                 player.lives.remove_cow(&life_type);
+                                self.ephemeral.stat(StatKind::Life {
+                                    id: *ucid,
+                                    lives: player.lives.clone(),
+                                });
                                 self.ephemeral.dirty = true;
                             } else if n == 0 {
                                 break SlotAuth::NoLives(life_type);
@@ -470,25 +492,25 @@ impl Db {
                     ucid,
                     Player {
                         name: name.clone(),
-                        alts: Set::from_iter([name.clone()]),
+                        alts: SetS::from_iter([name.clone()]),
                         side,
                         side_switches: self.ephemeral.cfg.side_switches,
-                        lives: Map::new(),
-                        crates: Set::new(),
+                        lives: MapS::new(),
+                        crates: SetS::new(),
                         airborne: None,
                         points,
                         current_slot: None,
                         changing_slots: false,
                         jtac_or_spectators: true,
-                        ai_team_kills: Set::new(),
-                        player_team_kills: Map::new(),
+                        ai_team_kills: SetS::new(),
+                        player_team_kills: MapS::new(),
                     },
                 );
-                self.ephemeral.stat(StatKind::PlayerRegister {
+                self.ephemeral.stat(StatKind::Register {
                     initial_points: points,
                     name,
                     side,
-                    ucid,
+                    id: ucid,
                 });
                 self.ephemeral.dirty();
                 Ok(())
@@ -500,7 +522,7 @@ impl Db {
         let player = maybe_mut!(self.persisted.players, ucid, "no such player")?;
         player.side = side;
         self.ephemeral
-            .stat(StatKind::PlayerSideswitch { ucid: *ucid, side });
+            .stat(StatKind::Sideswitch { id: *ucid, side });
         self.ephemeral.dirty();
         Ok(())
     }
@@ -524,7 +546,7 @@ impl Db {
                     }
                     player.side = side;
                     self.ephemeral
-                        .stat(StatKind::PlayerSideswitch { ucid: *ucid, side });
+                        .stat(StatKind::Sideswitch { id: *ucid, side });
                     self.ephemeral.dirty();
                     Ok(())
                 }
@@ -767,6 +789,7 @@ impl Db {
                 self.ephemeral.push_sync_warehouse(oid, inst.typ.clone());
             }
         }
+        self.ephemeral.stat(StatKind::Disconnect { id: *ucid });
         self.player_deslot(ucid);
     }
 
@@ -993,7 +1016,7 @@ impl Db {
                 self.ephemeral.stat(StatKind::Points {
                     points: amount,
                     reason: m.clone().into(),
-                    ucid: *ucid,
+                    id: *ucid,
                 });
                 self.ephemeral.panel_to_player(&self.persisted, 10, ucid, m);
                 self.ephemeral.dirty();

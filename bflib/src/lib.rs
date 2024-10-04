@@ -458,8 +458,8 @@ fn try_occupy_slot(
             ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
             ctx.subscribed_jtac_menus.remove(&slot);
             ctx.do_bg_task(Task::Stat(StatKind::Slot {
+                id: ifo.ucid,
                 slot,
-                ucid: ifo.ucid,
                 typ,
             }));
             Ok(true)
@@ -1171,6 +1171,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         .map(|hrs| AutoShutdown::new(Utc::now() + Duration::hours(hrs as i64)));
     ctx.do_bg_task(Task::Stat(StatKind::SessionStart {
         stop: ctx.shutdown.map(|a| a.when),
+        cfg: Box::new((*ctx.db.ephemeral.cfg).clone())
     }));
     info!("spawning units");
     ctx.respawn_groups(lua, &miz)

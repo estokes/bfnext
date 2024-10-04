@@ -18,7 +18,7 @@ use super::{
     group::{SpawnedGroup, SpawnedUnit},
     objective::Objective,
     player::Player,
-    Map, Set,
+    Map, MapM, MapS, Set, SetS, SetM,
 };
 use bfprotocols::db::{
     group::{GroupId, UnitId},
@@ -33,21 +33,21 @@ pub struct Persisted {
     pub units: Map<UnitId, SpawnedUnit>,
     pub groups_by_name: Map<String, GroupId>,
     pub units_by_name: Map<String, UnitId>,
-    pub groups_by_side: Map<Side, Set<GroupId>>,
-    pub deployed: Set<GroupId>,
-    pub farps: Set<ObjectiveId>,
-    pub crates: Set<GroupId>,
-    pub troops: Set<GroupId>,
-    pub jtacs: Set<GroupId>,
-    pub ewrs: Set<GroupId>,
+    pub groups_by_side: MapS<Side, Set<GroupId>>,
+    pub deployed: SetM<GroupId>,
+    pub farps: SetS<ObjectiveId>,
+    pub crates: SetM<GroupId>,
+    pub troops: SetM<GroupId>,
+    pub jtacs: SetM<GroupId>,
+    pub ewrs: SetS<GroupId>,
     #[serde(default)]
-    pub actions: Set<GroupId>,
-    pub objectives: Map<ObjectiveId, Objective>,
-    pub objectives_by_name: Map<String, ObjectiveId>,
-    pub objectives_by_group: Map<GroupId, ObjectiveId>,
+    pub actions: SetS<GroupId>,
+    pub objectives: MapM<ObjectiveId, Objective>,
+    pub objectives_by_name: MapM<String, ObjectiveId>,
+    pub objectives_by_group: MapM<GroupId, ObjectiveId>,
     pub players: Map<Ucid, Player>,
     #[serde(default)]
-    pub logistics_hubs: Set<ObjectiveId>,
+    pub logistics_hubs: SetS<ObjectiveId>,
     #[serde(default)]
     pub nukes_used: u32,
     #[serde(default)]

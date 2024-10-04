@@ -14,12 +14,13 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db, Map};
+use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db};
 use crate::{
     bg::Task,
     db::{
         logistics::Warehouse,
         objective::{Objective, Zone},
+        MapS,
     },
     group,
     landcache::LandCache,
@@ -119,7 +120,7 @@ impl Db {
             name: name.clone(),
             kind,
             owner,
-            groups: Map::new(),
+            groups: MapS::new(),
             health: 0,
             logi: 0,
             supply: 0,

@@ -16,7 +16,7 @@ for more details.
 
 use crate::{
     bg::Task,
-    db::{group::DeployKind, Db, Set},
+    db::{group::DeployKind, Db, SetS},
     msgq::MsgTyp,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
@@ -614,7 +614,7 @@ fn admin_list_connected(ctx: &Context) -> SmallVec<[(PlayerId, Ucid, String); 64
 fn admin_search(
     ctx: &Context,
     expr: Regex,
-) -> SmallVec<[(Option<PlayerId>, Ucid, Set<String>); 64]> {
+) -> SmallVec<[(Option<PlayerId>, Ucid, SetS<String>); 64]> {
     ctx.db
         .persisted
         .players()

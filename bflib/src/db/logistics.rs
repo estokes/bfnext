@@ -17,7 +17,7 @@ for more details.
 use super::{
     ephemeral::{Equipment, LogiStage, Production},
     objective::Objective,
-    Db, Map, Set,
+    Db, Map, MapS, SetS,
 };
 use crate::{
     admin::WarehouseKind,
@@ -178,9 +178,9 @@ struct Needed<'a> {
 pub struct Warehouse {
     pub(super) base_equipment: Map<String, Inventory>,
     pub(super) equipment: Map<String, Inventory>,
-    pub(super) liquids: Map<LiquidType, Inventory>,
+    pub(super) liquids: MapS<LiquidType, Inventory>,
     pub(super) supplier: Option<ObjectiveId>,
-    pub(super) destination: Set<ObjectiveId>,
+    pub(super) destination: SetS<ObjectiveId>,
 }
 
 fn sync_obj_to_warehouse(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
@@ -651,7 +651,7 @@ impl Db {
                 }
             }
         }
-        let mut current: FxHashMap<ObjectiveId, Set<ObjectiveId>> = FxHashMap::default();
+        let mut current: FxHashMap<ObjectiveId, SetS<ObjectiveId>> = FxHashMap::default();
         for oid in &self.persisted.logistics_hubs {
             let obj = objective_mut!(self, oid)?;
             current.insert(*oid, mem::take(&mut obj.warehouse.destination));

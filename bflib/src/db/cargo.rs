@@ -774,7 +774,7 @@ impl Db {
                     self.delete_group(base_repairs.keys().next().unwrap())?;
                     self.ephemeral.stat(StatKind::Repair {
                         id: oid,
-                        ucid: st.ucid,
+                        by: st.ucid,
                     });
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_repair) {
                         self.adjust_points(&st.ucid, amount as i32, "for logistics repair");
@@ -804,7 +804,7 @@ impl Db {
                     self.ephemeral.stat(StatKind::SupplyTransfer {
                         from,
                         to,
-                        ucid: st.ucid,
+                        by: st.ucid,
                     });
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_transfer) {
                         self.adjust_points(&st.ucid, amount as i32, "for supply transfer");
@@ -847,11 +847,11 @@ impl Db {
                                     .add_farp(lua, &spctx, idx, st.side, centroid, &spec, parts)?;
                                 self.ephemeral.stat(StatKind::DeployFarp {
                                     oid,
-                                    ucid: st.ucid,
+                                    by: st.ucid,
                                     pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
                                         centroid.x, 0., centroid.y,
                                     )))?,
-                                    deployable: spec.clone(),
+                                    deployable: dep,
                                 });
                                 self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
                                 let name = objective!(self, oid)?.name.clone();
@@ -881,11 +881,11 @@ impl Db {
                                 }
                                 self.ephemeral.stat(StatKind::DeployGroup {
                                     gid,
-                                    ucid: st.ucid,
+                                    by: st.ucid,
                                     pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
                                         centroid.x, 0., centroid.y,
                                     )))?,
-                                    deployable: spec.clone(),
+                                    deployable: dep.clone(),
                                 });
                                 self.adjust_points(
                                     &st.ucid,
@@ -1180,8 +1180,8 @@ impl Db {
                     gid,
                     pos: Coord::singleton(lua)?
                         .lo_to_ll(LuaVec3(Vector3::new(point.x, 0., point.y)))?,
-                    troop: troop_cfg.clone(),
-                    ucid,
+                    troop: troop_cfg.name.clone(),
+                    by: ucid,
                 });
                 Ok(troop_cfg)
             }

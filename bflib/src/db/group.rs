@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{objective::ObjGroupClass, Db, Set};
+use super::{objective::ObjGroupClass, Db, SetS};
 use crate::{
     group, group_by_name, group_health, group_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
@@ -121,7 +121,7 @@ pub struct SpawnedGroup {
     pub kind: Option<GroupCategory>,
     pub class: ObjGroupClass,
     pub origin: DeployKind,
-    pub units: Set<UnitId>,
+    pub units: SetS<UnitId>,
     pub tags: UnitTags,
 }
 
@@ -634,7 +634,7 @@ impl Db {
             kind,
             origin,
             class: ObjGroupClass::from(template_name.as_str()),
-            units: Set::new(),
+            units: SetS::new(),
             tags: UnitTags(BitFlags::empty()),
         };
         for unit in template.group.units()?.into_iter() {

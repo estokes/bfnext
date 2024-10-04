@@ -1,4 +1,4 @@
-use super::{objective::Objective, Db, Map};
+use super::{objective::Objective, Db, MapM};
 use crate::{
     admin,
     db::{cargo::Oldest, group::DeployKind},
@@ -231,7 +231,7 @@ impl ActionCmd {
 // setup the awacs race track 90 degrees offset from the heading
 // to the nearest enemy objective
 fn racetrack_dist_and_heading(
-    obj: &Map<ObjectiveId, Objective>,
+    obj: &MapM<ObjectiveId, Objective>,
     pos: Vector2,
     enemy: Side,
 ) -> (f64, f64) {
@@ -323,7 +323,6 @@ impl Db {
             }
         }
         let name = cmd.name.clone();
-        let action = cmd.action.clone();
         let gid = match cmd.args {
             ActionArgs::Awacs(args) => self
                 .awacs(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
@@ -391,7 +390,7 @@ impl Db {
         if let Some(ucid) = ucid.as_ref() {
             self.ephemeral.stat(StatKind::Action {
                 by: *ucid,
-                action,
+                action: cmd.name.clone(),
                 gid,
             });
             self.adjust_points(
@@ -1687,7 +1686,7 @@ impl Db {
         }
         let oid = obj.id;
         if let Some(ucid) = ucid {
-            self.ephemeral.stat(StatKind::Repair { id: oid, ucid });
+            self.ephemeral.stat(StatKind::Repair { id: oid, by: ucid });
         }
         self.repair_one_logi_step(side, Utc::now(), oid)?;
         Ok(())
@@ -1719,7 +1718,7 @@ impl Db {
             self.ephemeral.stat(StatKind::SupplyTransfer {
                 from: src,
                 to: tgt,
-                ucid,
+                by: ucid,
             });
         }
         self.transfer_supplies(lua, src, tgt)
@@ -1779,8 +1778,8 @@ impl Db {
         )?;
         self.ephemeral.stat(StatKind::DeployGroup {
             gid,
-            deployable: spec,
-            ucid,
+            deployable: dep,
+            by: ucid,
             pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
         });
         Ok(())
@@ -1845,9 +1844,9 @@ impl Db {
             None,
         )?;
         self.ephemeral.stat(StatKind::DeployTroop {
-            troop: troop_cfg,
+            troop,
             pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
-            ucid,
+            by: ucid,
             gid,
         });
         Ok(())

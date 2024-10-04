@@ -18,7 +18,7 @@ use super::{
     ephemeral::LogiStage,
     group::{DeployKind, SpawnedUnit},
     logistics::{Inventory, Warehouse},
-    Db, Map, Set,
+    Db, Map, MapM, MapS, Set,
 };
 use crate::{
     group, group_health, group_mut,
@@ -245,7 +245,7 @@ pub struct Objective {
     pub(super) radius: Option<f64>,
     pub owner: Side,
     pub(super) kind: ObjectiveKind,
-    pub(super) groups: Map<Side, Set<GroupId>>,
+    pub(super) groups: MapS<Side, Set<GroupId>>,
     pub(super) health: u8,
     pub(super) logi: u8,
     #[serde(default)]
@@ -334,7 +334,7 @@ impl Db {
     /// returns the closest objective that matches the critera to the specified point
     /// (distance, heading from objective to point, objective)
     pub fn objective_near_point<P: Fn(&Objective) -> bool>(
-        obj: &Map<ObjectiveId, Objective>,
+        obj: &MapM<ObjectiveId, Objective>,
         pos: Vector2,
         p: P,
     ) -> Option<(f64, f64, &Objective)> {
@@ -530,7 +530,7 @@ impl Db {
         let obj = Objective {
             id: ObjectiveId::new(),
             name: name.clone(),
-            groups: Map::from_iter([(side, groups)]),
+            groups: MapS::from_iter([(side, groups)]),
             kind: ObjectiveKind::Farp {
                 spec: spec.clone(),
                 pad_template: pad_template.clone(),
@@ -1091,7 +1091,7 @@ impl Db {
                 self.ephemeral.stat(StatKind::Capture {
                     id: oid,
                     side: new_owner,
-                    ucids: ucids.clone(),
+                    by: ucids.clone(),
                 });
                 if let Some(points) = self.ephemeral.cfg.points.as_ref() {
                     let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;

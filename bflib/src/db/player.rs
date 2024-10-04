@@ -26,12 +26,7 @@ use bfprotocols::{
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    airbase::Airbase,
-    coalition::Side,
-    net::{SlotId, Ucid},
-    object::{DcsObject, DcsOid},
-    unit::{ClassUnit, Unit},
-    MizLua, Position3, String, Vector2, Vector3,
+    airbase::Airbase, coalition::Side, coord::Coord, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, unit::{ClassUnit, Unit}, MizLua, Position3, String, Vector2, Vector3
 };
 use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
@@ -111,6 +106,7 @@ impl Db {
                     .ephemeral
                     .player_deslot(&self.persisted, &slot, Some(*ucid));
             }
+            self.ephemeral.stat(StatKind::Deslot { ucid: *ucid });
             self.ephemeral.dirty()
         }
     }
@@ -538,6 +534,7 @@ impl Db {
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
         let mut unit: Option<Unit> = None;
+        let coord = Coord::singleton(lua)?;
         for ucid in ids {
             if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                 if let Some((slot, Some(inst))) = &mut player.current_slot {
@@ -556,6 +553,14 @@ impl Db {
                                     inst.moved = Some(now);
                                 }
                                 unit = Some(instance);
+                                self.ephemeral.stat(StatKind::PlayerPosition {
+                                    id: *slot,
+                                    pos: stats::Pos {
+                                        pos: coord.lo_to_ll(inst.position.p)?,
+                                        altitude: inst.position.p.0.y as f32,
+                                        velocity: inst.velocity
+                                    }
+                                });
                             }
                             Err(e) => {
                                 warn!(

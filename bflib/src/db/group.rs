@@ -24,6 +24,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     db::objective::ObjectiveId,
+    stats,
 };
 use bfprotocols::{
     db::group::{GroupId, UnitId},
@@ -34,6 +35,7 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     azumith3d, centroid2d, centroid3d, change_heading,
     coalition::Side,
+    coord::Coord,
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
@@ -43,7 +45,7 @@ use dcso3::{
     static_object::{ClassStatic, StaticObject},
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    LuaVec2, MizLua, Position3, String, Vector2, Vector3,
+    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
@@ -769,6 +771,20 @@ impl Db {
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
+            self.ephemeral.stat(StatKind::Unit {
+                id: *uid,
+                gid: unit.group,
+                typ: stats::Unit {
+                    typ: unit.typ.clone(),
+                    tags: unit.tags,
+                },
+                pos: stats::Pos {
+                    pos: Coord::singleton(lua)?
+                        .lo_to_ll(LuaVec3(Vector3::new(unit.pos.x, 0., unit.pos.y)))?,
+                    altitude: 0.,
+                    velocity: unit.airborne_velocity.unwrap_or_default(),
+                },
+            });
             return Ok(None);
         }
         let slot = unit.slot()?;
@@ -950,6 +966,7 @@ impl Db {
         now: DateTime<Utc>,
         units: &[UnitId],
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
+        let coord = Coord::singleton(lua)?;
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
@@ -987,11 +1004,22 @@ impl Db {
                 self.ephemeral
                     .units_potentially_close_to_enemies
                     .insert(*uid);
-                if spunit.tags.contains(UnitTag::Aircraft) && instance.in_air()? {
-                    spunit.airborne_velocity = Some(instance.get_velocity()?.0)
+                let v = if spunit.tags.contains(UnitTag::Aircraft) && instance.in_air()? {
+                    let v = instance.get_velocity()?.0;
+                    spunit.airborne_velocity = Some(v);
+                    Some(v)
                 } else {
                     spunit.airborne_velocity = None;
-                }
+                    None
+                };
+                self.ephemeral.stat(StatKind::UnitPosition {
+                    id: *uid,
+                    pos: stats::Pos {
+                        pos: coord.lo_to_ll(pos.p)?,
+                        altitude: pos.p.0.y as f32,
+                        velocity: v.unwrap_or_default(),
+                    },
+                });
             }
             unit = Some(instance);
         }

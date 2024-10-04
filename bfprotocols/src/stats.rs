@@ -133,6 +133,7 @@ pub enum StatKind {
         id: UnitId,
         gid: GroupId,
         typ: Unit,
+        pos: Pos,
     },
     GroupDeleted {
         id: GroupId,

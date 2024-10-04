@@ -14,9 +14,22 @@ use dcso3::{
     warehouse::LiquidType,
     String, Vector3,
 };
+use enumflags2::bitflags;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum EnId {
+    Player(Ucid),
+    Unit(UnitId)
+}
+
+impl fmt::Display for EnId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Unit {
@@ -29,6 +42,14 @@ pub struct Pos {
     pub pos: LLPos,
     pub altitude: f32,
     pub velocity: Vector3,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[bitflags]
+#[repr(u8)]
+pub enum DetectionSource {
+    EWR,
+    Jtac
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,21 +159,14 @@ pub enum StatKind {
     GroupDeleted {
         id: GroupId,
     },
-    PlayerPosition {
-        id: SlotId,
+    Position {
+        id: EnId,
         pos: Pos,
     },
-    UnitPosition {
-        id: UnitId,
-        pos: Pos,
-    },
-    PlayerDetected {
-        id: Ucid,
+    Detected {
+        id: EnId,
         detected: bool,
-    },
-    UnitDetected {
-        id: UnitId,
-        detected: bool,
+        source: DetectionSource
     },
     Takeoff {
         id: SlotId,

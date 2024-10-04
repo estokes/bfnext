@@ -25,6 +25,7 @@ use bfprotocols::{
         group::{GroupId, UnitId},
         objective::ObjectiveId,
     },
+    stats::{DetectionSource, EnId, StatKind},
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -52,18 +53,6 @@ use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{collections::hash_map::Entry, fmt, str::FromStr};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CtId {
-    Unit(UnitId),
-    Player(Ucid),
-}
-
-impl fmt::Display for CtId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
@@ -816,8 +805,15 @@ impl Jtac {
 }
 
 #[derive(Debug, Clone, Default)]
+struct Detected {
+    was_detected: bool,
+    detected: bool,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Jtacs {
     jtacs: FxHashMap<Side, FxHashMap<JtId, Jtac>>,
+    detected: FxHashMap<Side, FxHashMap<CtId, Detected>>,
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
     code_by_location: LocByCode,
     menu_dirty: FxHashMap<Side, FxHashSet<ObjectiveId>>,
@@ -1056,6 +1052,169 @@ impl Jtacs {
         Ok(dead)
     }
 
+    fn prepare_detected(&mut self) {
+        for detected in self.detected.values_mut() {
+            for dt in detected.values_mut() {
+                dt.detected = false;
+            }
+        }
+    }
+
+    fn update_jtac(
+        &mut self,
+        lua: MizLua,
+        land: &Land,
+        landcache: &mut LandCache,
+        db: &Db,
+        saw_jtacs: &mut SmallVec<[JtId; 32]>,
+        saw_units: &mut FxHashSet<CtId>,
+        lost_targets: &mut SmallVec<[(Side, JtId, Option<CtId>); 64]>,
+        jt: JtDesc,
+    ) -> Result<()> {
+        let JtDesc {
+            mut pos,
+            id,
+            side,
+            spec,
+            air,
+        } = jt;
+        if !saw_jtacs.contains(&id) {
+            saw_jtacs.push(id)
+        }
+        let detected = self.detected.entry(side.opposite()).or_default();
+        let range = (spec.range as f64).powi(2);
+        let jtac = self
+            .jtacs
+            .entry(side)
+            .or_default()
+            .entry(id)
+            .or_insert_with(|| {
+                let jt = Jtac::new(
+                    db,
+                    id,
+                    side,
+                    db.ephemeral.cfg.jtac_priority.clone(),
+                    pos,
+                    air,
+                );
+                self.menu_dirty
+                    .entry(side)
+                    .or_default()
+                    .insert(jt.location.oid);
+                Self::add_code_by_location(
+                    &mut self.code_by_location,
+                    jt.side,
+                    jt.location.oid,
+                    jt.code,
+                    jt.gid,
+                );
+                jt
+            });
+        let prev_loc = jtac.location;
+        jtac.location = JtacLocation::new(db, pos);
+        let jtac_moved = (prev_loc.pos - jtac.location.pos).magnitude_squared() > 1.0;
+        if prev_loc.oid != jtac.location.oid {
+            Self::remove_code_by_location(
+                &mut self.code_by_location,
+                jtac.side,
+                prev_loc.oid,
+                jtac.code,
+                jtac.gid,
+            );
+            Self::add_code_by_location(
+                &mut self.code_by_location,
+                jtac.side,
+                jtac.location.oid,
+                jtac.code,
+                jtac.gid,
+            );
+            let menu = self.menu_dirty.entry(jtac.side).or_default();
+            menu.insert(prev_loc.oid);
+            menu.insert(jtac.location.oid);
+        }
+        if air {
+            pos.y -= 5.
+        } else {
+            pos.y += 10.
+        };
+        for (unit, _) in db.instanced_units() {
+            let id = CtId::Unit(unit.id);
+            macro_rules! lost {
+                () => {{
+                    match jtac.remove_contact(lua, db, &id) {
+                        Err(e) => warn!(
+                            "could not remove airborne jtac contact {} {:?}",
+                            unit.name, e
+                        ),
+                        Ok(false) => (),
+                        Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
+                    }
+                    continue;
+                }};
+            }
+            if unit.side == jtac.side {
+                continue;
+            }
+            saw_units.insert(id);
+            let detected = detected.entry(id).or_default();
+            if !unit.tags.contains(jtac.filter) {
+                lost!();
+            }
+            if unit.airborne_velocity.is_some() && !unit.tags.contains(UnitTag::Helicopter) {
+                lost!();
+            }
+            if let Some(ct) = jtac.contacts.get(&id) {
+                if !jtac_moved && unit.moved == ct.last_move {
+                    detected.detected = true;
+                    continue;
+                }
+            };
+            let dist = na::distance_squared(&pos.into(), &unit.position.p.0.into());
+            if dist <= range
+                && (spec.nolos
+                    || landcache.is_visible(&land, dist.sqrt(), pos, unit.position.p.0)?)
+            {
+                detected.detected = true;
+                jtac.add_unit_contact(unit)
+            } else {
+                lost!()
+            }
+        }
+        for (ucid, player, inst) in db.instanced_players() {
+            if player.side == jtac.side {
+                continue;
+            }
+            let id = CtId::Player(*ucid);
+            saw_units.insert(id);
+            let detected = detected.entry(id).or_default();
+            let tags = db.ephemeral.cfg.unit_classification[&inst.typ];
+            if !tags.contains(jtac.filter) {
+                if let Err(e) = jtac.remove_contact(lua, db, &id) {
+                    warn!("could not filter player contact {ucid} {e:?}")
+                }
+                continue;
+            }
+            if inst.in_air && !tags.contains(UnitTag::Helicopter) {
+                continue;
+            }
+            let dist = na::distance_squared(&pos.into(), &inst.position.p.0.into());
+            if dist <= range
+                && (spec.nolos
+                    || landcache.is_visible(&land, dist.sqrt(), pos, inst.position.p.0)?)
+            {
+                detected.detected = true;
+                jtac.add_player_contact(*ucid, inst)
+            } else {
+                match jtac.remove_contact(lua, db, &id) {
+                    Err(e) => warn!("could not remove jtac contact {ucid} {e:?}"),
+                    Ok(false) => (),
+                    Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn update_contacts(
         &mut self,
         lua: MizLua,
@@ -1063,145 +1222,21 @@ impl Jtacs {
         db: &mut Db,
     ) -> Result<FxHashMap<Side, FxHashSet<ObjectiveId>>> {
         let land = Land::singleton(lua)?;
+        self.prepare_detected();
         let mut saw_jtacs: SmallVec<[JtId; 32]> = smallvec![];
         let mut saw_units: FxHashSet<CtId> = FxHashSet::default();
         let mut lost_targets: SmallVec<[(Side, JtId, Option<CtId>); 64]> = smallvec![];
-        for JtDesc {
-            mut pos,
-            id,
-            side,
-            spec,
-            air,
-        } in db.jtacs()
-        {
-            if !saw_jtacs.contains(&id) {
-                saw_jtacs.push(id)
-            }
-            let range = (spec.range as f64).powi(2);
-            let jtac = self
-                .jtacs
-                .entry(side)
-                .or_default()
-                .entry(id)
-                .or_insert_with(|| {
-                    let jt = Jtac::new(
-                        db,
-                        id,
-                        side,
-                        db.ephemeral.cfg.jtac_priority.clone(),
-                        pos,
-                        air,
-                    );
-                    self.menu_dirty
-                        .entry(side)
-                        .or_default()
-                        .insert(jt.location.oid);
-                    Self::add_code_by_location(
-                        &mut self.code_by_location,
-                        jt.side,
-                        jt.location.oid,
-                        jt.code,
-                        jt.gid,
-                    );
-                    jt
-                });
-            let prev_loc = jtac.location;
-            jtac.location = JtacLocation::new(db, pos);
-            let jtac_moved = (prev_loc.pos - jtac.location.pos).magnitude_squared() > 1.0;
-            if prev_loc.oid != jtac.location.oid {
-                Self::remove_code_by_location(
-                    &mut self.code_by_location,
-                    jtac.side,
-                    prev_loc.oid,
-                    jtac.code,
-                    jtac.gid,
-                );
-                Self::add_code_by_location(
-                    &mut self.code_by_location,
-                    jtac.side,
-                    jtac.location.oid,
-                    jtac.code,
-                    jtac.gid,
-                );
-                let menu = self.menu_dirty.entry(jtac.side).or_default();
-                menu.insert(prev_loc.oid);
-                menu.insert(jtac.location.oid);
-            }
-            if air {
-                pos.y -= 5.
-            } else {
-                pos.y += 10.
-            };
-            for (unit, _) in db.instanced_units() {
-                let id = CtId::Unit(unit.id);
-                macro_rules! lost {
-                    () => {{
-                        match jtac.remove_contact(lua, db, &id) {
-                            Err(e) => warn!(
-                                "could not remove airborne jtac contact {} {:?}",
-                                unit.name, e
-                            ),
-                            Ok(false) => (),
-                            Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
-                        }
-                        continue;
-                    }};
-                }
-                if unit.side == jtac.side {
-                    continue;
-                }
-                saw_units.insert(id);
-                if !unit.tags.contains(jtac.filter) {
-                    lost!();
-                }
-                if unit.airborne_velocity.is_some() && !unit.tags.contains(UnitTag::Helicopter) {
-                    lost!();
-                }
-                if let Some(ct) = jtac.contacts.get(&id) {
-                    if !jtac_moved && unit.moved == ct.last_move {
-                        continue;
-                    }
-                };
-                let dist = na::distance_squared(&pos.into(), &unit.position.p.0.into());
-                if dist <= range
-                    && (spec.nolos
-                        || landcache.is_visible(&land, dist.sqrt(), pos, unit.position.p.0)?)
-                {
-                    jtac.add_unit_contact(unit)
-                } else {
-                    lost!()
-                }
-            }
-            for (ucid, player, inst) in db.instanced_players() {
-                if player.side == jtac.side {
-                    continue;
-                }
-                let id = CtId::Player(*ucid);
-                saw_units.insert(id);
-                let tags = db.ephemeral.cfg.unit_classification[&inst.typ];
-                if !tags.contains(jtac.filter) {
-                    if let Err(e) = jtac.remove_contact(lua, db, &id) {
-                        warn!("could not filter player contact {ucid} {e:?}")
-                    }
-                    continue;
-                }
-                if inst.in_air && !tags.contains(UnitTag::Helicopter) {
-                    continue;
-                }
-                let dist = na::distance_squared(&pos.into(), &inst.position.p.0.into());
-                if dist <= range
-                    && (spec.nolos
-                        || landcache.is_visible(&land, dist.sqrt(), pos, inst.position.p.0)?)
-                {
-                    jtac.add_player_contact(*ucid, inst)
-                } else {
-                    match jtac.remove_contact(lua, db, &id) {
-                        Err(e) => warn!("could not remove jtac contact {ucid} {e:?}"),
-                        Ok(false) => (),
-                        Ok(true) => lost_targets.push((jtac.side, jtac.gid, None)),
-                    }
-                }
-            }
+        for jt in db.jtacs() {
+            self.update_jtac(
+                lua,
+                &land,
+                landcache,
+                db,
+                &mut saw_jtacs,
+                &mut saw_units,
+                &mut lost_targets,
+                jt,
+            )?
         }
         for (side, jtx) in self.jtacs.iter_mut() {
             jtx.retain(|gid, jt| {
@@ -1233,6 +1268,23 @@ impl Jtacs {
                     }
                 }
             }
+        }
+        for detected in self.detected.values_mut() {
+            detected.retain(|(id, detected)| {
+                if !saw_units.contains(id) {
+                    false
+                } else {
+                    if detected.was_detected != detected.detected {
+                        detected.was_detected = detected.detected;
+                        db.ephemeral.stat(StatKind::Detected {
+                            id: *id,
+                            detected: detected.detected,
+                            source: DetectionSource::Jtac,
+                        });
+                    }
+                    true
+                }
+            })
         }
         for (side, gid, uid) in lost_targets {
             match uid {

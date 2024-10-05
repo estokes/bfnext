@@ -14,8 +14,12 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use crate::{cfg::Cfg, db::persisted::Persisted, Perf};
+use crate::{db::persisted::Persisted, Perf};
 use anyhow::{anyhow, Result};
+use bfprotocols::{
+    cfg::Cfg,
+    stats::{Stat, StatKind},
+};
 use bytes::{BufMut, Bytes, BytesMut};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
@@ -26,7 +30,10 @@ use parking_lot::{Condvar, Mutex};
 use simplelog::{LevelFilter, WriteLogger};
 use std::{
     cell::RefCell,
-    env, fs, io,
+    env,
+    ffi::OsStr,
+    fs,
+    io,
     path::{Path, PathBuf},
     sync::Arc,
     thread,
@@ -55,7 +62,7 @@ fn encode(db: &Persisted) -> Result<Bytes> {
     })
 }
 
-fn rotate(path: &Path) -> Result<()> {
+fn rotate_state(path: &Path) -> Result<()> {
     if path.exists() {
         let name = path
             .file_name()
@@ -149,7 +156,7 @@ fn save(path: &Path, encoded: Bytes) -> Result<()> {
     let mut file = zstd::stream::Encoder::new(file, 9)?.auto_finish();
     io::copy(&mut &*encoded, &mut file)?;
     drop(file);
-    if let Err(e) = rotate(path) {
+    if let Err(e) = rotate_state(path) {
         error!("failed to rotate backup files {e:?}")
     }
     fs::rename(tmp, path)?;
@@ -173,6 +180,38 @@ impl io::Write for LogHandle {
     }
 }
 
+fn rotate_log(path: &Path) {
+    if path.exists() {
+        let mut rotate_path = path.to_path_buf();
+        let name = rotate_path.file_name().unwrap_or(&OsStr::new("nameless"));
+        let ext = rotate_path.extension().unwrap_or(&OsStr::new("ext"));
+        let ts = Utc::now()
+            .to_rfc3339_opts(SecondsFormat::Secs, true)
+            .chars()
+            .filter(|c| c != &'-' && c != &':')
+            .collect::<CompactString>();
+        rotate_path.set_file_name(format_compact!("{name:?}{ts}.{ext:?}"));
+        if let Err(e) = fs::rename(&path, &rotate_path) {
+            error!(
+                "could not rotate log file {:?} to {:?} {:?}",
+                path, rotate_path, e
+            )
+        }
+    }
+}
+
+async fn write_stat(file: &mut File, buf: &mut BytesMut, stat: StatKind) {
+    let stat = Stat::new(stat);
+    if let Err(e) = serde_json::to_writer(buf.writer(), &stat) {
+        error!("could not format log item {stat:?}: {e:?}");
+        return;
+    }
+    buf.put_u8(0xA);
+    if let Err(e) = file.write_all_buf(&mut buf.split()).await {
+        error!("could not write stat {stat:?}: {e:?}")
+    }
+}
+
 #[derive(Debug)]
 pub(super) enum Task {
     SaveState(PathBuf, Persisted),
@@ -181,27 +220,25 @@ pub(super) enum Task {
     WriteLog(Bytes),
     LogPerf(Perf, dcso3::perf::Perf),
     Sync(Arc<(Mutex<bool>, Condvar)>),
+    Stat(StatKind),
+    RotateStats,
 }
 
 async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
+    let mut statsbuf = BytesMut::with_capacity(4096);
+    let stats_path = write_dir.join("Logs").join("bfstats.txt");
     let log_path = write_dir.join("Logs").join("bfnext.txt");
-    if log_path.exists() {
-        let mut rotate_path = log_path.clone();
-        let ts = Utc::now()
-            .to_rfc3339_opts(SecondsFormat::Secs, true)
-            .chars()
-            .filter(|c| c != &'-' && c != &':')
-            .collect::<String>();
-        rotate_path.set_file_name(format_compact!("bfnext{ts}.txt"));
-        if let Err(e) = fs::rename(&log_path, &rotate_path) {
-            error!("could not rotate log file to {:?} {:?}", rotate_path, e)
-        }
-    }
+    rotate_log(&log_path);
     let mut log_file = File::options()
         .create(true)
         .write(true)
+        .open(&log_path)
+        .await
+        .unwrap();
+    let mut stats_file = File::options()
+        .create(true)
         .append(true)
-        .open(log_path)
+        .open(&stats_path)
         .await
         .unwrap();
     while let Some(msg) = rx.recv().await {
@@ -211,7 +248,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                     Ok(encoded) => encoded,
                     Err(e) => {
                         error!("failed to encode save state {e:?}");
-                        continue
+                        continue;
                     }
                 };
                 drop(db); // don't hold the db reference any longer than necessary
@@ -219,7 +256,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                     Ok(()) => (),
                     Err(e) => error!("failed to save state to {path:?}, {e:?}"),
                 }
-            },
+            }
             Task::ResetState(path) => match fs::remove_file(&path) {
                 Ok(()) => (),
                 Err(e) => error!("failed to reset state {path:?}, {e:?}"),
@@ -238,6 +275,17 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                 let mut synced = lock.lock();
                 *synced = true;
                 cvar.notify_all();
+            }
+            Task::Stat(st) => write_stat(&mut stats_file, &mut statsbuf, st).await,
+            Task::RotateStats => {
+                drop(stats_file);
+                rotate_log(&stats_path);
+                stats_file = File::options()
+                    .create(true)
+                    .append(true)
+                    .open(&stats_path)
+                    .await
+                    .unwrap();
             }
         }
     }

@@ -15,11 +15,9 @@ for more details.
 */
 
 use super::{cargo, player_name, slot_for_group, ArgTuple};
-use crate::{
-    cfg::{Cfg, LimitEnforceTyp},
-    Context,
-};
+use crate::Context;
 use anyhow::{Context as ErrContext, Result};
+use bfprotocols::cfg::{Cfg, LimitEnforceTyp};
 use compact_str::format_compact;
 use dcso3::{
     coalition::Side, env::miz::GroupId, mission_commands::MissionCommands, MizLua, String,

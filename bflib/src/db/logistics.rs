@@ -16,17 +16,20 @@ for more details.
 
 use super::{
     ephemeral::{Equipment, LogiStage, Production},
-    objective::{Objective, ObjectiveId},
-    Db, Map, Set,
+    objective::Objective,
+    Db, Map, MapS, SetS,
 };
 use crate::{
     admin::WarehouseKind,
-    cfg::Vehicle,
-    db::objective::ObjectiveKind,
     maybe, objective, objective_mut,
     perf::{record_perf, Perf, PerfInner},
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::Vehicle,
+    db::objective::{ObjectiveId, ObjectiveKind},
+    stats::StatKind,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -116,22 +119,48 @@ impl Transfer {
     fn execute(&self, db: &mut Db) -> Result<()> {
         let src = objective_mut!(db, self.source)?;
         match &self.item {
-            TransferItem::Equipment(name) => src.warehouse.equipment[name].stored -= self.amount,
-            TransferItem::Liquid(name) => src.warehouse.liquids[name].stored -= self.amount,
+            TransferItem::Equipment(name) => {
+                let d = &mut src.warehouse.equipment[name].stored;
+                *d -= self.amount;
+                db.ephemeral.stat(StatKind::EquipmentInventory {
+                    id: src.id,
+                    item: name.clone(),
+                    amount: *d,
+                });
+            }
+            TransferItem::Liquid(name) => {
+                let d = &mut src.warehouse.liquids[name].stored;
+                *d -= self.amount;
+                db.ephemeral.stat(StatKind::LiquidInventory {
+                    id: src.id,
+                    item: *name,
+                    amount: *d,
+                });
+            }
         }
         let dst = objective_mut!(db, self.target)?;
         match &self.item {
             TransferItem::Equipment(name) => {
-                dst.warehouse
+                let d = &mut dst
+                    .warehouse
                     .equipment
                     .get_or_default_cow(name.clone())
-                    .stored += self.amount
+                    .stored;
+                *d += self.amount;
+                db.ephemeral.stat(StatKind::EquipmentInventory {
+                    id: dst.id,
+                    item: name.clone(),
+                    amount: *d,
+                });
             }
             TransferItem::Liquid(name) => {
-                dst.warehouse
-                    .liquids
-                    .get_or_default_cow(name.clone())
-                    .stored += self.amount
+                let d = &mut dst.warehouse.liquids.get_or_default_cow(*name).stored;
+                *d += self.amount;
+                db.ephemeral.stat(StatKind::LiquidInventory {
+                    id: dst.id,
+                    item: *name,
+                    amount: *d,
+                });
             }
         }
         Ok(())
@@ -149,9 +178,9 @@ struct Needed<'a> {
 pub struct Warehouse {
     pub(super) base_equipment: Map<String, Inventory>,
     pub(super) equipment: Map<String, Inventory>,
-    pub(super) liquids: Map<LiquidType, Inventory>,
+    pub(super) liquids: MapS<LiquidType, Inventory>,
     pub(super) supplier: Option<ObjectiveId>,
-    pub(super) destination: Set<ObjectiveId>,
+    pub(super) destination: SetS<ObjectiveId>,
 }
 
 fn sync_obj_to_warehouse(obj: &Objective, warehouse: &warehouse::Warehouse) -> Result<()> {
@@ -622,7 +651,7 @@ impl Db {
                 }
             }
         }
-        let mut current: FxHashMap<ObjectiveId, Set<ObjectiveId>> = FxHashMap::default();
+        let mut current: FxHashMap<ObjectiveId, SetS<ObjectiveId>> = FxHashMap::default();
         for oid in &self.persisted.logistics_hubs {
             let obj = objective_mut!(self, oid)?;
             current.insert(*oid, mem::take(&mut obj.warehouse.destination));
@@ -872,6 +901,8 @@ impl Db {
 
     fn update_supply_status(&mut self) -> Result<()> {
         for (_, obj) in self.persisted.objectives.iter_mut_cow() {
+            let current_supply = obj.supply;
+            let current_fuel = obj.fuel;
             let mut n = 0;
             let mut sum: u32 = 0;
             for (_, inv) in &obj.warehouse.equipment {
@@ -890,6 +921,13 @@ impl Db {
                 }
             }
             obj.fuel = if n == 0 { 0 } else { (sum / n) as u8 };
+            if current_supply != obj.supply || current_fuel != obj.fuel {
+                self.ephemeral.stat(StatKind::ObjectiveSupply {
+                    id: obj.id,
+                    supply: obj.supply,
+                    fuel: obj.fuel,
+                });
+            }
         }
         self.ephemeral.dirty();
         Ok(())

@@ -14,31 +14,34 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{
-    ephemeral::DeployableIndex,
-    group::{GroupId, SpawnedGroup},
-    objective::{Objective, ObjectiveId, ObjectiveKind},
-    Db,
-};
+use super::{ephemeral::DeployableIndex, group::SpawnedGroup, objective::Objective, Db};
 use crate::{
-    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     db::group::DeployKind,
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
 use anyhow::{anyhow, bail, Result};
+use bfprotocols::{
+    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
+    db::{
+        group::GroupId,
+        objective::{ObjectiveId, ObjectiveKind},
+    },
+    stats::StatKind,
+};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     azumith2d, azumith2d_to, azumith3d, centroid2d,
     coalition::Side,
+    coord::Coord,
     env::miz::{Miz, MizIndex, UnitInfo},
     land::Land,
     net::{SlotId, Ucid},
     radians_to_degrees,
     trigger::Trigger,
-    LuaVec2, MizLua, Position3, String, Vector2,
+    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
@@ -441,12 +444,7 @@ impl Db {
         Ok((n, oldest))
     }
 
-    pub fn unpakistan(
-        &mut self,
-        lua: MizLua,
-        idx: &MizIndex,
-        slot: &SlotId,
-    ) -> Result<Unpakistan> {
+    pub fn unpakistan(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Unpakistan> {
         #[derive(Clone)]
         struct Cifo {
             pos: Vector2,
@@ -774,6 +772,10 @@ impl Db {
                 } else {
                     self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
+                    self.ephemeral.stat(StatKind::Repair {
+                        id: oid,
+                        by: st.ucid,
+                    });
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_repair) {
                         self.adjust_points(&st.ucid, amount as i32, "for logistics repair");
                     }
@@ -799,6 +801,11 @@ impl Db {
                 {
                     self.transfer_supplies(lua, from, to)?;
                     self.delete_group(&gid)?;
+                    self.ephemeral.stat(StatKind::SupplyTransfer {
+                        from,
+                        to,
+                        by: st.ucid,
+                    });
                     if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_transfer) {
                         self.adjust_points(&st.ucid, amount as i32, "for supply transfer");
                     }
@@ -836,8 +843,16 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                let oid =
-                                    self.add_farp(&spctx, idx, st.side, centroid, &spec, parts)?;
+                                let oid = self
+                                    .add_farp(lua, &spctx, idx, st.side, centroid, &spec, parts)?;
+                                self.ephemeral.stat(StatKind::DeployFarp {
+                                    oid,
+                                    by: st.ucid,
+                                    pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
+                                        centroid.x, 0., centroid.y,
+                                    )))?,
+                                    deployable: dep,
+                                });
                                 self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name));
@@ -851,7 +866,7 @@ impl Db {
                                     moved_by: None,
                                     spec: spec.clone(),
                                 };
-                                let _gid = self.add_and_queue_group(
+                                let gid = self.add_and_queue_group(
                                     &spctx,
                                     idx,
                                     st.side,
@@ -864,6 +879,14 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
+                                self.ephemeral.stat(StatKind::DeployGroup {
+                                    gid,
+                                    by: st.ucid,
+                                    pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
+                                        centroid.x, 0., centroid.y,
+                                    )))?,
+                                    deployable: dep.clone(),
+                                });
                                 self.adjust_points(
                                     &st.ucid,
                                     -(spec.cost as i32),
@@ -1142,7 +1165,7 @@ impl Db {
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
         }
-        if let Err(e) = self.add_and_queue_group(
+        match self.add_and_queue_group(
             &spctx,
             idx,
             side,
@@ -1152,15 +1175,26 @@ impl Db {
             BitFlags::empty(),
             None,
         ) {
-            self.ephemeral
-                .cargo
-                .get_mut(slot)
-                .unwrap()
-                .troops
-                .push((ucid, origin, troop_cfg));
-            return Err(e);
+            Ok(gid) => {
+                self.ephemeral.stat(StatKind::DeployTroop {
+                    gid,
+                    pos: Coord::singleton(lua)?
+                        .lo_to_ll(LuaVec3(Vector3::new(point.x, 0., point.y)))?,
+                    troop: troop_cfg.name.clone(),
+                    by: ucid,
+                });
+                Ok(troop_cfg)
+            }
+            Err(e) => {
+                self.ephemeral
+                    .cargo
+                    .get_mut(slot)
+                    .unwrap()
+                    .troops
+                    .push((ucid, origin, troop_cfg));
+                Err(e)
+            }
         }
-        Ok(troop_cfg)
     }
 
     pub fn return_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {

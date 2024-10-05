@@ -15,10 +15,11 @@ for more details.
 */
 
 use super::{
-    objective::{Objective, ObjectiveKind, Zone},
+    objective::{Objective, Zone},
     persisted::Persisted,
 };
-use crate::{cfg::Cfg, msgq::MsgQ};
+use crate::msgq::MsgQ;
+use bfprotocols::{cfg::Cfg, db::objective::ObjectiveKind};
 use compact_str::format_compact;
 use dcso3::{
     coalition::Side,

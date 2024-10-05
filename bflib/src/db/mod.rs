@@ -16,21 +16,18 @@ for more details.
 
 extern crate nalgebra as na;
 use self::{group::DeployKind, persisted::Persisted};
-use crate::{
-    cfg::{
-        Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg,
-        Troop,
-    },
-    db::ephemeral::Ephemeral,
-    jtac::JtId,
-};
+use crate::{bg::Task, db::ephemeral::Ephemeral, jtac::JtId};
 use anyhow::{anyhow, Result};
+use bfprotocols::{cfg::{
+    Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg, Troop,
+}, db::objective::ObjectiveId, stats::Stat};
 use dcso3::{
     centroid3d,
     coalition::Side,
     env::miz::{Miz, MizIndex},
     Vector3,
 };
+use tokio::sync::mpsc::UnboundedSender;
 use std::{fs::File, path::Path};
 
 pub mod actions;
@@ -45,7 +42,12 @@ pub mod persisted;
 pub mod player;
 
 pub type Map<K, V> = immutable_chunkmap::map::Map<K, V, 256>;
+pub type MapM<K, V> = immutable_chunkmap::map::Map<K, V, 64>;
+pub type MapS<K, V> = immutable_chunkmap::map::Map<K, V, 16>;
+
 pub type Set<K> = immutable_chunkmap::set::Set<K, 256>;
+pub type SetM<K> = immutable_chunkmap::set::Set<K, 64>;
+pub type SetS<K> = immutable_chunkmap::set::Set<K, 16>;
 
 pub struct JtDesc {
     pub pos: Vector3,
@@ -174,7 +176,7 @@ pub struct Db {
 }
 
 impl Db {
-    pub fn load(miz: &Miz, idx: &MizIndex, path: &Path) -> Result<Self> {
+    pub fn load(miz: &Miz, idx: &MizIndex, to_bg: UnboundedSender<Task>, path: &Path) -> Result<Self> {
         let file = File::open(&path)
             .map_err(|e| anyhow!("failed to open save file {:?}, {:?}", path, e))?;
         let file = zstd::stream::Decoder::new(file)?;
@@ -184,12 +186,16 @@ impl Db {
             persisted,
             ephemeral: Ephemeral::default(),
         };
-        db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?)?;
+        Stat::setseq(db.persisted.seq);
+        ObjectiveId::setseq(db.persisted.oid);
+        db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?, to_bg)?;
         Ok(db)
     }
 
     pub fn maybe_snapshot(&mut self) -> Option<Persisted> {
         if self.ephemeral.take_dirty() {
+            self.persisted.seq = Stat::seq();
+            self.persisted.oid = ObjectiveId::seq();
             Some(self.persisted.clone())
         } else {
             None

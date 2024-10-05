@@ -16,12 +16,11 @@ for more details.
 
 use super::{
     ephemeral::LogiStage,
-    group::{DeployKind, GroupId, SpawnedUnit, UnitId},
+    group::{DeployKind, SpawnedUnit},
     logistics::{Inventory, Warehouse},
-    Db, Map, Set,
+    Db, Map, MapM, MapS, Set,
 };
 use crate::{
-    cfg::{Deployable, DeployableLogistics, UnitTag},
     group, group_health, group_mut,
     landcache::LandCache,
     maybe, objective, objective_mut,
@@ -29,11 +28,19 @@ use crate::{
     unit, unit_mut,
 };
 use anyhow::{anyhow, Context, Result};
+use bfprotocols::{
+    cfg::{Deployable, DeployableLogistics, UnitTag},
+    db::{
+        group::{GroupId, UnitId},
+        objective::{ObjectiveId, ObjectiveKind},
+    },
+    stats::StatKind,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
     airbase::Airbase,
-    atomic_id, azumith2d_to, centroid2d,
+    azumith2d_to, centroid2d,
     coalition::Side,
     coord::Coord,
     cvt_err,
@@ -52,49 +59,6 @@ use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, str::FromStr, sync::Arc};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ObjectiveKind {
-    Airbase,
-    Fob,
-    Logistics,
-    Farp {
-        spec: Deployable,
-        pad_template: String,
-    },
-}
-
-impl ObjectiveKind {
-    pub fn is_airbase(&self) -> bool {
-        match self {
-            Self::Airbase => true,
-            Self::Farp { .. } | Self::Fob | Self::Logistics => false,
-        }
-    }
-
-    pub fn is_farp(&self) -> bool {
-        match self {
-            Self::Farp { .. } => true,
-            Self::Airbase | Self::Fob | Self::Logistics => false,
-        }
-    }
-
-    pub fn is_hub(&self) -> bool {
-        match self {
-            Self::Logistics => true,
-            Self::Airbase | Self::Farp { .. } | Self::Fob => false,
-        }
-    }
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::Airbase => "Airbase",
-            Self::Fob => "FOB",
-            Self::Farp { .. } => "FARP",
-            Self::Logistics => "Logistics Hub",
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ObjGroupClass {
@@ -219,8 +183,6 @@ impl ObjGroup {
     }
 }
 
-atomic_id!(ObjectiveId);
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Zone {
     Circle { pos: Vector2, radius: f64 },
@@ -283,7 +245,7 @@ pub struct Objective {
     pub(super) radius: Option<f64>,
     pub owner: Side,
     pub(super) kind: ObjectiveKind,
-    pub(super) groups: Map<Side, Set<GroupId>>,
+    pub(super) groups: MapS<Side, Set<GroupId>>,
     pub(super) health: u8,
     pub(super) logi: u8,
     #[serde(default)]
@@ -372,7 +334,7 @@ impl Db {
     /// returns the closest objective that matches the critera to the specified point
     /// (distance, heading from objective to point, objective)
     pub fn objective_near_point<P: Fn(&Objective) -> bool>(
-        obj: &Map<ObjectiveId, Objective>,
+        obj: &MapM<ObjectiveId, Objective>,
         pos: Vector2,
         p: P,
     ) -> Option<(f64, f64, &Objective)> {
@@ -462,12 +424,15 @@ impl Db {
         self.persisted.farps.remove_cow(oid);
         self.ephemeral.airbase_by_oid.remove(oid);
         self.ephemeral.remove_objective_markup(oid);
+        self.ephemeral
+            .stat(StatKind::ObjectiveDestroyed { id: *oid });
         self.ephemeral.dirty();
         Ok(())
     }
 
     pub fn add_farp(
         &mut self,
+        lua: MizLua,
         spctx: &SpawnCtx,
         idx: &MizIndex,
         side: Side,
@@ -565,7 +530,7 @@ impl Db {
         let obj = Objective {
             id: ObjectiveId::new(),
             name: name.clone(),
-            groups: Map::from_iter([(side, groups)]),
+            groups: MapS::from_iter([(side, groups)]),
             kind: ObjectiveKind::Farp {
                 spec: spec.clone(),
                 pad_template: pad_template.clone(),
@@ -593,6 +558,14 @@ impl Db {
                 self.persisted.objectives_by_group.insert_cow(*gid, oid);
             }
         }
+        let pos = obj.zone.pos();
+        let llpos = Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
+        self.ephemeral.stat(StatKind::Objective {
+            id: obj.id,
+            kind: obj.kind.clone(),
+            owner: obj.owner,
+            pos: llpos,
+        });
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.persisted.farps.insert_cow(oid);
@@ -636,6 +609,12 @@ impl Db {
             obj.last_change_ts = now;
             (obj.kind.clone(), health, logi)
         };
+        self.ephemeral.stat(StatKind::ObjectiveHealth {
+            id: *oid,
+            last_change: now,
+            health,
+            logi,
+        });
         if let ObjectiveKind::Farp { .. } = &kind {
             if logi == 0 {
                 self.delete_objective(oid)?;
@@ -1099,7 +1078,7 @@ impl Db {
                 self.setup_supply_lines().context("setup supply lines")?;
                 self.deliver_supplies_from_logistics_hubs()
                     .context("delivering supplies")?;
-                let mut ucids: SmallVec<[Ucid; 4]> = smallvec![];
+                let mut ucids: SmallVec<[Ucid; 1]> = smallvec![];
                 for (_, ucid, troop_origin, gid) in gids {
                     self.delete_group(&gid)
                         .context("deleting capturing troops")?;
@@ -1109,10 +1088,15 @@ impl Db {
                         }
                     }
                 }
+                self.ephemeral.stat(StatKind::Capture {
+                    id: oid,
+                    side: new_owner,
+                    by: ucids.clone(),
+                });
                 if let Some(points) = self.ephemeral.cfg.points.as_ref() {
                     let ppp = (points.capture as f32 / ucids.len() as f32).ceil() as i32;
-                    for ucid in ucids {
-                        self.adjust_points(&ucid, ppp, &format!("for capturing {name}"));
+                    for ucid in &ucids {
+                        self.adjust_points(ucid, ppp, &format!("for capturing {name}"));
                     }
                 }
                 let obj = objective!(self, oid)?;

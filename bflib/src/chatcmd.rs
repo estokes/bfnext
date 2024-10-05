@@ -1,11 +1,7 @@
 use crate::{
     admin::{self, AdminCommand},
-    cfg::{Action, ActionKind},
-    db::{
-        actions::ActionCmd,
-        group::{DeployKind, GroupId},
-        player::RegErr,
-    },
+    bg::Task,
+    db::{actions::ActionCmd, group::DeployKind, player::RegErr},
     lives,
     msgq::MsgTyp,
     perf::PerfInner,
@@ -13,6 +9,11 @@ use crate::{
     Context,
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use bfprotocols::{
+    cfg::{Action, ActionKind},
+    db::group::GroupId,
+    stats::StatKind,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
@@ -23,10 +24,31 @@ use dcso3::{
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use log::{error, info};
-use std::sync::Arc;
+use regex::Regex;
+use std::{sync::Arc, sync::OnceLock};
+
+pub(crate) fn register_success(ctx: &mut Context, id: PlayerId, name: String, side: Side) {
+    let msg = String::from(format_compact!(
+        "Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!",
+        side
+    ));
+    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+    ctx.db.ephemeral.msgs().send(
+        MsgTyp::Chat(None),
+        format_compact!("{} has joined {:?} team", name, side),
+    );
+}
+
+pub(crate) fn register_already_on(ctx: &mut Context, id: PlayerId, side: Side) {
+    ctx.db.ephemeral.msgs().send(
+        MsgTyp::Chat(Some(id)),
+        format_compact!("you are already on {:?} team!", side),
+    )
+}
 
 fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) -> Result<String> {
     let ifo = ctx.connected.get_or_lookup_player_info(lua, id)?;
+    let name = ifo.name.clone();
     let side = if msg.eq_ignore_ascii_case("blue") {
         Side::Blue
     } else if msg.eq_ignore_ascii_case("red") {
@@ -38,18 +60,8 @@ fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) 
         .db
         .register_player(ifo.ucid.clone(), ifo.name.clone(), side)
     {
-        Ok(()) => {
-            let msg = String::from(format_compact!("Welcome to the {:?} team. You may only occupy slots belonging to your team. Good luck!", side));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            ctx.db.ephemeral.msgs().send(
-                MsgTyp::Chat(None),
-                format_compact!("{} has joined {:?} team", ifo.name, side),
-            );
-        }
-        Err(RegErr::AlreadyOn(side)) => ctx.db.ephemeral.msgs().send(
-            MsgTyp::Chat(Some(id)),
-            format_compact!("you are already on {:?} team!", side),
-        ),
+        Ok(()) => register_success(ctx, id, name, side),
+        Err(RegErr::AlreadyOn(side)) => register_already_on(ctx, id, side),
         Err(RegErr::AlreadyRegistered(side_switches, orig_side)) => {
             let msg = String::from(match side_switches {
                 None => format_compact!("You are already on the {:?} team. You may switch sides by typing -switch {:?}.", orig_side, side),
@@ -61,6 +73,11 @@ fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) 
         }
     }
     Ok("".into())
+}
+
+pub(crate) fn sideswitch_success(ctx: &mut Context, name: String, side: Side) {
+    let msg = String::from(format_compact!("{} has switched to {:?}", name, side));
+    ctx.db.ephemeral.msgs().send(MsgTyp::Chat(None), msg);
 }
 
 fn sideswitch_player(
@@ -83,8 +100,8 @@ fn sideswitch_player(
     };
     match ctx.db.sideswitch_player(&ifo.ucid, side) {
         Ok(()) => {
-            let msg = String::from(format_compact!("{} has switched to {:?}", ifo.name, side));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(None), msg);
+            let name = ifo.name.clone();
+            sideswitch_success(ctx, name, side);
         }
         Err(e) => ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), e),
     }
@@ -238,7 +255,7 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
                         player,
                         spec,
                         moved_by: _,
-                        origin: _
+                        origin: _,
                     } => {
                         let player = player.clone();
                         let points = (spec.cost as f32 / 2.).ceil() as i32;
@@ -373,6 +390,38 @@ pub(super) fn run_action_commands(
     Ok(())
 }
 
+fn bind_command(ctx: &mut Context, id: PlayerId, s: &str) {
+    static RX: OnceLock<Regex> = OnceLock::new();
+    match ctx.connected.get(&id) {
+        None => ctx.db.ephemeral.msgs().send(
+            MsgTyp::Chat(Some(id)),
+            "You must register first. Type red or blue in chat",
+        ),
+        Some(ifo) => {
+            let rx = RX.get_or_init(|| {
+                Regex::new("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+                    .unwrap()
+            });
+            let s = s.trim();
+            if !rx.is_match(s) {
+                ctx.db
+                    .ephemeral
+                    .msgs()
+                    .send(MsgTyp::Chat(Some(id)), "Invalid token")
+            } else {
+                ctx.db
+                    .ephemeral
+                    .msgs()
+                    .send(MsgTyp::Chat(Some(id)), "Success");
+                ctx.do_bg_task(Task::Stat(StatKind::Bind {
+                    id: ifo.ucid,
+                    token: s.into(),
+                }))
+            }
+        }
+    }
+}
+
 fn help_command(ctx: &mut Context, id: PlayerId) {
     let admin = match ctx.connected.get(&id) {
         None => false,
@@ -388,6 +437,7 @@ fn help_command(ctx: &mut Context, id: PlayerId) {
         " -transfer <amount> <player>: transfer points to another player",
         " -delete <groupid>: delete a group you deployed for a partial refund",
         " -action <name> <args>: perform an action, -action help for a list of actions",
+        " -bind <token>: bind your ucid to the specified token (for the web gui)",
         " -help: show this help message",
     ] {
         ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
@@ -433,6 +483,9 @@ pub(super) fn process(
         Ok("".into())
     } else if let Some(s) = msg.strip_prefix("-delete ") {
         delete_command(ctx, id, s);
+        Ok("".into())
+    } else if let Some(s) = msg.strip_prefix("-bind ") {
+        bind_command(ctx, id, s);
         Ok("".into())
     } else if msg.starts_with("-help") {
         help_command(ctx, id);

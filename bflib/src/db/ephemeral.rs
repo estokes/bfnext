@@ -16,22 +16,29 @@ for more details.
 
 use super::{
     cargo::Cargo,
-    group::{GroupId, SpawnedGroup, SpawnedUnit, UnitId},
+    group::{SpawnedGroup, SpawnedUnit},
     markup::ObjectiveMarkup,
-    objective::{Objective, ObjectiveId},
+    objective::Objective,
     persisted::Persisted,
 };
 use crate::{
-    cfg::{
-        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
-        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
-    },
+    bg::Task,
     maybe,
     msgq::MsgQ,
     perf::{record_perf, PerfInner},
     spawnctx::{Despawn, SpawnCtx, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::{
+        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
+    },
+    db::{
+        group::{GroupId, UnitId},
+        objective::ObjectiveId,
+    }, stats::StatKind,
+};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
@@ -60,6 +67,7 @@ use std::{
     mem,
     sync::Arc,
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
 pub struct SlotInfo {
@@ -116,6 +124,7 @@ pub(super) struct Production {
 pub struct Ephemeral {
     pub(super) dirty: bool,
     pub cfg: Arc<Cfg>,
+    to_bg: Option<UnboundedSender<Task>>,
     pub(super) players_by_slot: IndexMap<SlotId, Ucid, FxBuildHasher>,
     pub(super) cargo: FxHashMap<SlotId, Cargo>,
     pub(super) deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,
@@ -151,6 +160,7 @@ impl Default for Ephemeral {
         Self {
             dirty: false,
             cfg: Arc::new(Cfg::default()),
+            to_bg: None,
             players_by_slot: IndexMap::default(),
             cargo: FxHashMap::default(),
             deployable_idx: FxHashMap::default(),
@@ -184,6 +194,19 @@ impl Default for Ephemeral {
 }
 
 impl Ephemeral {
+    fn do_bg(&self, task: Task) {
+        if let Some(to_bg) = &self.to_bg {
+            match to_bg.send(task) {
+                Ok(()) => (),
+                Err(_) => panic!("background thread is dead"),
+            }
+        }
+    }
+
+    pub fn stat(&self, stat: StatKind) {
+        self.do_bg(Task::Stat(stat))
+    }
+
     pub fn get_slot_info(&self, slot: &SlotId) -> Option<&SlotInfo> {
         self.slot_info.get(slot)
     }
@@ -637,7 +660,14 @@ impl Ephemeral {
             .any(|si| &si.objective == oid && si.typ.as_str() == typ)
     }
 
-    pub(super) fn set_cfg(&mut self, miz: &Miz, mizidx: &MizIndex, mut cfg: Cfg) -> Result<()> {
+    pub(super) fn set_cfg(
+        &mut self,
+        miz: &Miz,
+        mizidx: &MizIndex,
+        mut cfg: Cfg,
+        to_bg: UnboundedSender<Task>,
+    ) -> Result<()> {
+        self.to_bg = Some(to_bg);
         for (_, actions) in &mut cfg.actions {
             actions.sort_by(|name0, _, name1, _| name0.cmp(name1));
         }

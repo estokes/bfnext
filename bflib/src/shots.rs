@@ -14,54 +14,23 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use std::collections::hash_map::Entry;
-
-/// Lets not bicker and argue about oo killed oo
-use crate::db::{group::GroupId, Db};
+//! Lets not bicker and argue about oo killed oo
+use crate::db::{group::DeployKind, Db};
 use anyhow::Result;
+use bfprotocols::shots::{Dead, Shot, Who};
 use chrono::{prelude::*, Duration};
 use dcso3::{
-    coalition::Side,
     event::Shot as ShotEvent,
-    net::Ucid,
     object::{DcsObject, DcsOid},
     unit::{ClassUnit, Unit},
-    weapon::ClassWeapon,
     String,
 };
 use fxhash::FxHashMap;
-use smallvec::SmallVec;
-use serde::{Serialize, Deserialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Dead {
-    pub victim: DcsOid<ClassUnit>,
-    pub victim_ucid: Option<Ucid>,
-    pub victim_side: Side,
-    pub victim_gid: Option<GroupId>,
-    pub time: DateTime<Utc>,
-    pub shots: Vec<Shot>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Shot {
-    pub weapon_name: Option<String>,
-    pub weapon: Option<DcsOid<ClassWeapon>>,
-    pub shooter: DcsOid<ClassUnit>,
-    pub shooter_ucid: Ucid,
-    pub shooter_gid: Option<GroupId>,
-    pub target: DcsOid<ClassUnit>,
-    pub target_side: Side,
-    pub target_ucid: Option<Ucid>,
-    pub target_gid: Option<GroupId>,
-    pub target_typ: String,
-    pub time: DateTime<Utc>,
-    pub hit: bool,
-}
+use std::collections::hash_map::Entry;
 
 #[derive(Debug, Clone, Default)]
 pub struct ShotDb {
-    by_target: FxHashMap<DcsOid<ClassUnit>, SmallVec<[Shot; 8]>>,
+    by_target: FxHashMap<DcsOid<ClassUnit>, Vec<Shot>>,
     dead: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     recently_dead: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     last_gc: DateTime<Utc>,
@@ -85,24 +54,32 @@ macro_rules! some {
     };
 }
 
-fn side_and_gid(db: &Db, target: &DcsOid<ClassUnit>) -> (Side, Option<GroupId>) {
-    match db.ephemeral.get_uid_by_object_id(target) {
-        Some(uid) => db.unit(uid).ok().map(|u| (u.side, Some(u.group))).unwrap_or((Side::Neutral, None)),
+fn who(db: &Db, id: DcsOid<ClassUnit>) -> Option<Who> {
+    match db.ephemeral.get_uid_by_object_id(&id) {
+        Some(uid) => db.unit(uid).ok().map(|u| Who::AI {
+            side: u.side,
+            gid: u.group,
+            uid: *uid,
+            unit: id,
+            ucid: db.group(&u.group).ok().and_then(|g| match &g.origin {
+                DeployKind::Action { player, .. } => *player,
+                DeployKind::Deployed { player, .. } => Some(*player),
+                DeployKind::Troop { player, .. } => Some(*player),
+                DeployKind::Crate { .. } | DeployKind::Objective => None,
+            }),
+        }),
         None => db
             .ephemeral
-            .get_slot_by_object_id(target)
-            .and_then(|sl| db.ephemeral.player_in_slot(sl))
-            .and_then(|ucid| db.player(ucid))
-            .map(|p| (p.side, None))
-            .unwrap_or((Side::Neutral, None)),
+            .get_slot_by_object_id(&id)
+            .and_then(|sl| db.ephemeral.player_in_slot(sl).map(|ucid| (sl, ucid)))
+            .and_then(|(sl, ucid)| db.player(ucid).map(|p| (sl, ucid, p)))
+            .map(|(sl, ucid, p)| Who::Player {
+                side: p.side,
+                slot: *sl,
+                ucid: *ucid,
+                unit: id,
+            }),
     }
-}
-
-fn gid_by_oid(db: &Db, oid: &DcsOid<ClassUnit>) -> Option<GroupId> {
-    db.ephemeral
-        .get_uid_by_object_id(oid)
-        .and_then(|uid| db.unit(uid).ok())
-        .map(|u| u.group)
 }
 
 impl ShotDb {
@@ -118,29 +95,18 @@ impl ShotDb {
         if self.dead.contains_key(&target_oid) || self.recently_dead.contains_key(&target_oid) {
             return Ok(());
         }
-        let shooter = e.initiator.object_id()?;
-        let shooter_ucid = some!(db.player_in_unit(true, &shooter));
-        let shooter_gid = gid_by_oid(db, &shooter);
+        let shooter = some!(who(db, e.initiator.object_id()?));
         let target_typ = target.get_type_name()?;
-        let (target_side, target_gid) = side_and_gid(db, &target_oid);
-        let target = target_oid;
-        self.by_target
-            .entry(target.clone())
-            .or_default()
-            .push(Shot {
-                weapon_name: Some(e.weapon_name),
-                weapon: Some(e.weapon.object_id()?),
-                shooter: shooter.clone(),
-                shooter_ucid,
-                shooter_gid,
-                target_ucid: db.player_in_unit(false, &target),
-                target_gid,
-                target,
-                target_typ,
-                target_side,
-                time: now,
-                hit: false,
-            });
+        let target = some!(who(db, target_oid.clone()));
+        self.by_target.entry(target_oid).or_default().push(Shot {
+            weapon_name: Some(e.weapon_name),
+            weapon: Some(e.weapon.object_id()?),
+            shooter,
+            target,
+            target_typ,
+            time: now,
+            hit: false,
+        });
         Ok(())
     }
 
@@ -158,30 +124,22 @@ impl ShotDb {
             return Ok(());
         }
         let target_typ = target.get_type_name()?;
-        let shooter = shooter.object_id()?;
-        let shooter_ucid = some!(db.player_in_unit(true, &shooter));
-        let shooter_gid = gid_by_oid(db, &shooter);
-        let (target_side, target_gid) = side_and_gid(db, &target_oid);
-        let target = target_oid;
+        let shooter = some!(who(db, shooter.object_id()?));
+        let target = some!(who(db, target_oid.clone()));
         self.by_target
-            .entry(target.clone())
+            .entry(target_oid.clone())
             .or_default()
             .push(Shot {
                 weapon_name: Some(weapon_name),
                 weapon: None,
-                shooter: shooter.clone(),
-                shooter_ucid,
-                shooter_gid,
-                target: target.clone(),
-                target_ucid: db.player_in_unit(false, &target),
-                target_gid,
+                shooter,
+                target,
                 target_typ,
-                target_side,
                 time: now,
                 hit: true,
             });
         if dead {
-            self.dead.insert(target, now);
+            self.dead.insert(target_oid, now);
         }
         Ok(())
     }
@@ -189,36 +147,25 @@ impl ShotDb {
     pub fn bring_out_your_dead(&mut self, now: DateTime<Utc>) -> Vec<Dead> {
         let mut dead = Vec::with_capacity(self.dead.len());
         for (target, time) in self.dead.drain() {
-            dead.push(Dead {
-                victim: target.clone(),
-                victim_ucid: None,
-                victim_side: Side::Neutral,
-                victim_gid: None,
-                time,
-                shots: vec![],
-            });
-            let kill = dead.last_mut().unwrap();
             if let Some(shots) = self.by_target.remove(&target) {
-                for shot in shots {
-                    if kill.victim_ucid.is_none() {
-                        if let Some(ucid) = shot.target_ucid.clone() {
-                            kill.victim_ucid = Some(ucid);
-                        }
-                    }
-                    kill.victim_side = shot.target_side;
-                    kill.victim_gid = shot.target_gid;
-                    kill.shots.push(shot);
+                if shots.len() > 0 {
+                    let victim = shots[0].target.clone();
+                    dead.push(Dead {
+                        victim,
+                        time,
+                        shots,
+                    });
                 }
             }
             self.recently_dead.insert(target, time);
         }
-        let five_min = Duration::minutes(5);
-        self.recently_dead.retain(|_, t| now - *t <= five_min);
-        let thirty_min = Duration::minutes(30);
-        if now - self.last_gc >= thirty_min {
+        const FIVE_MIN: Duration = Duration::minutes(5);
+        const THIRTY_MIN: Duration = Duration::minutes(30);
+        self.recently_dead.retain(|_, t| now - *t <= FIVE_MIN);
+        if now - self.last_gc >= THIRTY_MIN {
             self.last_gc = now;
             self.by_target.retain(|_, shots| {
-                shots.retain(|shot| now - shot.time <= thirty_min);
+                shots.retain(|shot| now - shot.time <= THIRTY_MIN);
                 !shots.is_empty()
             });
         }

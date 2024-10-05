@@ -14,17 +14,13 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{
-    ephemeral::SlotInfo,
-    group::{DeployKind, GroupId},
-    objective::ObjGroup,
-    Db, Map,
-};
+use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db};
 use crate::{
-    cfg::{Cfg, Vehicle},
+    bg::Task,
     db::{
         logistics::Warehouse,
-        objective::{Objective, ObjectiveId, ObjectiveKind, Zone},
+        objective::{Objective, Zone},
+        MapS,
     },
     group,
     landcache::LandCache,
@@ -33,20 +29,30 @@ use crate::{
     spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::{Cfg, Vehicle},
+    db::{
+        group::GroupId,
+        objective::{ObjectiveId, ObjectiveKind},
+    },
+    stats::StatKind,
+};
 use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
     centroid2d,
     coalition::Side,
     controller::PointType,
+    coord::Coord,
     env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
     land::Land,
-    LuaVec2, MizLua, String, Vector2, Vector3,
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
 use log::{debug, error, info};
 use smallvec::SmallVec;
+use tokio::sync::mpsc::UnboundedSender;
 
 impl Db {
     /// objectives are just trigger zones named according to type codes
@@ -68,7 +74,7 @@ impl Db {
     /// - N: Neutral
     ///
     /// So e.g. Tblisi would be OABBTBLISI -> Objective, Airbase, Default to Blue, named Tblisi
-    fn init_objective(&mut self, zone: TriggerZone, name: &str) -> Result<()> {
+    fn init_objective(&mut self, lua: MizLua, zone: TriggerZone, name: &str) -> Result<()> {
         fn side_and_name(s: &str) -> Result<(Side, String)> {
             if let Some(name) = s.strip_prefix("R") {
                 Ok((Side::Red, String::from(name)))
@@ -114,7 +120,7 @@ impl Db {
             name: name.clone(),
             kind,
             owner,
-            groups: Map::new(),
+            groups: MapS::new(),
             health: 0,
             logi: 0,
             supply: 0,
@@ -129,6 +135,14 @@ impl Db {
         if let ObjectiveKind::Logistics = obj.kind {
             self.persisted.logistics_hubs.insert_cow(id);
         }
+        let pos = zone.pos();
+        let llpos = Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
+        self.ephemeral.stat(StatKind::Objective {
+            id,
+            kind: obj.kind.clone(),
+            owner: obj.owner,
+            pos: llpos,
+        });
         self.persisted.objectives.insert_cow(id, obj);
         self.persisted.objectives_by_name.insert_cow(name, id);
         Ok(())
@@ -255,10 +269,16 @@ impl Db {
         Ok(())
     }
 
-    pub fn init(lua: MizLua, cfg: Cfg, idx: &MizIndex, miz: &Miz) -> Result<Self> {
+    pub fn init(
+        lua: MizLua,
+        cfg: Cfg,
+        idx: &MizIndex,
+        miz: &Miz,
+        to_bg: UnboundedSender<Task>,
+    ) -> Result<Self> {
         let spctx = SpawnCtx::new(lua)?;
         let mut t = Self::default();
-        t.ephemeral.set_cfg(miz, idx, cfg)?;
+        t.ephemeral.set_cfg(miz, idx, cfg, to_bg)?;
         let mut objective_names = FxHashSet::default();
         for zone in miz.triggers()? {
             let zone = zone?;
@@ -272,7 +292,7 @@ impl Db {
                     bail!("malformed objective name {name}")
                 }
                 let name = name.strip_prefix("O").unwrap();
-                t.init_objective(zone, name)?
+                t.init_objective(lua, zone, name)?
             }
         }
         for side in Side::ALL {
@@ -453,6 +473,9 @@ impl Db {
             }
             Ok(())
         };
+        queue_check_close_enemies().context("queuing unit pos checks")?;
+        self.cull_or_respawn_objectives(spctx.lua(), landcache, Utc::now())
+            .context("initial cull or respawn")?;
         // return lives to pilots who were airborne on the last restart
         let airborne_players = self
             .persisted
@@ -468,12 +491,13 @@ impl Db {
                 if *lives >= self.ephemeral.cfg.default_lives[&lt].0 {
                     player.lives.remove_cow(&lt);
                 }
-                self.ephemeral.dirty = true;
+                self.ephemeral.stat(StatKind::Life {
+                    id: ucid,
+                    lives: player.lives.clone()
+                });
+                self.ephemeral.dirty();
             }
         }
-        queue_check_close_enemies().context("queuing unit pos checks")?;
-        self.cull_or_respawn_objectives(spctx.lua(), landcache, Utc::now())
-            .context("initial cull or respawn")?;
         Ok(())
     }
 }

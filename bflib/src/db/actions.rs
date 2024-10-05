@@ -1,14 +1,6 @@
-use super::{
-    group::GroupId,
-    objective::{Objective, ObjectiveId},
-    Db, Map,
-};
+use super::{objective::Objective, Db, MapM};
 use crate::{
     admin,
-    cfg::{
-        Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg, DroneCfg,
-        LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
-    },
     db::{cargo::Oldest, group::DeployKind},
     group, group_mut,
     jtac::{JtId, Jtacs},
@@ -18,6 +10,14 @@ use crate::{
     unit,
 };
 use anyhow::{anyhow, bail, Context, Ok, Result};
+use bfprotocols::{
+    cfg::{
+        Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg, DroneCfg,
+        LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
+    },
+    db::{group::GroupId, objective::ObjectiveId},
+    stats::StatKind,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
@@ -28,6 +28,7 @@ use dcso3::{
         ActionTyp, AiOption, AlarmState, AltType, Command, GroundOption, MissionPoint,
         OrbitPattern, PointType, Task, TurnMethod, VehicleFormation,
     },
+    coord::Coord,
     env::miz::MizIndex,
     group::Group,
     land::Land,
@@ -230,7 +231,7 @@ impl ActionCmd {
 // setup the awacs race track 90 degrees offset from the heading
 // to the nearest enemy objective
 fn racetrack_dist_and_heading(
-    obj: &Map<ObjectiveId, Objective>,
+    obj: &MapM<ObjectiveId, Objective>,
     pos: Vector2,
     enemy: Side,
 ) -> (f64, f64) {
@@ -322,7 +323,7 @@ impl Db {
             }
         }
         let name = cmd.name.clone();
-        match cmd.args {
+        let gid = match cmd.args {
             ActionArgs::Awacs(args) => self
                 .awacs(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling awacs")?,
@@ -385,8 +386,13 @@ impl Db {
                     .move_group(spctx, side, ucid, cmd.action.penalty.unwrap_or(0), args)
                     .context("moving unit")?,
             },
-        }
+        };
         if let Some(ucid) = ucid.as_ref() {
+            self.ephemeral.stat(StatKind::Action {
+                by: *ucid,
+                action: cmd.name.clone(),
+                gid,
+            });
             self.adjust_points(
                 ucid,
                 -(cost as i32),
@@ -556,7 +562,7 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name).context("getting pos")?;
@@ -564,7 +570,8 @@ impl Db {
             .drone_mission(side, ucid, pos, args)
             .context("generate drone mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting ai mission")
+            .context("setting ai mission")?;
+        Ok(None)
     }
 
     fn drone(
@@ -577,8 +584,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<DroneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -605,8 +612,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_fighters_mission<'lua>(
@@ -653,7 +659,7 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
@@ -661,7 +667,8 @@ impl Db {
             .ai_fighters_mission(side, ucid, pos, args)
             .context("generate fighters mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting fighters mission")
+            .context("setting fighters mission")?;
+        Ok(None)
     }
 
     fn ai_fighters(
@@ -674,8 +681,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -699,8 +706,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_attackers_mission<'lua>(
@@ -750,7 +756,7 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
@@ -758,7 +764,8 @@ impl Db {
             .ai_attackers_mission(side, ucid, pos, args)
             .context("generate attackers mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting ai mission")
+            .context("setting ai mission")?;
+        Ok(None)
     }
 
     fn ai_attackers(
@@ -771,8 +778,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -796,8 +803,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn move_group(
@@ -807,7 +813,7 @@ impl Db {
         ucid: &Ucid,
         penalty: u32,
         args: WithPosAndGroup<MoveCfg>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let pos = self.group_center(&args.group)?;
         let group = group_mut!(self, args.group)?;
         if group.side != side {
@@ -918,7 +924,7 @@ impl Db {
                 },
             ],
         })?;
-        Ok(())
+        Ok(None)
     }
 
     fn tanker_mission<'lua>(
@@ -966,14 +972,15 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
         let mission = self
             .tanker_mission(side, ucid, pos, args)
             .context("generate tanker mission")?;
-        self.set_ai_mission(spctx, gid, mission)
+        self.set_ai_mission(spctx, gid, mission)?;
+        Ok(None)
     }
 
     fn tanker(
@@ -986,8 +993,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<AiPlaneCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1011,8 +1018,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn paratroops(
@@ -1025,8 +1031,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<DeployableCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1042,11 +1048,10 @@ impl Db {
             Some(args.pos),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
-    fn nuke(&mut self, spctx: &SpawnCtx, args: WithPos<NukeCfg>) -> Result<()> {
+    fn nuke(&mut self, spctx: &SpawnCtx, args: WithPos<NukeCfg>) -> Result<Option<GroupId>> {
         let land = Land::singleton(spctx.lua())?;
         let act = Trigger::singleton(spctx.lua())?.action()?;
         let alt = land.get_height(LuaVec2(args.pos))? + 500.;
@@ -1054,7 +1059,7 @@ impl Db {
         act.explosion(LuaVec3(pos), args.cfg.power as f32)?;
         self.persisted.nukes_used += 1;
         self.ephemeral.dirty();
-        Ok(())
+        Ok(None)
     }
 
     fn ai_logistics_transfer(
@@ -1067,10 +1072,10 @@ impl Db {
         name: String,
         action: Action,
         args: WithFromTo<AiPlaneCfg>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let from = objective!(self, args.from)?.zone.pos();
         let to = objective!(self, args.to)?.zone.pos();
-        self.add_and_spawn_ai_air(
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1086,8 +1091,7 @@ impl Db {
             Some(to),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_logistics_repair(
@@ -1100,9 +1104,9 @@ impl Db {
         name: String,
         action: Action,
         args: WithObj<AiPlaneCfg>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let pos = objective!(self, args.oid)?.zone.pos();
-        self.add_and_spawn_ai_air(
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1118,8 +1122,7 @@ impl Db {
             Some(pos),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_deploy(
@@ -1132,8 +1135,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<DeployableCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1149,8 +1152,7 @@ impl Db {
             Some(args.pos),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_point_to_point_mission<'lua>(
@@ -1218,14 +1220,14 @@ impl Db {
         name: String,
         action: Action,
         args: WithJtac<BomberCfg>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let jt = jtacs.get(&args.jtac)?;
         let tgt = jt
             .target()
             .as_ref()
             .map(|t| Vector2::new(t.pos.x, t.pos.z))
             .unwrap_or(jt.location().pos);
-        self.add_and_spawn_ai_air(
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1241,8 +1243,7 @@ impl Db {
             Some(tgt),
             BitFlags::empty(),
             |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?;
-        Ok(())
+        )?))
     }
 
     fn add_and_spawn_ai_air<'lua>(
@@ -1382,7 +1383,7 @@ impl Db {
         side: Side,
         ucid: Option<Ucid>,
         args: WithPosAndGroup<()>,
-    ) -> Result<()> {
+    ) -> Result<Option<GroupId>> {
         let gid = args.group;
         let group = group!(self, gid)?;
         let pos = group_position(spctx.lua(), &group.name)?;
@@ -1390,7 +1391,8 @@ impl Db {
             .awacs_mission(side, ucid, pos, args)
             .context("generating awacs mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting ai mission")
+            .context("setting ai mission")?;
+        Ok(None)
     }
 
     fn awacs(
@@ -1403,8 +1405,8 @@ impl Db {
         name: String,
         action: Action,
         args: WithPos<AwacsCfg>,
-    ) -> Result<()> {
-        self.add_and_spawn_ai_air(
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
             perf,
             spctx,
             idx,
@@ -1431,8 +1433,7 @@ impl Db {
                     },
                 )
             },
-        )?;
-        Ok(())
+        )?))
     }
 
     fn ai_loiter_point_mission<'lua>(
@@ -1676,7 +1677,7 @@ impl Db {
         Ok(())
     }
 
-    fn repair_target(&mut self, target: Vector2, side: Side) -> Result<()> {
+    fn repair_target(&mut self, target: Vector2, ucid: Option<Ucid>, side: Side) -> Result<()> {
         let (dist, _, obj) =
             Self::objective_near_point(&self.persisted.objectives, target, |o| o.owner == side)
                 .ok_or_else(|| anyhow!("no friendly objective near drop off point"))?;
@@ -1684,6 +1685,9 @@ impl Db {
             bail!("no friendly objective near drop off point")
         }
         let oid = obj.id;
+        if let Some(ucid) = ucid {
+            self.ephemeral.stat(StatKind::Repair { id: oid, by: ucid });
+        }
         self.repair_one_logi_step(side, Utc::now(), oid)?;
         Ok(())
     }
@@ -1693,6 +1697,7 @@ impl Db {
         lua: MizLua,
         src: Vector2,
         target: Vector2,
+        ucid: Option<Ucid>,
         side: Side,
     ) -> Result<()> {
         let (dist, _, src) =
@@ -1709,6 +1714,13 @@ impl Db {
         }
         let src = src.id;
         let tgt = tgt.id;
+        if let Some(ucid) = ucid {
+            self.ephemeral.stat(StatKind::SupplyTransfer {
+                from: src,
+                to: tgt,
+                by: ucid,
+            });
+        }
         self.transfer_supplies(lua, src, tgt)
     }
 
@@ -1754,7 +1766,7 @@ impl Db {
             moved_by: None,
             spec: spec.clone(),
         };
-        self.add_and_queue_group(
+        let gid = self.add_and_queue_group(
             &spctx,
             idx,
             side,
@@ -1764,6 +1776,12 @@ impl Db {
             BitFlags::empty(),
             None,
         )?;
+        self.ephemeral.stat(StatKind::DeployGroup {
+            gid,
+            deployable: dep,
+            by: ucid,
+            pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
+        });
         Ok(())
     }
 
@@ -1815,7 +1833,7 @@ impl Db {
         if let Some(gid) = to_delete {
             self.delete_group(&gid)?
         }
-        self.add_and_queue_group(
+        let gid = self.add_and_queue_group(
             &spctx,
             idx,
             side,
@@ -1825,6 +1843,12 @@ impl Db {
             BitFlags::empty(),
             None,
         )?;
+        self.ephemeral.stat(StatKind::DeployTroop {
+            troop,
+            pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
+            by: ucid,
+            gid,
+        });
         Ok(())
     }
 
@@ -1837,8 +1861,8 @@ impl Db {
     ) -> Result<()> {
         let mut to_delete: SmallVec<[GroupId; 4]> = smallvec![];
         let mut to_bomb: SmallVec<[(BomberCfg, Vector2, Side); 2]> = smallvec![];
-        let mut to_repair: SmallVec<[(Vector2, Side); 2]> = smallvec![];
-        let mut to_transfer: SmallVec<[(Vector2, Vector2, Side); 2]> = smallvec![];
+        let mut to_repair: SmallVec<[(Vector2, Option<Ucid>, Side); 2]> = smallvec![];
+        let mut to_transfer: SmallVec<[(Vector2, Vector2, Option<Ucid>, Side); 2]> = smallvec![];
         let mut to_deploy: SmallVec<[(Vector2, String, Side, Ucid); 2]> = smallvec![];
         let mut to_paratroop: SmallVec<[(Vector2, String, Side, Ucid, ObjectiveId); 2]> =
             smallvec![];
@@ -1902,7 +1926,7 @@ impl Db {
                         if let Some(target) = *destination {
                             if at_dest!(group, target, 800.) {
                                 destination.take();
-                                to_repair.push((target, group.side));
+                                to_repair.push((target, *player, group.side));
                                 to_delete.push(group.id);
                             }
                         }
@@ -1912,7 +1936,7 @@ impl Db {
                             if at_dest!(group, target, 800.) {
                                 destination.take();
                                 if let Some(rtb) = *rtb {
-                                    to_transfer.push((rtb, target, group.side));
+                                    to_transfer.push((rtb, target, *player, group.side));
                                     to_delete.push(group.id);
                                 }
                             }
@@ -1923,13 +1947,17 @@ impl Db {
                             if at_dest!(group, target, 800.) {
                                 destination.take();
                                 let ucid = player
-                                    .as_ref()
-                                    .map(|u| u.clone())
                                     .ok_or_else(|| anyhow!("paratroop missions require a ucid"))?;
                                 let origin = (*origin).ok_or_else(|| {
                                     anyhow!("objective origin is required for paratroops")
                                 })?;
-                                to_paratroop.push((target, t.name.clone(), group.side, ucid, origin));
+                                to_paratroop.push((
+                                    target,
+                                    t.name.clone(),
+                                    group.side,
+                                    ucid,
+                                    origin,
+                                ));
                             }
                         }
                         if destination.is_none() {
@@ -2016,8 +2044,8 @@ impl Db {
                 error!("bomb targets failed {e:?}")
             }
         }
-        for (target, side) in to_repair {
-            if let Err(e) = self.repair_target(target, side) {
+        for (target, ucid, side) in to_repair {
+            if let Err(e) = self.repair_target(target, ucid, side) {
                 self.ephemeral.msgs().panel_to_side(
                     10,
                     false,
@@ -2026,8 +2054,8 @@ impl Db {
                 );
             }
         }
-        for (src, target, side) in to_transfer {
-            if let Err(e) = self.transfer_to_target(lua, src, target, side) {
+        for (src, target, ucid, side) in to_transfer {
+            if let Err(e) = self.transfer_to_target(lua, src, target, ucid, side) {
                 self.ephemeral.msgs().panel_to_side(
                     10,
                     false,

@@ -16,18 +16,18 @@ for more details.
 
 use crate::{
     bg::Task,
-    cfg::Cfg,
-    db::{
-        group::{DeployKind, GroupId},
-        objective::ObjectiveId,
-        Db, Set,
-    },
+    db::{group::DeployKind, Db, SetS},
     msgq::MsgTyp,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
     Context,
 };
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
+use bfprotocols::{
+    cfg::Cfg,
+    db::{group::GroupId, objective::ObjectiveId},
+    stats::StatKind,
+};
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use dcso3::{
@@ -141,7 +141,9 @@ pub enum AdminCommand {
     Remark {
         objective: String,
     },
-    Reset,
+    Reset {
+        winner: Option<Side>,
+    },
     Shutdown,
 }
 
@@ -172,7 +174,7 @@ impl AdminCommand {
             "delete <groupid>: delete deployed group, now with 100% less mess",
             "deslot <player>: force <player> to spectators",
             "remark <obj>: force refresh the markup on objective",
-            "reset: shutdown the server and reset the campaign state",
+            "reset [winner]: shutdown the server and reset the campaign state",
             "shutdown: shutdown the server"
         ]
     }
@@ -300,20 +302,20 @@ impl FromStr for AdminCommand {
             Ok(Self::Remark {
                 objective: s.into(),
             })
-        } else if s == "reset" {
-            Ok(Self::Reset)
+        } else if let Some(s) = s.strip_prefix("reset") {
+            let winner = if s == "" {
+                None
+            } else {
+                Some(Side::from_str(s)?)
+            };
+            Ok(Self::Reset { winner })
         } else {
             bail!("unknown command {s}")
         }
     }
 }
 
-fn admin_spawn(
-    ctx: &mut Context,
-    lua: MizLua,
-    id: PlayerId,
-    key: String,
-) -> Result<()> {
+fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Result<()> {
     let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
     let act = Trigger::singleton(lua)?.action()?;
     let spctx = SpawnCtx::new(lua)?;
@@ -425,7 +427,7 @@ fn admin_spawn(
                     match &spec.logistics {
                         Some(parts) => {
                             ctx.db
-                                .add_farp(&spctx, &ctx.idx, side, pos, &spec, parts)
+                                .add_farp(lua, &spctx, &ctx.idx, side, pos, &spec, parts)
                                 .context("adding farp")?;
                         }
                         None => {
@@ -612,7 +614,7 @@ fn admin_list_connected(ctx: &Context) -> SmallVec<[(PlayerId, Ucid, String); 64
 fn admin_search(
     ctx: &Context,
     expr: Regex,
-) -> SmallVec<[(Option<PlayerId>, Ucid, Set<String>); 64]> {
+) -> SmallVec<[(Option<PlayerId>, Ucid, SetS<String>); 64]> {
     ctx.db
         .persisted
         .players()
@@ -664,16 +666,24 @@ fn admin_reset_lives(ctx: &mut Context, player: &String) -> Result<()> {
     ctx.db.player_reset_lives(&ucid)
 }
 
-pub(super) fn admin_shutdown(ctx: &mut Context, lua: MizLua, reset: bool) -> Result<()> {
+pub(super) fn admin_shutdown(
+    ctx: &mut Context,
+    lua: MizLua,
+    reset: Option<Option<Side>>,
+) -> Result<()> {
     let wait = Arc::new((Mutex::new(false), Condvar::new()));
-    if reset {
-        ctx.do_bg_task(Task::ResetState(ctx.miz_state_path.clone()))
+    if let Some(winner) = reset {
+        ctx.do_bg_task(Task::ResetState(ctx.miz_state_path.clone()));
+        ctx.do_bg_task(Task::Stat(StatKind::SessionEnd));
+        ctx.do_bg_task(Task::Stat(StatKind::RoundEnd { winner }));
+        ctx.do_bg_task(Task::RotateStats);
     } else {
         return_lives(lua, ctx, DateTime::<Utc>::MAX_UTC);
         ctx.do_bg_task(Task::SaveState(
             ctx.miz_state_path.clone(),
             ctx.db.persisted.clone(),
         ));
+        ctx.do_bg_task(Task::Stat(StatKind::SessionEnd));
     }
     ctx.do_bg_task(Task::Sync(Arc::clone(&wait)));
     let &(ref lock, ref cvar) = &*wait;
@@ -757,10 +767,7 @@ fn remark(ctx: &mut Context, objective: &String) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn run_admin_commands(
-    ctx: &mut Context,
-    lua: MizLua,
-) -> Result<()> {
+pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     let mut cmds = mem::take(&mut ctx.admin_commands);
     for (id, cmd) in cmds.drain(..) {
         macro_rules! reply {
@@ -889,7 +896,7 @@ pub(super) fn run_admin_commands(
                 Ok(()) => reply!("{player} lives reset"),
                 Err(e) => reply!("could not reset {player} lives {:?}", e),
             },
-            AdminCommand::Shutdown => match admin_shutdown(ctx, lua, false) {
+            AdminCommand::Shutdown => match admin_shutdown(ctx, lua, None) {
                 Ok(()) => reply!("shutting down"),
                 Err(e) => reply!("failed to shutdown {:?}", e),
             },
@@ -921,7 +928,7 @@ pub(super) fn run_admin_commands(
                 Ok(()) => reply!("{objective} remark queued"),
                 Err(e) => reply!("could not remark {objective} {e:?}"),
             },
-            AdminCommand::Reset => match admin_shutdown(ctx, lua, true) {
+            AdminCommand::Reset { winner } => match admin_shutdown(ctx, lua, Some(winner)) {
                 Ok(()) => reply!("the state has been reset"),
                 Err(e) => reply!("the state could not be reset {e:?}"),
             },

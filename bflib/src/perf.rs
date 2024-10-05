@@ -21,7 +21,7 @@ use hdrhistogram::Histogram;
 use log::info;
 use std::sync::Arc;
 
-use crate::db::objective::ObjectiveId;
+use bfprotocols::db::objective::ObjectiveId;
 
 #[derive(Debug, Clone)]
 pub struct PerfInner {

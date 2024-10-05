@@ -16,7 +16,6 @@ for more details.
 
 use super::{player_name, slot_for_group, ArgTuple};
 use crate::{
-    cfg::{Cfg, LimitEnforceTyp},
     db::{
         self,
         cargo::{Cargo, Oldest, SlotStats},
@@ -24,6 +23,7 @@ use crate::{
     Context,
 };
 use anyhow::{Context as ErrContext, Result};
+use bfprotocols::cfg::{Cfg, LimitEnforceTyp};
 use compact_str::{format_compact, CompactString, ToCompactString};
 use dcso3::{
     coalition::Side,

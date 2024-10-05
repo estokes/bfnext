@@ -14,22 +14,28 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{
-    objective::{ObjGroupClass, ObjectiveId},
-    Db, Set,
-};
+use super::{objective::ObjGroupClass, Db, SetS};
 use crate::{
-    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     group, group_by_name, group_health, group_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_by_name, unit_mut, Connected,
 };
 use anyhow::{anyhow, bail, Context, Result};
+use bfprotocols::{
+    cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
+    db::objective::ObjectiveId,
+    stats::{self, EnId},
+};
+use bfprotocols::{
+    db::group::{GroupId, UnitId},
+    stats::StatKind,
+};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    atomic_id, azumith3d, centroid2d, centroid3d, change_heading,
+    azumith3d, centroid2d, centroid3d, change_heading,
     coalition::Side,
+    coord::Coord,
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
@@ -39,18 +45,14 @@ use dcso3::{
     static_object::{ClassStatic, StaticObject},
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    LuaVec2, MizLua, Position3, String, Vector2, Vector3,
+    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{error, warn};
-use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, collections::VecDeque};
-
-atomic_id!(GroupId);
-atomic_id!(UnitId);
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
@@ -119,7 +121,7 @@ pub struct SpawnedGroup {
     pub kind: Option<GroupCategory>,
     pub class: ObjGroupClass,
     pub origin: DeployKind,
-    pub units: Set<UnitId>,
+    pub units: SetS<UnitId>,
     pub tags: UnitTags,
 }
 
@@ -380,6 +382,7 @@ impl Db {
                 }
             }
         }
+        self.ephemeral.stat(StatKind::GroupDeleted { id: *gid });
         Ok(())
     }
 
@@ -631,7 +634,7 @@ impl Db {
             kind,
             origin,
             class: ObjGroupClass::from(template_name.as_str()),
-            units: Set::new(),
+            units: SetS::new(),
             tags: UnitTags(BitFlags::empty()),
         };
         for unit in template.group.units()?.into_iter() {
@@ -768,6 +771,20 @@ impl Db {
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
+            self.ephemeral.stat(StatKind::Unit {
+                id: *uid,
+                gid: unit.group,
+                typ: stats::Unit {
+                    typ: unit.typ.clone(),
+                    tags: unit.tags,
+                },
+                pos: stats::Pos {
+                    pos: Coord::singleton(lua)?
+                        .lo_to_ll(LuaVec3(Vector3::new(unit.pos.x, 0., unit.pos.y)))?,
+                    altitude: 0.,
+                    velocity: unit.airborne_velocity.unwrap_or_default(),
+                },
+            });
             return Ok(None);
         }
         let slot = unit.slot()?;
@@ -949,6 +966,7 @@ impl Db {
         now: DateTime<Utc>,
         units: &[UnitId],
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
+        let coord = Coord::singleton(lua)?;
         let mut unit: Option<Unit> = None;
         let mut moved: SmallVec<[GroupId; 16]> = smallvec![];
         let mut dead: Vec<DcsOid<ClassUnit>> = vec![];
@@ -986,11 +1004,22 @@ impl Db {
                 self.ephemeral
                     .units_potentially_close_to_enemies
                     .insert(*uid);
-                if spunit.tags.contains(UnitTag::Aircraft) && instance.in_air()? {
-                    spunit.airborne_velocity = Some(instance.get_velocity()?.0)
+                let v = if spunit.tags.contains(UnitTag::Aircraft) && instance.in_air()? {
+                    let v = instance.get_velocity()?.0;
+                    spunit.airborne_velocity = Some(v);
+                    Some(v)
                 } else {
                     spunit.airborne_velocity = None;
-                }
+                    None
+                };
+                self.ephemeral.stat(StatKind::Position {
+                    id: EnId::Unit(*uid),
+                    pos: stats::Pos {
+                        pos: coord.lo_to_ll(pos.p)?,
+                        altitude: pos.p.0.y as f32,
+                        velocity: v.unwrap_or_default(),
+                    },
+                });
             }
             unit = Some(instance);
         }

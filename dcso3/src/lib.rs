@@ -152,6 +152,10 @@ macro_rules! atomic_id {
                     });
                 }
 
+                pub fn inner(&self) -> i64 {
+                    self.0
+                }
+
                 pub fn setseq(i: i64) {
                     [<MAX_ $name:upper _ID>].store(i, std::sync::atomic::Ordering::Relaxed)
                 }

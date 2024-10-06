@@ -200,20 +200,9 @@ impl Db {
             ephemeral: Ephemeral::default(),
         };
         Stat::setseq(db.persisted.seq);
-        macro_rules! get_max {
-            ($m:expr) => {
-                $m.into_iter()
-                    .next_back()
-                    .map(|(i, _)| i.inner() + 1)
-                    .unwrap_or(0)
-            };
-        }
-        let max_oid = get_max!(db.persisted.objectives);
-        ObjectiveId::setseq(max(db.persisted.oid, max_oid));
-        let max_gid = get_max!(db.persisted.groups);
-        GroupId::setseq(max(db.persisted.gid, max_gid));
-        let max_uid = get_max!(db.persisted.units);
-        UnitId::setseq(max(db.persisted.uid, max_uid));
+        ObjectiveId::setseq(max(db.persisted.oid, ObjectiveId::seq()));
+        GroupId::setseq(max(db.persisted.gid, GroupId::seq()));
+        UnitId::setseq(max(db.persisted.uid, UnitId::seq()));
         db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?, to_bg)?;
         Ok(db)
     }

@@ -18,17 +18,25 @@ extern crate nalgebra as na;
 use self::{group::DeployKind, persisted::Persisted};
 use crate::{bg::Task, db::ephemeral::Ephemeral, jtac::JtId};
 use anyhow::{anyhow, Result};
-use bfprotocols::{cfg::{
-    Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg, Troop,
-}, db::objective::ObjectiveId, stats::Stat};
+use bfprotocols::{
+    cfg::{
+        Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg,
+        Troop,
+    },
+    db::{
+        group::{GroupId, UnitId},
+        objective::ObjectiveId,
+    },
+    stats::Stat,
+};
 use dcso3::{
     centroid3d,
     coalition::Side,
     env::miz::{Miz, MizIndex},
     Vector3,
 };
+use std::{cmp::max, fs::File, path::Path};
 use tokio::sync::mpsc::UnboundedSender;
-use std::{fs::File, path::Path};
 
 pub mod actions;
 pub mod cargo;
@@ -176,7 +184,12 @@ pub struct Db {
 }
 
 impl Db {
-    pub fn load(miz: &Miz, idx: &MizIndex, to_bg: UnboundedSender<Task>, path: &Path) -> Result<Self> {
+    pub fn load(
+        miz: &Miz,
+        idx: &MizIndex,
+        to_bg: UnboundedSender<Task>,
+        path: &Path,
+    ) -> Result<Self> {
         let file = File::open(&path)
             .map_err(|e| anyhow!("failed to open save file {:?}, {:?}", path, e))?;
         let file = zstd::stream::Decoder::new(file)?;
@@ -187,7 +200,20 @@ impl Db {
             ephemeral: Ephemeral::default(),
         };
         Stat::setseq(db.persisted.seq);
-        ObjectiveId::setseq(db.persisted.oid);
+        macro_rules! get_max {
+            ($m:expr) => {
+                $m.into_iter()
+                    .next_back()
+                    .map(|(i, _)| i.inner() + 1)
+                    .unwrap_or(0)
+            };
+        }
+        let max_oid = get_max!(db.persisted.objectives);
+        ObjectiveId::setseq(max(db.persisted.oid, max_oid));
+        let max_gid = get_max!(db.persisted.groups);
+        GroupId::setseq(max(db.persisted.gid, max_gid));
+        let max_uid = get_max!(db.persisted.units);
+        UnitId::setseq(max(db.persisted.uid, max_uid));
         db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?, to_bg)?;
         Ok(db)
     }
@@ -196,6 +222,8 @@ impl Db {
         if self.ephemeral.take_dirty() {
             self.persisted.seq = Stat::seq();
             self.persisted.oid = ObjectiveId::seq();
+            self.persisted.gid = GroupId::seq();
+            self.persisted.uid = UnitId::seq();
             Some(self.persisted.clone())
         } else {
             None

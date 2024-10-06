@@ -56,6 +56,10 @@ pub struct Persisted {
     pub seq: u64,
     #[serde(default)]
     pub oid: i64,
+    #[serde(default)]
+    pub gid: i64,
+    #[serde(default)]
+    pub uid: i64
 }
 
 impl Persisted {

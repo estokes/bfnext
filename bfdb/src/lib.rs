@@ -70,7 +70,7 @@ struct PilotDb {
 struct T {
     pilots: PilotDb,
     campaign: Tree<(String, RoundId), ()>,
-    kills: Tree<(Ucid, RoundId, SortieId, KillId), Dead>,
+    kills: Tree<(EnId, RoundId, SortieId, KillId), Dead>,
     units: Tree<(RoundId, UnitId), Unit>,
     groups: Tree<(RoundId, GroupId, UnitId), ()>,
     detected: Tree<(RoundId, Side, EnId), BitFlags<DetectionSource>>

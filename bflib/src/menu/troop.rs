@@ -15,7 +15,7 @@ for more details.
 */
 
 use super::{cargo, player_name, slot_for_group, ArgTuple};
-use crate::Context;
+use crate::{jtac::JtId, Context};
 use anyhow::{Context as ErrContext, Result};
 use bfprotocols::cfg::{Cfg, LimitEnforceTyp};
 use compact_str::format_compact;
@@ -27,12 +27,16 @@ fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &arg.fst).context("getting slot for group")?;
     match ctx.db.load_troops(lua, &ctx.idx, &slot, &arg.snd) {
-        Ok(tr) => {
+        Ok((tr, oid)) => {
             let (n, oldest) = ctx
                 .db
                 .number_troops_deployed(side, &tr.name)
                 .context("getting number of deployed troops")?;
             let player = player_name(&ctx.db, &slot);
+            let sub = ctx.subscribed_jtac_menus.entry(slot).or_default();
+            sub.pinned.insert(JtId::Slot(slot));
+            sub.subscribed_objectives.insert(oid);
+            super::jtac::init_jtac_menu_for_slot(ctx, lua, &slot)?;
             let enforce = match tr.limit_enforce {
                 LimitEnforceTyp::DenyCrate => {
                     format_compact!("unloading will be denied when the limit is exceeded")
@@ -71,8 +75,14 @@ fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
     match ctx.db.unload_troops(lua, &ctx.idx, &slot) {
-        Ok(tr) => {
+        Ok((tr, tgid, oid)) => {
             let player = player_name(&ctx.db, &slot);
+            let sub = ctx.subscribed_jtac_menus.entry(slot).or_default();
+            sub.pinned.insert(JtId::Group(tgid));
+            if let Some(oid) = oid {
+                sub.subscribed_objectives.insert(oid);
+            }
+            super::jtac::init_jtac_menu_for_slot(ctx, lua, &slot)?;
             let msg = format_compact!("{player} dropped {} troops into the field", tr.name);
             ctx.db.ephemeral.msgs().panel_to_side(10, false, side, msg)
         }

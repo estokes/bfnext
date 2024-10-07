@@ -1062,7 +1062,7 @@ impl Db {
         idx: &MizIndex,
         slot: &SlotId,
         name: &str,
-    ) -> Result<Troop> {
+    ) -> Result<(Troop, ObjectiveId)> {
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
         let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
@@ -1107,10 +1107,15 @@ impl Db {
             -(troop_cfg.cost as i32),
             &format_compact!("for {name} troop"),
         );
-        Ok(troop_cfg)
+        Ok((troop_cfg, origin))
     }
 
-    pub fn unload_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {
+    pub fn unload_troops(
+        &mut self,
+        lua: MizLua,
+        idx: &MizIndex,
+        slot: &SlotId,
+    ) -> Result<(Troop, GroupId, Option<ObjectiveId>)> {
         let cargo = self.ephemeral.cargo.get(slot);
         if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
             bail!("no troops onboard")
@@ -1122,6 +1127,12 @@ impl Db {
         let unit_name = unit.get_name()?;
         let side = slot_miz_unit(lua, idx, slot)?.side;
         let pos = unit.get_position()?;
+        let oid = Db::objective_near_point(
+            &self.persisted.objectives,
+            Vector2::new(pos.p.0.x, pos.p.0.z),
+            |_| true,
+        )
+        .map(|(_, _, o)| o.id);
         let point = Vector2::new(pos.p.x, pos.p.z);
         match self.point_near_logistics(side, point) {
             Ok((_, obj)) if obj.threatened => {
@@ -1183,7 +1194,7 @@ impl Db {
                     troop: troop_cfg.name.clone(),
                     by: ucid,
                 });
-                Ok(troop_cfg)
+                Ok((troop_cfg, gid, oid))
             }
             Err(e) => {
                 self.ephemeral

@@ -828,15 +828,11 @@ fn add_jtac_locations(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Res
             .get(&slot)
             .map(|subd| subd.pinned.contains(&jtac.gid()))
             .unwrap_or(false);
-        let ownship = match jtac.gid() {
-            JtId::Group(_) => false,
-            JtId::Slot(sl) => sl == slot,
-        };
         Some(JtEntry {
             jtac,
             near,
             oid,
-            pinned: ownship || pinned,
+            pinned,
         })
     }));
     jtacs.sort_by(|jte0, jte1| {

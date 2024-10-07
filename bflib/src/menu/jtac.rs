@@ -692,9 +692,14 @@ pub(super) fn add_menu_for_jtac(
         })
     });
     for name in bomber_missions {
+        let root = mc.add_submenu_for_group(
+            mizgid,
+            format_compact!("Bomber Mission({name})").into(),
+            Some(root.clone()),
+        )?;
         mc.add_command_for_group(
             mizgid,
-            "Bomber Mission".into(),
+            "Yes, do it!".into(),
             Some(root.clone()),
             call_bomber,
             ArgTriple {
@@ -804,7 +809,7 @@ fn add_jtac_locations(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Res
     let mut jtacs: SmallVec<[JtEntry; 64]> = smallvec![];
     jtacs.extend(ctx.jtac.jtacs().filter_map(|jtac| {
         if jtac.side() != player.side {
-            return None
+            return None;
         }
         let (near, oid) = match ctx
             .db
@@ -834,7 +839,7 @@ fn add_jtac_locations(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Res
         use std::cmp::Ordering;
         match jte1.pinned.cmp(&jte0.pinned) {
             Ordering::Equal => jte0.near.cmp(&jte1.near),
-            o => o
+            o => o,
         }
     });
     for jte in jtacs {

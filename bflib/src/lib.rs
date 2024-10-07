@@ -915,14 +915,12 @@ fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
                                     }
                                 }));
                                 for oid in &oids {
-                                    if subd.subscribed_objectives.contains(oid) {
+                                    if subd.subscribed_objectives.contains(oid) || pinned.contains(oid) {
                                         if !dirty_slots.contains(slot) {
                                             dirty_slots.push(*slot);
                                         }
                                     }
-                                    if !pinned.contains(oid) {
-                                        subd.subscribed_objectives.remove(oid);
-                                    }
+                                    subd.subscribed_objectives.remove(oid);
                                 }
                                 expunge = subd.subscribed_objectives.is_empty();
                             }

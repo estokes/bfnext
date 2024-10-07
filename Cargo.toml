@@ -41,6 +41,9 @@ simplelog = "0.12"
 smallvec = { version = "1", features = ["const_generics", "union", "serde"] }
 tokio = { version = "1", features = ["full"] }
 zstd = { version = "0.13" }
+sled = { version = "0.34" }
+typed-sled = { version = "0.2" }
+arrayvec = { version = "0.7", features = ["serde"] }
 
 [workspace]
 resolver = "2"

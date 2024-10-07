@@ -151,6 +151,7 @@ pub enum StatKind {
     Connect {
         id: Ucid,
         addr: String,
+        name: String,
     },
     Disconnect {
         id: Ucid,

@@ -362,10 +362,11 @@ fn on_player_try_connect(
     ) {
         return Ok(Some(String::from(format_compact!("{e}"))));
     }
-    ctx.db.player_connected(ucid, name);
+    ctx.db.player_connected(ucid, name.clone());
     ctx.do_bg_task(Task::Stat(StatKind::Connect {
         id: ucid,
         addr,
+        name,
     }));
     record_perf(
         &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
@@ -1175,7 +1176,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         .map(|hrs| AutoShutdown::new(Utc::now() + Duration::hours(hrs as i64)));
     ctx.do_bg_task(Task::Stat(StatKind::SessionStart {
         stop: ctx.shutdown.map(|a| a.when),
-        cfg: Box::new((*ctx.db.ephemeral.cfg).clone())
+        cfg: Box::new((*ctx.db.ephemeral.cfg).clone()),
     }));
     info!("spawning units");
     ctx.respawn_groups(lua, &miz)

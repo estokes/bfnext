@@ -795,53 +795,76 @@ fn add_jtac_locations(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Res
             n += 1;
         };
     }
-    for jtac in ctx.jtac.jtacs() {
-        if jtac.side() == player.side {
-            let (near, oid) = match ctx
-                .db
-                .objective(&jtac.location().oid)
-                .map(|o| (o.name.clone(), o.id))
-                .ok()
-            {
-                Some((near, oid)) => (near, oid),
-                None => {
-                    error!("jtac near missing objective {:?}", jtac.location());
-                    continue;
-                }
-            };
-            let pinned = ctx
-                .subscribed_jtac_menus
-                .get(&slot)
-                .map(|subd| subd.pinned.contains(&jtac.gid()))
-                .unwrap_or(false);
-            if pinned {
-                handle_submenu!();
-                add_menu_for_jtac(
-                    &ctx.db,
-                    player.side,
-                    root.clone(),
-                    lua,
-                    arg.snd,
-                    jtac,
-                    &arg.fst,
-                    slot,
-                )?;
-            } else if !roots.contains(&near) {
-                roots.push(near.clone());
-                handle_submenu!();
-                mc.add_command_for_group(
-                    arg.snd,
-                    format_compact!("{near}>>").into(),
-                    Some(root.clone()),
-                    add_jtacs_by_location,
-                    ArgQuad {
-                        fst: arg.fst,
-                        snd: arg.snd,
-                        trd: oid,
-                        fth: root.clone(),
-                    },
-                )?;
+    struct JtEntry<'a> {
+        jtac: &'a Jtac,
+        near: String,
+        oid: ObjectiveId,
+        pinned: bool,
+    }
+    let mut jtacs: SmallVec<[JtEntry; 64]> = smallvec![];
+    jtacs.extend(ctx.jtac.jtacs().filter_map(|jtac| {
+        if jtac.side() != player.side {
+            return None
+        }
+        let (near, oid) = match ctx
+            .db
+            .objective(&jtac.location().oid)
+            .map(|o| (o.name.clone(), o.id))
+            .ok()
+        {
+            Some((near, oid)) => (near, oid),
+            None => {
+                error!("jtac near missing objective {:?}", jtac.location());
+                return None;
             }
+        };
+        let pinned = ctx
+            .subscribed_jtac_menus
+            .get(&slot)
+            .map(|subd| subd.pinned.contains(&jtac.gid()))
+            .unwrap_or(false);
+        Some(JtEntry {
+            jtac,
+            near,
+            oid,
+            pinned,
+        })
+    }));
+    jtacs.sort_by(|jte0, jte1| {
+        use std::cmp::Ordering;
+        match jte0.pinned.cmp(&jte1.pinned) {
+            Ordering::Equal => jte0.near.cmp(&jte1.near),
+            o => o
+        }
+    });
+    for jte in jtacs {
+        if jte.pinned {
+            handle_submenu!();
+            add_menu_for_jtac(
+                &ctx.db,
+                player.side,
+                root.clone(),
+                lua,
+                arg.snd,
+                jte.jtac,
+                &arg.fst,
+                slot,
+            )?;
+        } else if !roots.contains(&jte.near) {
+            roots.push(jte.near.clone());
+            handle_submenu!();
+            mc.add_command_for_group(
+                arg.snd,
+                format_compact!("{}>>", jte.near).into(),
+                Some(root.clone()),
+                add_jtacs_by_location,
+                ArgQuad {
+                    fst: arg.fst,
+                    snd: arg.snd,
+                    trd: jte.oid,
+                    fth: root.clone(),
+                },
+            )?;
         }
     }
     Ok(())

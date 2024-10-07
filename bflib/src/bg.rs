@@ -32,8 +32,7 @@ use std::{
     cell::RefCell,
     env,
     ffi::OsStr,
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
     sync::Arc,
     thread,
@@ -182,16 +181,24 @@ impl io::Write for LogHandle {
 
 fn rotate_log(path: &Path) {
     if path.exists() {
-        let ext = path.extension().unwrap_or(&OsStr::new("ext"));
+        let ext = path
+            .extension()
+            .unwrap_or(&OsStr::new("ext"))
+            .to_str()
+            .unwrap_or("inv");
         let mut rotate_path = path.to_path_buf();
         rotate_path.set_extension("");
-        let name = rotate_path.file_name().unwrap_or(&OsStr::new("nameless"));
+        let name = rotate_path
+            .file_name()
+            .unwrap_or(&OsStr::new("nameless"))
+            .to_str()
+            .unwrap_or("invalid");
         let ts = Utc::now()
             .to_rfc3339_opts(SecondsFormat::Secs, true)
             .chars()
             .filter(|c| c != &'-' && c != &':')
             .collect::<CompactString>();
-        rotate_path.set_file_name(format_compact!("{name:?}{ts}.{ext:?}"));
+        rotate_path.set_file_name(format_compact!("{name}{ts}.{ext}"));
         if let Err(e) = fs::rename(&path, &rotate_path) {
             println!(
                 "could not rotate log file {:?} to {:?} {:?}",
@@ -270,7 +277,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
             Task::LogPerf(perf, api_perf) => {
                 perf.log();
                 api_perf.log();
-            },
+            }
             Task::Sync(a) => {
                 let &(ref lock, ref cvar) = &*a;
                 let mut synced = lock.lock();

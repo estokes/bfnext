@@ -888,7 +888,7 @@ fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
                             let mut dead: SmallVec<[JtId; 4]> = smallvec![];
                             let mut expunge = false;
                             if let Some(subd) = ctx.subscribed_jtac_menus.get_mut(&slot) {
-                                let pinned: SmallVec<[ObjectiveId; 16]> = subd
+                                let mut pinned: SmallVec<[ObjectiveId; 16]> = subd
                                     .pinned
                                     .iter()
                                     .filter_map(|jt| match ctx.jtac.get(jt) {
@@ -899,6 +899,21 @@ fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
                                         }
                                     })
                                     .collect();
+                                pinned.extend(ctx.db.jtacs().filter_map(|jt| match jt.id {
+                                    JtId::Group(_) => None,
+                                    JtId::Slot(sl) => {
+                                        player.current_slot.as_ref().and_then(|(player_slot, _)| {
+                                            if &sl == player_slot {
+                                                ctx.jtac
+                                                    .get(&jt.id)
+                                                    .ok()
+                                                    .map(|jt| jt.location().oid)
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                    }
+                                }));
                                 for oid in &oids {
                                     if subd.subscribed_objectives.contains(oid) {
                                         if !dirty_slots.contains(slot) {

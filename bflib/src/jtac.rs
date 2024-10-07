@@ -275,7 +275,7 @@ impl Jtac {
             code: 1688,
             last_smoke: DateTime::<Utc>::default(),
             nearby_artillery: smallvec![],
-            menu_dirty: true,
+            menu_dirty: false,
             air,
         }
     }

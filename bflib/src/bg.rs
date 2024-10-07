@@ -192,7 +192,7 @@ fn rotate_log(path: &Path) {
             .collect::<CompactString>();
         rotate_path.set_file_name(format_compact!("{name:?}{ts}.{ext:?}"));
         if let Err(e) = fs::rename(&path, &rotate_path) {
-            error!(
+            println!(
                 "could not rotate log file {:?} to {:?} {:?}",
                 path, rotate_path, e
             )

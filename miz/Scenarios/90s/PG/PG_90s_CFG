@@ -940,7 +940,7 @@
         ],
         "template": "DEPTUNGUSKA",
         "persist": "Forever",
-        "limit": 6,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1232,7 +1232,7 @@
         ],
         "template": "DEPROLAND",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1367,7 +1367,7 @@
         ],
         "template": "DEPGEPARD",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1392,7 +1392,7 @@
         ],
         "template": "DEPCRAM",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 6,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {

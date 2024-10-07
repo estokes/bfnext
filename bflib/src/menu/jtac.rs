@@ -832,7 +832,7 @@ fn add_jtac_locations(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Res
     }));
     jtacs.sort_by(|jte0, jte1| {
         use std::cmp::Ordering;
-        match jte0.pinned.cmp(&jte1.pinned) {
+        match jte1.pinned.cmp(&jte0.pinned) {
             Ordering::Equal => jte0.near.cmp(&jte1.near),
             o => o
         }

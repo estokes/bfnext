@@ -182,9 +182,10 @@ impl io::Write for LogHandle {
 
 fn rotate_log(path: &Path) {
     if path.exists() {
+        let ext = path.extension().unwrap_or(&OsStr::new("ext"));
         let mut rotate_path = path.to_path_buf();
+        rotate_path.set_extension("");
         let name = rotate_path.file_name().unwrap_or(&OsStr::new("nameless"));
-        let ext = rotate_path.extension().unwrap_or(&OsStr::new("ext"));
         let ts = Utc::now()
             .to_rfc3339_opts(SecondsFormat::Secs, true)
             .chars()

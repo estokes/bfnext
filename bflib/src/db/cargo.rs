@@ -904,9 +904,9 @@ impl Db {
             Ok(mut candidates) => {
                 let (dep, (gid, have)) = candidates.drain().next().unwrap();
                 let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
-                let player = maybe!(self.ephemeral.players, &st.ucid, "player")?;
+                let player = maybe!(self.persisted.players, &st.ucid, "player")?;
                 let centroid = centroid2d(have.iter().map(|c| c.pos));
-                if spec.repair_cost > 0 && spec.repair_cost > player.points {
+                if spec.repair_cost > 0 && spec.repair_cost as i32 > player.points {
                     reasons.push(format_compact!(
                         "Repairing {dep} costs {}, you have {}",
                         spec.repair_cost,

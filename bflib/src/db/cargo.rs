@@ -746,7 +746,7 @@ impl Db {
         if st.in_air {
             bail!("you must land to unpack crates")
         }
-        let max_dist = self.ephemeral.cfg.crate_load_distance as f64;
+        let max_dist = self.ephemeral.cfg.crate_spread as f64;
         let nearby = nearby(self, &st)?;
         let didx = Arc::clone(
             self.ephemeral
@@ -903,8 +903,16 @@ impl Db {
             Err(mut rep_reasons) => reasons.append(&mut rep_reasons),
             Ok(mut candidates) => {
                 let (dep, (gid, have)) = candidates.drain().next().unwrap();
+                let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
+                let player = maybe!(self.ephemeral.players, &st.ucid, "player")?;
                 let centroid = centroid2d(have.iter().map(|c| c.pos));
-                if too_close(self, st.side, centroid, false, || have.iter()) {
+                if spec.repair_cost > 0 && spec.repair_cost > player.points {
+                    reasons.push(format_compact!(
+                        "Repairing {dep} costs {}, you have {}",
+                        spec.repair_cost,
+                        player.points
+                    ));
+                } else if too_close(self, st.side, centroid, false, || have.iter()) {
                     reasons.push("can't repair that here while enemies are close".into())
                 } else {
                     let group = group!(self, gid)?;
@@ -916,6 +924,13 @@ impl Db {
                         self.delete_group(&cr.group)?
                     }
                     self.ephemeral.push_spawn(gid);
+                    if spec.repair_cost > 0 {
+                        self.adjust_points(
+                            &st.ucid,
+                            -(spec.repair_cost as i32),
+                            &format_compact!("for {dep} repair"),
+                        );
+                    }
                     self.ephemeral.dirty();
                     return Ok(Unpakistan::Repaired(dep));
                 }

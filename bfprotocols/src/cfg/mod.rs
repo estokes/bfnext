@@ -352,6 +352,9 @@ pub struct Deployable {
     pub crates: Vec<Crate>,
     /// Can the damaged deployable be repaired, and if so, by which crate.
     pub repair_crate: Option<Crate>,
+    /// How much does the damaged deployable cost to repair
+    #[serde(default)]
+    pub repair_cost: u32,
     /// Does this deployable provide logistics services
     pub logistics: Option<DeployableLogistics>,
     /// How many points does this deployable cost (if any)

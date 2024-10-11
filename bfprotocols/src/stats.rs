@@ -5,16 +5,11 @@ use crate::{
         objective::{ObjectiveId, ObjectiveKind},
     },
     shots::Dead,
-    perf::Perf,
+    perf::PerfInner,
 };
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side,
-    coord::LLPos,
-    net::{SlotId, Ucid},
-    warehouse::LiquidType,
-    perf::Perf as ApiPerf,
-    String, Vector3,
+    coalition::Side, coord::LLPos, net::{SlotId, Ucid}, perf::{HistogramSer, PerfInner as ApiPerfInner}, warehouse::LiquidType, String, Vector3
 };
 use enumflags2::bitflags;
 use serde::{Deserialize, Serialize};
@@ -73,8 +68,9 @@ pub enum StatKind {
         cfg: Box<Cfg>,
     },
     SessionEnd {
-        api_perf: ApiPerf,
-        perf: Perf
+        api_perf: ApiPerfInner,
+        perf: PerfInner,
+        frame: HistogramSer,
     },
     Objective {
         id: ObjectiveId,

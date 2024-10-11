@@ -674,9 +674,14 @@ pub(super) fn admin_shutdown(
     reset: Option<Option<Side>>,
 ) -> Result<()> {
     let wait = Arc::new((Mutex::new(false), Condvar::new()));
-    let se = StatKind::SessionEnd {
-        perf: unsafe { Perf::get_mut() }.clone(),
-        api_perf: unsafe { ApiPerf::get_mut() }.clone(),
+    let se = {
+        let perf = unsafe { Perf::get_mut() };
+        let api_perf = unsafe { ApiPerf::get_mut() };
+        StatKind::SessionEnd {
+            perf: (*perf.inner).clone(),
+            frame: (*perf.frame).clone(),
+            api_perf: (*api_perf.0).clone(),
+        }
     };
     if let Some(winner) = reset {
         ctx.do_bg_task(Task::ResetState(ctx.miz_state_path.clone()));

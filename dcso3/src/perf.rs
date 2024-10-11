@@ -11,14 +11,131 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.
 */
 
+use bytes::{BufMut, BytesMut};
 use chrono::prelude::*;
-use hdrhistogram::Histogram;
+use compact_str::format_compact;
+use hdrhistogram::{
+    serialization::{Deserializer, Serializer, V2DeflateSerializer},
+    Histogram,
+};
 use log::info;
-use std::{ops::Deref, sync::Arc};
+use serde::{de, ser, Deserialize, Serialize};
+use std::{borrow::{Borrow, BorrowMut}, cell::RefCell, ops::{Deref, DerefMut}, sync::Arc};
+
+#[derive(Debug, Clone)]
+pub struct HistogramSer(Histogram<u64>);
+
+impl Borrow<Histogram<u64>> for HistogramSer {
+    fn borrow(&self) -> &Histogram<u64> {
+        &self.0
+    }
+}
+
+impl BorrowMut<Histogram<u64>> for HistogramSer {
+    fn borrow_mut(&mut self) -> &mut Histogram<u64> {
+        &mut self.0
+    }
+}
+
+impl AsRef<Histogram<u64>> for HistogramSer {
+    fn as_ref(&self) -> &Histogram<u64> {
+        &self.0
+    }
+}
+
+impl Deref for HistogramSer {
+    type Target = Histogram<u64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for HistogramSer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Default for HistogramSer {
+    fn default() -> Self {
+        Self(Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap())
+    }
+}
+
+impl Serialize for HistogramSer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use base64::prelude::*;
+        use ser::Error;
+        thread_local! {
+            static SER: RefCell<(V2DeflateSerializer, BytesMut, String)> = RefCell::new(
+                (V2DeflateSerializer::default(), BytesMut::new(), String::new()));
+        }
+        SER.with_borrow_mut(|(ser, buf, sbuf)| {
+            buf.clear();
+            sbuf.clear();
+            let mut w = buf.writer();
+            ser.serialize(&self.0, &mut w)
+                .map_err(|e| S::Error::custom(format_compact!("{e:?}")))?;
+            BASE64_STANDARD.encode_string(buf, sbuf);
+            serializer.serialize_str(&sbuf)
+        })
+    }
+}
+
+struct HistogramSerVisitor;
+
+impl<'de> de::Visitor<'de> for HistogramSerVisitor {
+    type Value = HistogramSer;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "expecting a string")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        use base64::prelude::*;
+        thread_local! {
+            static SER: RefCell<(Deserializer, Vec<u8>)> = RefCell::new(
+                (Deserializer::default(), Vec::new()));
+        }
+        SER.with_borrow_mut(|(des, buf)| {
+            buf.clear();
+            BASE64_STANDARD
+                .decode_vec(v, buf)
+                .map_err(|e| E::custom(format_compact!("{e:?}")))?;
+            let h = des
+                .deserialize(&mut &buf[..])
+                .map_err(|e| E::custom(format_compact!("{e:?}")))?;
+            Ok(HistogramSer(h))
+        })
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        self.visit_str(&v)
+    }
+}
+
+impl<'de> Deserialize<'de> for HistogramSer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(HistogramSerVisitor)
+    }
+}
 
 pub struct Snap<'a> {
     ts: DateTime<Utc>,
-    perf: Option<&'a mut Histogram<u64>>,
+    perf: Option<&'a mut HistogramSer>,
 }
 
 impl<'a> Drop for Snap<'a> {
@@ -28,7 +145,7 @@ impl<'a> Drop for Snap<'a> {
 }
 
 impl<'a> Snap<'a> {
-    pub fn new(perf: &'a mut Histogram<u64>) -> Self {
+    pub fn new(perf: &'a mut HistogramSer) -> Self {
         Self {
             ts: Utc::now(),
             perf: Some(perf),
@@ -39,35 +156,35 @@ impl<'a> Snap<'a> {
         if let Some(h) = self.perf.take() {
             if let Some(ns) = (Utc::now() - self.ts).num_nanoseconds() {
                 if ns >= 1 && ns <= 1_000_000_000 {
-                    *h += ns as u64;
+                    **h += ns as u64;
                 }
             }
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PerfInner {
-    pub get_position: Histogram<u64>,
-    pub get_point: Histogram<u64>,
-    pub get_velocity: Histogram<u64>,
-    pub in_air: Histogram<u64>,
-    pub get_ammo: Histogram<u64>,
-    pub add_group: Histogram<u64>,
-    pub add_static_object: Histogram<u64>,
-    pub unit_is_exist: Histogram<u64>,
-    pub unit_get_by_name: Histogram<u64>,
-    pub unit_get_desc: Histogram<u64>,
-    pub land_is_visible: Histogram<u64>,
-    pub land_get_height: Histogram<u64>,
-    pub timer_schedule_function: Histogram<u64>,
-    pub timer_remove_function: Histogram<u64>,
-    pub timer_get_time: Histogram<u64>,
-    pub timer_get_abs_time: Histogram<u64>,
-    pub timer_get_time0: Histogram<u64>,
+    pub get_position: HistogramSer,
+    pub get_point: HistogramSer,
+    pub get_velocity: HistogramSer,
+    pub in_air: HistogramSer,
+    pub get_ammo: HistogramSer,
+    pub add_group: HistogramSer,
+    pub add_static_object: HistogramSer,
+    pub unit_is_exist: HistogramSer,
+    pub unit_get_by_name: HistogramSer,
+    pub unit_get_desc: HistogramSer,
+    pub land_is_visible: HistogramSer,
+    pub land_get_height: HistogramSer,
+    pub timer_schedule_function: HistogramSer,
+    pub timer_remove_function: HistogramSer,
+    pub timer_get_time: HistogramSer,
+    pub timer_get_abs_time: HistogramSer,
+    pub timer_get_time0: HistogramSer,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Perf(pub Arc<PerfInner>);
 
 static mut PERF: Option<Perf> = None;
@@ -83,30 +200,6 @@ impl Deref for Perf {
 impl Clone for Perf {
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
-    }
-}
-
-impl Default for Perf {
-    fn default() -> Self {
-        Self(Arc::new(PerfInner {
-            get_position: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            get_point: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            get_velocity: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            in_air: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            get_ammo: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            add_group: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            add_static_object: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            unit_is_exist: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            unit_get_by_name: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            unit_get_desc: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            land_is_visible: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            land_get_height: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            timer_schedule_function: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            timer_remove_function: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            timer_get_time: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            timer_get_abs_time: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-            timer_get_time0: Histogram::new_with_bounds(1, 1_000_000_000, 3).unwrap(),
-        }))
     }
 }
 
@@ -163,7 +256,9 @@ impl Perf {
 
 pub fn log_histogram(h: &Histogram<u64>, name: &str, ns: bool) {
     let n = h.len();
-    if n == 0 { return }
+    if n == 0 {
+        return;
+    }
     let d = if ns { 1 } else { 1000 };
     let unit = if ns { "ns" } else { "us" };
     let mean = h.mean().trunc() as u64 / d;
@@ -198,4 +293,12 @@ macro_rules! record_perf {
     ($key:ident, $e:expr) => {
         $e
     };
+}
+
+pub fn record_perf(h: &mut HistogramSer, start_ts: DateTime<Utc>) {
+    if let Some(ns) = (Utc::now() - start_ts).num_nanoseconds() {
+        if ns >= 1 && ns <= 1_000_000_000 {
+            **h += ns as u64;
+        }
+    }
 }

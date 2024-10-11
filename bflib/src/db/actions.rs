@@ -5,7 +5,6 @@ use crate::{
     group, group_mut,
     jtac::{JtId, Jtacs},
     objective,
-    perf::PerfInner,
     spawnctx::{SpawnCtx, SpawnLoc},
     unit,
 };
@@ -16,6 +15,7 @@ use bfprotocols::{
         LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
     db::{group::GroupId, objective::ObjectiveId},
+    perf::PerfInner,
     stats::StatKind,
 };
 use chrono::{prelude::*, Duration};

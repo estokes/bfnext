@@ -23,17 +23,17 @@ mod jtac;
 mod landcache;
 mod menu;
 mod msgq;
-mod perf;
 mod shots;
 mod spawnctx;
 
 extern crate nalgebra as na;
-use crate::{db::player::SlotAuth, perf::record_perf};
+use crate::db::player::SlotAuth;
 use admin::{run_admin_commands, AdminCommand};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use bfprotocols::{
     cfg::{Cfg, LifeType},
     db::objective::ObjectiveId,
+    perf::{Perf, PerfInner},
     stats::StatKind,
 };
 use bg::Task;
@@ -56,6 +56,7 @@ use dcso3::{
     lfs::Lfs,
     net::{Net, PlayerId, SlotId, Ucid},
     object::{DcsObject, DcsOid},
+    perf::record_perf,
     timer::Timer,
     trigger::Trigger,
     unit::{ClassUnit, Unit},
@@ -70,7 +71,6 @@ use landcache::LandCache;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
-use perf::{Perf, PerfInner};
 use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
@@ -1215,7 +1215,7 @@ fn on_simulation_frame(_: HooksLua) -> Result<()> {
         Some(last) => {
             if let Some(ns) = (now - *last).num_nanoseconds() {
                 if ns >= 1 && ns <= 1_000_000_000 {
-                    *frame += ns as u64;
+                    **frame += ns as u64;
                 }
             }
             *last = now;

@@ -19,15 +19,12 @@ use super::{
     objective::Objective,
     Db, Map, MapS, SetS,
 };
-use crate::{
-    admin::WarehouseKind,
-    maybe, objective, objective_mut,
-    perf::{record_perf, Perf, PerfInner},
-};
+use crate::{admin::WarehouseKind, maybe, objective, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::Vehicle,
     db::objective::{ObjectiveId, ObjectiveKind},
+    perf::{Perf, PerfInner},
     stats::StatKind,
 };
 use chrono::{prelude::*, Duration};
@@ -36,6 +33,7 @@ use dcso3::{
     airbase::Airbase,
     coalition::Side,
     object::DcsObject,
+    perf::record_perf,
     warehouse::{self, LiquidType},
     world::World,
     MizLua, String, Vector2,

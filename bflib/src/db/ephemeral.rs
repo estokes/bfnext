@@ -25,7 +25,6 @@ use crate::{
     bg::Task,
     maybe,
     msgq::MsgQ,
-    perf::{record_perf, PerfInner},
     spawnctx::{Despawn, SpawnCtx, Spawned},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -38,6 +37,7 @@ use bfprotocols::{
         group::{GroupId, UnitId},
         objective::ObjectiveId,
     }, stats::StatKind,
+    perf::{PerfInner}
 };
 use chrono::prelude::*;
 use compact_str::format_compact;
@@ -53,6 +53,7 @@ use dcso3::{
     static_object::ClassStatic,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
+    perf::record_perf,
     warehouse::{LiquidType, WSCategory},
     MizLua, Position3, String, Vector2,
 };

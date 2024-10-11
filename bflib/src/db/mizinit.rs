@@ -25,7 +25,6 @@ use crate::{
     group,
     landcache::LandCache,
     maybe, objective, objective_mut,
-    perf::PerfInner,
     spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -36,6 +35,7 @@ use bfprotocols::{
         objective::{ObjectiveId, ObjectiveKind},
     },
     stats::StatKind,
+    perf::PerfInner
 };
 use chrono::prelude::*;
 use compact_str::CompactString;

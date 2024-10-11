@@ -19,3 +19,5 @@ enumflags2 = { workspace = true }
 indexmap = { workspace = true }
 regex = { workspace = true }
 paste = { workspace = true }
+hdrhistogram = { workspace = true }
+log = { workspace = true }

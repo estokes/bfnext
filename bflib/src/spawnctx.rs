@@ -15,6 +15,7 @@ for more details.
 */
 
 use anyhow::{anyhow, Context, Result};
+use bfprotocols::perf::PerfInner;
 use chrono::Utc;
 use compact_str::format_compact;
 use dcso3::{
@@ -23,6 +24,7 @@ use dcso3::{
     group::{ClassGroup, Group, GroupCategory},
     land::Land,
     object::{DcsObject, DcsOid, ObjectCategory},
+    perf::record_perf,
     world::{SearchVolume, World},
     DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
@@ -30,8 +32,6 @@ use fxhash::FxHashMap;
 use log::info;
 use mlua::Value;
 use serde_derive::{Deserialize, Serialize};
-
-use crate::perf::{record_perf, PerfInner};
 
 fn default_speed() -> f64 {
     220.

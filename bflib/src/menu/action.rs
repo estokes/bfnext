@@ -4,16 +4,16 @@ use super::{ArgPent, ArgQuad, ArgTriple};
 use crate::{
     db::{
         actions::{ActionArgs, ActionCmd, WithObj, WithPos, WithPosAndGroup},
-        group::{DeployKind},
+        group::DeployKind,
     },
-    perf::{Perf, PerfInner},
     spawnctx::SpawnCtx,
     Context,
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use bfprotocols::{
     cfg::{Action, ActionKind},
-    db::{objective::ObjectiveId, group::GroupId as DbGid},
+    db::{group::GroupId as DbGid, objective::ObjectiveId},
+    perf::{Perf, PerfInner},
 };
 use compact_str::format_compact;
 use dcso3::{

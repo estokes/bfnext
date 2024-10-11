@@ -19,9 +19,10 @@ use dcso3::{String, perf::HistogramSer};
 use fxhash::FxHashSet;
 use hdrhistogram::Histogram;
 use log::info;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PerfInner {
     pub timed_events: HistogramSer,
     pub slow_timed: HistogramSer,
@@ -52,7 +53,7 @@ pub struct PerfInner {
     pub logistics_items: FxHashSet<(String, ObjectiveId)>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Perf {
     pub inner: Arc<PerfInner>,
     pub frame: Arc<HistogramSer>,

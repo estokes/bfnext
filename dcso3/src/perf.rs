@@ -184,7 +184,7 @@ pub struct PerfInner {
     pub timer_get_time0: HistogramSer,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Perf(pub Arc<PerfInner>);
 
 static mut PERF: Option<Perf> = None;

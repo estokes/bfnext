@@ -5,6 +5,7 @@ use crate::{
         objective::{ObjectiveId, ObjectiveKind},
     },
     shots::Dead,
+    perf::Perf,
 };
 use chrono::prelude::*;
 use dcso3::{
@@ -12,6 +13,7 @@ use dcso3::{
     coord::LLPos,
     net::{SlotId, Ucid},
     warehouse::LiquidType,
+    perf::Perf as ApiPerf,
     String, Vector3,
 };
 use enumflags2::bitflags;
@@ -70,7 +72,10 @@ pub enum StatKind {
         stop: Option<DateTime<Utc>>,
         cfg: Box<Cfg>,
     },
-    SessionEnd,
+    SessionEnd {
+        api_perf: ApiPerf,
+        perf: Perf
+    },
     Objective {
         id: ObjectiveId,
         pos: LLPos,

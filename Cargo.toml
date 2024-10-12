@@ -42,11 +42,12 @@ smallvec = { version = "1", features = ["const_generics", "union", "serde"] }
 tokio = { version = "1", features = ["full"] }
 zstd = { version = "0.13" }
 sled = { version = "0.34" }
-typed-sled = { version = "0.2" }
 arrayvec = { version = "0.7", features = ["serde"] }
 base64 = { version = "0.22" }
+bincode = { version = "1" }
+pin-project = { version = "1" }
 
 [workspace]
 resolver = "2"
-members = ["dcso3", "bflib", "bfdb", "bfprotocols"]
+members = ["dcso3", "bflib", "bfdb", "bfprotocols", "sled-typed"]
 exclude = ["bftools"]

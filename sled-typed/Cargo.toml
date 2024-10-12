@@ -1,0 +1,11 @@
+[package]
+name = "sled-typed"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+bincode = { workspace = true }
+pin-project = { workspace = true }
+sled = { workspace = true }
+anyhow = { workspace = true }

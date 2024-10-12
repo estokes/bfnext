@@ -1,21 +1,20 @@
+use anyhow::Result;
 use arrayvec::ArrayVec;
 use bfprotocols::{
     cfg::{LifeType, UnitTags, Vehicle},
-    db::group::{GroupId, UnitId},
+    db::{group::{GroupId, UnitId}, objective::{ObjectiveId, ObjectiveKind}},
     shots::Dead,
-    stats::{DetectionSource, EnId, Pos},
+    stats::{DetectionSource, EnId, Pos, SeqId, Stat},
 };
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side,
-    net::{SlotId, Ucid},
-    String,
+    coalition::Side, coord::LLPos, net::{SlotId, Ucid}, String
 };
 use enumflags2::BitFlags;
 use serde::{Deserialize, Serialize};
 use sled::Db;
 use smallvec::SmallVec;
-use typed_sled::Tree;
+use sled_typed::Tree;
 
 mod db_id;
 
@@ -67,6 +66,17 @@ struct Slot {
     vehicle: Option<Vehicle>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Objective {
+    name: String,
+    pos: LLPos,
+    typ: ObjectiveKind,
+    health: u8,
+    logi: u8,
+    supply: u8,
+    fuel: u8,
+}
+
 struct Pilots {
     pilots: Tree<Ucid, Pilot>,
     aggregates: Tree<(Ucid, Vehicle, RoundId), Aggregates>,
@@ -74,13 +84,52 @@ struct Pilots {
     side: Tree<(Ucid, RoundId), Side>,
     slot: Tree<(Ucid, RoundId), Slot>,
     sortie: Tree<(Ucid, RoundId, SortieId), Sortie>,
+    lives: Tree<(Ucid, RoundId), SmallVec<[(LifeType, DateTime<Utc>, u8); 5]>>
 }
 
-struct T {
+impl Pilots {
+    fn new(db: &Db) -> Self {
+        Self {
+            pilots: Tree::open(db, "pilots"),
+            aggregates: Tree::open(db, "aggregates"),
+            by_name: Tree::open(db, "by_name"),
+            side: Tree::open(db, "side"),
+            slot: Tree::open(db, "slot"),
+            sortie: Tree::open(db, "sortie"),
+            lives: Tree::open(db, "lives"),
+        }
+    }
+}
+
+struct StatsDb {
     pilots: Pilots,
-    campaign: Tree<(String, RoundId), u64>,
+    campaign: Tree<(String, RoundId), SeqId>,
     kills: Tree<(EnId, RoundId, SortieId, KillId), Dead>,
     units: Tree<(RoundId, UnitId), Unit>,
-    groups: Tree<(RoundId, GroupId, UnitId), ()>,
+    groups: Tree<(RoundId, GroupId), SmallVec<[UnitId; 16]>>,
     detected: Tree<(RoundId, Side, EnId), BitFlags<DetectionSource>>,
+    objectives: Tree<(RoundId, ObjectiveId), Objective>,
+}
+
+impl StatsDb {
+    fn new(db: &Db) -> Self {
+        Self {
+            pilots: Pilots::new(db),
+            campaign: Tree::open(db, "campaign"),
+            kills: Tree::open(db, "kills"),
+            units: Tree::open(db, "units"),
+            groups: Tree::open(db, "groups"),
+            detected: Tree::open(db, "detected"),
+            objectives: Tree::open(db, "objectives")
+        }
+    }
+
+    fn get_seqs(&self, sortie: String) -> Result<(RoundId, SeqId)> {
+        //        self.campaign.scan_prefix(&sortie).next_back()
+        unimplemented!()
+    }
+
+    fn add_stat(&self, stat: &Stat) -> Result<RoundId> {
+        unimplemented!()
+    }
 }

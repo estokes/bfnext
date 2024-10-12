@@ -397,7 +397,8 @@ impl<K, V> Tree<K, V> {
     /// and replicated systems.
     pub fn watch_prefix<P>(&self, prefix: &P) -> Result<Subscriber<K, V>>
     where
-        P: Prefix<K>,
+        P: KV,
+        K: Prefix<P>,
     {
         Ok(Subscriber::from_sled(
             self.inner.watch_prefix(serialize(prefix)?),
@@ -586,7 +587,8 @@ impl<K, V> Tree<K, V> {
     /// where the all the keys starts with the given prefix.
     pub fn scan_prefix<P>(&self, prefix: &P) -> Result<Iter<K, V>>
     where
-        P: Prefix<K>,
+        P: KV,
+        K: Prefix<P>,
     {
         Ok(Iter::from_sled(self.inner.scan_prefix(serialize(prefix)?)))
     }

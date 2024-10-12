@@ -2,19 +2,25 @@ use anyhow::Result;
 use arrayvec::ArrayVec;
 use bfprotocols::{
     cfg::{LifeType, UnitTags, Vehicle},
-    db::{group::{GroupId, UnitId}, objective::{ObjectiveId, ObjectiveKind}},
+    db::{
+        group::{GroupId, UnitId},
+        objective::{ObjectiveId, ObjectiveKind},
+    },
     shots::Dead,
     stats::{DetectionSource, EnId, Pos, SeqId, Stat},
 };
 use chrono::prelude::*;
 use dcso3::{
-    coalition::Side, coord::LLPos, net::{SlotId, Ucid}, String
+    coalition::Side,
+    coord::LLPos,
+    net::{SlotId, Ucid},
+    String,
 };
 use enumflags2::BitFlags;
 use serde::{Deserialize, Serialize};
 use sled::Db;
+use sled_typed::{Prefix, Tree};
 use smallvec::SmallVec;
-use sled_typed::Tree;
 
 mod db_id;
 
@@ -84,7 +90,7 @@ struct Pilots {
     side: Tree<(Ucid, RoundId), Side>,
     slot: Tree<(Ucid, RoundId), Slot>,
     sortie: Tree<(Ucid, RoundId, SortieId), Sortie>,
-    lives: Tree<(Ucid, RoundId), SmallVec<[(LifeType, DateTime<Utc>, u8); 5]>>
+    lives: Tree<(Ucid, RoundId), SmallVec<[(LifeType, DateTime<Utc>, u8); 5]>>,
 }
 
 impl Pilots {
@@ -102,6 +108,7 @@ impl Pilots {
 }
 
 struct StatsDb {
+    db: Db,
     pilots: Pilots,
     campaign: Tree<(String, RoundId), SeqId>,
     kills: Tree<(EnId, RoundId, SortieId, KillId), Dead>,
@@ -114,19 +121,32 @@ struct StatsDb {
 impl StatsDb {
     fn new(db: &Db) -> Self {
         Self {
+            db: db.clone(),
             pilots: Pilots::new(db),
             campaign: Tree::open(db, "campaign"),
             kills: Tree::open(db, "kills"),
             units: Tree::open(db, "units"),
             groups: Tree::open(db, "groups"),
             detected: Tree::open(db, "detected"),
-            objectives: Tree::open(db, "objectives")
+            objectives: Tree::open(db, "objectives"),
         }
     }
 
     fn get_seqs(&self, sortie: String) -> Result<(RoundId, SeqId)> {
-        //        self.campaign.scan_prefix(&sortie).next_back()
-        unimplemented!()
+        match self
+            .campaign
+            .scan_prefix(&sortie)?
+            .next_back()
+            .transpose()?
+        {
+            Some(((_, round), seq)) => Ok((round, seq)),
+            None => {
+                let rid = RoundId::new(&self.db)?;
+                let sid = SeqId::zero();
+                self.campaign.insert(&(sortie, rid), &sid)?;
+                Ok((rid, sid))
+            }
+        }
     }
 
     fn add_stat(&self, stat: &Stat) -> Result<RoundId> {

@@ -163,6 +163,10 @@ macro_rules! atomic_id {
                 pub fn seq() -> i64 {
                     [<MAX_ $name:upper _ID>].load(std::sync::atomic::Ordering::Relaxed)
                 }
+
+                pub fn zero() -> Self {
+                    Self(0)
+                }
             }
         }
     }

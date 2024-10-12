@@ -9,6 +9,7 @@ edition = "2021"
 mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
 bfprotocols = { version = "0.1.0", path = "../bfprotocols" }
 dcso3 = { version = "0.1", path = "../dcso3" }
+sled-typed = { version = "0.1", path = "../sled-typed" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_derive = { workspace = true }

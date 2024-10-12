@@ -743,19 +743,19 @@ impl<K: KV, V: KV> Iterator for Iter<K, V> {
     }
 
     fn last(mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back().map(|r| match r {
-                Ok((k, v)) => Ok((deserialize(&k)?, deserialize(&v)?)),
-                Err(e) => Err(anyhow::Error::from(e))
-            })
+        self.inner.next_back().map(|r| match r {
+            Ok((k, v)) => Ok((deserialize(&k)?, deserialize(&v)?)),
+            Err(e) => Err(anyhow::Error::from(e)),
+        })
     }
 }
 
 impl<K: KV, V: KV> DoubleEndedIterator for Iter<K, V> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|res| res.map(|(k, v)| (deserialize(&k), deserialize(&v))))
+        self.inner.next_back().map(|r| match r {
+            Ok((k, v)) => Ok((deserialize(&k)?, deserialize(&v)?)),
+            Err(e) => Err(anyhow::Error::from(e)),
+        })
     }
 }
 
@@ -789,24 +789,24 @@ impl<K, V> Iter<K, V> {
 #[derive(Clone, Debug)]
 pub struct Batch<K, V> {
     inner: sled::Batch,
-    _key: PhantomData<fn() -> K>,
-    _value: PhantomData<fn() -> V>,
+    _key: PhantomData<K>,
+    _value: PhantomData<V>,
 }
 
 impl<K, V> Batch<K, V> {
-    pub fn insert(&mut self, key: &K, value: &V)
+    pub fn insert(&mut self, key: &K, value: &V) -> Result<()>
     where
         K: KV,
         V: KV,
     {
-        self.inner.insert(serialize(key), serialize(value));
+        Ok(self.inner.insert(serialize(key)?, serialize(value)?))
     }
 
-    pub fn remove(&mut self, key: &K)
+    pub fn remove(&mut self, key: &K) -> Result<()>
     where
         K: KV,
     {
-        self.inner.remove(serialize(key))
+        Ok(self.inner.remove(serialize(key)?))
     }
 }
 
@@ -833,8 +833,8 @@ pub struct Subscriber<K, V> {
 impl<K, V> Subscriber<K, V> {
     pub fn next_timeout(
         &mut self,
-        timeout: core::time::Duration,
-    ) -> core::result::Result<Event<K, V>, std::sync::mpsc::RecvTimeoutError>
+        timeout: std::time::Duration,
+    ) -> std::result::Result<Result<Event<K, V>>, std::sync::mpsc::RecvTimeoutError>
     where
         K: KV,
         V: KV,
@@ -853,11 +853,14 @@ impl<K, V> Subscriber<K, V> {
     }
 }
 
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{Context, Poll};
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 impl<K: KV + Unpin, V: KV + Unpin> Future for Subscriber<K, V> {
-    type Output = Option<Event<K, V>>;
+    type Output = Option<Result<Event<K, V>>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.project()
@@ -868,9 +871,9 @@ impl<K: KV + Unpin, V: KV + Unpin> Future for Subscriber<K, V> {
 }
 
 impl<K: KV, V: KV> Iterator for Subscriber<K, V> {
-    type Item = Event<K, V>;
+    type Item = Result<Event<K, V>>;
 
-    fn next(&mut self) -> Option<Event<K, V>> {
+    fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|e| Event::from_sled(&e))
     }
 }
@@ -890,19 +893,19 @@ impl<K, V> Event<K, V> {
         }
     }
 
-    pub fn from_sled(event: &sled::Event) -> Self
+    pub fn from_sled(event: &sled::Event) -> Result<Self>
     where
         K: KV,
         V: KV,
     {
         match event {
-            sled::Event::Insert { key, value } => Self::Insert {
-                key: deserialize(key),
-                value: deserialize(value),
-            },
-            sled::Event::Remove { key } => Self::Remove {
-                key: deserialize(key),
-            },
+            sled::Event::Insert { key, value } => Ok(Self::Insert {
+                key: deserialize(key)?,
+                value: deserialize(value)?,
+            }),
+            sled::Event::Remove { key } => Ok(Self::Remove {
+                key: deserialize(key)?,
+            }),
         }
     }
 }
@@ -951,7 +954,7 @@ mod tests {
 
         let expect_results = [(6, 2), (10, 2)];
 
-        for (i, result) in tree.range(6..11).enumerate() {
+        for (i, result) in tree.range(6..11).unwrap().enumerate() {
             assert_eq!(result.unwrap(), expect_results[i]);
         }
     }

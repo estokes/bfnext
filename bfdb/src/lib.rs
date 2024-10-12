@@ -1,18 +1,27 @@
 use arrayvec::ArrayVec;
-use bfprotocols::{cfg::{LifeType, UnitTags, Vehicle}, db::group::{GroupId, UnitId}, shots::Dead, stats::{DetectionSource, EnId, Pos}};
-use dcso3::{coalition::Side, net::{SlotId, Ucid}, String};
-use enumflags2::BitFlags;
-use smallvec::SmallVec;
-use sled::Db;
-use typed_sled::Tree;
+use bfprotocols::{
+    cfg::{LifeType, UnitTags, Vehicle},
+    db::group::{GroupId, UnitId},
+    shots::Dead,
+    stats::{DetectionSource, EnId, Pos},
+};
 use chrono::prelude::*;
-use serde::{Serialize, Deserialize};
+use dcso3::{
+    coalition::Side,
+    net::{SlotId, Ucid},
+    String,
+};
+use enumflags2::BitFlags;
+use serde::{Deserialize, Serialize};
+use sled::Db;
+use smallvec::SmallVec;
+use typed_sled::Tree;
 
-mod atomic_id;
+mod db_id;
 
-atomic_id!(KillId);
-atomic_id!(RoundId);
-atomic_id!(SortieId);
+db_id!(KillId);
+db_id!(RoundId);
+db_id!(SortieId);
 
 // lives: SmallVec<[(LifeType, DateTime<Utc>, u8); 6]>,
 
@@ -55,10 +64,10 @@ struct Unit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Slot {
     id: SlotId,
-    vehicle: Option<Vehicle>
+    vehicle: Option<Vehicle>,
 }
 
-struct PilotDb {
+struct Pilots {
     pilots: Tree<Ucid, Pilot>,
     aggregates: Tree<(Ucid, Vehicle, RoundId), Aggregates>,
     by_name: Tree<String, Ucid>,
@@ -68,10 +77,10 @@ struct PilotDb {
 }
 
 struct T {
-    pilots: PilotDb,
-    campaign: Tree<(String, RoundId), ()>,
+    pilots: Pilots,
+    campaign: Tree<(String, RoundId), u64>,
     kills: Tree<(EnId, RoundId, SortieId, KillId), Dead>,
     units: Tree<(RoundId, UnitId), Unit>,
     groups: Tree<(RoundId, GroupId, UnitId), ()>,
-    detected: Tree<(RoundId, Side, EnId), BitFlags<DetectionSource>>
+    detected: Tree<(RoundId, Side, EnId), BitFlags<DetectionSource>>,
 }

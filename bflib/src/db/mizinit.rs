@@ -138,6 +138,7 @@ impl Db {
         let pos = zone.pos();
         let llpos = Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
         self.ephemeral.stat(StatKind::Objective {
+            name: name.clone(),
             id,
             kind: obj.kind.clone(),
             owner: obj.owner,

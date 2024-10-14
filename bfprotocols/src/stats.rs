@@ -81,6 +81,7 @@ pub enum StatKind {
         frame: HistogramSer,
     },
     Objective {
+        name: String,
         id: ObjectiveId,
         pos: LLPos,
         owner: Side,

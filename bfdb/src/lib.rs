@@ -131,6 +131,7 @@ struct SessionEnd {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Session {
+    stop_time: Option<DateTime<Utc>>,
     end: Option<SessionEnd>,
     cfg: Cfg,
 }
@@ -218,17 +219,8 @@ impl StatsDb {
             end: None,
             winner: None,
         };
-        (&self.round, &self.seq)
-            .transaction(|(round, seq)| {
-                if let Some(_) = seq.insert(&key, &seqnum)? {
-                    abort!("{sortie}/{id} conflict")
-                }
-                if let Some(_) = round.insert(&key, &r)? {
-                    abort!("{sortie}/{id} conflict")
-                }
-                Ok(())
-            })
-            .map_err(txn_err)?;
+        self.seq.insert(&key, &seqnum)?;
+        self.round.insert(&key, &r)?;
         ctx.0 = Some(StatCtxInner {
             sortie,
             round: id,
@@ -237,18 +229,18 @@ impl StatsDb {
         Ok(())
     }
 
-    fn add_stat(&self, ctx: &mut StatCtx, stat: &Stat) -> Result<()> {
+    fn add_stat(&self, ctx: &mut StatCtx, stat: Stat) -> Result<()> {
         if let Some(ctx) = &ctx.0 {
             if stat.seq <= ctx.seq {
                 return Ok(());
             }
         }
-        match &stat.kind {
+        match stat.kind {
             StatKind::NewRound { sortie } => {
                 if ctx.0.is_some() {
                     bail!("NewRound should only appear at the beginning of the stats or after RoundEnd")
                 }
-                match self.seq.scan_prefix(sortie)?.next_back().transpose()? {
+                match self.seq.scan_prefix(&sortie)?.next_back().transpose()? {
                     None => self.new_round(ctx, stat.time, sortie.clone(), stat.seq),
                     Some(((_, round), seq)) => match self.round.get(&(sortie.clone(), round))? {
                         Some(r) if r.end.is_none() => {
@@ -271,10 +263,42 @@ impl StatsDb {
                     .get(&key)?
                     .ok_or_else(|| anyhow!("round not found"))?;
                 round.end = Some(stat.time);
-                round.winner = *winner;
+                round.winner = winner;
                 let _ = self.round.insert(&key, &round)?;
                 ctx.0 = None;
                 Ok(())
+            }
+            StatKind::SessionStart { stop, cfg } => {
+                let ctx = ctx.get_mut()?;
+                self.seq.insert(&(ctx.sortie.clone(), ctx.round), &stat.seq)?;
+                self.session.insert(
+                    &(ctx.round, stat.time),
+                    &Session {
+                        cfg: (*cfg).clone(),
+                        stop_time: stop,
+                        end: None,
+                    },
+                )?;
+                ctx.seq = stat.seq;
+                Ok(())
+            }
+            StatKind::SessionEnd { api_perf, perf, frame } => {
+                let ctx = ctx.get_mut()?;
+                self.seq.insert(&(ctx.sortie.clone(), ctx.round), &stat.seq)?;
+                match self.session.scan_prefix(&ctx.round)?.next_back().transpose()? {
+                    None => bail!("no session for {} is in progress", &ctx.sortie),
+                    Some((k, mut session)) => {
+                        session.end = Some(SessionEnd {
+                            api: api_perf,
+                            engine: perf,
+                            frame,
+                            time: stat.time
+                        });
+                        self.session.insert(&k, &session)?;
+                        ctx.seq = stat.seq;
+                        Ok(())
+                    }
+                }
             }
             _ => Ok(()),
         }

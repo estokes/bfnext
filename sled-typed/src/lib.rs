@@ -177,12 +177,12 @@ impl<K, V> Tree<K, V> {
     ///     Ok(())
     /// }
     /// ```
-    pub fn open<T: AsRef<str>>(db: &sled::Db, id: T) -> Self {
-        Self {
-            inner: db.open_tree(id.as_ref()).unwrap(),
+    pub fn open<T: AsRef<str>>(db: &sled::Db, id: T) -> Result<Self> {
+        Ok(Self {
+            inner: db.open_tree(id.as_ref())?,
             _key: PhantomData,
             _value: PhantomData,
-        }
+        })
     }
 
     /// Insert a key to a new value, returning the last value if it was set.

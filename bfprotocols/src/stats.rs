@@ -4,12 +4,18 @@ use crate::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
     },
-    shots::Dead,
     perf::PerfInner,
+    shots::Dead,
 };
 use chrono::prelude::*;
 use dcso3::{
-    atomic_id, coalition::Side, coord::LLPos, net::{SlotId, Ucid}, perf::{HistogramSer, PerfInner as ApiPerfInner}, warehouse::LiquidType, String, Vector3
+    atomic_id,
+    coalition::Side,
+    coord::LLPos,
+    net::{SlotId, Ucid},
+    perf::{HistogramSer, PerfInner as ApiPerfInner},
+    warehouse::LiquidType,
+    String, Vector3,
 };
 use enumflags2::bitflags;
 use serde::{Deserialize, Serialize};
@@ -223,6 +229,10 @@ pub struct Stat {
 impl Stat {
     pub fn new(kind: StatKind) -> Self {
         let time = Utc::now();
-        Self { time, seq: SeqId::new(), kind }
+        Self {
+            time,
+            seq: SeqId::new(),
+            kind,
+        }
     }
 }

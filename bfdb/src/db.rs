@@ -57,6 +57,27 @@ struct Pilot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct PilotRoundInfo {
+    points: i32,
+    side: (DateTime<Utc>, Side),
+    slot: Option<Slot>,
+    lives: ArrayVec<(LifeType, DateTime<Utc>, u8), 5>,
+    connected: Option<(DateTime<Utc>, String)>,
+}
+
+impl Default for PilotRoundInfo {
+    fn default() -> Self {
+        Self {
+            points: 0,
+            side: (Utc::now(), Side::Neutral),
+            slot: None,
+            lives: ArrayVec::new(),
+            connected: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Sortie {
     vehicle: Vehicle,
     pos: Pos,
@@ -76,6 +97,7 @@ struct Unit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Slot {
     id: SlotId,
+    time: DateTime<Utc>,
     vehicle: Option<Vehicle>,
 }
 
@@ -98,11 +120,8 @@ struct Pilots {
     pilots: Tree<Ucid, Pilot>,
     aggregates: Tree<(Ucid, Vehicle, RoundId), Aggregates>,
     by_name: Tree<String, ArrayVec<Ucid, 8>>,
-    points: Tree<(Ucid, RoundId), i32>,
-    side: Tree<(Ucid, RoundId), (DateTime<Utc>, Side)>,
-    slot: Tree<(Ucid, RoundId), (DateTime<Utc>, Slot)>,
     sortie: Tree<(Ucid, RoundId, SortieId), Sortie>,
-    lives: Tree<(Ucid, RoundId), ArrayVec<(LifeType, DateTime<Utc>, u8), 5>>,
+    round_info: Tree<(Ucid, RoundId), PilotRoundInfo>,
 }
 
 impl Pilots {
@@ -112,11 +131,8 @@ impl Pilots {
             pilots: Tree::open(db, "pilots")?,
             aggregates: Tree::open(db, "aggregates")?,
             by_name: Tree::open(db, "by_name")?,
-            points: Tree::open(db, "points")?,
-            side: Tree::open(db, "side")?,
-            slot: Tree::open(db, "slot")?,
             sortie: Tree::open(db, "sortie")?,
-            lives: Tree::open(db, "lives")?,
+            round_info: Tree::open(db, "pilot_round_info")?,
         })
     }
 
@@ -155,7 +171,10 @@ impl Pilots {
         F: FnMut(&mut Pilot),
         G: FnMut(&mut Aggregates),
     {
-        let vehicle = self.slot.get(&(ucid, round))?.and_then(|(_, s)| s.vehicle);
+        let vehicle = self
+            .round_info
+            .get(&(ucid, round))?
+            .and_then(|ri| ri.slot.and_then(|(_, s)| s.vehicle));
         self.with_pilot(ucid, f)?;
         if let Some(vehicle) = vehicle {
             self.with_aggregates((ucid, vehicle, round), g)?
@@ -163,16 +182,19 @@ impl Pilots {
         Ok(())
     }
 
-    fn register<'a>(
-        &self,
-        ctx: &'a mut StatCtx,
-        time: DateTime<Utc>,
-        name: String,
-        id: Ucid,
-        side: Side,
-        initial_points: i32,
-    ) -> Result<&'a mut StatCtxInner> {
-        let ctx = ctx.get_mut()?;
+    fn with_pilot_round_info<F>(&self, ucid: Ucid, round: RoundId, mut f: F) -> Result<()>
+    where
+        F: FnMut(&mut PilotRoundInfo),
+    {
+        self.round_info.fetch_and_update(&(ucid, round), |ri| {
+            let mut ri = ri.unwrap_or_default();
+            f(&mut ri);
+            Some(ri)
+        })?;
+        Ok(())
+    }
+
+    fn saw_pilot(&self, id: Ucid, name: String) -> Result<()> {
         self.pilots.fetch_and_update(&id, |pilot| match pilot {
             None => Some(Pilot {
                 name: ArrayVec::from_iter([name.clone()]),
@@ -204,11 +226,7 @@ impl Pilots {
             }
             Some(ids) => Some(ids),
         })?;
-        self.side
-            .update_and_fetch(&(id, ctx.round), |_| Some((time, side)))?;
-        self.points
-            .update_and_fetch(&(id, ctx.round), |_| Some(initial_points))?;
-        Ok(ctx)
+        Ok(())
     }
 }
 
@@ -638,9 +656,52 @@ impl StatsDb {
                 id,
                 side,
                 initial_points,
-            } => self
-                .pilots
-                .register(ctx, stat.time, name, id, side, initial_points)?,
+            } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots.saw_pilot(id, name)?;
+                self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
+                    ri.side = (stat.time, side);
+                    ri.points = initial_points;
+                })?;
+                ctx
+            }
+            StatKind::Sideswitch { id, side } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots
+                    .with_pilot_round_info(id, ctx.round, |ri| ri.side = (stat.time, side))?;
+                ctx
+            }
+            StatKind::Connect { id, addr, name } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots.saw_pilot(id, name)?;
+                self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
+                    ri.connected = Some((stat.time, addr.clone()))
+                })?;
+                ctx
+            }
+            StatKind::Disconnect { id } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots
+                    .with_pilot_round_info(id, ctx.round, |ri| ri.connected = None)?;
+                ctx
+            }
+            StatKind::Slot { id, slot, typ } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
+                    ri.slot = Some(Slot {
+                        time: stat.time,
+                        id: slot,
+                        vehicle: typ.as_ref().map(|u| u.typ.clone()),
+                    })
+                })?;
+                ctx
+            }
+            StatKind::Deslot { id } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots
+                    .with_pilot_round_info(id, ctx.round, |ri| ri.slot = None)?;
+                ctx
+            }
             _ => ctx.get_mut()?,
         };
         self.seq

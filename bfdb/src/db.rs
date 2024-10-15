@@ -116,25 +116,31 @@ impl Pilots {
         })
     }
 
-    fn with_pilot<F: FnMut(Pilot) -> Pilot>(&self, k: Ucid, mut f: F) -> Result<()> {
+    fn with_pilot<F: FnMut(&mut Pilot)>(&self, k: Ucid, mut f: F) -> Result<()> {
         self.pilots
             .fetch_and_update(&k, |o| match o {
-                Some(o) => Some(f(o)),
                 None => None,
+                Some(mut p) => {
+                    f(&mut p);
+                    Some(p)
+                }
             })?
             .ok_or_else(|| anyhow!("pilot {k:?} is missing"))?;
         Ok(())
     }
 
-    fn with_aggregates<F: FnMut(Aggregates) -> Aggregates>(
+    fn with_aggregates<F: FnMut(&mut Aggregates)>(
         &self,
         k: (Ucid, Vehicle, RoundId),
         mut f: F,
     ) -> Result<()> {
         self.aggregates
-            .fetch_and_update(&k, |o| match o {
-                Some(o) => Some(f(o)),
+            .fetch_and_update(&k, |a| match a {
                 None => None,
+                Some(mut a) => {
+                    f(&mut a);
+                    Some(a)
+                }
             })?
             .ok_or_else(|| anyhow!("aggregates {k:?} is missing"))?;
         Ok(())
@@ -142,8 +148,8 @@ impl Pilots {
 
     fn with_pilot_and_aggregates<F, G>(&self, ucid: Ucid, round: RoundId, f: F, g: G) -> Result<()>
     where
-        F: FnMut(Pilot) -> Pilot,
-        G: FnMut(Aggregates) -> Aggregates,
+        F: FnMut(&mut Pilot),
+        G: FnMut(&mut Aggregates),
     {
         let vehicle = self.slot.get(&(ucid, round))?.and_then(|(_, s)| s.vehicle);
         self.with_pilot(ucid, f)?;
@@ -177,6 +183,20 @@ struct Session {
 }
 
 type Scenario = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum GroupKind {
+    Deployed { name: String, by: Ucid },
+    Troop { name: String, by: Ucid },
+    Action { name: String, by: Ucid },
+    Objective,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Group {
+    units: SmallVec<[UnitId; 16]>,
+    kind: GroupKind,
+}
 
 #[derive(Debug, Clone)]
 struct StatCtxInner {
@@ -212,7 +232,7 @@ struct StatsDb {
     session: Tree<(RoundId, DateTime<Utc>), Session>,
     kills: Tree<(EnId, RoundId, SortieId, KillId), Dead>,
     units: Tree<(RoundId, UnitId), Unit>,
-    groups: Tree<(RoundId, GroupId), SmallVec<[UnitId; 16]>>,
+    groups: Tree<(RoundId, GroupId), Group>,
     detected: Tree<(RoundId, Side, EnId), BitFlags<DetectionSource>>,
     objectives: Tree<(RoundId, ObjectiveId), Objective>,
     equipment: Tree<(RoundId, ObjectiveId, String), u32>,
@@ -292,17 +312,33 @@ impl StatsDb {
         Ok(())
     }
 
-    fn with_objective<F: FnMut(Objective) -> Objective>(
+    fn with_objective<F: FnMut(&mut Objective)>(
         &self,
         k: (RoundId, ObjectiveId),
         mut f: F,
     ) -> Result<()> {
         self.objectives
             .fetch_and_update(&k, |o| match o {
-                Some(o) => Some(f(o)),
                 None => None,
+                Some(mut o) => {
+                    f(&mut o);
+                    Some(o)
+                }
             })?
             .ok_or_else(|| anyhow!("objective {k:?} is missing"))?;
+        Ok(())
+    }
+
+    fn with_group<F: FnMut(&mut Group)>(&self, k: (RoundId, GroupId), mut f: F) -> Result<()> {
+        self.groups
+            .fetch_and_update(&k, |g| match g {
+                None => None,
+                Some(mut g) => {
+                    f(&mut g);
+                    Some(g)
+                }
+            })?
+            .ok_or_else(|| anyhow!("group {k:?} is missing"))?;
         Ok(())
     }
 
@@ -408,41 +444,30 @@ impl StatsDb {
                 logi,
             } => {
                 let ctx = ctx.get_mut()?;
-                self.with_objective((ctx.round, id), |mut o| {
+                self.with_objective((ctx.round, id), |o| {
                     o.last_change = last_change;
                     o.health = health;
-                    o.logi = logi;
-                    o
+                    o.logi = logi
                 })?;
                 ctx
             }
             StatKind::ObjectiveSupply { id, supply, fuel } => {
                 let ctx = ctx.get_mut()?;
-                self.with_objective((ctx.round, id), |mut o| {
+                self.with_objective((ctx.round, id), |o| {
                     o.supply = supply;
-                    o.logi = fuel;
-                    o
+                    o.logi = fuel
                 })?;
                 ctx
             }
             StatKind::Capture { id, by, side } => {
                 let ctx = ctx.get_mut()?;
-                self.with_objective((ctx.round, id), |mut o| {
-                    o.owner = side;
-                    o
-                })?;
+                self.with_objective((ctx.round, id), |o| o.owner = side)?;
                 for ucid in by {
                     self.pilots.with_pilot_and_aggregates(
                         ucid,
                         ctx.round,
-                        |mut pilot| {
-                            pilot.total.captures += 1;
-                            pilot
-                        },
-                        |mut agg| {
-                            agg.captures += 1;
-                            agg
-                        },
+                        |pilot| pilot.total.captures += 1,
+                        |agg| agg.captures += 1,
                     )?
                 }
                 ctx
@@ -452,14 +477,8 @@ impl StatsDb {
                 self.pilots.with_pilot_and_aggregates(
                     by,
                     ctx.round,
-                    |mut pilot| {
-                        pilot.total.repairs += 1;
-                        pilot
-                    },
-                    |mut agg| {
-                        agg.repairs += 1;
-                        agg
-                    },
+                    |pilot| pilot.total.repairs += 1,
+                    |agg| agg.repairs += 1,
                 )?;
                 ctx
             }
@@ -468,14 +487,8 @@ impl StatsDb {
                 self.pilots.with_pilot_and_aggregates(
                     by,
                     ctx.round,
-                    |mut pilot| {
-                        pilot.total.supply_transfers += 1;
-                        pilot
-                    },
-                    |mut agg| {
-                        agg.supply_transfers += 1;
-                        agg
-                    },
+                    |pilot| pilot.total.supply_transfers += 1,
+                    |agg| agg.supply_transfers += 1,
                 )?;
                 ctx
             }
@@ -489,6 +502,66 @@ impl StatsDb {
                 let ctx = ctx.get_mut()?;
                 self.liquids
                     .fetch_and_update(&(ctx.round, id, item), |_| Some(amount))?;
+                ctx
+            }
+            StatKind::Action { by, gid, action } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots.with_pilot_and_aggregates(
+                    by,
+                    ctx.round,
+                    |p| p.total.actions += 1,
+                    |a| a.actions += 1,
+                )?;
+                if let Some(gid) = gid {
+                    self.with_group((ctx.round, gid), |group| {
+                        group.kind = GroupKind::Action {
+                            by,
+                            name: action.clone(),
+                        }
+                    })?;
+                }
+                ctx
+            }
+            StatKind::DeployTroop {
+                by,
+                pos: _,
+                troop,
+                gid,
+            } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots.with_pilot_and_aggregates(
+                    by,
+                    ctx.round,
+                    |p| p.total.troops += 1,
+                    |a| a.troops += 1,
+                )?;
+                self.with_group((ctx.round, gid), |group| {
+                    group.kind = GroupKind::Troop {
+                        by,
+                        name: troop.clone(),
+                    }
+                })?;
+                ctx
+            }
+            StatKind::DeployGroup {
+                by,
+                pos: _,
+                gid,
+                deployable,
+            } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots.with_pilot_and_aggregates(
+                    by,
+                    ctx.round,
+                    |p| p.total.troops += 1,
+                    |a| a.troops += 1,
+                )?;
+                self.with_group((ctx.round, gid), |group| {
+                    group.kind = GroupKind::Deployed {
+                        by,
+                        name: deployable.clone(),
+                    }
+                })?;
                 ctx
             }
             _ => ctx.get_mut()?,

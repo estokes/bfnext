@@ -43,6 +43,7 @@ struct Aggregates {
     repairs: u32,
     supply_transfers: u32,
     troops: u32,
+    farps: u32,
     deploys: u32,
     actions: u32,
     deaths: u32,
@@ -83,6 +84,7 @@ struct Objective {
     name: String,
     pos: LLPos,
     kind: ObjectiveKind,
+    by: Option<Ucid>,
     owner: Side,
     last_change: DateTime<Utc>,
     health: u8,
@@ -423,6 +425,7 @@ impl StatsDb {
                         pos,
                         kind,
                         owner,
+                        by: None,
                         last_change: stat.time,
                         health: 100,
                         logi: 100,
@@ -562,6 +565,22 @@ impl StatsDb {
                         name: deployable.clone(),
                     }
                 })?;
+                ctx
+            }
+            StatKind::DeployFarp {
+                by,
+                pos: _,
+                oid,
+                deployable: _,
+            } => {
+                let ctx = ctx.get_mut()?;
+                self.pilots.with_pilot_and_aggregates(
+                    by,
+                    ctx.round,
+                    |p| p.total.farps += 1,
+                    |a| a.farps += 1,
+                )?;
+                self.with_objective((ctx.round, oid), |o| o.by = Some(by))?;
                 ctx
             }
             _ => ctx.get_mut()?,

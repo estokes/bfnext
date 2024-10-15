@@ -728,6 +728,15 @@ impl StatsDb {
                 })?;
                 ctx
             }
+            StatKind::GroupDeleted { id } => {
+                let ctx = ctx.get_mut()?;
+                if let Some(group) = self.groups.remove(&(ctx.round, id))? {
+                    for uid in group.units {
+                        self.units.remove(&(ctx.round, uid))?;
+                    }
+                }
+                ctx
+            }
             _ => ctx.get_mut()?,
         };
         self.seq

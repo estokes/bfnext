@@ -27,7 +27,7 @@ use sled::{
     Db,
 };
 use sled_typed::{transaction::Transactional, Prefix, Tree};
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 
 db_id!(KillId);
 db_id!(RoundId);
@@ -35,7 +35,7 @@ db_id!(SortieId);
 
 // lives: SmallVec<[(LifeType, DateTime<Utc>, u8); 6]>,
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct Aggregates {
     air_kills: u32,
     ground_kills: u32,
@@ -97,11 +97,12 @@ struct Pilots {
     db: Db,
     pilots: Tree<Ucid, Pilot>,
     aggregates: Tree<(Ucid, Vehicle, RoundId), Aggregates>,
-    by_name: Tree<String, Ucid>,
+    by_name: Tree<String, ArrayVec<Ucid, 8>>,
+    points: Tree<(Ucid, RoundId), i32>,
     side: Tree<(Ucid, RoundId), (DateTime<Utc>, Side)>,
     slot: Tree<(Ucid, RoundId), (DateTime<Utc>, Slot)>,
     sortie: Tree<(Ucid, RoundId, SortieId), Sortie>,
-    lives: Tree<(Ucid, RoundId), SmallVec<[(LifeType, DateTime<Utc>, u8); 5]>>,
+    lives: Tree<(Ucid, RoundId), ArrayVec<(LifeType, DateTime<Utc>, u8), 5>>,
 }
 
 impl Pilots {
@@ -111,6 +112,7 @@ impl Pilots {
             pilots: Tree::open(db, "pilots")?,
             aggregates: Tree::open(db, "aggregates")?,
             by_name: Tree::open(db, "by_name")?,
+            points: Tree::open(db, "points")?,
             side: Tree::open(db, "side")?,
             slot: Tree::open(db, "slot")?,
             sortie: Tree::open(db, "sortie")?,
@@ -159,6 +161,54 @@ impl Pilots {
             self.with_aggregates((ucid, vehicle, round), g)?
         }
         Ok(())
+    }
+
+    fn register<'a>(
+        &self,
+        ctx: &'a mut StatCtx,
+        time: DateTime<Utc>,
+        name: String,
+        id: Ucid,
+        side: Side,
+        initial_points: i32,
+    ) -> Result<&'a mut StatCtxInner> {
+        let ctx = ctx.get_mut()?;
+        self.pilots.fetch_and_update(&id, |pilot| match pilot {
+            None => Some(Pilot {
+                name: ArrayVec::from_iter([name.clone()]),
+                total: Aggregates::default(),
+            }),
+            Some(mut pilot) => match pilot.name.iter().enumerate().find(|(_, n)| name == **n) {
+                Some((i, _)) => {
+                    let last = pilot.name.len() - 1;
+                    pilot.name.swap(i, last);
+                    Some(pilot)
+                }
+                None => {
+                    if pilot.name.is_full() {
+                        let _ = pilot.name.pop_at(0);
+                    }
+                    pilot.name.push(name.clone());
+                    Some(pilot)
+                }
+            },
+        })?;
+        self.by_name.update_and_fetch(&name, |ids| match ids {
+            None => Some(ArrayVec::from_iter([id])),
+            Some(mut ids) if !ids.contains(&id) => {
+                if ids.is_full() {
+                    ids.pop_at(0);
+                }
+                ids.push(id);
+                Some(ids)
+            }
+            Some(ids) => Some(ids),
+        })?;
+        self.side
+            .update_and_fetch(&(id, ctx.round), |_| Some((time, side)))?;
+        self.points
+            .update_and_fetch(&(id, ctx.round), |_| Some(initial_points))?;
+        Ok(ctx)
     }
 }
 
@@ -583,6 +633,14 @@ impl StatsDb {
                 self.with_objective((ctx.round, oid), |o| o.by = Some(by))?;
                 ctx
             }
+            StatKind::Register {
+                name,
+                id,
+                side,
+                initial_points,
+            } => self
+                .pilots
+                .register(ctx, stat.time, name, id, side, initial_points)?,
             _ => ctx.get_mut()?,
         };
         self.seq

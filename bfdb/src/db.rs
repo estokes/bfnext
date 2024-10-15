@@ -115,6 +115,7 @@ struct Objective {
     fuel: u8,
 }
 
+#[derive(Clone)]
 struct Pilots {
     db: Db,
     pilots: Tree<Ucid, Pilot>,
@@ -174,7 +175,7 @@ impl Pilots {
         let vehicle = self
             .round_info
             .get(&(ucid, round))?
-            .and_then(|ri| ri.slot.and_then(|(_, s)| s.vehicle));
+            .and_then(|ri| ri.slot.and_then(|s| s.vehicle));
         self.with_pilot(ucid, f)?;
         if let Some(vehicle) = vehicle {
             self.with_aggregates((ucid, vehicle, round), g)?
@@ -262,7 +263,13 @@ enum GroupKind {
     Objective,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Default for GroupKind {
+    fn default() -> Self {
+        GroupKind::Objective
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Group {
     units: SmallVec<[UnitId; 16]>,
     kind: GroupKind,
@@ -294,6 +301,7 @@ impl StatCtx {
     }
 }
 
+#[derive(Clone)]
 struct StatsDb {
     db: Db,
     pilots: Pilots,
@@ -700,6 +708,24 @@ impl StatsDb {
                 let ctx = ctx.get_mut()?;
                 self.pilots
                     .with_pilot_round_info(id, ctx.round, |ri| ri.slot = None)?;
+                ctx
+            }
+            StatKind::Unit { id, gid, typ, pos } => {
+                let ctx = ctx.get_mut()?;
+                self.units.fetch_and_update(&(ctx.round, id), |_| Some(Unit {
+                    dead: false,
+                    group: gid,
+                    typ: typ.typ.clone(),
+                    tags: typ.tags,
+                    pos
+                }))?;
+                self.groups.fetch_and_update(&(ctx.round, gid), |g| {
+                    let mut g = g.unwrap_or_default();
+                    if !g.units.contains(&id) {
+                        g.units.push(id);
+                    }
+                    Some(g)
+                })?;
                 ctx
             }
             _ => ctx.get_mut()?,

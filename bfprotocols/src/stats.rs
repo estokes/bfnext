@@ -47,7 +47,7 @@ pub struct Unit {
     pub tags: UnitTags,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Pos {
     pub pos: LLPos,
     pub altitude: f32,

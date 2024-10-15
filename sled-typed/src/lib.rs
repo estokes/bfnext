@@ -50,7 +50,7 @@ use transaction::TransactionalTree;
 ///     Ok(())
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tree<K, V> {
     inner: sled::Tree,
     _key: PhantomData<K>,

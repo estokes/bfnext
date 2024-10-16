@@ -28,7 +28,6 @@ use dcso3::{
         ActionTyp, AiOption, AlarmState, AltType, Command, GroundOption, MissionPoint,
         OrbitPattern, PointType, Task, TurnMethod, VehicleFormation,
     },
-    coord::Coord,
     env::miz::MizIndex,
     group::Group,
     land::Land,
@@ -1780,7 +1779,6 @@ impl Db {
             gid,
             deployable: dep,
             by: ucid,
-            pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
         });
         Ok(())
     }
@@ -1845,7 +1843,6 @@ impl Db {
         )?;
         self.ephemeral.stat(StatKind::DeployTroop {
             troop,
-            pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?,
             by: ucid,
             gid,
         });

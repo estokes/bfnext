@@ -46,6 +46,7 @@ arrayvec = { version = "0.7", features = ["serde"] }
 base64 = { version = "0.22" }
 bincode = { version = "1" }
 pin-project = { version = "1" }
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [workspace]
 resolver = "2"

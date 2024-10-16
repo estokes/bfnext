@@ -25,3 +25,4 @@ paste = { workspace = true }
 arrayvec = { workspace = true }
 bincode = { workspace = true }
 pin-project = { workspace = true }
+uuid = { workspace = true }

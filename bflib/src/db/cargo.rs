@@ -35,13 +35,12 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     azumith2d, azumith2d_to, azumith3d, centroid2d,
     coalition::Side,
-    coord::Coord,
     env::miz::{Miz, MizIndex, UnitInfo},
     land::Land,
     net::{SlotId, Ucid},
     radians_to_degrees,
     trigger::Trigger,
-    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
+    LuaVec2, MizLua, Position3, String, Vector2,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
@@ -848,9 +847,6 @@ impl Db {
                                 self.ephemeral.stat(StatKind::DeployFarp {
                                     oid,
                                     by: st.ucid,
-                                    pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
-                                        centroid.x, 0., centroid.y,
-                                    )))?,
                                     deployable: dep,
                                 });
                                 self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
@@ -882,9 +878,6 @@ impl Db {
                                 self.ephemeral.stat(StatKind::DeployGroup {
                                     gid,
                                     by: st.ucid,
-                                    pos: Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(
-                                        centroid.x, 0., centroid.y,
-                                    )))?,
                                     deployable: dep.clone(),
                                 });
                                 self.adjust_points(
@@ -1204,8 +1197,6 @@ impl Db {
             Ok(gid) => {
                 self.ephemeral.stat(StatKind::DeployTroop {
                     gid,
-                    pos: Coord::singleton(lua)?
-                        .lo_to_ll(LuaVec3(Vector3::new(point.x, 0., point.y)))?,
                     troop: troop_cfg.name.clone(),
                     by: ucid,
                 });

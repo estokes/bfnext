@@ -2,13 +2,13 @@ use crate::db_id;
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use bfprotocols::{
-    cfg::{Cfg, LifeType, UnitTags, Vehicle},
+    cfg::{Cfg, LifeType, UnitTag, UnitTags, Vehicle},
     db::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
     },
     perf::PerfInner,
-    shots::Dead,
+    shots::{Dead, Who},
     stats::{DetectionSource, EnId, Pos, SeqId, Stat, StatKind},
 };
 use chrono::prelude::*;
@@ -28,6 +28,7 @@ use sled::{
 };
 use sled_typed::{transaction::Transactional, Prefix, Tree};
 use smallvec::{smallvec, SmallVec};
+use uuid::Uuid;
 
 db_id!(KillId);
 db_id!(RoundId);
@@ -48,12 +49,14 @@ struct Aggregates {
     actions: u32,
     deaths: u32,
     hours: f32,
+    donated_points: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Pilot {
     name: ArrayVec<String, 8>,
     total: Aggregates,
+    token: ArrayVec<Uuid, 4>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,6 +125,7 @@ struct Pilots {
     pilots: Tree<Ucid, Pilot>,
     aggregates: Tree<(Ucid, Vehicle, RoundId), Aggregates>,
     by_name: Tree<String, ArrayVec<Ucid, 8>>,
+    by_token: Tree<Uuid, Ucid>,
     sortie: Tree<(Ucid, RoundId, SortieId), Sortie>,
     round_info: Tree<(Ucid, RoundId), PilotRoundInfo>,
 }
@@ -133,6 +137,7 @@ impl Pilots {
             pilots: Tree::open(db, "pilots")?,
             aggregates: Tree::open(db, "aggregates")?,
             by_name: Tree::open(db, "by_name")?,
+            by_token: Tree::open(db, "by_token")?,
             sortie: Tree::open(db, "sortie")?,
             round_info: Tree::open(db, "pilot_round_info")?,
         })
@@ -217,6 +222,7 @@ impl Pilots {
             None => Some(Pilot {
                 name: ArrayVec::from_iter([name.clone()]),
                 total: Aggregates::default(),
+                token: ArrayVec::new(),
             }),
             Some(mut pilot) => match pilot.name.iter().enumerate().find(|(_, n)| name == **n) {
                 Some((i, _)) => {
@@ -326,7 +332,8 @@ struct StatsDb {
     seq: Tree<(Scenario, RoundId), SeqId>,
     round: Tree<(Scenario, RoundId), Round>,
     session: Tree<(RoundId, DateTime<Utc>), Session>,
-    kills: Tree<(EnId, RoundId, SortieId, KillId), Dead>,
+    kills: Tree<(EnId, RoundId, KillId), Dead>,
+    shared_kills: Tree<KillId, SmallVec<[EnId; 2]>>,
     units: Tree<(RoundId, EnId), Unit>,
     groups: Tree<(RoundId, GroupId), Group>,
     detected: Tree<(RoundId, EnId), BitFlags<DetectionSource>>,
@@ -340,6 +347,7 @@ macro_rules! abort {
         return Err(ConflictableTransactionError::Abort(anyhow!($e)))
     };
 }
+
 fn txn_err(e: TransactionError<anyhow::Error>) -> anyhow::Error {
     match e {
         TransactionError::Abort(e) => e,
@@ -356,6 +364,7 @@ impl StatsDb {
             round: Tree::open(db, "round")?,
             session: Tree::open(db, "session")?,
             kills: Tree::open(db, "kills")?,
+            shared_kills: Tree::open(db, "shared_kills")?,
             units: Tree::open(db, "units")?,
             groups: Tree::open(db, "groups")?,
             detected: Tree::open(db, "detected")?,
@@ -451,37 +460,113 @@ impl StatsDb {
         Ok(())
     }
 
+    fn with_shared_kills<F: FnMut(&mut SmallVec<[EnId; 2]>)>(
+        &self,
+        k: KillId,
+        mut f: F,
+    ) -> Result<()> {
+        self.shared_kills.update_and_fetch(&k, |sk| {
+            let mut sk = sk.unwrap_or_default();
+            f(&mut sk);
+            Some(sk)
+        })?;
+        Ok(())
+    }
+
+    fn record_kill(&self, ctx: &mut StatCtxInner, dead: Dead) -> Result<()> {
+        let kid = KillId::new(&self.db)?;
+        let air = match &dead.victim {
+            Who::Player { ucid, .. } => {
+                self.pilots.with_pilot_and_aggregates(
+                    *ucid,
+                    ctx.round,
+                    |p| p.total.deaths += 1,
+                    |a| a.deaths += 1,
+                )?;
+                true
+            }
+            Who::AI { uid, .. } => {
+                let tags = self
+                    .units
+                    .get(&(ctx.round, EnId::Unit(*uid)))?
+                    .map(|u| u.tags)
+                    .unwrap_or_default();
+                tags.contains(UnitTag::Aircraft) || tags.contains(UnitTag::Helicopter)
+            }
+        };
+        let no_hit = dead.shots.iter().any(|s| s.hit);
+        let up = |a: &mut Aggregates| {
+            if air {
+                a.air_kills += 1
+            } else {
+                a.ground_kills += 1
+            }
+        };
+        for shot in dead.shots.iter() {
+            if no_hit && !shot.hit {
+                continue;
+            }
+            let enid = match &shot.shooter {
+                Who::AI {
+                    ucid: None, uid, ..
+                } => EnId::Unit(*uid),
+                Who::Player { ucid, .. }
+                | Who::AI {
+                    ucid: Some(ucid), ..
+                } => {
+                    self.pilots.with_pilot_and_aggregates(
+                        *ucid,
+                        ctx.round,
+                        |p| up(&mut p.total),
+                        |a| up(a),
+                    )?;
+                    EnId::Player(*ucid)
+                }
+            };
+            self.kills.insert(&(enid, ctx.round, kid), &dead)?;
+            self.with_shared_kills(kid, |sk| {
+                if !sk.contains(&enid) {
+                    sk.push(enid)
+                }
+            })?;
+        }
+        Ok(())
+    }
+
     pub fn add_stat(&self, ctx: &mut StatCtx, stat: Stat) -> Result<()> {
         if let Some(ctx) = &ctx.0 {
             if stat.seq <= ctx.seq {
                 return Ok(());
             }
         }
-        let ctx = match stat.kind {
-            StatKind::NewRound { sortie } => {
-                if ctx.0.is_some() {
-                    bail!("NewRound should only appear at the beginning of the stats or after RoundEnd")
-                }
-                match self.seq.scan_prefix(&sortie)?.next_back().transpose()? {
-                    None => return self.new_round(ctx, stat.time, sortie.clone(), stat.seq),
-                    Some(((_, round), seq)) => match self.round.get(&(sortie.clone(), round))? {
-                        Some(r) if r.end.is_none() => {
-                            ctx.0 = Some(StatCtxInner {
-                                round,
-                                seq,
-                                sortie: sortie.clone(),
-                            });
-                            return Ok(());
-                        }
-                        Some(_) | None => {
-                            return self.new_round(ctx, stat.time, sortie.clone(), stat.seq)
-                        }
-                    },
-                }
+        if let StatKind::NewRound { sortie } = &stat.kind {
+            if ctx.0.is_some() {
+                bail!("NewRound should only appear at the beginning of the stats or after RoundEnd")
             }
-            StatKind::RoundEnd { winner } => return self.round_end(ctx, stat.time, winner),
+            match self.seq.scan_prefix(sortie)?.next_back().transpose()? {
+                None => return self.new_round(ctx, stat.time, sortie.clone(), stat.seq),
+                Some(((_, round), seq)) => match self.round.get(&(sortie.clone(), round))? {
+                    Some(r) if r.end.is_none() => {
+                        ctx.0 = Some(StatCtxInner {
+                            round,
+                            seq,
+                            sortie: sortie.clone(),
+                        });
+                        return Ok(());
+                    }
+                    Some(_) | None => {
+                        return self.new_round(ctx, stat.time, sortie.clone(), stat.seq)
+                    }
+                },
+            }
+        }
+        if let StatKind::RoundEnd { winner } = &stat.kind {
+            return self.round_end(ctx, stat.time, *winner);
+        }
+        let ctx = ctx.get_mut()?;
+        match stat.kind {
+            StatKind::NewRound { .. } | StatKind::RoundEnd { .. } => unreachable!(),
             StatKind::SessionStart { stop, cfg } => {
-                let ctx = ctx.get_mut()?;
                 self.session.insert(
                     &(ctx.round, stat.time),
                     &Session {
@@ -490,14 +575,12 @@ impl StatsDb {
                         end: None,
                     },
                 )?;
-                ctx
             }
             StatKind::SessionEnd {
                 api_perf,
                 perf,
                 frame,
             } => {
-                let ctx = ctx.get_mut()?;
                 match self
                     .session
                     .scan_prefix(&ctx.round)?
@@ -513,7 +596,6 @@ impl StatsDb {
                             time: stat.time,
                         });
                         self.session.insert(&k, &session)?;
-                        ctx
                     }
                 }
             }
@@ -524,7 +606,6 @@ impl StatsDb {
                 owner,
                 kind,
             } => {
-                let ctx = ctx.get_mut()?;
                 self.objectives.insert(
                     &(ctx.round, id),
                     &Objective {
@@ -540,12 +621,9 @@ impl StatsDb {
                         fuel: 100,
                     },
                 )?;
-                ctx
             }
             StatKind::ObjectiveDestroyed { id } => {
-                let ctx = ctx.get_mut()?;
                 self.objectives.remove(&(ctx.round, id))?;
-                ctx
             }
             StatKind::ObjectiveHealth {
                 id,
@@ -553,24 +631,19 @@ impl StatsDb {
                 health,
                 logi,
             } => {
-                let ctx = ctx.get_mut()?;
                 self.with_objective((ctx.round, id), |o| {
                     o.last_change = last_change;
                     o.health = health;
                     o.logi = logi
                 })?;
-                ctx
             }
             StatKind::ObjectiveSupply { id, supply, fuel } => {
-                let ctx = ctx.get_mut()?;
                 self.with_objective((ctx.round, id), |o| {
                     o.supply = supply;
                     o.logi = fuel
                 })?;
-                ctx
             }
             StatKind::Capture { id, by, side } => {
-                let ctx = ctx.get_mut()?;
                 self.with_objective((ctx.round, id), |o| o.owner = side)?;
                 for ucid in by {
                     self.pilots.with_pilot_and_aggregates(
@@ -580,42 +653,32 @@ impl StatsDb {
                         |agg| agg.captures += 1,
                     )?
                 }
-                ctx
             }
             StatKind::Repair { id: _, by } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots.with_pilot_and_aggregates(
                     by,
                     ctx.round,
                     |pilot| pilot.total.repairs += 1,
                     |agg| agg.repairs += 1,
                 )?;
-                ctx
             }
             StatKind::SupplyTransfer { from: _, to: _, by } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots.with_pilot_and_aggregates(
                     by,
                     ctx.round,
                     |pilot| pilot.total.supply_transfers += 1,
                     |agg| agg.supply_transfers += 1,
                 )?;
-                ctx
             }
             StatKind::EquipmentInventory { id, item, amount } => {
-                let ctx = ctx.get_mut()?;
                 self.equipment
                     .fetch_and_update(&(ctx.round, id, item), |_| Some(amount))?;
-                ctx
             }
             StatKind::LiquidInventory { id, item, amount } => {
-                let ctx = ctx.get_mut()?;
                 self.liquids
                     .fetch_and_update(&(ctx.round, id, item), |_| Some(amount))?;
-                ctx
             }
             StatKind::Action { by, gid, action } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots.with_pilot_and_aggregates(
                     by,
                     ctx.round,
@@ -630,15 +693,8 @@ impl StatsDb {
                         }
                     })?;
                 }
-                ctx
             }
-            StatKind::DeployTroop {
-                by,
-                pos: _,
-                troop,
-                gid,
-            } => {
-                let ctx = ctx.get_mut()?;
+            StatKind::DeployTroop { by, troop, gid } => {
                 self.pilots.with_pilot_and_aggregates(
                     by,
                     ctx.round,
@@ -651,15 +707,12 @@ impl StatsDb {
                         name: troop.clone(),
                     }
                 })?;
-                ctx
             }
             StatKind::DeployGroup {
                 by,
-                pos: _,
                 gid,
                 deployable,
             } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots.with_pilot_and_aggregates(
                     by,
                     ctx.round,
@@ -672,15 +725,12 @@ impl StatsDb {
                         name: deployable.clone(),
                     }
                 })?;
-                ctx
             }
             StatKind::DeployFarp {
                 by,
-                pos: _,
                 oid,
                 deployable: _,
             } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots.with_pilot_and_aggregates(
                     by,
                     ctx.round,
@@ -688,7 +738,6 @@ impl StatsDb {
                     |a| a.farps += 1,
                 )?;
                 self.with_objective((ctx.round, oid), |o| o.by = Some(by))?;
-                ctx
             }
             StatKind::Register {
                 name,
@@ -696,36 +745,27 @@ impl StatsDb {
                 side,
                 initial_points,
             } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots.saw_pilot(id, name)?;
                 self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
                     ri.side = (stat.time, side);
                     ri.points = initial_points;
                 })?;
-                ctx
             }
             StatKind::Sideswitch { id, side } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots
                     .with_pilot_round_info(id, ctx.round, |ri| ri.side = (stat.time, side))?;
-                ctx
             }
             StatKind::Connect { id, addr, name } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots.saw_pilot(id, name)?;
                 self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
                     ri.connected = Some((stat.time, addr.clone()))
                 })?;
-                ctx
             }
             StatKind::Disconnect { id } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots
                     .with_pilot_round_info(id, ctx.round, |ri| ri.connected = None)?;
-                ctx
             }
             StatKind::Slot { id, slot, typ } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
                     ri.slot = Some(Slot {
                         time: stat.time,
@@ -734,14 +774,11 @@ impl StatsDb {
                         sortie: None,
                     })
                 })?;
-                ctx
             }
             StatKind::Deslot { id } => {
-                let ctx = ctx.get_mut()?;
                 self.pilots
                     .with_pilot_round_info(id, ctx.round, |ri| ri.slot = None)?;
                 self.units.remove(&(ctx.round, EnId::Player(id)))?;
-                ctx
             }
             StatKind::Unit {
                 id,
@@ -750,7 +787,6 @@ impl StatsDb {
                 typ,
                 pos,
             } => {
-                let ctx = ctx.get_mut()?;
                 self.units.fetch_and_update(&(ctx.round, id), |_| {
                     Some(Unit {
                         dead: false,
@@ -771,28 +807,22 @@ impl StatsDb {
                         Some(g)
                     })?;
                 }
-                ctx
             }
             StatKind::Position { id, pos } => {
-                let ctx = ctx.get_mut()?;
                 self.with_unit((ctx.round, id), |u| u.pos = pos)?;
-                ctx
             }
             StatKind::GroupDeleted { id } => {
-                let ctx = ctx.get_mut()?;
                 if let Some(group) = self.groups.remove(&(ctx.round, id))? {
                     for uid in group.units {
                         self.units.remove(&(ctx.round, uid))?;
                     }
                 }
-                ctx
             }
             StatKind::Detected {
                 id,
                 detected,
                 source,
             } => {
-                let ctx = ctx.get_mut()?;
                 self.detected.update_and_fetch(&(ctx.round, id), |d| {
                     let mut d = d.unwrap_or_default();
                     if detected {
@@ -806,10 +836,8 @@ impl StatsDb {
                         Some(d)
                     }
                 })?;
-                ctx
             }
             StatKind::Takeoff { id } => {
-                let ctx = ctx.get_mut()?;
                 let sid = SortieId::new(&self.db)?;
                 let mut vehicle = None;
                 self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
@@ -827,10 +855,8 @@ impl StatsDb {
                         vehicle,
                     },
                 )?;
-                ctx
             }
             StatKind::Land { id } => {
-                let ctx = ctx.get_mut()?;
                 let mut sid: Option<SortieId> = None;
                 self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
                     if let Some(sl) = ri.slot.as_mut() {
@@ -840,9 +866,36 @@ impl StatsDb {
                 let sid = sid.ok_or_else(|| anyhow!("{id} landed without taking off"))?;
                 self.pilots
                     .with_sortie((id, ctx.round, sid), |s| s.land = Some(stat.time))?;
-                ctx
             }
-            _ => ctx.get_mut()?,
+            StatKind::Life { id, lives } => {
+                self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
+                    ri.lives.clear();
+                    ri.lives
+                        .extend(lives.into_iter().map(|(lt, (dt, n))| (*lt, *dt, *n)));
+                })?;
+            }
+            StatKind::Kill(dead) => self.record_kill(ctx, dead)?,
+            StatKind::Points {
+                id,
+                points,
+                reason: _,
+            } => {
+                self.pilots
+                    .with_pilot_round_info(id, ctx.round, |ri| ri.points += points)?;
+            }
+            StatKind::PointsTransfer { from, to, points } => {
+                self.pilots
+                    .with_pilot_round_info(from, ctx.round, |ri| ri.points -= points as i32)?;
+                self.pilots.with_pilot_and_aggregates(
+                    from,
+                    ctx.round,
+                    |p| p.total.donated_points += points,
+                    |a| a.donated_points += points,
+                )?;
+                self.pilots
+                    .with_pilot_round_info(to, ctx.round, |ri| ri.points += points as i32)?;
+            }
+            _ => (),
         };
         self.seq
             .insert(&(ctx.sortie.clone(), ctx.round), &stat.seq)?;

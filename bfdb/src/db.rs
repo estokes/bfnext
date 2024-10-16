@@ -80,18 +80,8 @@ impl Default for PilotRoundInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Sortie {
     vehicle: Vehicle,
-    pos: Pos,
     takeoff: DateTime<Utc>,
     land: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Unit {
-    group: GroupId,
-    typ: Vehicle,
-    tags: UnitTags,
-    pos: Pos,
-    dead: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +89,17 @@ struct Slot {
     id: SlotId,
     time: DateTime<Utc>,
     vehicle: Option<Vehicle>,
+    sortie: Option<SortieId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Unit {
+    group: Option<GroupId>,
+    owner: Side,
+    typ: Vehicle,
+    tags: UnitTags,
+    pos: Pos,
+    dead: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,6 +196,22 @@ impl Pilots {
         Ok(())
     }
 
+    fn with_sortie<F>(&self, k: (Ucid, RoundId, SortieId), mut f: F) -> Result<()>
+    where
+        F: FnMut(&mut Sortie),
+    {
+        self.sortie
+            .fetch_and_update(&k, |s| match s {
+                None => None,
+                Some(mut s) => {
+                    f(&mut s);
+                    Some(s)
+                }
+            })?
+            .ok_or_else(|| anyhow!("sortie {k:?} is missing"))?;
+        Ok(())
+    }
+
     fn saw_pilot(&self, id: Ucid, name: String) -> Result<()> {
         self.pilots.fetch_and_update(&id, |pilot| match pilot {
             None => Some(Pilot {
@@ -271,7 +288,8 @@ impl Default for GroupKind {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Group {
-    units: SmallVec<[UnitId; 16]>,
+    owner: Side,
+    units: SmallVec<[EnId; 16]>,
     kind: GroupKind,
 }
 
@@ -309,9 +327,9 @@ struct StatsDb {
     round: Tree<(Scenario, RoundId), Round>,
     session: Tree<(RoundId, DateTime<Utc>), Session>,
     kills: Tree<(EnId, RoundId, SortieId, KillId), Dead>,
-    units: Tree<(RoundId, UnitId), Unit>,
+    units: Tree<(RoundId, EnId), Unit>,
     groups: Tree<(RoundId, GroupId), Group>,
-    detected: Tree<(RoundId, Side, EnId), BitFlags<DetectionSource>>,
+    detected: Tree<(RoundId, EnId), BitFlags<DetectionSource>>,
     objectives: Tree<(RoundId, ObjectiveId), Objective>,
     equipment: Tree<(RoundId, ObjectiveId, String), u32>,
     liquids: Tree<(RoundId, ObjectiveId, LiquidType), u32>,
@@ -417,6 +435,19 @@ impl StatsDb {
                 }
             })?
             .ok_or_else(|| anyhow!("group {k:?} is missing"))?;
+        Ok(())
+    }
+
+    fn with_unit<F: FnMut(&mut Unit)>(&self, k: (RoundId, EnId), mut f: F) -> Result<()> {
+        self.units
+            .fetch_and_update(&k, |g| match g {
+                None => None,
+                Some(mut u) => {
+                    f(&mut u);
+                    Some(u)
+                }
+            })?
+            .ok_or_else(|| anyhow!("unit {k:?} is missing"))?;
         Ok(())
     }
 
@@ -700,6 +731,7 @@ impl StatsDb {
                         time: stat.time,
                         id: slot,
                         vehicle: typ.as_ref().map(|u| u.typ.clone()),
+                        sortie: None,
                     })
                 })?;
                 ctx
@@ -708,24 +740,42 @@ impl StatsDb {
                 let ctx = ctx.get_mut()?;
                 self.pilots
                     .with_pilot_round_info(id, ctx.round, |ri| ri.slot = None)?;
+                self.units.remove(&(ctx.round, EnId::Player(id)))?;
                 ctx
             }
-            StatKind::Unit { id, gid, typ, pos } => {
+            StatKind::Unit {
+                id,
+                gid,
+                owner,
+                typ,
+                pos,
+            } => {
                 let ctx = ctx.get_mut()?;
-                self.units.fetch_and_update(&(ctx.round, id), |_| Some(Unit {
-                    dead: false,
-                    group: gid,
-                    typ: typ.typ.clone(),
-                    tags: typ.tags,
-                    pos
-                }))?;
-                self.groups.fetch_and_update(&(ctx.round, gid), |g| {
-                    let mut g = g.unwrap_or_default();
-                    if !g.units.contains(&id) {
-                        g.units.push(id);
-                    }
-                    Some(g)
+                self.units.fetch_and_update(&(ctx.round, id), |_| {
+                    Some(Unit {
+                        dead: false,
+                        group: gid,
+                        owner,
+                        typ: typ.typ.clone(),
+                        tags: typ.tags,
+                        pos,
+                    })
                 })?;
+                if let Some(gid) = gid {
+                    self.groups.fetch_and_update(&(ctx.round, gid), |g| {
+                        let mut g = g.unwrap_or_default();
+                        g.owner = owner;
+                        if !g.units.contains(&id) {
+                            g.units.push(id);
+                        }
+                        Some(g)
+                    })?;
+                }
+                ctx
+            }
+            StatKind::Position { id, pos } => {
+                let ctx = ctx.get_mut()?;
+                self.with_unit((ctx.round, id), |u| u.pos = pos)?;
                 ctx
             }
             StatKind::GroupDeleted { id } => {
@@ -735,6 +785,61 @@ impl StatsDb {
                         self.units.remove(&(ctx.round, uid))?;
                     }
                 }
+                ctx
+            }
+            StatKind::Detected {
+                id,
+                detected,
+                source,
+            } => {
+                let ctx = ctx.get_mut()?;
+                self.detected.update_and_fetch(&(ctx.round, id), |d| {
+                    let mut d = d.unwrap_or_default();
+                    if detected {
+                        d.insert(source);
+                    } else {
+                        d.remove(source);
+                    }
+                    if d.is_empty() {
+                        None
+                    } else {
+                        Some(d)
+                    }
+                })?;
+                ctx
+            }
+            StatKind::Takeoff { id } => {
+                let ctx = ctx.get_mut()?;
+                let sid = SortieId::new(&self.db)?;
+                let mut vehicle = None;
+                self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
+                    if let Some(sl) = ri.slot.as_mut() {
+                        sl.sortie = Some(sid);
+                        vehicle = sl.vehicle.clone()
+                    }
+                })?;
+                let vehicle = vehicle.ok_or_else(|| anyhow!("{id} takeoff without slotting"))?;
+                self.pilots.sortie.insert(
+                    &(id, ctx.round, sid),
+                    &Sortie {
+                        takeoff: stat.time,
+                        land: None,
+                        vehicle,
+                    },
+                )?;
+                ctx
+            }
+            StatKind::Land { id } => {
+                let ctx = ctx.get_mut()?;
+                let mut sid: Option<SortieId> = None;
+                self.pilots.with_pilot_round_info(id, ctx.round, |ri| {
+                    if let Some(sl) = ri.slot.as_mut() {
+                        sid = sl.sortie.take();
+                    }
+                })?;
+                let sid = sid.ok_or_else(|| anyhow!("{id} landed without taking off"))?;
+                self.pilots
+                    .with_sortie((id, ctx.round, sid), |s| s.land = Some(stat.time))?;
                 ctx
             }
             _ => ctx.get_mut()?,

@@ -772,8 +772,9 @@ impl Db {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
             self.ephemeral.stat(StatKind::Unit {
-                id: *uid,
-                gid: unit.group,
+                id: EnId::Unit(*uid),
+                gid: Some(unit.group),
+                owner: unit.side,
                 typ: stats::Unit {
                     typ: unit.typ.clone(),
                     tags: unit.tags,
@@ -781,7 +782,6 @@ impl Db {
                 pos: stats::Pos {
                     pos: Coord::singleton(lua)?
                         .lo_to_ll(LuaVec3(Vector3::new(unit.pos.x, 0., unit.pos.y)))?,
-                    altitude: 0.,
                     velocity: unit.airborne_velocity.unwrap_or_default(),
                 },
             });
@@ -799,6 +799,19 @@ impl Db {
                     return Ok(None);
                 }
             };
+            self.ephemeral.stat(StatKind::Unit {
+                id: EnId::Player(ucid),
+                gid: None,
+                owner: si.side,
+                typ: stats::Unit {
+                    typ: si.typ.clone(),
+                    tags: self.ephemeral.cfg.unit_classification[&si.typ],
+                },
+                pos: stats::Pos {
+                    pos: Coord::singleton(lua)?.lo_to_ll(unit.get_point()?)?,
+                    velocity: Vector3::default(),
+                },
+            });
             self.player_entered_slot(lua, id, unit, slot, si.objective, ucid)
                 .context("entering player into slot")?;
             return Ok(Some(slot));
@@ -1016,7 +1029,6 @@ impl Db {
                     id: EnId::Unit(*uid),
                     pos: stats::Pos {
                         pos: coord.lo_to_ll(pos.p)?,
-                        altitude: pos.p.0.y as f32,
                         velocity: v.unwrap_or_default(),
                     },
                 });

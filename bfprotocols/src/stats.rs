@@ -50,7 +50,6 @@ pub struct Unit {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Pos {
     pub pos: LLPos,
-    pub altitude: f32,
     pub velocity: Vector3,
 }
 
@@ -175,8 +174,9 @@ pub enum StatKind {
         id: Ucid,
     },
     Unit {
-        id: UnitId,
-        gid: GroupId,
+        id: EnId,
+        gid: Option<GroupId>,
+        owner: Side,
         typ: Unit,
         pos: Pos,
     },

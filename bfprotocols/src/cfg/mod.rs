@@ -462,7 +462,7 @@ pub enum AiPlaneKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiPlaneCfg {
     pub kind: AiPlaneKind,
-    pub duration: Option<u8>,
+    pub duration: Option<u32>,
     pub template: String,
     pub altitude: f64,
     pub altitude_typ: AltType,

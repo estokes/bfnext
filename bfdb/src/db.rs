@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::db_id;
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -895,7 +897,20 @@ impl StatsDb {
                 self.pilots
                     .with_pilot_round_info(to, ctx.round, |ri| ri.points += points as i32)?;
             }
-            _ => (),
+            StatKind::Bind { id, token } => {
+                let token = Uuid::from_str(&token)?;
+                let mut remove = None;
+                self.pilots.with_pilot(id, |p| {
+                    if p.token.is_full() {
+                        remove = p.token.pop_at(0);
+                    }
+                    p.token.push(token)
+                })?;
+                self.pilots.by_token.insert(&token, &id)?;
+                if let Some(token) = remove {
+                    self.pilots.by_token.remove(&token)?;
+                }
+            }
         };
         self.seq
             .insert(&(ctx.sortie.clone(), ctx.round), &stat.seq)?;

@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use crate::db_id;
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -30,13 +28,12 @@ use sled::{
 };
 use sled_typed::{transaction::Transactional, Prefix, Tree};
 use smallvec::{smallvec, SmallVec};
+use std::str::FromStr;
 use uuid::Uuid;
 
 db_id!(KillId);
 db_id!(RoundId);
 db_id!(SortieId);
-
-// lives: SmallVec<[(LifeType, DateTime<Utc>, u8); 6]>,
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct Aggregates {

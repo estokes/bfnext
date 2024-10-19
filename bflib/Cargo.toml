@@ -8,30 +8,31 @@ name = "bflib"
 crate-type = ["cdylib"]
 
 [dependencies]
-dcso3 = { version = "0.1", path = "../dcso3", features = ["perf"] }
+anyhow = { workspace = true }
 bfprotocols = { version = "0.1", path = "../bfprotocols" }
-chrono = { workspace = true }
-mlua = { version = "0.9.8", features = ["lua51", "module", "serialize"] }
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_derive = { workspace = true }
-compact_str = { workspace = true }
 bytes = { workspace = true }
-fxhash = { workspace = true }
+chrono = { workspace = true }
+compact_str = { workspace = true }
+dcso3 = { version = "0.1", path = "../dcso3", features = ["perf"] }
 enumflags2 = { workspace = true, features = ["serde"] }
+fxhash = { workspace = true }
+hdrhistogram = { workspace = true }
+humantime = { workspace = true }
+immutable-chunkmap = { workspace = true }
+indexmap = { workspace = true }
+log = { workspace = true }
+mlua = { version = "0.9.8", features = ["lua51", "module", "serialize"] }
+nalgebra = { workspace = true }
+netidx = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
-nalgebra = { workspace = true }
-immutable-chunkmap = { workspace = true }
-anyhow = { workspace = true }
-log = { workspace = true }
-tokio = { workspace = true }
-simplelog = { workspace = true }
 paste = { workspace = true }
-smallvec = { workspace = true }
-indexmap = { workspace = true }
-hdrhistogram = { workspace = true }
 rand = { workspace = true }
-humantime = { workspace = true }
 regex = { workspace = true }
+serde_derive = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+simplelog = { workspace = true }
+smallvec = { workspace = true }
+tokio = { workspace = true }
 zstd = { workspace = true }

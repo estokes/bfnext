@@ -20,7 +20,12 @@ use hdrhistogram::{
 };
 use log::info;
 use serde::{de, ser, Deserialize, Serialize};
-use std::{borrow::{Borrow, BorrowMut}, cell::RefCell, ops::{Deref, DerefMut}, sync::Arc};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 #[derive(Debug, Clone)]
 pub struct HistogramSer(Histogram<u64>);
@@ -163,6 +168,63 @@ impl<'a> Snap<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct HistStat {
+    pub name: &'static str,
+    pub unit: &'static str,
+    pub n: u64,
+    pub mean: u64,
+    pub twenty_five: u64,
+    pub fifty: u64,
+    pub ninety: u64,
+    pub ninety_nine: u64,
+    pub ninety_nine_nine: u64,
+}
+
+impl HistStat {
+    pub fn new(h: &Histogram<u64>, name: &'static str, ns: bool) -> Self {
+        let n = h.len();
+        let d = if ns { 1 } else { 1000 };
+        let unit = if ns { "ns" } else { "us" };
+        let mean = h.mean().trunc() as u64 / d;
+        let twenty_five = h.value_at_quantile(0.25) / d;
+        let fifty = h.value_at_quantile(0.5) / d;
+        let ninety = h.value_at_quantile(0.9) / d;
+        let ninety_nine = h.value_at_quantile(0.99) / d;
+        let ninety_nine_nine = h.value_at_quantile(0.999) / d;
+        Self {
+            name,
+            unit,
+            n,
+            mean,
+            twenty_five,
+            fifty,
+            ninety,
+            ninety_nine,
+            ninety_nine_nine,
+        }
+    }
+
+    pub fn log(&self, pad: usize) {
+        let Self {
+            name,
+            unit,
+            n,
+            mean,
+            twenty_five,
+            fifty,
+            ninety,
+            ninety_nine,
+            ninety_nine_nine,
+        } = self;
+        if *n > 0 {
+            info!(
+                "{name:pad$}: n: {n:>6}, mean: {mean:>5}{unit}, 25th: {twenty_five:>5}{unit}, 50th: {fifty:>5}{unit}, 90th: {ninety:>5}{unit}, 99th: {ninety_nine:>6}{unit}, 99.9th: {ninety_nine_nine:>6}{unit}"
+            );
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PerfInner {
     pub get_position: HistogramSer,
@@ -218,58 +280,127 @@ impl Perf {
         PERF = None;
     }
 
-    pub fn log(&self) {
-        log_histogram(&self.get_position, "Unit.getPosition:          ", false);
-        log_histogram(&self.get_velocity, "Unit.getVelocity:          ", false);
-        log_histogram(&self.unit_get_by_name, "Unit.getByName:            ", false);
-        log_histogram(&self.unit_get_desc, "Unit.getDesc:              ", false);
-        log_histogram(&self.unit_is_exist, "Unit.isExist:              ", false);
-        log_histogram(&self.in_air, "Unit.inAir:                ", false);
-        log_histogram(&self.get_ammo, "Unit.getAmmo:              ", false);
-        log_histogram(&self.add_group, "Coalition.addGroup:        ", false);
-        log_histogram(
-            &self.add_static_object,
-            "Coalition.addStaticObject: ",
-            false,
-        );
-        log_histogram(&self.land_is_visible, "Land.isVisible:            ", false);
-        log_histogram(&self.land_get_height, "Land.getHeight:            ", false);
-        log_histogram(
-            &self.timer_schedule_function,
-            "Timer.scheduleFunction:    ",
-            false,
-        );
-        log_histogram(
-            &self.timer_remove_function,
-            "Timer.removeFunction:      ",
-            false,
-        );
-        log_histogram(&self.timer_get_time, "Timer.getTime:             ", false);
-        log_histogram(
-            &self.timer_get_abs_time,
-            "Timer.getAbsTime:          ",
-            false,
-        );
-        log_histogram(&self.timer_get_time0, "Timer.getTime0:            ", false);
+    pub fn stat(&self) -> PerfStat {
+        let PerfInner {
+            get_position,
+            get_point,
+            get_velocity,
+            in_air,
+            get_ammo,
+            add_group,
+            add_static_object,
+            unit_is_exist,
+            unit_get_by_name,
+            unit_get_desc,
+            land_is_visible,
+            land_get_height,
+            timer_schedule_function,
+            timer_remove_function,
+            timer_get_time,
+            timer_get_abs_time,
+            timer_get_time0,
+        } = &*self.0;
+        PerfStat {
+            get_position: HistStat::new(&get_position, "Unit.getPosition", false),
+            add_group: HistStat::new(&add_group, "Coalition.addGroup", false),
+            add_static_object: HistStat::new(
+                &add_static_object,
+                "Coalition.addStaticObject",
+                false,
+            ),
+            get_ammo: HistStat::new(&get_ammo, "Unit.getAmmo", false),
+            get_point: HistStat::new(&get_point, "Unit.getPoint", false),
+            get_velocity: HistStat::new(&get_velocity, "Unit.getVelocity", false),
+            in_air: HistStat::new(&in_air, "Unit.inAir", false),
+            land_get_height: HistStat::new(&land_get_height, "Land.getHeight", false),
+            land_is_visible: HistStat::new(&land_is_visible, "Land.isVisible", false),
+            timer_get_abs_time: HistStat::new(&timer_get_abs_time, "Timer.getAbsTime", false),
+            timer_get_time: HistStat::new(&timer_get_time, "Timer.getTime", false),
+            timer_get_time0: HistStat::new(&timer_get_time0, "Timer.getTime0", false),
+            timer_remove_function: HistStat::new(
+                &timer_remove_function,
+                "Timer.removeFunction",
+                false,
+            ),
+            timer_schedule_function: HistStat::new(
+                &timer_schedule_function,
+                "Timer.scheduleFunction",
+                false,
+            ),
+            unit_get_by_name: HistStat::new(&unit_get_by_name, "Unit.getByName", false),
+            unit_get_desc: HistStat::new(&unit_get_desc, "Unit.getDesc", false),
+            unit_is_exist: HistStat::new(&unit_is_exist, "Unit.isExist", false),
+        }
     }
 }
 
-pub fn log_histogram(h: &Histogram<u64>, name: &str, ns: bool) {
-    let n = h.len();
-    if n == 0 {
-        return;
+#[derive(Debug, Clone, Copy)]
+pub struct PerfStat {
+    pub get_position: HistStat,
+    pub get_point: HistStat,
+    pub get_velocity: HistStat,
+    pub in_air: HistStat,
+    pub get_ammo: HistStat,
+    pub add_group: HistStat,
+    pub add_static_object: HistStat,
+    pub unit_is_exist: HistStat,
+    pub unit_get_by_name: HistStat,
+    pub unit_get_desc: HistStat,
+    pub land_is_visible: HistStat,
+    pub land_get_height: HistStat,
+    pub timer_schedule_function: HistStat,
+    pub timer_remove_function: HistStat,
+    pub timer_get_time: HistStat,
+    pub timer_get_abs_time: HistStat,
+    pub timer_get_time0: HistStat,
+}
+
+impl PerfStat {
+    pub fn log(&self) {
+        use std::cmp::max;
+        let Self {
+            get_position,
+            get_point,
+            get_velocity,
+            in_air,
+            get_ammo,
+            add_group,
+            add_static_object,
+            unit_is_exist,
+            unit_get_by_name,
+            unit_get_desc,
+            land_is_visible,
+            land_get_height,
+            timer_schedule_function,
+            timer_remove_function,
+            timer_get_time,
+            timer_get_abs_time,
+            timer_get_time0,
+        } = self;
+        let stats = [
+            get_position,
+            get_point,
+            get_velocity,
+            in_air,
+            get_ammo,
+            add_group,
+            add_static_object,
+            unit_is_exist,
+            unit_get_by_name,
+            unit_get_desc,
+            land_is_visible,
+            land_get_height,
+            timer_schedule_function,
+            timer_remove_function,
+            timer_get_time,
+            timer_get_abs_time,
+            timer_get_time0,
+        ];
+        let max_len = stats.iter().fold(0, |l, st| max(l, st.name.len()));
+        for st in stats {
+            st.log(max_len);
+        }
     }
-    let d = if ns { 1 } else { 1000 };
-    let unit = if ns { "ns" } else { "us" };
-    let mean = h.mean().trunc() as u64 / d;
-    let twenty_five = h.value_at_quantile(0.25) / d;
-    let fifty = h.value_at_quantile(0.5) / d;
-    let ninety = h.value_at_quantile(0.9) / d;
-    let ninety_nine = h.value_at_quantile(0.99) / d;
-    let ninety_nine_nine = h.value_at_quantile(0.999) / d;
-    info!(
-        "{name} n: {n:>6}, mean: {mean:>5}{unit}, 25th: {twenty_five:>5}{unit}, 50th: {fifty:>5}{unit}, 90th: {ninety:>5}{unit}, 99th: {ninety_nine:>6}{unit}, 99.9th: {ninety_nine_nine:>6}{unit}"
-    );
 }
 
 #[cfg(feature = "perf")]

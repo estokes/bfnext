@@ -17,6 +17,7 @@ for more details.
 use super::*;
 use dcso3::coalition::Side;
 use fxhash::FxHashMap;
+use netidx::path::Path as NetIdxPath;
 
 fn default_red_troops() -> Vec<Troop> {
     vec![
@@ -1749,6 +1750,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
 impl Default for Cfg {
     fn default() -> Self {
         Self {
+            netidx_base: Some(NetIdxPath::from("/fowl-engine")),
             admins: FxHashMap::from_iter([(
                 "f279deb7a6b62c96a78eca3ddb2bd8d0".parse().unwrap(),
                 "REAPER 32 | EvilKipper".into(),

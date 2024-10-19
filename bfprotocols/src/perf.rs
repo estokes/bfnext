@@ -15,12 +15,114 @@ for more details.
 */
 
 use crate::db::objective::ObjectiveId;
-use dcso3::{String, perf::HistogramSer};
+use dcso3::{
+    perf::{HistStat, HistogramSer},
+    String,
+};
 use fxhash::FxHashSet;
-use hdrhistogram::Histogram;
 use log::info;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+#[derive(Debug, Clone, Copy)]
+pub struct PerfStat {
+    pub frame: HistStat,
+    pub timed_events: HistStat,
+    pub slow_timed: HistStat,
+    pub dcs_events: HistStat,
+    pub dcs_hooks: HistStat,
+    pub unit_positions: HistStat,
+    pub player_positions: HistStat,
+    pub ewr_tracks: HistStat,
+    pub ewr_reports: HistStat,
+    pub unit_culling: HistStat,
+    pub remark_objectives: HistStat,
+    pub update_jtac_contacts: HistStat,
+    pub do_repairs: HistStat,
+    pub spawn_queue: HistStat,
+    pub spawn: HistStat,
+    pub despawn: HistStat,
+    pub advise_captured: HistStat,
+    pub advise_capturable: HistStat,
+    pub jtac_target_positions: HistStat,
+    pub process_messages: HistStat,
+    pub snapshot: HistStat,
+    pub logistics: HistStat,
+    pub logistics_distribute: HistStat,
+    pub logistics_deliver: HistStat,
+    pub logistics_sync_from: HistStat,
+    pub logistics_sync_to: HistStat,
+    pub logistics_items: u64,
+}
+
+impl PerfStat {
+    pub fn log(&self) {
+        let Self {
+            frame,
+            timed_events,
+            slow_timed,
+            dcs_events,
+            dcs_hooks,
+            unit_positions,
+            player_positions,
+            ewr_tracks,
+            ewr_reports,
+            unit_culling,
+            remark_objectives,
+            update_jtac_contacts,
+            do_repairs,
+            spawn_queue,
+            spawn,
+            despawn,
+            advise_captured,
+            advise_capturable,
+            jtac_target_positions,
+            process_messages,
+            snapshot,
+            logistics,
+            logistics_distribute,
+            logistics_deliver,
+            logistics_sync_from,
+            logistics_sync_to,
+            logistics_items,
+        } = self;
+        let stats = [
+            frame,
+            timed_events,
+            slow_timed,
+            dcs_events,
+            dcs_hooks,
+            unit_positions,
+            player_positions,
+            ewr_tracks,
+            ewr_reports,
+            unit_culling,
+            remark_objectives,
+            update_jtac_contacts,
+            do_repairs,
+            spawn_queue,
+            spawn,
+            despawn,
+            advise_captured,
+            advise_capturable,
+            jtac_target_positions,
+            process_messages,
+            snapshot,
+            logistics,
+            logistics_distribute,
+            logistics_deliver,
+            logistics_sync_from,
+            logistics_sync_to,
+        ];
+        let max_len = stats
+            .iter()
+            .fold(0, |l, st| std::cmp::max(l, st.name.len()));
+        for st in stats {
+            st.log(max_len);
+        }
+        info!("logistics_items: {logistics_items}")
+    }
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PerfInner {
@@ -51,6 +153,80 @@ pub struct PerfInner {
     pub logistics_sync_to: HistogramSer,
     // CR evilkipper: remove this once the warehouse client/server desync bug is fixed
     pub logistics_items: FxHashSet<(String, ObjectiveId)>,
+}
+
+impl PerfInner {
+    fn stat(&self, frame: &HistogramSer) -> PerfStat {
+        let Self {
+            timed_events,
+            slow_timed,
+            dcs_events,
+            dcs_hooks,
+            unit_positions,
+            player_positions,
+            ewr_tracks,
+            ewr_reports,
+            unit_culling,
+            remark_objectives,
+            update_jtac_contacts,
+            do_repairs,
+            spawn_queue,
+            spawn,
+            despawn,
+            advise_captured,
+            advise_capturable,
+            jtac_target_positions,
+            process_messages,
+            snapshot,
+            logistics,
+            logistics_distribute,
+            logistics_deliver,
+            logistics_sync_from,
+            logistics_sync_to,
+            logistics_items,
+        } = self;
+        PerfStat {
+            frame: HistStat::new(frame, "frame", false),
+            timed_events: HistStat::new(timed_events, "timed_events", false),
+            slow_timed: HistStat::new(slow_timed, "slow_timed", false),
+            dcs_events: HistStat::new(dcs_events, "dcs_events", false),
+            dcs_hooks: HistStat::new(dcs_hooks, "dcs_hooks", false),
+            unit_positions: HistStat::new(unit_positions, "unit_positions", false),
+            player_positions: HistStat::new(player_positions, "player_positions", false),
+            ewr_tracks: HistStat::new(ewr_tracks, "ewr_tracks", false),
+            ewr_reports: HistStat::new(ewr_reports, "ewr_reports", false),
+            unit_culling: HistStat::new(unit_culling, "unit_culling", false),
+            remark_objectives: HistStat::new(remark_objectives, "remark_objectives", false),
+            update_jtac_contacts: HistStat::new(
+                update_jtac_contacts,
+                "update_jtac_contacts",
+                false,
+            ),
+            do_repairs: HistStat::new(do_repairs, "do_repairs", false),
+            spawn_queue: HistStat::new(spawn_queue, "spawn_queue", false),
+            spawn: HistStat::new(spawn, "spawn", false),
+            despawn: HistStat::new(despawn, "despawn", false),
+            advise_captured: HistStat::new(advise_captured, "advise_captured", false),
+            advise_capturable: HistStat::new(advise_capturable, "advise_capturable", false),
+            jtac_target_positions: HistStat::new(
+                jtac_target_positions,
+                "jtac_target_positions",
+                false,
+            ),
+            process_messages: HistStat::new(process_messages, "process_messages", false),
+            snapshot: HistStat::new(snapshot, "snapshot", false),
+            logistics: HistStat::new(logistics, "logistics", false),
+            logistics_distribute: HistStat::new(
+                logistics_distribute,
+                "logistics_distribute",
+                false,
+            ),
+            logistics_deliver: HistStat::new(logistics_deliver, "logistics_deliver", false),
+            logistics_sync_from: HistStat::new(logistics_sync_from, "logistics_sync_from", false),
+            logistics_sync_to: HistStat::new(logistics_sync_to, "logistics_sync_to", false),
+            logistics_items: logistics_items.len() as u64,
+        }
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -85,44 +261,7 @@ impl Perf {
         PERF = None;
     }
 
-    pub fn log(&self) {
-        fn log_histogram(h: &Histogram<u64>, name: &str) {
-            let n = h.len();
-            let twenty_five = h.value_at_quantile(0.25) / 1000;
-            let fifty = h.value_at_quantile(0.5) / 1000;
-            let ninety = h.value_at_quantile(0.9) / 1000;
-            let ninety_nine = h.value_at_quantile(0.99) / 1000;
-            info!(
-                "{name} n: {:>5}, 25th: {:>5}, 50th: {:>5}, 90th: {:>5}, 99th: {:>6}",
-                n, twenty_five, fifty, ninety, ninety_nine
-            );
-        }
-        log_histogram(&self.inner.timed_events, "timed events:      ");
-        log_histogram(&self.inner.slow_timed, "slow timed events: ");
-        log_histogram(&self.inner.dcs_events, "dcs events:        ");
-        log_histogram(&self.inner.dcs_hooks, "dcs hooks:         ");
-        log_histogram(&self.inner.unit_positions, "unit positions:    ");
-        log_histogram(&self.inner.player_positions, "player positions:  ");
-        log_histogram(&self.inner.ewr_tracks, "ewr tracks:        ");
-        log_histogram(&self.inner.ewr_reports, "ewr reports:       ");
-        log_histogram(&self.inner.unit_culling, "unit culling:      ");
-        log_histogram(&self.inner.remark_objectives, "remark objectives: ");
-        log_histogram(&self.inner.update_jtac_contacts, "update jtacs:      ");
-        log_histogram(&self.inner.do_repairs, "do repairs:        ");
-        log_histogram(&self.inner.spawn_queue, "spawn queue:       ");
-        log_histogram(&self.inner.spawn, "spawn:             ");
-        log_histogram(&self.inner.despawn, "despawn:           ");
-        log_histogram(&self.inner.advise_captured, "advise captured:   ");
-        log_histogram(&self.inner.advise_capturable, "advise capturable: ");
-        log_histogram(&self.inner.jtac_target_positions, "jtac target pos:   ");
-        log_histogram(&self.inner.process_messages, "process messages:  ");
-        log_histogram(&self.inner.snapshot, "snapshot:          ");
-        log_histogram(&self.inner.logistics, "logistics:         ");
-        log_histogram(&self.inner.logistics_distribute, "logistics_distrib: ");
-        log_histogram(&self.inner.logistics_deliver, "logistics_deliver: ");
-        log_histogram(&self.inner.logistics_sync_from, "logistics_sfrom:   ");
-        log_histogram(&self.inner.logistics_sync_to, "logistics_sto:     ");
-        log_histogram(&self.frame, "frame:             ");
-        info!("logistics items:   {}", self.inner.logistics_items.len());
+    pub fn stat(&self) -> PerfStat {
+        self.inner.stat(&self.frame)
     }
 }

@@ -15,6 +15,7 @@ for more details.
 */
 
 use anyhow::{anyhow, Context, Result};
+use netidx::path::Path as NetIdxPath;
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{coalition::Side, controller::AltType, net::Ucid, String};
@@ -500,9 +501,11 @@ pub struct DroneCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NukeCfg {
-    /// using a nuke reduces the cost of nukes for everyone by this factor. e.g. cost_scale: 4, with initial cost 1000.
-    /// The first nuke would cost 1000 points. The next nuke would cost 250 points. The next nuke would cost 62 points.
-    /// and so on until a nuke costs 1 point at which point it stops scaling.
+    /// using a nuke reduces the cost of nukes for everyone by this
+    /// factor. e.g. cost_scale: 4, with initial cost 1000. The first
+    /// nuke would cost 1000 points. The next nuke would cost 250
+    /// points. The next nuke would cost 62 points, and so on until a
+    /// nuke costs 1 point at which point it stops scaling.
     pub cost_scale: u8,
     /// in Kilotons of TNT
     pub power: usize,
@@ -608,6 +611,8 @@ fn default_cull_after() -> u32 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {
+    #[serde(default)]
+    pub netidx_base: Option<NetIdxPath>,
     /// ucids in this list are able to run admin commands
     #[serde(default)]
     pub admins: FxHashMap<Ucid, String>,

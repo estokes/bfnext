@@ -327,4 +327,6 @@ impl PubPerf {
 
 pub struct T {
     publisher: Publisher,
+    base: Path,
+    perf: PubPerf,
 }

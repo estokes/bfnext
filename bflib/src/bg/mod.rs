@@ -254,6 +254,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
         .unwrap();
     while let Some(msg) = rx.recv().await {
         match msg {
+            Task::CfgLoaded(_) => (),
             Task::SaveState(path, db) => {
                 let encoded = match encode(&db) {
                     Ok(encoded) => encoded,

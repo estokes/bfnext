@@ -1,5 +1,5 @@
 #[macro_export]
-macro_rules! atomic_id {
+macro_rules! db_id {
     ($name:ident) => {
         paste::paste! {
             #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

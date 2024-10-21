@@ -4,13 +4,16 @@ use crate::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
     },
+    perf::PerfInner,
     shots::Dead,
 };
 use chrono::prelude::*;
 use dcso3::{
+    atomic_id,
     coalition::Side,
     coord::LLPos,
     net::{SlotId, Ucid},
+    perf::{HistogramSer, PerfInner as ApiPerfInner},
     warehouse::LiquidType,
     String, Vector3,
 };
@@ -21,6 +24,8 @@ use std::{
     fmt,
     sync::atomic::{AtomicU64, Ordering},
 };
+
+atomic_id!(SeqId);
 
 pub type MapS<K, V> = immutable_chunkmap::map::Map<K, V, 16>;
 
@@ -42,10 +47,9 @@ pub struct Unit {
     pub tags: UnitTags,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Pos {
     pub pos: LLPos,
-    pub altitude: f32,
     pub velocity: Vector3,
 }
 
@@ -70,8 +74,13 @@ pub enum StatKind {
         stop: Option<DateTime<Utc>>,
         cfg: Box<Cfg>,
     },
-    SessionEnd,
+    SessionEnd {
+        api_perf: ApiPerfInner,
+        perf: PerfInner,
+        frame: HistogramSer,
+    },
     Objective {
+        name: String,
         id: ObjectiveId,
         pos: LLPos,
         owner: Side,
@@ -108,19 +117,16 @@ pub enum StatKind {
     },
     DeployTroop {
         by: Ucid,
-        pos: LLPos,
         troop: String,
         gid: GroupId,
     },
     DeployGroup {
         by: Ucid,
-        pos: LLPos,
         gid: GroupId,
         deployable: String,
     },
     DeployFarp {
         by: Ucid,
-        pos: LLPos,
         oid: ObjectiveId,
         deployable: String,
     },
@@ -165,8 +171,9 @@ pub enum StatKind {
         id: Ucid,
     },
     Unit {
-        id: UnitId,
-        gid: GroupId,
+        id: EnId,
+        gid: Option<GroupId>,
+        owner: Side,
         typ: Unit,
         pos: Pos,
     },
@@ -211,26 +218,19 @@ pub enum StatKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stat {
-    pub seq: u64,
+    pub seq: SeqId,
     pub time: DateTime<Utc>,
     #[serde(flatten)]
     pub kind: StatKind,
 }
 
-static SEQ: AtomicU64 = AtomicU64::new(0);
-
 impl Stat {
     pub fn new(kind: StatKind) -> Self {
         let time = Utc::now();
-        let seq = SEQ.fetch_add(1, Ordering::Relaxed);
-        Self { time, seq, kind }
-    }
-
-    pub fn setseq(seq: u64) {
-        SEQ.store(seq, Ordering::Relaxed);
-    }
-
-    pub fn seq() -> u64 {
-        SEQ.load(Ordering::Relaxed)
+        Self {
+            time,
+            seq: SeqId::new(),
+            kind,
+        }
     }
 }

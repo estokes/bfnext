@@ -22,7 +22,6 @@ use crate::{
         Db,
     },
     jtac::{AdjustmentDir, JtId, Jtac, Jtacs},
-    perf::Perf,
     spawnctx::SpawnCtx,
     Context,
 };
@@ -30,6 +29,7 @@ use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use bfprotocols::{
     cfg::{ActionKind, UnitTag, Vehicle},
     db::{group::GroupId as DbGid, objective::ObjectiveId},
+    perf::Perf,
 };
 use compact_str::format_compact;
 use dcso3::{

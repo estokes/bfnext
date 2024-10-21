@@ -594,7 +594,6 @@ impl Db {
                                     id: EnId::Player(*ucid),
                                     pos: stats::Pos {
                                         pos: coord.lo_to_ll(inst.position.p)?,
-                                        altitude: inst.position.p.0.y as f32,
                                         velocity: inst.velocity,
                                     },
                                 });

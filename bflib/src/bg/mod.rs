@@ -14,6 +14,8 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
+mod net;
+
 use crate::{db::persisted::Persisted, Perf};
 use anyhow::{anyhow, Result};
 use bfprotocols::{
@@ -224,6 +226,7 @@ async fn write_stat(file: &mut File, buf: &mut BytesMut, stat: StatKind) {
 pub(super) enum Task {
     SaveState(PathBuf, Persisted),
     ResetState(PathBuf),
+    CfgLoaded(Arc<Cfg>),
     SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
     LogPerf(Perf, dcso3::perf::Perf),
@@ -251,6 +254,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
         .unwrap();
     while let Some(msg) = rx.recv().await {
         match msg {
+            Task::CfgLoaded(_) => (),
             Task::SaveState(path, db) => {
                 let encoded = match encode(&db) {
                     Ok(encoded) => encoded,
@@ -275,8 +279,8 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
             },
             Task::WriteLog(mut buf) => log_file.write_all_buf(&mut buf).await.unwrap(),
             Task::LogPerf(perf, api_perf) => {
-                perf.log();
-                api_perf.log();
+                perf.stat().log();
+                api_perf.stat().log();
             }
             Task::Sync(a) => {
                 let &(ref lock, ref cvar) = &*a;

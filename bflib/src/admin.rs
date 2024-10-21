@@ -26,6 +26,7 @@ use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use bfprotocols::{
     cfg::Cfg,
     db::{group::GroupId, objective::ObjectiveId},
+    perf::Perf,
     stats::StatKind,
 };
 use chrono::{prelude::*, Duration};
@@ -35,6 +36,7 @@ use dcso3::{
     degrees_to_radians,
     net::{DcsLuaEnvironment, Net, PlayerId, Ucid},
     object::DcsObject,
+    perf::Perf as ApiPerf,
     pointing_towards2,
     trigger::{MarkId, Trigger},
     unit::Unit,
@@ -672,9 +674,18 @@ pub(super) fn admin_shutdown(
     reset: Option<Option<Side>>,
 ) -> Result<()> {
     let wait = Arc::new((Mutex::new(false), Condvar::new()));
+    let se = {
+        let perf = unsafe { Perf::get_mut() };
+        let api_perf = unsafe { ApiPerf::get_mut() };
+        StatKind::SessionEnd {
+            perf: (*perf.inner).clone(),
+            frame: (*perf.frame).clone(),
+            api_perf: (*api_perf.0).clone(),
+        }
+    };
     if let Some(winner) = reset {
         ctx.do_bg_task(Task::ResetState(ctx.miz_state_path.clone()));
-        ctx.do_bg_task(Task::Stat(StatKind::SessionEnd));
+        ctx.do_bg_task(Task::Stat(se));
         ctx.do_bg_task(Task::Stat(StatKind::RoundEnd { winner }));
         ctx.do_bg_task(Task::RotateStats);
     } else {
@@ -683,7 +694,7 @@ pub(super) fn admin_shutdown(
             ctx.miz_state_path.clone(),
             ctx.db.persisted.clone(),
         ));
-        ctx.do_bg_task(Task::Stat(StatKind::SessionEnd));
+        ctx.do_bg_task(Task::Stat(se));
     }
     ctx.do_bg_task(Task::Sync(Arc::clone(&wait)));
     let &(ref lock, ref cvar) = &*wait;

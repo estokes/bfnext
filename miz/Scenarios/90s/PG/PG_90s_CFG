@@ -689,7 +689,7 @@
     },
     "CH-47Fbl1": {
       "troop_slots": 4,
-      "crate_slots": 4,
+      "crate_slots": 3,
       "total_slots": 4
     },
     "SA342L": {

@@ -8,6 +8,8 @@ use netidx::{
 };
 use std::path::PathBuf;
 
+use super::log::LogPublisher;
+
 struct PubHistStat {
     unit: Val,
     n: Val,
@@ -331,19 +333,15 @@ pub struct T {
     publisher: Publisher,
     base: Path,
     perf: Option<PubPerf>,
-    logs_path: PathBuf,
     stats_path: PathBuf,
-    stats: Val,
-    logs: Val,
+    stats: LogPublisher,
 }
 
 impl T {
-    pub async fn new(base: Path, logs_path: PathBuf, stats_path: PathBuf) -> Result<Self> {
+    pub async fn new(base: Path, stats_path: PathBuf) -> Result<Self> {
         let publisher = PublisherBuilder::new(Config::load_default()?)
             .build()
             .await?;
-        let stats = publisher.publish(base.append("stats"), Value::Null)?;
-        let logs = publisher.publish(base.append("logs"), Value::Null)?;
         unimplemented!()
     }
 }

@@ -1,16 +1,13 @@
-use super::logpub::LogPublisher;
 use anyhow::Result;
 use bfprotocols::perf::PerfStat;
 use dcso3::perf::{HistStat, PerfStat as ApiPerfStat};
 use netidx::{
-    config::Config,
     path::Path,
-    publisher::{Publisher, PublisherBuilder, UpdateBatch, Val, Value},
+    publisher::{Publisher, UpdateBatch, Val},
 };
-use std::path::PathBuf;
 
 struct PubHistStat {
-    unit: Val,
+    _unit: Val,
     n: Val,
     mean: Val,
     twenty_five: Val,
@@ -35,7 +32,7 @@ impl PubHistStat {
         } = stat;
         let base = base.append(name);
         Ok(Self {
-            unit: publisher.publish(base.append("unit"), unit)?,
+            _unit: publisher.publish(base.append("unit"), unit)?,
             n: publisher.publish(base.append("n"), n)?,
             mean: publisher.publish(base.append("mean"), mean)?,
             twenty_five: publisher.publish(base.append("25th"), twenty_five)?,
@@ -48,7 +45,7 @@ impl PubHistStat {
 
     fn update(&self, batch: &mut UpdateBatch, stat: &HistStat) {
         let Self {
-            unit: _,
+            _unit: _,
             n,
             mean,
             twenty_five,

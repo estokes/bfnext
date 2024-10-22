@@ -20,10 +20,7 @@ use dcso3::{
 use enumflags2::bitflags;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::{
-    fmt,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::fmt;
 
 atomic_id!(SeqId);
 

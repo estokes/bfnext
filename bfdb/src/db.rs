@@ -4,7 +4,7 @@ use arrayvec::ArrayVec;
 use bfprotocols::{
     cfg::{Cfg, LifeType, UnitTag, UnitTags, Vehicle},
     db::{
-        group::{GroupId, UnitId},
+        group::GroupId,
         objective::{ObjectiveId, ObjectiveKind},
     },
     perf::PerfInner,
@@ -22,11 +22,8 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use serde::{Deserialize, Serialize};
-use sled::{
-    transaction::{ConflictableTransactionError, TransactionError},
-    Db,
-};
-use sled_typed::{transaction::Transactional, Prefix, Tree};
+use sled::{transaction::TransactionError, Db};
+use sled_typed::Tree;
 use smallvec::{smallvec, SmallVec};
 use std::str::FromStr;
 use uuid::Uuid;

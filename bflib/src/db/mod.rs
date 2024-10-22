@@ -27,7 +27,7 @@ use bfprotocols::{
         group::{GroupId, UnitId},
         objective::ObjectiveId,
     },
-    stats::{SeqId, Stat},
+    stats::SeqId,
 };
 use dcso3::{
     centroid3d,

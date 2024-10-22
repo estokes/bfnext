@@ -1,5 +1,5 @@
 use crate::cfg::Deployable;
-use dcso3::{atomic_id, net::Ucid, String};
+use dcso3::{atomic_id, String};
 use serde_derive::{Deserialize, Serialize};
 
 atomic_id!(ObjectiveId);

@@ -2,9 +2,11 @@ use anyhow::Result;
 use bfprotocols::perf::PerfStat;
 use dcso3::perf::{HistStat, PerfStat as ApiPerfStat};
 use netidx::{
+    config::Config,
     path::Path,
-    publisher::{Publisher, UpdateBatch, Val},
+    publisher::{Publisher, PublisherBuilder, UpdateBatch, Val, Value},
 };
+use std::path::PathBuf;
 
 struct PubHistStat {
     unit: Val,
@@ -328,5 +330,20 @@ impl PubPerf {
 pub struct T {
     publisher: Publisher,
     base: Path,
-    perf: PubPerf,
+    perf: Option<PubPerf>,
+    logs_path: PathBuf,
+    stats_path: PathBuf,
+    stats: Val,
+    logs: Val,
+}
+
+impl T {
+    pub async fn new(base: Path, logs_path: PathBuf, stats_path: PathBuf) -> Result<Self> {
+        let publisher = PublisherBuilder::new(Config::load_default()?)
+            .build()
+            .await?;
+        let stats = publisher.publish(base.append("stats"), Value::Null)?;
+        let logs = publisher.publish(base.append("logs"), Value::Null)?;
+        unimplemented!()
+    }
 }

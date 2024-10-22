@@ -15,6 +15,7 @@ chrono = { workspace = true }
 compact_str = { workspace = true }
 dcso3 = { version = "0.1", path = "../dcso3", features = ["perf"] }
 enumflags2 = { workspace = true, features = ["serde"] }
+futures = { workspace = true }
 fxhash = { workspace = true }
 hdrhistogram = { workspace = true }
 humantime = { workspace = true }

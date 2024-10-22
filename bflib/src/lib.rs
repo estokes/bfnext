@@ -93,6 +93,10 @@ struct Connected {
 }
 
 impl Connected {
+    pub fn len(&self) -> usize {
+        self.info_by_player_id.len()
+    }
+
     pub fn get(&self, id: &PlayerId) -> Option<&PlayerInfo> {
         self.info_by_player_id.get(id)
     }
@@ -302,10 +306,11 @@ impl Context {
     fn log_perf(&mut self, now: DateTime<Utc>) {
         if now - self.last_perf_log > Duration::seconds(60) {
             self.last_perf_log = now;
-            self.do_bg_task(bg::Task::LogPerf(
-                unsafe { Perf::get_mut() }.clone(),
-                unsafe { dcso3::perf::Perf::get_mut() }.clone(),
-            ));
+            self.do_bg_task(bg::Task::LogPerf {
+                players: self.connected.len(),
+                perf: unsafe { Perf::get_mut() }.clone(),
+                api_perf: unsafe { dcso3::perf::Perf::get_mut() }.clone(),
+            });
             info!("landcache {}", self.landcache.stats())
         }
     }

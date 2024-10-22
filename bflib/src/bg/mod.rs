@@ -18,7 +18,7 @@ mod logpub;
 mod perf;
 
 use crate::db::persisted::Persisted;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use bfprotocols::{
     cfg::Cfg,
     perf::{Perf, PerfStat},
@@ -234,7 +234,11 @@ pub(super) enum Task {
     CfgLoaded(Arc<Cfg>),
     SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
-    LogPerf(Perf, ApiPerf),
+    LogPerf {
+        players: usize,
+        perf: Perf,
+        api_perf: ApiPerf,
+    },
     Sync(Arc<(Mutex<bool>, Condvar)>),
     Stat(StatKind),
     RotateStats,
@@ -243,7 +247,9 @@ pub(super) enum Task {
 enum Logs {
     Netidx {
         publisher: Publisher,
+        base: NetIdxPath,
         perf: PubPerf,
+        stats_path: PathBuf,
         stats: LogPublisher,
         log: LogPublisher,
     },
@@ -256,57 +262,90 @@ enum Logs {
 }
 
 impl Logs {
+    async fn open_files(&mut self) -> Result<()> {
+        match self {
+            Self::Netidx { .. } => Ok(()),
+            Self::Files {
+                log_path,
+                log_file,
+                stats_path,
+                stats_file,
+            } => {
+                *log_file = Some(
+                    File::options()
+                        .create(true)
+                        .write(true)
+                        .open(&log_path)
+                        .await?,
+                );
+                *stats_file = Some(
+                    File::options()
+                        .create(true)
+                        .append(true)
+                        .open(&stats_path)
+                        .await?,
+                );
+                Ok(())
+            }
+        }
+    }
+
     async fn new(write_dir: &Path) -> Result<Self> {
         let stats_path = write_dir.join("Logs").join("bfstats.txt");
         let log_path = write_dir.join("Logs").join("bfnext.txt");
         rotate_log(&log_path);
-        let log_file = File::options()
-            .create(true)
-            .write(true)
-            .open(&log_path)
-            .await?;
-        let stats_file = File::options()
-            .create(true)
-            .append(true)
-            .open(&stats_path)
-            .await?;
-
-        Ok(Self::Files {
-            log_file: Some(log_file),
-            stats_file: Some(stats_file),
+        let mut t = Self::Files {
+            log_file: None,
+            stats_file: None,
             log_path,
             stats_path,
-        })
+        };
+        t.open_files().await?;
+        Ok(t)
     }
 
     async fn write_log(&mut self, mut buf: Bytes) -> Result<()> {
         match self {
+            Self::Netidx { log, .. } => log.append(buf),
             Self::Files {
                 log_file: Some(log_file),
                 ..
             } => Ok(log_file.write_all_buf(&mut buf).await?),
-            Self::Files { .. } => Ok(()),
-            Self::Netidx { .. } => unimplemented!(),
+            Self::Files { .. } => bail!("log file is closed"),
         }
     }
 
     async fn write_stat(&mut self, stat: StatKind) -> Result<()> {
+        let mut buf = encode(&Stat::new(stat))?;
         match self {
+            Self::Netidx { stats, .. } => stats.append(buf.freeze()),
             Self::Files {
                 stats_file: Some(stats_file),
                 ..
             } => {
-                let mut buf = encode(&Stat::new(stat))?;
                 buf.put_u8(0xA);
                 Ok(stats_file.write_all_buf(&mut buf).await?)
             }
-            Self::Files { .. } => Ok(()),
-            Self::Netidx { .. } => unimplemented!(),
+            Self::Files { .. } => bail!("stats file is closed"),
         }
     }
 
     async fn rotate_stats(&mut self) -> Result<()> {
         match self {
+            Self::Netidx {
+                publisher,
+                base,
+                stats_path,
+                stats,
+                ..
+            } => {
+                if let Err(e) = stats.close().await {
+                    error!("failed to close stats {e:?}")
+                }
+                rotate_log(&stats_path);
+                *stats = LogPublisher::new(publisher.clone(), stats_path, base.append("stats"))?;
+                Ok(())
+            }
             Self::Files {
                 stats_path,
                 stats_file,
@@ -323,7 +362,21 @@ impl Logs {
                 );
                 Ok(())
             }
-            Self::Netidx { .. } => unimplemented!(),
+        }
+    }
+
+    async fn log_perf(&self, players: usize, perf_stat: &PerfStat, api_perf_stat: &ApiPerfStat) {
+        perf_stat.log();
+        api_perf_stat.log();
+        match self {
+            Self::Files { .. } => (),
+            Self::Netidx {
+                publisher, perf, ..
+            } => {
+                let mut batch = publisher.start_batch();
+                perf.update(&mut batch, players, perf_stat, api_perf_stat);
+                batch.commit(None).await
+            }
         }
     }
 
@@ -337,25 +390,41 @@ impl Logs {
                 stats_file,
             } => {
                 drop((log_file.take(), stats_file.take()));
-                let publisher = PublisherBuilder::new(Config::load_default()?)
-                    .build()
-                    .await?;
-                let perf = PubPerf::new(
-                    &publisher,
-                    &base.append("perf"),
-                    0,
-                    &PerfStat::default(),
-                    &ApiPerfStat::default(),
-                )?;
-                let stats = LogPublisher::new(publisher.clone(), stats_path, base.append("stats"))?;
-                let log = LogPublisher::new(publisher.clone(), log_path, base.append("log"))?;
-                *self = Self::Netidx {
-                    publisher,
-                    perf,
-                    stats,
-                    log,
+                let go = || async {
+                    let publisher = PublisherBuilder::new(Config::load_default()?)
+                        .build()
+                        .await?;
+                    let perf = PubPerf::new(
+                        &publisher,
+                        &base.append("perf"),
+                        0,
+                        &PerfStat::default(),
+                        &ApiPerfStat::default(),
+                    )?;
+                    let stats =
+                        LogPublisher::new(publisher.clone(), stats_path, base.append("stats"))?;
+                    let log = LogPublisher::new(publisher.clone(), log_path, base.append("log"))?;
+                    Ok::<_, anyhow::Error>(Self::Netidx {
+                        publisher,
+                        base,
+                        stats_path: stats_path.clone(),
+                        perf,
+                        stats,
+                        log,
+                    })
                 };
-                Ok(())
+                match go().await {
+                    Ok(t) => {
+                        *self = t;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        if let Err(e) = self.open_files().await {
+                            eprintln!("netidx init failed and reopening files also failed {e:?}")
+                        }
+                        return Err(e);
+                    }
+                }
             }
         }
     }
@@ -367,7 +436,13 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
         .expect("could not open log files");
     while let Some(msg) = rx.recv().await {
         match msg {
-            Task::CfgLoaded(_) => (),
+            Task::CfgLoaded(cfg) => {
+                if let Some(base) = cfg.netidx_base.as_ref() {
+                    if let Err(e) = logs.switch_to_netidx(base.clone()).await {
+                        eprintln!("failed to initialize netidx {e:?}")
+                    }
+                }
+            }
             Task::SaveState(path, db) => {
                 let encoded = match encode(&db) {
                     Ok(encoded) => encoded.freeze(),
@@ -395,9 +470,12 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                     eprintln!("could not write log line {e:?}")
                 }
             }
-            Task::LogPerf(perf, api_perf) => {
-                perf.stat().log();
-                api_perf.stat().log();
+            Task::LogPerf {
+                players,
+                perf,
+                api_perf,
+            } => {
+                logs.log_perf(players, &perf.stat(), &api_perf.stat()).await;
             }
             Task::Sync(a) => {
                 let &(ref lock, ref cvar) = &*a;

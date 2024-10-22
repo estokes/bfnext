@@ -15,7 +15,7 @@ for more details.
 */
 
 mod net;
-mod log;
+mod logpub;
 
 use crate::{db::persisted::Persisted, Perf};
 use anyhow::{anyhow, Result};

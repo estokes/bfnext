@@ -1,3 +1,4 @@
+use super::logpub::LogPublisher;
 use anyhow::Result;
 use bfprotocols::perf::PerfStat;
 use dcso3::perf::{HistStat, PerfStat as ApiPerfStat};
@@ -7,8 +8,6 @@ use netidx::{
     publisher::{Publisher, PublisherBuilder, UpdateBatch, Val, Value},
 };
 use std::path::PathBuf;
-
-use super::log::LogPublisher;
 
 struct PubHistStat {
     unit: Val,

@@ -14,22 +14,32 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-mod net;
 mod logpub;
+mod perf;
 
-use crate::{db::persisted::Persisted, Perf};
+use crate::db::persisted::Persisted;
 use anyhow::{anyhow, Result};
 use bfprotocols::{
     cfg::Cfg,
+    perf::{Perf, PerfStat},
     stats::{Stat, StatKind},
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
+use dcso3::perf::{Perf as ApiPerf, PerfStat as ApiPerfStat};
 use fxhash::FxHashMap;
 use log::error;
+use logpub::LogPublisher;
+use netidx::{
+    config::Config,
+    path::Path as NetIdxPath,
+    publisher::{Publisher, PublisherBuilder},
+};
 use once_cell::sync::OnceCell;
 use parking_lot::{Condvar, Mutex};
+use perf::PubPerf;
+use serde::Serialize;
 use simplelog::{LevelFilter, WriteLogger};
 use std::{
     cell::RefCell,
@@ -45,22 +55,40 @@ use tokio::{
     io::AsyncWriteExt,
     runtime::Builder,
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+    task,
 };
-
-struct LogHandle(UnboundedSender<Task>);
 
 thread_local! {
     static LOGBUF: RefCell<BytesMut> = RefCell::new(BytesMut::new());
 }
 
-fn encode(db: &Persisted) -> Result<Bytes> {
+struct LogHandle(UnboundedSender<Task>);
+
+impl io::Write for LogHandle {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        LOGBUF.with(|lbuf| {
+            let mut lbuf = lbuf.borrow_mut();
+            lbuf.extend_from_slice(buf);
+            self.0
+                .send(Task::WriteLog(lbuf.split().freeze()))
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "backend dead"))?;
+            Ok(buf.len())
+        })
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn encode<T: Serialize>(db: &T) -> Result<BytesMut> {
     thread_local! {
         static BUF: RefCell<BytesMut> = RefCell::new(BytesMut::new());
     }
     BUF.with(|buf| {
         let mut buf = buf.borrow_mut();
         serde_json::to_writer((&mut *buf).writer(), db)?;
-        Ok(buf.split().freeze())
+        Ok(buf.split())
     })
 }
 
@@ -139,47 +167,35 @@ fn rotate_state(path: &Path) -> Result<()> {
             paths.sort_by_key(|(ts, _)| *ts);
             paths.reverse();
             while paths.len() > 1 {
-                fs::remove_file(paths.pop().unwrap().1)?;
+                if let Some(path) = paths.pop() {
+                    fs::remove_file(path.1)?;
+                }
             }
         }
     }
     Ok(())
 }
 
-fn save(path: &Path, encoded: Bytes) -> Result<()> {
-    use std::fs::File;
-    let mut tmp = PathBuf::from(path);
-    tmp.set_extension("tmp");
-    let file = File::options()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(&tmp)?;
-    let mut file = zstd::stream::Encoder::new(file, 9)?.auto_finish();
-    io::copy(&mut &*encoded, &mut file)?;
-    drop(file);
-    if let Err(e) = rotate_state(path) {
-        error!("failed to rotate backup files {e:?}")
-    }
-    fs::rename(tmp, path)?;
-    Ok(())
-}
-
-impl io::Write for LogHandle {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        LOGBUF.with(|lbuf| {
-            let mut lbuf = lbuf.borrow_mut();
-            lbuf.extend_from_slice(buf);
-            self.0
-                .send(Task::WriteLog(lbuf.split().freeze()))
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "backend dead"))?;
-            Ok(buf.len())
-        })
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
+async fn save(path: PathBuf, encoded: Bytes) -> Result<()> {
+    task::spawn_blocking(move || {
+        use std::fs::File;
+        let mut tmp = PathBuf::from(&path);
+        tmp.set_extension("tmp");
+        let file = File::options()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&tmp)?;
+        let mut file = zstd::stream::Encoder::new(file, 9)?.auto_finish();
+        io::copy(&mut &*encoded, &mut file)?;
+        drop(file);
+        if let Err(e) = rotate_state(&path) {
+            error!("failed to rotate backup files {e:?}")
+        }
+        fs::rename(tmp, path)?;
         Ok(())
-    }
+    })
+    .await?
 }
 
 fn rotate_log(path: &Path) {
@@ -211,18 +227,6 @@ fn rotate_log(path: &Path) {
     }
 }
 
-async fn write_stat(file: &mut File, buf: &mut BytesMut, stat: StatKind) {
-    let stat = Stat::new(stat);
-    if let Err(e) = serde_json::to_writer(buf.writer(), &stat) {
-        error!("could not format log item {stat:?}: {e:?}");
-        return;
-    }
-    buf.put_u8(0xA);
-    if let Err(e) = file.write_all_buf(&mut buf.split()).await {
-        error!("could not write stat {stat:?}: {e:?}")
-    }
-}
-
 #[derive(Debug)]
 pub(super) enum Task {
     SaveState(PathBuf, Persisted),
@@ -230,42 +234,150 @@ pub(super) enum Task {
     CfgLoaded(Arc<Cfg>),
     SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
-    LogPerf(Perf, dcso3::perf::Perf),
+    LogPerf(Perf, ApiPerf),
     Sync(Arc<(Mutex<bool>, Condvar)>),
     Stat(StatKind),
     RotateStats,
 }
 
+enum Logs {
+    Netidx {
+        publisher: Publisher,
+        perf: PubPerf,
+        stats: LogPublisher,
+        log: LogPublisher,
+    },
+    Files {
+        log_path: PathBuf,
+        log_file: Option<File>,
+        stats_path: PathBuf,
+        stats_file: Option<File>,
+    },
+}
+
+impl Logs {
+    async fn new(write_dir: &Path) -> Result<Self> {
+        let stats_path = write_dir.join("Logs").join("bfstats.txt");
+        let log_path = write_dir.join("Logs").join("bfnext.txt");
+        rotate_log(&log_path);
+        let log_file = File::options()
+            .create(true)
+            .write(true)
+            .open(&log_path)
+            .await?;
+        let stats_file = File::options()
+            .create(true)
+            .append(true)
+            .open(&stats_path)
+            .await?;
+
+        Ok(Self::Files {
+            log_file: Some(log_file),
+            stats_file: Some(stats_file),
+            log_path,
+            stats_path,
+        })
+    }
+
+    async fn write_log(&mut self, mut buf: Bytes) -> Result<()> {
+        match self {
+            Self::Files {
+                log_file: Some(log_file),
+                ..
+            } => Ok(log_file.write_all_buf(&mut buf).await?),
+            Self::Files { .. } => Ok(()),
+            Self::Netidx { .. } => unimplemented!(),
+        }
+    }
+
+    async fn write_stat(&mut self, stat: StatKind) -> Result<()> {
+        match self {
+            Self::Files {
+                stats_file: Some(stats_file),
+                ..
+            } => {
+                let mut buf = encode(&Stat::new(stat))?;
+                buf.put_u8(0xA);
+                Ok(stats_file.write_all_buf(&mut buf).await?)
+            }
+            Self::Files { .. } => Ok(()),
+            Self::Netidx { .. } => unimplemented!(),
+        }
+    }
+
+    async fn rotate_stats(&mut self) -> Result<()> {
+        match self {
+            Self::Files {
+                stats_path,
+                stats_file,
+                ..
+            } => {
+                drop(stats_file.take());
+                rotate_log(&stats_path);
+                *stats_file = Some(
+                    File::options()
+                        .create(true)
+                        .append(true)
+                        .open(&stats_path)
+                        .await?,
+                );
+                Ok(())
+            }
+            Self::Netidx { .. } => unimplemented!(),
+        }
+    }
+
+    async fn switch_to_netidx(&mut self, base: NetIdxPath) -> Result<()> {
+        match self {
+            Self::Netidx { .. } => Ok(()),
+            Self::Files {
+                log_path,
+                log_file,
+                stats_path,
+                stats_file,
+            } => {
+                drop((log_file.take(), stats_file.take()));
+                let publisher = PublisherBuilder::new(Config::load_default()?)
+                    .build()
+                    .await?;
+                let perf = PubPerf::new(
+                    &publisher,
+                    &base.append("perf"),
+                    0,
+                    &PerfStat::default(),
+                    &ApiPerfStat::default(),
+                )?;
+                let stats = LogPublisher::new(publisher.clone(), stats_path, base.append("stats"))?;
+                let log = LogPublisher::new(publisher.clone(), log_path, base.append("log"))?;
+                *self = Self::Netidx {
+                    publisher,
+                    perf,
+                    stats,
+                    log,
+                };
+                Ok(())
+            }
+        }
+    }
+}
+
 async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
-    let mut statsbuf = BytesMut::with_capacity(4096);
-    let stats_path = write_dir.join("Logs").join("bfstats.txt");
-    let log_path = write_dir.join("Logs").join("bfnext.txt");
-    rotate_log(&log_path);
-    let mut log_file = File::options()
-        .create(true)
-        .write(true)
-        .open(&log_path)
+    let mut logs = Logs::new(&write_dir)
         .await
-        .unwrap();
-    let mut stats_file = File::options()
-        .create(true)
-        .append(true)
-        .open(&stats_path)
-        .await
-        .unwrap();
+        .expect("could not open log files");
     while let Some(msg) = rx.recv().await {
         match msg {
             Task::CfgLoaded(_) => (),
             Task::SaveState(path, db) => {
                 let encoded = match encode(&db) {
-                    Ok(encoded) => encoded,
+                    Ok(encoded) => encoded.freeze(),
                     Err(e) => {
                         error!("failed to encode save state {e:?}");
                         continue;
                     }
                 };
                 drop(db); // don't hold the db reference any longer than necessary
-                match save(&path, encoded) {
+                match save(path.clone(), encoded).await {
                     Ok(()) => (),
                     Err(e) => error!("failed to save state to {path:?}, {e:?}"),
                 }
@@ -278,7 +390,11 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                 Ok(()) => (),
                 Err(e) => error!("failed to save config {e:?}"),
             },
-            Task::WriteLog(mut buf) => log_file.write_all_buf(&mut buf).await.unwrap(),
+            Task::WriteLog(buf) => {
+                if let Err(e) = logs.write_log(buf).await {
+                    eprintln!("could not write log line {e:?}")
+                }
+            }
             Task::LogPerf(perf, api_perf) => {
                 perf.stat().log();
                 api_perf.stat().log();
@@ -289,16 +405,15 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                 *synced = true;
                 cvar.notify_all();
             }
-            Task::Stat(st) => write_stat(&mut stats_file, &mut statsbuf, st).await,
+            Task::Stat(st) => {
+                if let Err(e) = logs.write_stat(st).await {
+                    eprintln!("could not write stat {e:?}")
+                }
+            }
             Task::RotateStats => {
-                drop(stats_file);
-                rotate_log(&stats_path);
-                stats_file = File::options()
-                    .create(true)
-                    .append(true)
-                    .open(&stats_path)
-                    .await
-                    .unwrap();
+                if let Err(e) = logs.rotate_stats().await {
+                    eprintln!("failed to rotate stats {e:?}")
+                }
             }
         }
     }
@@ -317,7 +432,8 @@ fn setup_logger(tx: UnboundedSender<Task>) {
         Some(s) if &s == "off" => LevelFilter::Off,
         Some(_) => LevelFilter::Debug,
     };
-    WriteLogger::init(level, simplelog::Config::default(), LogHandle(tx)).unwrap()
+    WriteLogger::init(level, simplelog::Config::default(), LogHandle(tx))
+        .expect("could not init logger")
 }
 
 pub(super) fn init(write_dir: PathBuf) -> UnboundedSender<Task> {
@@ -325,10 +441,13 @@ pub(super) fn init(write_dir: PathBuf) -> UnboundedSender<Task> {
         Some(tx) => tx.clone(),
         None => {
             let (tx, rx) = mpsc::unbounded_channel();
-            TXCOM.set(tx.clone()).unwrap();
+            TXCOM.set(tx.clone()).expect("txcom is already set");
             setup_logger(tx.clone());
             thread::spawn(move || {
-                let rt = Builder::new_current_thread().enable_all().build().unwrap();
+                let rt = Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("could not initialize async runtime");
                 rt.block_on(background_loop(write_dir, rx))
             });
             tx

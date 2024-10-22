@@ -746,8 +746,11 @@ impl Cfg {
                 },
             }
         };
-        let cfg: Self = serde_json::from_reader(file)
+        let mut cfg: Self = serde_json::from_reader(file)
             .map_err(|e| anyhow!("failed to decode cfg file {:?}, {:?}", path, e))?;
+        for (_, actions) in &mut cfg.actions {
+            actions.sort_by(|name0, _, name1, _| name0.cmp(name1));
+        }
         Ok(cfg)
     }
 

@@ -1154,19 +1154,20 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
             PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str());
         ctx.miz_state_path.clone()
     };
+    let cfg = Arc::new(Cfg::load(&path)?);
+    ctx.do_bg_task(Task::CfgLoaded(Arc::clone(&cfg)));
     debug!("path to saved state is {:?}", path);
     info!("initializing db");
     let to_bg = ctx.to_background.as_ref().unwrap().clone();
     if !path.exists() {
         debug!("saved state doesn't exist, starting from default");
-        let cfg = Cfg::load(&path)?;
         ctx.do_bg_task(Task::Stat(StatKind::NewRound {
             sortie: ctx.sortie.clone(),
         }));
         ctx.db = Db::init(lua, cfg, &ctx.idx, &miz, to_bg).context("initalizing the mission")?;
     } else {
         debug!("saved state exists, loading it");
-        ctx.db = Db::load(&miz, &ctx.idx, to_bg, &path).context("loading the saved state")?;
+        ctx.db = Db::load(&miz, &ctx.idx, to_bg, cfg, &path).context("loading the saved state")?;
     }
     ctx.shutdown = ctx
         .db

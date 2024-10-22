@@ -67,7 +67,7 @@ impl PubHistStat {
     }
 }
 
-struct PubPerf {
+pub struct PubPerf {
     players: Val,
     logistics_items: Val,
     frame: PubHistStat,
@@ -116,7 +116,7 @@ struct PubPerf {
 }
 
 impl PubPerf {
-    fn new(
+    pub fn new(
         publisher: &Publisher,
         base: &Path,
         players: usize,
@@ -220,7 +220,7 @@ impl PubPerf {
         })
     }
 
-    fn update(
+    pub fn update(
         &self,
         batch: &mut UpdateBatch,
         players: usize,

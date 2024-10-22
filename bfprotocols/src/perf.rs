@@ -55,6 +55,40 @@ pub struct PerfStat {
     pub logistics_items: u64,
 }
 
+impl Default for PerfStat {
+    fn default() -> Self {
+        PerfStat {
+            frame: HistStat::empty("frame", false),
+            timed_events: HistStat::empty("timed_events", false),
+            slow_timed: HistStat::empty("slow_timed", false),
+            dcs_events: HistStat::empty("dcs_events", false),
+            dcs_hooks: HistStat::empty("dcs_hooks", false),
+            unit_positions: HistStat::empty("unit_positions", false),
+            player_positions: HistStat::empty("player_positions", false),
+            ewr_tracks: HistStat::empty("ewr_tracks", false),
+            ewr_reports: HistStat::empty("ewr_reports", false),
+            unit_culling: HistStat::empty("unit_culling", false),
+            remark_objectives: HistStat::empty("remark_objectives", false),
+            update_jtac_contacts: HistStat::empty("update_jtac_contacts", false),
+            do_repairs: HistStat::empty("do_repairs", false),
+            spawn_queue: HistStat::empty("spawn_queue", false),
+            spawn: HistStat::empty("spawn", false),
+            despawn: HistStat::empty("despawn", false),
+            advise_captured: HistStat::empty("advise_captured", false),
+            advise_capturable: HistStat::empty("advise_capturable", false),
+            jtac_target_positions: HistStat::empty("jtac_target_positions", false),
+            process_messages: HistStat::empty("process_messages", false),
+            snapshot: HistStat::empty("snapshot", false),
+            logistics: HistStat::empty("logistics", false),
+            logistics_distribute: HistStat::empty("logistics_distribute", false),
+            logistics_deliver: HistStat::empty("logistics_deliver", false),
+            logistics_sync_from: HistStat::empty("logistics_sync_from", false),
+            logistics_sync_to: HistStat::empty("logistics_sync_to", false),
+            logistics_items: 0,
+        }
+    }
+}
+
 impl PerfStat {
     pub fn log(&self) {
         let Self {

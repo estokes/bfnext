@@ -35,7 +35,7 @@ use dcso3::{
     env::miz::{Miz, MizIndex},
     Vector3,
 };
-use std::{cmp::max, fs::File, path::Path};
+use std::{cmp::max, fs::File, path::Path, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 
 pub mod actions;
@@ -188,6 +188,7 @@ impl Db {
         miz: &Miz,
         idx: &MizIndex,
         to_bg: UnboundedSender<Task>,
+        cfg: Arc<Cfg>,
         path: &Path,
     ) -> Result<Self> {
         let file = File::open(&path)
@@ -203,7 +204,7 @@ impl Db {
         ObjectiveId::setseq(max(db.persisted.oid, ObjectiveId::seq()));
         GroupId::setseq(max(db.persisted.gid, GroupId::seq()));
         UnitId::setseq(max(db.persisted.uid, UnitId::seq()));
-        db.ephemeral.set_cfg(miz, idx, Cfg::load(path)?, to_bg)?;
+        db.ephemeral.set_cfg(miz, idx, cfg, to_bg)?;
         Ok(db)
     }
 

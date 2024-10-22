@@ -665,13 +665,10 @@ impl Ephemeral {
         &mut self,
         miz: &Miz,
         mizidx: &MizIndex,
-        mut cfg: Cfg,
+        cfg: Arc<Cfg>,
         to_bg: UnboundedSender<Task>,
     ) -> Result<()> {
         self.to_bg = Some(to_bg);
-        for (_, actions) in &mut cfg.actions {
-            actions.sort_by(|name0, _, name1, _| name0.cmp(name1));
-        }
         let check_unit_classification = || -> Result<()> {
             let mut not_classified = FxHashSet::default();
             for side in Side::ALL {
@@ -797,7 +794,7 @@ impl Ephemeral {
                 }
             }
         }
-        self.cfg = Arc::new(cfg);
+        self.cfg = cfg;
         Ok(())
     }
 

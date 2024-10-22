@@ -14,6 +14,8 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
+use std::sync::Arc;
+
 use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db};
 use crate::{
     bg::Task,
@@ -272,7 +274,7 @@ impl Db {
 
     pub fn init(
         lua: MizLua,
-        cfg: Cfg,
+        cfg: Arc<Cfg>,
         idx: &MizIndex,
         miz: &Miz,
         to_bg: UnboundedSender<Task>,

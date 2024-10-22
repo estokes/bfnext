@@ -27,7 +27,7 @@ enum ToLogger {
 
 async fn logger_loop(
     publisher: Publisher,
-    file_path: PathBuf,
+    file_path: &PathBuf,
     netidx_path: Path,
     mut input: UnboundedReceiver<ToLogger>,
 ) -> Result<()> {
@@ -96,10 +96,11 @@ async fn logger_loop(
 pub struct LogPublisher(UnboundedSender<ToLogger>);
 
 impl LogPublisher {
-    pub fn new(publisher: Publisher, file_path: PathBuf, netidx_path: Path) -> Result<Self> {
+    pub fn new(publisher: Publisher, file_path: &PathBuf, netidx_path: Path) -> Result<Self> {
         let (tx, rx) = mpsc::unbounded();
+        let file_path = file_path.clone();
         task::spawn(async move {
-            match logger_loop(publisher, file_path.clone(), netidx_path, rx).await {
+            match logger_loop(publisher, &file_path, netidx_path, rx).await {
                 Ok(()) => (),
                 Err(e) => error!("{file_path:?} logger failed {e:?}")
             }

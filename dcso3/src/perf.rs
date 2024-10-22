@@ -182,6 +182,20 @@ pub struct HistStat {
 }
 
 impl HistStat {
+    pub fn empty(name: &'static str, ns: bool) -> Self {
+        Self {
+            name,
+            unit: if ns { "ns" } else { "us" },
+            n: 0,
+            mean: 0,
+            twenty_five: 0,
+            fifty: 0,
+            ninety: 0,
+            ninety_nine: 0,
+            ninety_nine_nine: 0,
+        }
+    }
+
     pub fn new(h: &Histogram<u64>, name: &'static str, ns: bool) -> Self {
         let n = h.len();
         let d = if ns { 1 } else { 1000 };
@@ -353,6 +367,30 @@ pub struct PerfStat {
     pub timer_get_time: HistStat,
     pub timer_get_abs_time: HistStat,
     pub timer_get_time0: HistStat,
+}
+
+impl Default for PerfStat {
+    fn default() -> Self {
+        PerfStat {
+            get_position: HistStat::empty("Unit.getPosition", false),
+            add_group: HistStat::empty("Coalition.addGroup", false),
+            add_static_object: HistStat::empty("Coalition.addStaticObject", false),
+            get_ammo: HistStat::empty("Unit.getAmmo", false),
+            get_point: HistStat::empty("Unit.getPoint", false),
+            get_velocity: HistStat::empty("Unit.getVelocity", false),
+            in_air: HistStat::empty("Unit.inAir", false),
+            land_get_height: HistStat::empty("Land.getHeight", false),
+            land_is_visible: HistStat::empty("Land.isVisible", false),
+            timer_get_abs_time: HistStat::empty("Timer.getAbsTime", false),
+            timer_get_time: HistStat::empty("Timer.getTime", false),
+            timer_get_time0: HistStat::empty("Timer.getTime0", false),
+            timer_remove_function: HistStat::empty("Timer.removeFunction", false),
+            timer_schedule_function: HistStat::empty("Timer.scheduleFunction", false),
+            unit_get_by_name: HistStat::empty("Unit.getByName", false),
+            unit_get_desc: HistStat::empty("Unit.getDesc", false),
+            unit_is_exist: HistStat::empty("Unit.isExist", false),
+        }
+    }
 }
 
 impl PerfStat {

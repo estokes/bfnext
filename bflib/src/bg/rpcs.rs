@@ -1,7 +1,9 @@
-use crate::admin::AdminCommand;
+use crate::admin::{AdminCommand, WarehouseKind};
 use anyhow::Result;
 use arcstr::ArcStr;
+use chrono::prelude::*;
 use crossbeam::queue::SegQueue;
+use dcso3::coalition::Side;
 use futures::{channel::mpsc, stream::StreamExt};
 use netidx::{
     chars::Chars,
@@ -13,7 +15,8 @@ use netidx_protocols::{
     rpc::server::{ArgSpec, Proc, RpcCall},
     rpc_err,
 };
-use std::sync::Arc;
+use regex::Regex;
+use std::{str::FromStr, sync::Arc};
 use tokio::{sync::oneshot, task};
 
 pub struct Rpcs {
@@ -164,6 +167,182 @@ impl Rpcs {
             },
             Some(wait.clone()),
             key: Chars = Value::Null; "The key of the mark you want to spawn"
+        );
+        let _q = Arc::clone(&q);
+        let side_switch = define_rpc!(
+            publisher,
+            base.append("side-switch"),
+            "Side switch a player",
+            |mut c: RpcCall, player: Chars, side: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let side = match Side::from_str(&side) {
+                    Ok(side) => side,
+                    Err(e) => {
+                        c.reply.send(Value::Error(format!("{e:?}").into()));
+                        return None
+                    },
+                };
+                let cmd = AdminCommand::SideSwitch { side, player: player.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The name of the player to switch",
+            side: Chars = Value::Null; "The side to switch the player to"
+        );
+        let _q = Arc::clone(&q);
+        let ban = define_rpc!(
+            publisher,
+            base.append("ban"),
+            "Ban a player",
+            |c: RpcCall, player: Chars, until: Option<DateTime<Utc>>| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Ban { player: player.as_ref().into(), until };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The name of the player to ban",
+            until: Option<DateTime<Utc>> = Value::Null; "Optional end time of the ban"
+        );
+        let _q = Arc::clone(&q);
+        let unban = define_rpc!(
+            publisher,
+            base.append("unban"),
+            "Unban a player",
+            |c: RpcCall, player: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Unban { player: player.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The name of the player to unban"
+        );
+        let _q = Arc::clone(&q);
+        let kick = define_rpc!(
+            publisher,
+            base.append("kick"),
+            "Kick a player",
+            |c: RpcCall, player: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Kick { player: player.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The name of the player to kick"
+        );
+        let _q = Arc::clone(&q);
+        let list_connected = define_rpc!(
+            publisher,
+            base.append("list-connected"),
+            "List connected players",
+            |c: RpcCall, _: Value| {
+                let (tx, rx) = oneshot::channel();
+                _q.push((AdminCommand::Connected, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            arg: Value = Value::Null; ""
+        );
+        let _q = Arc::clone(&q);
+        let list_banned = define_rpc!(
+            publisher,
+            base.append("list-banned"),
+            "List banned players",
+            |c: RpcCall, _: Value| {
+                let (tx, rx) = oneshot::channel();
+                _q.push((AdminCommand::Banned, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            arg: Value = Value::Null; ""
+        );
+        let _q = Arc::clone(&q);
+        let search = define_rpc!(
+            publisher,
+            base.append("search"),
+            "Search players",
+            |mut c: RpcCall, expr: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = match Regex::new(&expr) {
+                    Ok(expr) => AdminCommand::Search { expr },
+                    Err(e) => {
+                        c.reply.send(Value::Error(format!("{e:?}").into()));
+                        return None
+                    }
+                };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            expr: Chars = Value::Null; "The regular expression to search for"
+        );
+        let _q = Arc::clone(&q);
+        let log_warehouse = define_rpc!(
+            publisher,
+            base.append("log-warehouse"),
+            "Log the contents of the specified warehouse",
+            |mut c: RpcCall, airbase: Chars, kind: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let kind = match kind.as_ref() {
+                    "Objective" => WarehouseKind::Objective,
+                    "DCS" => WarehouseKind::DCS,
+                    s => {
+                        c.reply.send(Value::Error(format!("invalid objective kind {s}").into()));
+                        return None
+                    }
+                };
+                let cmd = AdminCommand::LogWarehouse { kind, airbase: airbase.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            airbase: Chars = Value::Null; "The airbase to log",
+            kind: Chars = Value::Null; "The kind of warehouse to log (Objective or DCS)"
+        );
+        let _q = Arc::clone(&q);
+        let reset_lives = define_rpc!(
+            publisher,
+            base.append("reset-lives"),
+            "Reset the specified player's lives",
+            |c: RpcCall, player: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::ResetLives { player: player.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The player to reset"
+        );
+        let _q = Arc::clone(&q);
+        let add_admin = define_rpc!(
+            publisher,
+            base.append("add-admin"),
+            "Add player as an admin",
+            |c: RpcCall, player: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::AddAdmin { player: player.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The player to add"
+        );
+        let _q = Arc::clone(&q);
+        let remove_admin = define_rpc!(
+            publisher,
+            base.append("remove-admin"),
+            "Remove player as an admin",
+            |c: RpcCall, player: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::RemoveAdmin { player: player.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The player to remove"
         );
         unimplemented!()
     }

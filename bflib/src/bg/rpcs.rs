@@ -94,6 +94,77 @@ impl Rpcs {
             from: Chars = Value::Null; "The airbase to transfer supply from",
             to: Chars = Value::Null; "The airbase to transfer supply to"
         );
+        let _q = Arc::clone(&q);
+        let logistics_tick_now = define_rpc!(
+            publisher,
+            base.append("logistics-tick-now"),
+            "Force a logistics tick to happen on the next timed events",
+            |c: RpcCall, _: Value| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::LogisticsTickNow;
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            arg: Value = Value::Null; ""
+        );
+        let _q = Arc::clone(&q);
+        let logistics_deliver_now = define_rpc!(
+            publisher,
+            base.append("logistics-deliver-now"),
+            "Force a logistics delivery to happen on the next timed events",
+            |c: RpcCall, _: Value| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::LogisticsDeliverNow;
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            arg: Value = Value::Null; ""
+        );
+        let _q = Arc::clone(&q);
+        let repair = define_rpc!(
+            publisher,
+            base.append("repair"),
+            "Repair one logistics group",
+            |c: RpcCall, airbase: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Repair { airbase: airbase.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            airbase: Chars = Value::Null; "The airbase to repair"
+        );
+        let _q = Arc::clone(&q);
+        let tim = define_rpc!(
+            publisher,
+            base.append("tim"),
+            "Cause an explosion on the specified mark",
+            |c: RpcCall, key: Chars, size: usize| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Tim { key: key.as_ref().into(), size };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            key: Chars = Value::Null; "The text in the mark you want to blow up",
+            size: usize = 3000; "The size of the explosion in kg of TNT"
+        );
+        let _q = Arc::clone(&q);
+        let spawn = define_rpc!(
+            publisher,
+            base.append("spawn"),
+            "Spawn a group at the specified mark",
+            |c: RpcCall, key: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Spawn { key: key.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            key: Chars = Value::Null; "The key of the mark you want to spawn"
+        );
         unimplemented!()
     }
 }

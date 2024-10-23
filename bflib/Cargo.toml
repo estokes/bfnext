@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = { workspace = true }
+arcstr = { workspace = true }
 bfprotocols = { version = "0.1", path = "../bfprotocols" }
 bytes = { workspace = true }
 chrono = { workspace = true }
@@ -26,6 +27,7 @@ log = { workspace = true }
 mlua = { version = "0.9.8", features = ["lua51", "module", "serialize"] }
 nalgebra = { workspace = true }
 netidx = { workspace = true }
+netidx-protocols = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }

@@ -16,6 +16,7 @@ for more details.
 
 mod logpub;
 mod perf;
+mod rpcs;
 
 use crate::{admin::AdminCommand, db::persisted::Persisted};
 use anyhow::{anyhow, bail, Result};
@@ -387,7 +388,7 @@ impl Logs {
         }
     }
 
-    async fn switch_to_netidx(&mut self, base: NetIdxPath) -> Result<()> {
+    async fn switch_to_netidx(&mut self, publisher: Publisher, base: NetIdxPath) -> Result<()> {
         match self {
             Self::Netidx { .. } => Ok(()),
             Self::Files {
@@ -398,9 +399,6 @@ impl Logs {
             } => {
                 drop((log_file.take(), stats_file.take()));
                 let go = || async {
-                    let publisher = PublisherBuilder::new(Config::load_default()?)
-                        .build()
-                        .await?;
                     let perf = PubPerf::new(
                         &publisher,
                         &base.append("perf"),
@@ -412,7 +410,7 @@ impl Logs {
                         LogPublisher::new(publisher.clone(), stats_path, base.append("stats"))?;
                     let log = LogPublisher::new(publisher.clone(), log_path, base.append("log"))?;
                     Ok::<_, anyhow::Error>(Self::Netidx {
-                        publisher,
+                        publisher: publisher.clone(),
                         base,
                         stats_path: stats_path.clone(),
                         perf,
@@ -445,8 +443,22 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
         match msg {
             Task::CfgLoaded { cfg, admin_channel } => {
                 if let Some(base) = cfg.netidx_base.as_ref() {
-                    if let Err(e) = logs.switch_to_netidx(base.clone()).await {
-                        eprintln!("failed to initialize netidx {e:?}")
+                    let cfg = match Config::load_default() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            error!("failed to load netidx config {e:?}");
+                            continue;
+                        }
+                    };
+                    let publisher = match PublisherBuilder::new(cfg).build().await {
+                        Ok(p) => p,
+                        Err(e) => {
+                            error!("failed to init netidx publisher {e:?}");
+                            continue;
+                        }
+                    };
+                    if let Err(e) = logs.switch_to_netidx(publisher.clone(), base.clone()).await {
+                        eprintln!("failed to initialize netidx logs {e:?}")
                     }
                 }
             }

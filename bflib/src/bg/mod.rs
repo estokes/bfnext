@@ -17,7 +17,7 @@ for more details.
 mod logpub;
 mod perf;
 
-use crate::db::persisted::Persisted;
+use crate::{admin::AdminCommand, db::persisted::Persisted};
 use anyhow::{anyhow, bail, Result};
 use bfprotocols::{
     cfg::Cfg,
@@ -27,6 +27,7 @@ use bfprotocols::{
 use bytes::{BufMut, Bytes, BytesMut};
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
+use crossbeam::queue::SegQueue;
 use dcso3::perf::{Perf as ApiPerf, PerfStat as ApiPerfStat};
 use fxhash::FxHashMap;
 use log::error;
@@ -34,7 +35,7 @@ use logpub::LogPublisher;
 use netidx::{
     config::Config,
     path::Path as NetIdxPath,
-    publisher::{Publisher, PublisherBuilder},
+    publisher::{Publisher, PublisherBuilder, Value},
 };
 use once_cell::sync::OnceCell;
 use parking_lot::{Condvar, Mutex};
@@ -54,7 +55,10 @@ use tokio::{
     fs::File,
     io::AsyncWriteExt,
     runtime::Builder,
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+    sync::{
+        mpsc::{self, UnboundedReceiver, UnboundedSender},
+        oneshot,
+    },
     task,
 };
 
@@ -231,7 +235,10 @@ fn rotate_log(path: &Path) {
 pub(super) enum Task {
     SaveState(PathBuf, Persisted),
     ResetState(PathBuf),
-    CfgLoaded(Arc<Cfg>),
+    CfgLoaded {
+        cfg: Arc<Cfg>,
+        admin_channel: Arc<SegQueue<(AdminCommand, oneshot::Sender<Value>)>>,
+    },
     SaveConfig(PathBuf, Arc<Cfg>),
     WriteLog(Bytes),
     LogPerf {
@@ -436,7 +443,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
         .expect("could not open log files");
     while let Some(msg) = rx.recv().await {
         match msg {
-            Task::CfgLoaded(cfg) => {
+            Task::CfgLoaded { cfg, admin_channel } => {
                 if let Some(base) = cfg.netidx_base.as_ref() {
                     if let Err(e) = logs.switch_to_netidx(base.clone()).await {
                         eprintln!("failed to initialize netidx {e:?}")

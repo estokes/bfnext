@@ -48,10 +48,12 @@ use enumflags2::BitFlags;
 use fxhash::FxHashMap;
 use log::warn;
 use mlua::Value;
+use netidx::publisher::Value as NetIdxValue;
 use parking_lot::{Condvar, Mutex};
 use regex::{Regex, RegexBuilder};
 use smallvec::{smallvec, SmallVec};
 use std::{mem, str::FromStr, sync::Arc};
+use tokio::sync::oneshot;
 
 #[derive(Debug, Clone, Copy)]
 pub enum WarehouseKind {
@@ -317,15 +319,20 @@ impl FromStr for AdminCommand {
     }
 }
 
-fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Result<()> {
+fn admin_spawn(ctx: &mut Context, lua: MizLua, id: Option<PlayerId>, key: String) -> Result<()> {
     let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
     let act = Trigger::singleton(lua)?.action()?;
     let spctx = SpawnCtx::new(lua)?;
     let key = format_compact!("{} ", key);
-    let ifo = ctx
-        .connected
-        .get(&id)
-        .ok_or_else(|| anyhow!("unknown admin"))?;
+    let ucid = match id {
+        None => Ucid::default(),
+        Some(id) => {
+            ctx.connected
+                .get(&id)
+                .ok_or_else(|| anyhow!("unknown admin"))?
+                .ucid
+        }
+    };
     enum Kind {
         Troop,
         Deployable,
@@ -395,7 +402,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         .ok_or_else(|| anyhow!("no troop called {name} on {side}"))?
                         .clone();
                     let origin = DeployKind::Troop {
-                        player: ifo.ucid.clone(),
+                        player: ucid,
                         moved_by: None,
                         spec: spec.clone(),
                         origin: None,
@@ -434,7 +441,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: PlayerId, key: String) -> Res
                         }
                         None => {
                             let origin = DeployKind::Deployed {
-                                player: ifo.ucid.clone(),
+                                player: ucid,
                                 moved_by: None,
                                 spec: spec.clone(),
                             };
@@ -778,12 +785,43 @@ fn remark(ctx: &mut Context, objective: &String) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
+pub(super) enum Caller {
+    Player(PlayerId),
+    External(oneshot::Sender<NetIdxValue>),
+}
+
 pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
     let mut cmds = mem::take(&mut ctx.admin_commands);
-    for (id, cmd) in cmds.drain(..) {
-        macro_rules! reply {
+    while let Some((cmd, ch)) = ctx.external_admin_commands.pop() {
+        cmds.push((Caller::External(ch), cmd));
+    }
+    for (caller, cmd) in cmds.drain(..) {
+        let mut replies: SmallVec<[NetIdxValue; 4]> = smallvec![];
+        macro_rules! reply_ok {
             ($($arg:expr),+) => {
-                ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), format_compact!($($arg),+))
+                match caller {
+                    Caller::Player(id) => {
+                        ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), format_compact!($($arg),+))
+                    },
+                    Caller::External(_) => {
+                        replies.push(NetIdxValue::from(format!($($arg),+)));
+                    }
+                }
+
+            }
+        }
+        macro_rules! reply_err {
+            ($($arg:expr),+) => {
+                match caller {
+                    Caller::Player(id) => {
+                        ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), format_compact!($($arg),+))
+                    },
+                    Caller::External(_) => {
+                        replies.push(NetIdxValue::Error(format!($($arg),+).into()));
+                    }
+                }
+
             }
         }
         macro_rules! airbase {
@@ -791,7 +829,7 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 match get_airbase(&ctx.db, $name) {
                     Ok(oid) => oid,
                     Err(e) => {
-                        reply!("{e:?}");
+                        reply_err!("{e:?}");
                         continue;
                     }
                 }
@@ -804,30 +842,30 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                     .db
                     .admin_reduce_inventory(lua, airbase!(&airbase), amount)
                 {
-                    Err(e) => reply!("reduce inventory failed: {:?}", e),
-                    Ok(()) => reply!("inventory reduced"),
+                    Err(e) => reply_err!("reduce inventory failed: {:?}", e),
+                    Ok(()) => reply_ok!("inventory reduced"),
                 }
             }
             AdminCommand::TransferSupply { from, to } => {
                 let from = airbase!(&from);
                 let to = airbase!(&to);
                 match ctx.db.transfer_supplies(lua, from, to) {
-                    Err(e) => reply!("transfer inventory failed {:?}", e),
-                    Ok(()) => reply!("transfer complete. disconnect"),
+                    Err(e) => reply_err!("transfer inventory failed {:?}", e),
+                    Ok(()) => reply_ok!("transfer complete. disconnect"),
                 }
             }
             AdminCommand::LogisticsTickNow => {
                 ctx.db.admin_tick_now();
-                reply!("tick scheduled")
+                reply_ok!("tick scheduled")
             }
             AdminCommand::LogisticsDeliverNow => {
                 ctx.db.admin_deliver_now();
-                reply!("delivery scheduled")
+                reply_ok!("delivery scheduled")
             }
             AdminCommand::Repair { airbase } => {
                 match ctx.db.repair_objective(airbase!(&airbase), Utc::now()) {
-                    Ok(()) => reply!("repaired {airbase}"),
-                    Err(e) => reply!("failed to repair {e:?}"),
+                    Ok(()) => reply_ok!("repaired {airbase}"),
+                    Err(e) => reply_ok!("failed to repair {e:?}"),
                 }
             }
             AdminCommand::Tim { key, size } => {
@@ -849,100 +887,117 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 }
             }
             AdminCommand::Spawn { key } => {
+                let id = match &caller {
+                    Caller::Player(id) => Some(*id),
+                    Caller::External(_) => None,
+                };
                 if let Err(e) = admin_spawn(ctx, lua, id, key) {
-                    reply!("could not spawn {:?}", e)
+                    reply_ok!("could not spawn {:?}", e)
                 }
             }
             AdminCommand::SideSwitch { side, player } => {
                 if let Err(e) = admin_sideswitch(ctx, side, player.clone()) {
-                    reply!("could not sideswitch {:?}", e)
+                    reply_err!("could not sideswitch {:?}", e)
                 } else {
-                    reply!("{player} sideswitched to {side}")
+                    reply_ok!("{player} sideswitched to {side}")
                 }
             }
             AdminCommand::Ban { player, until } => match admin_ban(ctx, lua, until, &player) {
-                Ok(()) => reply!("{player} banned until {:?}", until),
-                Err(e) => reply!("could not ban {player}, {:?}", e),
+                Ok(()) => reply_ok!("{player} banned until {:?}", until),
+                Err(e) => reply_err!("could not ban {player}, {:?}", e),
             },
             AdminCommand::Unban { player } => match admin_unban(ctx, &player) {
-                Ok(()) => reply!("{player} unbanned"),
-                Err(e) => reply!("could not unban {}, {:?}", player, e),
+                Ok(()) => reply_ok!("{player} unbanned"),
+                Err(e) => reply_err!("could not unban {}, {:?}", player, e),
             },
             AdminCommand::Kick { player } => match admin_kick(ctx, lua, &player) {
-                Ok(()) => reply!("{player} kicked"),
-                Err(e) => reply!("could not kick {player}, {:?}", e),
+                Ok(()) => reply_ok!("{player} kicked"),
+                Err(e) => reply_err!("could not kick {player}, {:?}", e),
             },
             AdminCommand::Banned => {
                 for (ucid, name, until) in admin_list_banned(ctx) {
-                    reply!("{ucid} \"{name}\" {:?}", until)
+                    reply_ok!("{ucid} \"{name}\" {:?}", until)
                 }
             }
             AdminCommand::Connected => {
                 for (pid, ucid, name) in admin_list_connected(ctx) {
-                    reply!("{pid} {ucid} {name}")
+                    reply_ok!("{pid} {ucid} {name}")
                 }
             }
             AdminCommand::Search { expr } => {
                 for (pid, ucid, names) in admin_search(ctx, expr) {
                     match pid {
-                        None => reply!("{ucid} {:?}", names),
-                        Some(pid) => reply!("{pid} {ucid} {:?}", names),
+                        None => reply_err!("{ucid} {:?}", names),
+                        Some(pid) => reply_ok!("{pid} {ucid} {:?}", names),
                     }
                 }
             }
             AdminCommand::LogWarehouse { kind, airbase } => {
                 match ctx.db.admin_log_inventory(lua, kind, airbase!(&airbase)) {
-                    Ok(()) => reply!("{airbase} inventory logged"),
-                    Err(e) => reply!("could not log {airbase} inventory {:?}", e),
+                    Ok(()) => reply_err!("{airbase} inventory logged"),
+                    Err(e) => reply_ok!("could not log {airbase} inventory {:?}", e),
                 }
             }
-            AdminCommand::Logdesc => match ctx.connected.get(&id) {
-                None => reply!("no player {id}"),
-                Some(ifo) => match admin_log_desc(ctx, lua, &ifo.ucid) {
-                    Ok(()) => reply!("{} desc logged", ifo.ucid),
-                    Err(e) => reply!("could not log admin desc {:?}", e),
+            AdminCommand::Logdesc => match &caller {
+                Caller::External(_) => reply_err!("external clients can't be in a plane"),
+                Caller::Player(id) => match ctx.connected.get(&id) {
+                    None => reply_err!("no player {id}"),
+                    Some(ifo) => match admin_log_desc(ctx, lua, &ifo.ucid) {
+                        Ok(()) => reply_ok!("{} desc logged", ifo.ucid),
+                        Err(e) => reply_err!("could not log admin desc {:?}", e),
+                    },
                 },
             },
             AdminCommand::ResetLives { player } => match admin_reset_lives(ctx, &player) {
-                Ok(()) => reply!("{player} lives reset"),
-                Err(e) => reply!("could not reset {player} lives {:?}", e),
+                Ok(()) => reply_ok!("{player} lives reset"),
+                Err(e) => reply_err!("could not reset {player} lives {:?}", e),
             },
             AdminCommand::Shutdown => match admin_shutdown(ctx, lua, None) {
-                Ok(()) => reply!("shutting down"),
-                Err(e) => reply!("failed to shutdown {:?}", e),
+                Ok(()) => reply_ok!("shutting down"),
+                Err(e) => reply_err!("failed to shutdown {:?}", e),
             },
             AdminCommand::AddAdmin { player } => match add_admin(ctx, &player) {
-                Ok(()) => reply!("{player} is now an admin"),
-                Err(e) => reply!("failed to make {player} an admin {e:?}"),
+                Ok(()) => reply_ok!("{player} is now an admin"),
+                Err(e) => reply_err!("failed to make {player} an admin {e:?}"),
             },
             AdminCommand::RemoveAdmin { player } => match remove_admin(ctx, &player) {
-                Ok(()) => reply!("{player} is no longer an admin"),
-                Err(e) => reply!("failed to remove {player} from the admin list {e:?}"),
+                Ok(()) => reply_ok!("{player} is no longer an admin"),
+                Err(e) => reply_err!("failed to remove {player} from the admin list {e:?}"),
             },
             AdminCommand::Balance { player } => match balance(ctx, &player) {
-                Ok(b) => reply!("{player}'s balance is {b}"),
-                Err(e) => reply!("could not get {player}'s balance {e:?}"),
+                Ok(b) => reply_ok!("{player}'s balance is {b}"),
+                Err(e) => reply_err!("could not get {player}'s balance {e:?}"),
             },
             AdminCommand::SetPoints { amount, player } => match set_points(ctx, &player, amount) {
-                Ok(()) => reply!("{player}'s points set to {amount}"),
-                Err(e) => reply!("could not set {player}'s points {e:?}"),
+                Ok(()) => reply_ok!("{player}'s points set to {amount}"),
+                Err(e) => reply_err!("could not set {player}'s points {e:?}"),
             },
             AdminCommand::Delete { group } => match delete(ctx, &group) {
-                Ok(()) => reply!("{group} deleted"),
-                Err(e) => reply!("could not delete group {e:?}"),
+                Ok(()) => reply_ok!("{group} deleted"),
+                Err(e) => reply_err!("could not delete group {e:?}"),
             },
             AdminCommand::Deslot { player } => match deslot(ctx, &player) {
-                Ok(()) => reply!("{player} deslotted"),
-                Err(e) => reply!("could not deslot {player} {e:?}"),
+                Ok(()) => reply_ok!("{player} deslotted"),
+                Err(e) => reply_err!("could not deslot {player} {e:?}"),
             },
             AdminCommand::Remark { objective } => match remark(ctx, &objective) {
-                Ok(()) => reply!("{objective} remark queued"),
-                Err(e) => reply!("could not remark {objective} {e:?}"),
+                Ok(()) => reply_ok!("{objective} remark queued"),
+                Err(e) => reply_err!("could not remark {objective} {e:?}"),
             },
             AdminCommand::Reset { winner } => match admin_shutdown(ctx, lua, Some(winner)) {
-                Ok(()) => reply!("the state has been reset"),
-                Err(e) => reply!("the state could not be reset {e:?}"),
+                Ok(()) => reply_ok!("the state has been reset"),
+                Err(e) => reply_err!("the state could not be reset {e:?}"),
             },
+        }
+        match caller {
+            Caller::Player(_) => (),
+            Caller::External(ch) => {
+                if replies.len() == 1 {
+                    let _ = ch.send(replies.pop().unwrap());
+                } else {
+                    let _ = ch.send(NetIdxValue::from(replies));
+                }
+            }
         }
     }
     ctx.admin_commands = cmds;

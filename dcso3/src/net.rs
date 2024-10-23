@@ -288,6 +288,12 @@ impl SlotId {
 #[serde(try_from = "str48", into = "str48")]
 pub struct Ucid([u8; 16]);
 
+impl Default for Ucid {
+    fn default() -> Self {
+        Ucid([0; 16])
+    }
+}
+
 impl fmt::Display for Ucid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", Into::<str48>::into(*self))

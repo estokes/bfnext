@@ -1,5 +1,5 @@
 use crate::{
-    admin::{self, AdminCommand},
+    admin::{self, AdminCommand, Caller},
     bg::Task,
     db::{actions::ActionCmd, group::DeployKind, player::RegErr},
     lives,
@@ -138,7 +138,7 @@ fn admin_command(ctx: &mut Context, id: PlayerId, cmd: &str) {
         }
         Ok(cmd) => {
             info!("queueing admin command {:?} from {:?}", cmd, ifo);
-            ctx.admin_commands.push((id, cmd))
+            ctx.admin_commands.push((Caller::Player(id), cmd))
         }
     }
 }

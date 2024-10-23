@@ -40,6 +40,7 @@ use bg::Task;
 use chatcmd::run_action_commands;
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
+use crossbeam::queue::SegQueue;
 use db::{
     player::{RegErr, TakeoffRes},
     Db,
@@ -71,11 +72,12 @@ use landcache::LandCache;
 use log::{debug, error, info, warn};
 use mlua::prelude::*;
 use msgq::MsgTyp;
+use netidx::publisher::Value;
 use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
 #[derive(Debug, Clone)]
 struct PlayerInfo {
@@ -234,7 +236,8 @@ struct Context {
     load_state: LoadState,
     idx: env::miz::MizIndex,
     db: Db,
-    admin_commands: Vec<(PlayerId, AdminCommand)>,
+    external_admin_commands: Arc<SegQueue<(AdminCommand, oneshot::Sender<Value>)>>,
+    admin_commands: Vec<(admin::Caller, AdminCommand)>,
     action_commands: Vec<(PlayerId, String)>,
     to_background: Option<UnboundedSender<bg::Task>>,
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
@@ -1160,7 +1163,10 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         ctx.miz_state_path.clone()
     };
     let cfg = Arc::new(Cfg::load(&path)?);
-    ctx.do_bg_task(Task::CfgLoaded(Arc::clone(&cfg)));
+    ctx.do_bg_task(Task::CfgLoaded {
+        cfg: Arc::clone(&cfg),
+        admin_channel: Arc::clone(&ctx.external_admin_commands),
+    });
     debug!("path to saved state is {:?}", path);
     info!("initializing db");
     let to_bg = ctx.to_background.as_ref().unwrap().clone();

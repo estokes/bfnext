@@ -1,8 +1,9 @@
 {
+  "netidx_base": "/chicken/coop",
   "admins": {
     "f279deb7a6b62c96a78eca3ddb2bd8d0": "REAPER 32 | EvilKipper",
     "69d60e1a0fe1c86bc3e81792458dba61": "<64>Cookie",
-	  "9b2be86d1cc2d247e872807f2dee5669": "Baron 1-1 | Quigon"
+    "9b2be86d1cc2d247e872807f2dee5669": "Baron 1-1 | Quigon"
   },
   "banned": {},
   "rules": {
@@ -683,7 +684,7 @@
     "Mi-8MT": {
       "troop_slots": 3,
       "crate_slots": 3,
-      "total_slots": 3 
+      "total_slots": 3
     },
     "CH-47Fbl1": {
       "troop_slots": 4,
@@ -1006,7 +1007,7 @@
         "ewr": null,
         "jtac": null
       },
-	  {
+      {
         "path": [
           "Ground Units",
           "AT Armor"
@@ -1031,7 +1032,7 @@
         "ewr": null,
         "jtac": null
       },
-	  {
+      {
         "path": [
           "Ground Units",
           "Armor Group"
@@ -1433,7 +1434,7 @@
         "ewr": null,
         "jtac": null
       },
-	  {
+      {
         "path": [
           "Ground Units",
           "AT Armour"
@@ -1458,7 +1459,7 @@
         "ewr": null,
         "jtac": null
       },
-	  {
+      {
         "path": [
           "Ground Units",
           "Armor Group"
@@ -1953,7 +1954,7 @@
       "SmallArms",
       "Driveable"
     ],
-	"M1045 HMMWV TOW": [
+    "M1045 HMMWV TOW": [
       "APC",
       "MR",
       "ATGM",

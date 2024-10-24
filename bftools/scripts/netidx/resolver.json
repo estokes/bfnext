@@ -22,7 +22,8 @@
     ],
     "perms": {
         "/": {
-            "evilkipper.chicken.coop": "swlpd"
+            "evilkipper.chicken.coop": "swlpd",
+            "dcs.chicken.coop": "l"
         },
         "/chicken/coop": {
             "web.chicken.coop": "swl",

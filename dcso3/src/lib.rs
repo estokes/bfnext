@@ -62,6 +62,12 @@ macro_rules! atomic_id {
             #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
             pub struct $name(i64);
 
+            impl From<i64> for $name {
+                fn from(x: i64) -> Self {
+                    Self(x)
+                }
+            }
+
             impl std::str::FromStr for $name {
                 type Err = anyhow::Error;
 

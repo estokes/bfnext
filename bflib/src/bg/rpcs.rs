@@ -1,6 +1,7 @@
 use crate::admin::{AdminCommand, WarehouseKind};
 use anyhow::Result;
 use arcstr::ArcStr;
+use bfprotocols::db::group::GroupId;
 use chrono::prelude::*;
 use crossbeam::queue::SegQueue;
 use dcso3::coalition::Side;
@@ -45,8 +46,6 @@ pub struct Rpcs {
     remark: Proc,
     reset: Proc,
     shutdown: Proc,
-    create_mark: Proc,
-    delete_mark: Proc,
 }
 
 async fn wait_task(mut ch: mpsc::Receiver<(RpcCall, oneshot::Receiver<Value>)>) {
@@ -81,7 +80,7 @@ impl Rpcs {
             Some(wait.clone()),
             airbase: Chars = Value::Null; "The airbase to reduce",
             amount: u8 = Value::Null; "The amount, as a whole number percentage, to reduce"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let transfer_supply = define_rpc!(
             publisher,
@@ -96,7 +95,7 @@ impl Rpcs {
             Some(wait.clone()),
             from: Chars = Value::Null; "The airbase to transfer supply from",
             to: Chars = Value::Null; "The airbase to transfer supply to"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let logistics_tick_now = define_rpc!(
             publisher,
@@ -110,7 +109,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             arg: Value = Value::Null; ""
-        );
+        )?;
         let _q = Arc::clone(&q);
         let logistics_deliver_now = define_rpc!(
             publisher,
@@ -124,7 +123,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             arg: Value = Value::Null; ""
-        );
+        )?;
         let _q = Arc::clone(&q);
         let repair = define_rpc!(
             publisher,
@@ -138,7 +137,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             airbase: Chars = Value::Null; "The airbase to repair"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let tim = define_rpc!(
             publisher,
@@ -153,7 +152,7 @@ impl Rpcs {
             Some(wait.clone()),
             key: Chars = Value::Null; "The text in the mark you want to blow up",
             size: usize = 3000; "The size of the explosion in kg of TNT"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let spawn = define_rpc!(
             publisher,
@@ -167,7 +166,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             key: Chars = Value::Null; "The key of the mark you want to spawn"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let side_switch = define_rpc!(
             publisher,
@@ -189,7 +188,7 @@ impl Rpcs {
             Some(wait.clone()),
             player: Chars = Value::Null; "The name of the player to switch",
             side: Chars = Value::Null; "The side to switch the player to"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let ban = define_rpc!(
             publisher,
@@ -204,7 +203,7 @@ impl Rpcs {
             Some(wait.clone()),
             player: Chars = Value::Null; "The name of the player to ban",
             until: Option<DateTime<Utc>> = Value::Null; "Optional end time of the ban"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let unban = define_rpc!(
             publisher,
@@ -218,7 +217,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             player: Chars = Value::Null; "The name of the player to unban"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let kick = define_rpc!(
             publisher,
@@ -232,11 +231,11 @@ impl Rpcs {
             },
             Some(wait.clone()),
             player: Chars = Value::Null; "The name of the player to kick"
-        );
+        )?;
         let _q = Arc::clone(&q);
-        let list_connected = define_rpc!(
+        let connected = define_rpc!(
             publisher,
-            base.append("list-connected"),
+            base.append("connected"),
             "List connected players",
             |c: RpcCall, _: Value| {
                 let (tx, rx) = oneshot::channel();
@@ -245,11 +244,11 @@ impl Rpcs {
             },
             Some(wait.clone()),
             arg: Value = Value::Null; ""
-        );
+        )?;
         let _q = Arc::clone(&q);
-        let list_banned = define_rpc!(
+        let banned = define_rpc!(
             publisher,
-            base.append("list-banned"),
+            base.append("banned"),
             "List banned players",
             |c: RpcCall, _: Value| {
                 let (tx, rx) = oneshot::channel();
@@ -258,7 +257,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             arg: Value = Value::Null; ""
-        );
+        )?;
         let _q = Arc::clone(&q);
         let search = define_rpc!(
             publisher,
@@ -278,7 +277,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             expr: Chars = Value::Null; "The regular expression to search for"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let log_warehouse = define_rpc!(
             publisher,
@@ -301,7 +300,7 @@ impl Rpcs {
             Some(wait.clone()),
             airbase: Chars = Value::Null; "The airbase to log",
             kind: Chars = Value::Null; "The kind of warehouse to log (Objective or DCS)"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let reset_lives = define_rpc!(
             publisher,
@@ -315,7 +314,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             player: Chars = Value::Null; "The player to reset"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let add_admin = define_rpc!(
             publisher,
@@ -329,7 +328,7 @@ impl Rpcs {
             },
             Some(wait.clone()),
             player: Chars = Value::Null; "The player to add"
-        );
+        )?;
         let _q = Arc::clone(&q);
         let remove_admin = define_rpc!(
             publisher,
@@ -343,7 +342,137 @@ impl Rpcs {
             },
             Some(wait.clone()),
             player: Chars = Value::Null; "The player to remove"
-        );
-        unimplemented!()
+        )?;
+        let _q = Arc::clone(&q);
+        let balance = define_rpc!(
+            publisher,
+            base.append("balance"),
+            "Return a player's points balance",
+            |c: RpcCall, player: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Balance { player: player.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The player"
+        )?;
+        let _q = Arc::clone(&q);
+        let set_points = define_rpc!(
+            publisher,
+            base.append("set-points"),
+            "Set a player's points balance",
+            |c: RpcCall, player: Chars, amount: i32| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::SetPoints { player: player.as_ref().into(), amount };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The player",
+            amount: i32 = Value::Null; "The balance"
+        )?;
+        let _q = Arc::clone(&q);
+        let delete = define_rpc!(
+            publisher,
+            base.append("delete-group"),
+            "Delete a group",
+            |c: RpcCall, group: i64| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Delete { group: GroupId::from(group) };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            group: i64 = Value::Null; "The id of the group to delete"
+        )?;
+        let _q = Arc::clone(&q);
+        let deslot = define_rpc!(
+            publisher,
+            base.append("deslot"),
+            "Deslot a player",
+            |c: RpcCall, player: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Deslot { player: player.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            player: Chars = Value::Null; "The player to deslot"
+        )?;
+        let _q = Arc::clone(&q);
+        let remark = define_rpc!(
+            publisher,
+            base.append("remark"),
+            "Remark an objective",
+            |c: RpcCall, objective: Chars| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = AdminCommand::Remark { objective: objective.as_ref().into() };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            objective: Chars = Value::Null; "The objective to remark"
+        )?;
+        let _q = Arc::clone(&q);
+        let reset = define_rpc!(
+            publisher,
+            base.append("reset"),
+            "Reset the campaign",
+            |mut c: RpcCall, winner: Option<Chars>| {
+                let (tx, rx) = oneshot::channel();
+                let cmd = match winner.map(|s| Side::from_str(&s)).transpose() {
+                    Ok(winner) => AdminCommand::Reset { winner },
+                    Err(e) => {
+                        c.reply.send(Value::Error(format!("{e:?}").into()));
+                        return None
+                    }
+                };
+                _q.push((cmd, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            winner: Option<Chars> = Value::Null; "The winner, if any"
+        )?;
+        let _q = Arc::clone(&q);
+        let shutdown = define_rpc!(
+            publisher,
+            base.append("shutdown"),
+            "Shutdown the server",
+            |c: RpcCall, _: Value| {
+                let (tx, rx) = oneshot::channel();
+                _q.push((AdminCommand::Shutdown, tx));
+                Some((c, rx))
+            },
+            Some(wait.clone()),
+            arg: Value = Value::Null; ""
+        )?;
+        Ok(Self {
+            reduce_inventory,
+            transfer_supply,
+            logistics_tick_now,
+            logistics_deliver_now,
+            repair,
+            tim,
+            spawn,
+            side_switch,
+            ban,
+            unban,
+            kick,
+            connected,
+            banned,
+            search,
+            log_warehouse,
+            reset_lives,
+            add_admin,
+            remove_admin,
+            balance,
+            set_points,
+            delete,
+            deslot,
+            remark,
+            reset,
+            shutdown,
+        })
     }
 }

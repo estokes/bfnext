@@ -1,0 +1,31 @@
+{
+    "parent": null,
+    "children": [],
+    "member_servers": [
+        {
+            "pid_file": "",
+            "addr": "135.181.77.146:4645",
+            "max_connections": 768,
+            "hello_timeout": 10,
+            "reader_ttl": 60,
+            "writer_ttl": 120,
+            "auth": {
+                "Tls": {
+                    "name": "resolver.chicken.coop",
+                    "trusted": "/home/netidx/.config/netidx/ca/certificate",
+                    "certificate": "/home/netidx/.config/netidx/certificate",
+                    "private_key": "/home/netidx/.config/netidx/private.key"
+                }
+            }
+        }
+    ],
+    "perms": {
+        "/": {
+            "evilkipper.chicken.coop": "swlpd"
+        },
+        "/chicken/coop": {
+            "web.chicken.coop": "swl",
+            "dcs.chicken.coop": "swlpd"
+        }
+    }
+}

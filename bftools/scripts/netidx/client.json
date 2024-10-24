@@ -1,0 +1,18 @@
+{
+    "addrs":
+    [
+        ["135.181.77.146:4645", {"Tls": "resolver.chicken.coop"}]
+    ],
+    "base": "/",
+    "default_auth": "Tls",
+    "default_bind_config": "135.181.77.146/32",
+    "tls": {
+       "identities": {
+            "resolver.chicken.coop": {
+                "trusted": "/home/netidx/.config/netidx/ca/certificate",
+                "certificate": "/home/netidx/.config/netidx/certificate",
+                "private_key": "/home/netidx/.config/netidx/private.key"
+            }
+        }
+    }
+}

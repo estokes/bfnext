@@ -1,0 +1,9 @@
+[Unit]
+Description=Netidx Services as %i
+
+[Service]
+User=%i
+ExecStart=/usr/local/bin/netidx activation -f
+
+[Install]
+WantedBy=default.target

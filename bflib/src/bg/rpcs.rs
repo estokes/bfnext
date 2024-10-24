@@ -61,7 +61,7 @@ impl Rpcs {
     pub async fn new(
         publisher: &Publisher,
         q: &Arc<SegQueue<(AdminCommand, oneshot::Sender<Value>)>>,
-        base: Path,
+        base: &Path,
     ) -> Result<Self> {
         let base = base.append("api");
         let (wait, rx) = mpsc::channel(10);

@@ -41,6 +41,7 @@ use netidx::{
 use once_cell::sync::OnceCell;
 use parking_lot::{Condvar, Mutex};
 use perf::PubPerf;
+use rpcs::Rpcs;
 use serde::Serialize;
 use simplelog::{LevelFilter, WriteLogger};
 use std::{
@@ -439,6 +440,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
     let mut logs = Logs::new(&write_dir)
         .await
         .expect("could not open log files");
+    let mut _rpcs: Option<Rpcs> = None;
     while let Some(msg) = rx.recv().await {
         match msg {
             Task::CfgLoaded { cfg, admin_channel } => {
@@ -455,6 +457,13 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                         Err(e) => {
                             error!("failed to init netidx publisher {e:?}");
                             continue;
+                        }
+                    };
+                    _rpcs = match Rpcs::new(&publisher, &admin_channel, &base).await {
+                        Ok(r) => Some(r),
+                        Err(e) => {
+                            error!("failed to init rpcs {e:?}");
+                            None
                         }
                     };
                     if let Err(e) = logs.switch_to_netidx(publisher.clone(), base.clone()).await {

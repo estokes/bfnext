@@ -8,7 +8,7 @@
     "default_bind_config": "135.181.77.146/32",
     "tls": {
        "identities": {
-            "resolver.chicken.coop": {
+            "chicken.coop": {
                 "trusted": "/home/netidx/.config/netidx/ca/certificate",
                 "certificate": "/home/netidx/.config/netidx/certificate",
                 "private_key": "/home/netidx/.config/netidx/private.key"

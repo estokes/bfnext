@@ -73,8 +73,7 @@ struct LogHandle(UnboundedSender<Task>);
 
 impl io::Write for LogHandle {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        LOGBUF.with(|lbuf| {
-            let mut lbuf = lbuf.borrow_mut();
+        LOGBUF.with_borrow_mut(|lbuf| {
             lbuf.extend_from_slice(buf);
             self.0
                 .send(Task::WriteLog(lbuf.split().freeze()))
@@ -500,7 +499,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
             Task::WriteLog(buf) => match Chars::from_bytes(buf) {
                 Err(e) => eprintln!("invalid unicode log {e:?}"),
                 Ok(buf) => {
-                    if let Err(e) = logs.write_log(buf).await {
+                    if let Err(e) = logs.write_log(dbg!(buf)).await {
                         eprintln!("could not write log line {e:?}")
                     }
                 }

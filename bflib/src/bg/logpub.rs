@@ -75,7 +75,7 @@ async fn logger_loop(
             },
             e = input.select_next_some() => match e {
                 ToLogger::Log(b) => {
-                    file.write_all_buf(&mut b.as_bytes().chain(&sep[..])).await?;
+                    file.write_all_buf(&mut dbg!(&b).as_bytes().chain(&sep[..])).await?;
                     for cl in &subs {
                         contents.update_subscriber(&mut batch, *cl, Value::String(b.clone()))
                     }

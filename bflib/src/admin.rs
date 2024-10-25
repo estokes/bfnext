@@ -703,6 +703,7 @@ pub(super) fn admin_shutdown(
         ));
         ctx.do_bg_task(Task::Stat(se));
     }
+    ctx.do_bg_task(Task::Shutdown);
     ctx.do_bg_task(Task::Sync(Arc::clone(&wait)));
     let &(ref lock, ref cvar) = &*wait;
     let mut synced = lock.lock();

@@ -252,6 +252,7 @@ pub(super) enum Task {
         api_perf: ApiPerf,
     },
     Sync(Arc<(Mutex<bool>, Condvar)>),
+    Shutdown,
     Stat(StatKind),
     RotateStats,
 }
@@ -440,6 +441,13 @@ impl Logs {
             }
         }
     }
+
+    async fn shutdown(&mut self) {
+        match self {
+            Self::Netidx { publisher, .. } => publisher.clone().shutdown().await,
+            Self::Files { .. } => ()
+        }
+    }
 }
 
 async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
@@ -515,6 +523,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
             } => {
                 logs.log_perf(players, &perf.stat(), &api_perf.stat()).await;
             }
+            Task::Shutdown => logs.shutdown().await,
             Task::Sync(a) => {
                 let &(ref lock, ref cvar) = &*a;
                 let mut synced = lock.lock();

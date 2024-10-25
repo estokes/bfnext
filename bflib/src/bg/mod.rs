@@ -34,6 +34,7 @@ use fxhash::FxHashMap;
 use log::error;
 use logpub::LogPublisher;
 use netidx::{
+    chars::Chars,
     config::Config,
     path::Path as NetIdxPath,
     publisher::{Publisher, PublisherBuilder, Value},
@@ -313,13 +314,13 @@ impl Logs {
         Ok(t)
     }
 
-    async fn write_log(&mut self, mut buf: Bytes) -> Result<()> {
+    async fn write_log(&mut self, buf: Chars) -> Result<()> {
         match self {
             Self::Netidx { log, .. } => log.append(buf),
             Self::Files {
                 log_file: Some(log_file),
                 ..
-            } => Ok(log_file.write_all_buf(&mut buf).await?),
+            } => Ok(log_file.write_all_buf(&mut buf.as_bytes()).await?),
             Self::Files { .. } => bail!("log file is closed"),
         }
     }
@@ -327,7 +328,10 @@ impl Logs {
     async fn write_stat(&mut self, stat: StatKind) -> Result<()> {
         let mut buf = encode(&Stat::new(stat))?;
         match self {
-            Self::Netidx { stats, .. } => stats.append(buf.freeze()),
+            Self::Netidx { stats, .. } => {
+                let buf = Chars::from_bytes(buf.freeze())?;
+                stats.append(buf)
+            }
             Self::Files {
                 stats_file: Some(stats_file),
                 ..
@@ -493,9 +497,12 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                 Ok(()) => (),
                 Err(e) => error!("failed to save config {e:?}"),
             },
-            Task::WriteLog(buf) => {
-                if let Err(e) = logs.write_log(buf).await {
-                    eprintln!("could not write log line {e:?}")
+            Task::WriteLog(buf) => match Chars::from_bytes(buf) {
+                Err(e) => eprintln!("invalid unicode log {e:?}"),
+                Ok(buf) => {
+                    if let Err(e) = logs.write_log(buf).await {
+                        eprintln!("could not write log line {e:?}")
+                    }
                 }
             }
             Task::LogPerf {

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BytesMut};
 use futures::{
     channel::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -8,7 +8,9 @@ use futures::{
     select, StreamExt,
 };
 use fxhash::FxHashSet;
+use log::error;
 use netidx::{
+    chars::Chars,
     path::Path,
     publisher::{Event, Publisher, Value},
 };
@@ -18,10 +20,9 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt, BufReader},
     task,
 };
-use log::error;
 
 enum ToLogger {
-    Log(Bytes),
+    Log(Chars),
     Close(oneshot::Sender<()>),
 }
 
@@ -64,7 +65,8 @@ async fn logger_loop(
                         }
                         bytes.extend_from_slice(buf.as_bytes());
                         buf.clear();
-                        contents.update_subscriber(&mut batch, cl, Value::Bytes(bytes.split().freeze()));
+                        let chars = Chars::from_bytes(bytes.split().freeze()).unwrap();
+                        contents.update_subscriber(&mut batch, cl, Value::String(chars));
                     }
                     file = bufreader.into_inner();
                     batch.commit(None).await;
@@ -73,9 +75,9 @@ async fn logger_loop(
             },
             e = input.select_next_some() => match e {
                 ToLogger::Log(b) => {
-                    file.write_all_buf(&mut (&*b).chain(&sep[..])).await?;
+                    file.write_all_buf(&mut b.as_bytes().chain(&sep[..])).await?;
                     for cl in &subs {
-                        contents.update_subscriber(&mut batch, *cl, Value::Bytes(b.clone()))
+                        contents.update_subscriber(&mut batch, *cl, Value::String(b.clone()))
                     }
                     batch.commit(None).await;
                     batch = publisher.start_batch();
@@ -102,13 +104,13 @@ impl LogPublisher {
         task::spawn(async move {
             match logger_loop(publisher, &file_path, netidx_path, rx).await {
                 Ok(()) => (),
-                Err(e) => error!("{file_path:?} logger failed {e:?}")
+                Err(e) => error!("{file_path:?} logger failed {e:?}"),
             }
         });
         Ok(Self(tx))
     }
 
-    pub fn append(&self, m: Bytes) -> Result<()> {
+    pub fn append(&self, m: Chars) -> Result<()> {
         Ok(self.0.unbounded_send(ToLogger::Log(m))?)
     }
 

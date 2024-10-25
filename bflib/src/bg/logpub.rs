@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use futures::{
     channel::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -32,7 +32,6 @@ async fn logger_loop(
     netidx_path: Path,
     mut input: UnboundedReceiver<ToLogger>,
 ) -> Result<()> {
-    let sep = [b'\n'];
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
@@ -63,7 +62,7 @@ async fn logger_loop(
                         if bufreader.read_line(&mut buf).await? == 0 {
                             break
                         }
-                        bytes.extend_from_slice(buf.as_bytes());
+                        bytes.extend_from_slice(buf.trim().as_bytes());
                         buf.clear();
                         let chars = Chars::from_bytes(bytes.split().freeze()).unwrap();
                         contents.update_subscriber(&mut batch, cl, Value::String(chars));
@@ -75,9 +74,11 @@ async fn logger_loop(
             },
             e = input.select_next_some() => match e {
                 ToLogger::Log(b) => {
-                    file.write_all_buf(&mut dbg!(&b).as_bytes().chain(&sep[..])).await?;
+                    file.write_all_buf(&mut b.as_bytes()).await?;
+                    bytes.extend_from_slice(b.trim().as_bytes());
+                    let c = Chars::from_bytes(bytes.split().freeze()).unwrap();
                     for cl in &subs {
-                        contents.update_subscriber(&mut batch, *cl, Value::String(b.clone()))
+                        contents.update_subscriber(&mut batch, *cl, Value::String(c.clone()))
                     }
                     batch.commit(None).await;
                     batch = publisher.start_batch();

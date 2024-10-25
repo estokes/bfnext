@@ -75,9 +75,11 @@ impl io::Write for LogHandle {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         LOGBUF.with_borrow_mut(|lbuf| {
             lbuf.extend_from_slice(buf);
-            self.0
-                .send(Task::WriteLog(lbuf.split().freeze()))
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "backend dead"))?;
+            if lbuf.len() > 0 && lbuf[lbuf.len() - 1] == 0xA {
+                self.0
+                    .send(Task::WriteLog(lbuf.split().freeze()))
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "backend dead"))?;
+            }
             Ok(buf.len())
         })
     }
@@ -499,7 +501,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
             Task::WriteLog(buf) => match Chars::from_bytes(buf) {
                 Err(e) => eprintln!("invalid unicode log {e:?}"),
                 Ok(buf) => {
-                    if let Err(e) = logs.write_log(dbg!(buf)).await {
+                    if let Err(e) = logs.write_log(buf).await {
                         eprintln!("could not write log line {e:?}")
                     }
                 }

@@ -240,6 +240,7 @@ pub(super) enum Task {
     SaveState(PathBuf, Persisted),
     ResetState(PathBuf),
     CfgLoaded {
+        sortie: dcso3::String,
         cfg: Arc<Cfg>,
         admin_channel: Arc<SegQueue<(AdminCommand, oneshot::Sender<Value>)>>,
     },
@@ -407,7 +408,7 @@ impl Logs {
                 let go = || async {
                     let perf = PubPerf::new(
                         &publisher,
-                        &base.append("perf"),
+                        &base,
                         0,
                         &PerfStat::default(),
                         &ApiPerfStat::default(),
@@ -448,8 +449,9 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
     let mut _rpcs: Option<Rpcs> = None;
     while let Some(msg) = rx.recv().await {
         match msg {
-            Task::CfgLoaded { cfg, admin_channel } => {
+            Task::CfgLoaded { sortie, cfg, admin_channel } => {
                 if let Some(base) = cfg.netidx_base.as_ref() {
+                    let base = base.append(&sortie);
                     let cfg = match Config::load_default() {
                         Ok(c) => c,
                         Err(e) => {

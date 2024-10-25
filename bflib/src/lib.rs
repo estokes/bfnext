@@ -1153,7 +1153,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     let sortie = miz.sortie().context("getting the sortie")?;
     debug!("sortie is {:?}", sortie);
     let path = {
-        let s = Env::singleton(lua)?.get_value_dict_by_key(sortie)?;
+        let s = Env::singleton(lua)?.get_value_dict_by_key(sortie.clone())?;
         if s.is_empty() {
             bail!("missing sortie in miz file")
         }
@@ -1164,6 +1164,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     };
     let cfg = Arc::new(Cfg::load(&path)?);
     ctx.do_bg_task(Task::CfgLoaded {
+        sortie,
         cfg: Arc::clone(&cfg),
         admin_channel: Arc::clone(&ctx.external_admin_commands),
     });

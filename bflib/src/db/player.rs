@@ -938,10 +938,10 @@ impl Db {
             dead.shots
                 .iter()
                 .filter(|shot| match (&shot.shooter, &shot.target) {
-                    (Who::AI { gid: gid0, .. }, Who::AI { gid: gid1, .. }) => gid0 != gid1,
-                    (Who::Player { ucid: ucid0, .. }, Who::Player { ucid: ucid1, .. }) => {
-                        ucid0 != ucid1
-                    }
+                    (Who::AI { gid: g0, .. }, Who::AI { gid: g1, .. }) => g0 != g1,
+                    (Who::Player { ucid: u0, .. }, Who::Player { ucid: u1, .. }) => u0 != u1,
+                    (Who::AI { ucid: Some(u0), .. }, Who::Player { ucid: u1, .. })
+                    | (Who::Player { ucid: u1, .. }, Who::AI { ucid: Some(u0), .. }) => u0 != u1,
                     (Who::AI { .. }, Who::Player { .. }) | (Who::Player { .. }, Who::AI { .. }) => {
                         true
                     }

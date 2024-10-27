@@ -333,6 +333,9 @@ pub(super) fn add_cargo_menu_for_group(
     }
     let mut created_menus: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
     for dep in cfg.deployables.get(side).unwrap_or(&vec![]) {
+        if dep.crates.is_empty() && dep.repair_crate.is_none() {
+            continue
+        }
         let name = dep.path.last().unwrap();
         let root = dep
             .path

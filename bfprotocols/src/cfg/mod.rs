@@ -491,7 +491,7 @@ pub struct BomberCfg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeployableCfg {
     pub name: String,
-    pub plane: AiPlaneCfg,
+    pub plane: Option<AiPlaneCfg>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

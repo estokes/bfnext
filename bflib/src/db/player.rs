@@ -935,11 +935,17 @@ impl Db {
         let mut hit_by: SmallVec<[&Ucid; 16]> = smallvec![];
         let valid_shots = || {
             // why are you hitting yourself
-            dead.shots.iter().filter(|shot| {
-                shot.shooter.ucid().is_some()
-                    && shot.target.gid() != shot.shooter.gid()
-                    && shot.target.ucid() != shot.shooter.ucid()
-            })
+            dead.shots
+                .iter()
+                .filter(|shot| match (&shot.shooter, &shot.target) {
+                    (Who::AI { gid: gid0, .. }, Who::AI { gid: gid1, .. }) => gid0 != gid1,
+                    (Who::Player { ucid: ucid0, .. }, Who::Player { ucid: ucid1, .. }) => {
+                        ucid0 != ucid1
+                    }
+                    (Who::AI { .. }, Who::Player { .. }) | (Who::Player { .. }, Who::AI { .. }) => {
+                        true
+                    }
+                })
         };
         for shot in valid_shots() {
             let ucid = shot.shooter.ucid().unwrap();

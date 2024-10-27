@@ -940,8 +940,17 @@ impl Db {
                 .filter(|shot| match (&shot.shooter, &shot.target) {
                     (Who::AI { gid: g0, .. }, Who::AI { gid: g1, .. }) => g0 != g1,
                     (Who::Player { ucid: u0, .. }, Who::Player { ucid: u1, .. }) => u0 != u1,
-                    (Who::AI { ucid: Some(u0), .. }, Who::Player { ucid: u1, .. })
-                    | (Who::Player { ucid: u1, .. }, Who::AI { ucid: Some(u0), .. }) => u0 != u1,
+                    (
+                        Who::AI {
+                            ucid: Some(u0),
+                            side: s0,
+                            ..
+                        },
+                        Who::Player {
+                            side: s1, ucid: u1, ..
+                        },
+                    ) => u0 != u1 && s0 != s1,
+                    (Who::Player { ucid: u1, .. }, Who::AI { ucid: Some(u0), .. }) => u0 != u1,
                     (Who::AI { .. }, Who::Player { .. }) | (Who::Player { .. }, Who::AI { .. }) => {
                         true
                     }

@@ -606,7 +606,25 @@ impl Db {
                 match land.get_surface_type(LuaVec2(pos.position))? {
                     SurfaceType::Land | SurfaceType::Road | SurfaceType::Runway => (),
                     SurfaceType::ShallowWater | SurfaceType::Water => {
-                        bail!("you can't spawn units in water")
+                        bail!("you can't spawn this unit in water")
+                    }
+                }
+            }
+            Ok(())
+        }
+        fn check_land(
+            land: &Land,
+            positions: &VecDeque<UnitPosition>,
+            positions_by_typ: &FxHashMap<String, VecDeque<UnitPosition>>,
+        ) -> Result<()> {
+            for pos in positions
+                .iter()
+                .chain(positions_by_typ.values().flat_map(|v| v.iter()))
+            {
+                match land.get_surface_type(LuaVec2(pos.position))? {
+                    SurfaceType::ShallowWater | SurfaceType::Water => (),
+                    SurfaceType::Land | SurfaceType::Road | SurfaceType::Runway => {
+                        bail!("you can't spawn this unit on land")
                     }
                 }
             }
@@ -616,13 +634,6 @@ impl Db {
         let template_name = String::from(template_name);
         let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
         let mut gpos = compute_unit_positions(&spctx, idx, location.clone(), &template.group)?;
-        match &location {
-            SpawnLoc::AtPos { .. }
-            | SpawnLoc::AtPosWithCenter { .. }
-            | SpawnLoc::AtPosWithComponents { .. }
-            | SpawnLoc::AtTrigger { .. } => check_water(&land, &gpos.positions, &gpos.by_type)?,
-            SpawnLoc::InAir { .. } => (),
-        }
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
         let group_name = String::from(format_compact!("{}-{}", template_name, gid));
@@ -638,11 +649,8 @@ impl Db {
             tags: UnitTags(BitFlags::empty()),
         };
         for unit in template.group.units()?.into_iter() {
-            let uid = UnitId::new();
             let unit = unit?;
             let typ = unit.typ()?;
-            let template_name = unit.name()?;
-            let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
             let tags = *self
                 .ephemeral
                 .cfg
@@ -651,6 +659,33 @@ impl Db {
                 .ok_or_else(|| anyhow!("unit type not classified {typ}"))?;
             let tags = UnitTags(tags.0 | extra_tags);
             spawned.tags.0.insert(tags.0);
+        }
+        match &location {
+            SpawnLoc::AtPos { .. }
+            | SpawnLoc::AtPosWithCenter { .. }
+            | SpawnLoc::AtPosWithComponents { .. }
+            | SpawnLoc::AtTrigger { .. } => {
+                if spawned.tags.contains(UnitTag::Boat) {
+                    check_land(&land, &gpos.positions, &gpos.by_type)?
+                } else {
+                    check_water(&land, &gpos.positions, &gpos.by_type)?
+                }
+            }
+            SpawnLoc::InAir { .. } => (),
+        }
+        for unit in template.group.units()?.into_iter() {
+            let uid = UnitId::new();
+            let unit = unit?;
+            let typ = unit.typ()?;
+            let tags = *self
+                .ephemeral
+                .cfg
+                .unit_classification
+                .get(typ.as_str())
+                .ok_or_else(|| anyhow!("unit type not classified {typ}"))?;
+            let tags = UnitTags(tags.0 | extra_tags);
+            let template_name = unit.name()?;
+            let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
             let pos = match gpos.by_type.get_mut(&typ) {
                 None => gpos.positions.pop_front().unwrap(),
                 Some(positions) => positions.pop_front().unwrap(),

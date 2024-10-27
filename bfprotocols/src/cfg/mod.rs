@@ -164,6 +164,7 @@ pub enum UnitTag {
     Driveable,
     AWACS,
     Link16,
+    Boat
 }
 
 #[derive(

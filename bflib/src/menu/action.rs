@@ -39,8 +39,16 @@ fn run_action(
     cmd: ActionCmd,
 ) -> Result<()> {
     let spctx = SpawnCtx::new(lua)?;
-    ctx.db
-        .start_action(perf, &spctx, &ctx.idx, &ctx.jtac, side, Some(ucid), cmd)?;
+    ctx.db.start_action(
+        lua,
+        perf,
+        &spctx,
+        &ctx.idx,
+        &ctx.jtac,
+        side,
+        Some(ucid),
+        cmd,
+    )?;
     if let Some(mark) = mark {
         ctx.db.ephemeral.msgs().delete_mark(mark);
     }

@@ -1373,7 +1373,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                 limit: None,
                 kind: ActionKind::Paratrooper(DeployableCfg {
                     name: "Standard".into(),
-                    plane: AiPlaneCfg {
+                    plane: Some(AiPlaneCfg {
                         kind: AiPlaneKind::Helicopter,
                         template: "RTROOPCARRIER".into(),
                         altitude: 500.,
@@ -1381,7 +1381,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         speed: 70.,
                         duration: None,
                         freq: None,
-                    },
+                    }),
                 }),
             },
         ),
@@ -1393,7 +1393,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                 limit: None,
                 kind: ActionKind::Deployable(DeployableCfg {
                     name: "1L13".into(),
-                    plane: AiPlaneCfg {
+                    plane: Some(AiPlaneCfg {
                         kind: AiPlaneKind::Helicopter,
                         template: "RTROOPCARRIER".into(),
                         altitude: 500.,
@@ -1401,7 +1401,7 @@ fn default_red_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         duration: None,
                         speed: 70.,
                         freq: None,
-                    },
+                    }),
                 }),
             },
         ),
@@ -1654,7 +1654,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                 limit: None,
                 kind: ActionKind::Paratrooper(DeployableCfg {
                     name: "Standard".into(),
-                    plane: AiPlaneCfg {
+                    plane: Some(AiPlaneCfg {
                         kind: AiPlaneKind::Helicopter,
                         template: "BTROOPCARRIER".into(),
                         altitude: 500.,
@@ -1662,7 +1662,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         duration: None,
                         speed: 60.,
                         freq: None,
-                    },
+                    }),
                 }),
             },
         ),
@@ -1674,7 +1674,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                 limit: None,
                 kind: ActionKind::Deployable(DeployableCfg {
                     name: "AN/FPS-117".into(),
-                    plane: AiPlaneCfg {
+                    plane: Some(AiPlaneCfg {
                         kind: AiPlaneKind::Helicopter,
                         template: "BTROOPCARRIER".into(),
                         altitude: 500.,
@@ -1682,7 +1682,7 @@ fn default_blue_actions() -> IndexMap<String, Action, FxBuildHasher> {
                         duration: None,
                         speed: 60.,
                         freq: None,
-                    },
+                    }),
                 }),
             },
         ),

@@ -466,6 +466,7 @@ fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
         _ => bail!("not a bomber action"),
     };
     match ctx.db.start_action(
+        lua,
         perf,
         &spctx,
         &ctx.idx,

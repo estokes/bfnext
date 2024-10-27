@@ -36,8 +36,9 @@ use bfprotocols::{
     db::{
         group::{GroupId, UnitId},
         objective::ObjectiveId,
-    }, stats::StatKind,
-    perf::{PerfInner}
+    },
+    perf::PerfInner,
+    stats::StatKind,
 };
 use chrono::prelude::*;
 use compact_str::format_compact;
@@ -50,10 +51,10 @@ use dcso3::{
     group::ClassGroup,
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
+    perf::record_perf,
     static_object::ClassStatic,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    perf::record_perf,
     warehouse::{LiquidType, WSCategory},
     MizLua, Position3, String, Vector2,
 };
@@ -762,12 +763,16 @@ impl Ephemeral {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
                     }
-                    ActionKind::Deployable(DeployableCfg {
-                        name,
-                        plane: AiPlaneCfg { template, .. },
-                    }) => {
-                        miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
+                    ActionKind::Deployable(DeployableCfg { name, plane }) => {
+                        if let Some(AiPlaneCfg { template, .. }) = plane {
+                            miz.get_group_by_name(
+                                mizidx,
+                                GroupKind::Any,
+                                *side,
+                                template.as_str(),
+                            )?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
+                        }
                         self.deployable_idx
                             .get(side)
                             .and_then(|idx| idx.deployables_by_name.get(name))
@@ -775,7 +780,7 @@ impl Ephemeral {
                     }
                     ActionKind::Paratrooper(DeployableCfg {
                         name,
-                        plane: AiPlaneCfg { template, .. },
+                        plane: Some(AiPlaneCfg { template, .. }),
                     }) => {
                         miz.get_group_by_name(mizidx, GroupKind::Any, *side, template.as_str())?
                             .ok_or_else(|| anyhow!("missing template for action {act:?}"))?;
@@ -783,6 +788,9 @@ impl Ephemeral {
                             .get(side)
                             .and_then(|idx| idx.squads_by_name.get(name))
                             .ok_or_else(|| anyhow!("missing troop for action {act:?}"))?;
+                    }
+                    ActionKind::Paratrooper(DeployableCfg { name, plane: None }) => {
+                        bail!("patroop mission {name} does not include an ai plane config")
                     }
                     ActionKind::AwacsWaypoint
                     | ActionKind::TankerWaypoint

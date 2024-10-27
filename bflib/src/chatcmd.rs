@@ -370,6 +370,7 @@ pub(super) fn run_action_commands(
                 let r = match ActionCmd::parse(&mut ctx.db, lua, side, &s) {
                     Err(e) => Err(e),
                     Ok(cmd) => ctx.db.start_action(
+                        lua,
                         perf,
                         &spctx,
                         &ctx.idx,

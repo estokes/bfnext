@@ -252,6 +252,7 @@ fn group_position(lua: MizLua, name: &str) -> Result<Vector2> {
 impl Db {
     pub fn start_action(
         &mut self,
+        lua: MizLua,
         perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
@@ -343,7 +344,7 @@ impl Db {
                 )
                 .context("calling bomber strike")?,
             ActionArgs::Deployable(args) => self
-                .ai_deploy(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .ai_deploy(lua, perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling ai deployment")?,
             ActionArgs::Fighters(args) => self
                 .ai_fighters(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
@@ -1031,23 +1032,29 @@ impl Db {
         action: Action,
         args: WithPos<DeployableCfg>,
     ) -> Result<Option<GroupId>> {
-        Ok(Some(self.add_and_spawn_ai_air(
-            perf,
-            spctx,
-            idx,
-            side,
-            &ucid,
-            name,
-            action,
-            0.,
-            &WithPos {
-                cfg: args.cfg.plane.clone(),
-                pos: args.pos,
-            },
-            Some(args.pos),
-            BitFlags::empty(),
-            |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?))
+        Ok(Some(
+            self.add_and_spawn_ai_air(
+                perf,
+                spctx,
+                idx,
+                side,
+                &ucid,
+                name,
+                action,
+                0.,
+                &WithPos {
+                    pos: args.pos,
+                    cfg: args
+                        .cfg
+                        .plane
+                        .clone()
+                        .ok_or_else(|| anyhow!("paratrooper missing plane config"))?,
+                },
+                Some(args.pos),
+                BitFlags::empty(),
+                |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
+            )?,
+        ))
     }
 
     fn nuke(&mut self, spctx: &SpawnCtx, args: WithPos<NukeCfg>) -> Result<Option<GroupId>> {
@@ -1126,6 +1133,7 @@ impl Db {
 
     fn ai_deploy(
         &mut self,
+        lua: MizLua,
         perf: &mut PerfInner,
         spctx: &SpawnCtx,
         idx: &MizIndex,
@@ -1135,23 +1143,29 @@ impl Db {
         action: Action,
         args: WithPos<DeployableCfg>,
     ) -> Result<Option<GroupId>> {
-        Ok(Some(self.add_and_spawn_ai_air(
-            perf,
-            spctx,
-            idx,
-            side,
-            &ucid,
-            name,
-            action,
-            0.,
-            &WithPos {
-                cfg: args.cfg.plane.clone(),
-                pos: args.pos,
-            },
-            Some(args.pos),
-            BitFlags::empty(),
-            |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
-        )?))
+        match args.cfg.plane.as_ref() {
+            Some(plane) => Ok(Some(self.add_and_spawn_ai_air(
+                perf,
+                spctx,
+                idx,
+                side,
+                &ucid,
+                name,
+                action,
+                0.,
+                &WithPos {
+                    cfg: plane.clone(),
+                    pos: args.pos,
+                },
+                Some(args.pos),
+                BitFlags::empty(),
+                |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
+            )?)),
+            None => {
+                self.deployable_to_point(lua, idx, args.pos, args.cfg.name, side, ucid.unwrap_or_default())?;
+                Ok(None)
+            }
+        }
     }
 
     fn ai_point_to_point_mission<'lua>(
@@ -1176,8 +1190,8 @@ impl Db {
                 ),
                 ActionKind::LogisticsRepair(p)
                 | ActionKind::LogisticsTransfer(p)
-                | ActionKind::Paratrooper(DeployableCfg { name: _, plane: p })
-                | ActionKind::Deployable(DeployableCfg { name: _, plane: p }) => {
+                | ActionKind::Paratrooper(DeployableCfg { name: _, plane: Some(p) })
+                | ActionKind::Deployable(DeployableCfg { name: _, plane: Some(p) }) => {
                     (*src, *tgt, p.altitude, p.altitude_typ.clone(), p.speed)
                 }
                 _ => bail!("expected a point to point action"),

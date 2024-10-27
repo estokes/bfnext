@@ -322,6 +322,17 @@
         "penalty": 50,
         "limit": null
       },
+      "carrier": {
+        "kind": {
+          "Deployable": {
+            "name": "Carrier",
+            "plane": null 
+          }
+        },
+        "cost": 1000,
+        "penalty": 1000,
+        "limit": null
+      },
       "repair": {
         "kind": {
           "LogisticsRepair": {
@@ -539,6 +550,17 @@
         "penalty": 50,
         "limit": null
       },
+      "carrier": {
+        "kind": {
+          "Deployable": {
+            "name": "Carrier",
+            "plane": null 
+          }
+        },
+        "cost": 1000,
+        "penalty": 1000,
+        "limit": null
+      },
       "repair": {
         "kind": {
           "LogisticsRepair": {
@@ -713,6 +735,24 @@
   },
   "deployables": {
     "Red": [
+      {
+        "path": [
+          "Naval",
+          "Carrier"
+        ],
+        "template": "DEPRCARRIER",
+        "persist": "Forever",
+        "limit": 1,
+        "limit_enforce": "DeleteOldest",
+        "crates": [],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 1000,
+        "ewr": {
+          "range": 30000
+        },
+        "jtac": null
+      },
       {
         "path": [
           "Radar SAMs",
@@ -1199,6 +1239,24 @@
       }
     ],
     "Blue": [
+      {
+        "path": [
+          "Naval",
+          "Carrier"
+        ],
+        "template": "DEPBCARRIER",
+        "persist": "Forever",
+        "limit": 1,
+        "limit_enforce": "DeleteOldest",
+        "crates": [],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 1000,
+        "ewr": {
+          "range": 30000
+        },
+        "jtac": null
+      },
       {
         "path": [
           "Radar SAMs",

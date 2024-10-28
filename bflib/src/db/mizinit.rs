@@ -36,8 +36,8 @@ use bfprotocols::{
         group::GroupId,
         objective::{ObjectiveId, ObjectiveKind},
     },
+    perf::PerfInner,
     stats::StatKind,
-    perf::PerfInner
 };
 use chrono::prelude::*;
 use compact_str::CompactString;
@@ -418,9 +418,7 @@ impl Db {
                 if let Some(groups) = obj.groups.get(&obj.owner) {
                     for gid in groups {
                         let group = group!(self, gid)?;
-                        if obj.kind.is_farp()
-                            || (group.class.is_services() && !obj.kind.is_airbase())
-                        {
+                        if obj.kind.is_farp() || group.class.is_services() {
                             self.ephemeral.push_spawn(*gid)
                         }
                     }
@@ -496,7 +494,7 @@ impl Db {
                 }
                 self.ephemeral.stat(StatKind::Life {
                     id: ucid,
-                    lives: player.lives.clone()
+                    lives: player.lives.clone(),
                 });
                 self.ephemeral.dirty();
             }

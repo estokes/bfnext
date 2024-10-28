@@ -957,16 +957,18 @@ impl Db {
                 })
         };
         for shot in valid_shots() {
-            let ucid = shot.shooter.ucid().unwrap();
-            if shot.hit && !hit_by.contains(&ucid) {
-                hit_by.push(ucid);
+            if let Some(ucid) = shot.shooter.ucid() {
+                if shot.hit && !hit_by.contains(&ucid) {
+                    hit_by.push(ucid);
+                }
             }
         }
         if hit_by.is_empty() {
             for shot in valid_shots() {
-                let ucid = shot.shooter.ucid().unwrap();
-                if dead.time - shot.time <= Duration::minutes(3) && !hit_by.contains(&ucid) {
-                    hit_by.push(ucid);
+                if let Some(ucid) = shot.shooter.ucid() {
+                    if dead.time - shot.time <= Duration::minutes(3) && !hit_by.contains(&ucid) {
+                        hit_by.push(ucid);
+                    }
                 }
             }
         }

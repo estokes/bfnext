@@ -97,45 +97,53 @@ impl ObjGroupClass {
 }
 
 impl From<&str> for ObjGroupClass {
-    fn from(value: &str) -> Self {
-        match value {
-            "BLOGI" | "RLOGI" | "NLOGI" | "LOGI" | "BDEPFARP" | "RDEPFARP" => ObjGroupClass::Logi,
-            "BSERVICES" | "RSERVICES" | "NSERVICES" | "SERVICES" => ObjGroupClass::Services,
-            s => {
-                if s.starts_with("BAAA")
-                    || s.starts_with("RAAA")
-                    || s.starts_with("NAAA")
-                    || s.starts_with("AAA")
-                {
-                    ObjGroupClass::Aaa
-                } else if s.starts_with("BLR")
-                    || s.starts_with("RLR")
-                    || s.starts_with("NLR")
-                    || s.starts_with("LR")
-                {
-                    ObjGroupClass::Lr
-                } else if s.starts_with("BMR")
-                    || s.starts_with("RMR")
-                    || s.starts_with("NMR")
-                    || s.starts_with("MR")
-                {
-                    ObjGroupClass::Mr
-                } else if s.starts_with("BSR")
-                    || s.starts_with("RSR")
-                    || s.starts_with("NSR")
-                    || s.starts_with("SR")
-                {
-                    ObjGroupClass::Sr
-                } else if s.starts_with("BARMOR")
-                    || s.starts_with("RARMOR")
-                    || s.starts_with("NARMOR")
-                    || s.starts_with("ARMOR")
-                {
-                    ObjGroupClass::Armor
-                } else {
-                    ObjGroupClass::Other
-                }
-            }
+    fn from(s: &str) -> Self {
+        if s.starts_with("BLOGI")
+            || s.starts_with("RLOGI")
+            || s.starts_with("NLOGI")
+            || s.starts_with("LOGI")
+            || s.starts_with("BDEPFARP")
+            || s.starts_with("RDEPFARP")
+        {
+            ObjGroupClass::Logi
+        } else if s.starts_with("BSERVICES")
+            || s.starts_with("RSERVICES")
+            || s.starts_with("NSERVICES")
+            || s.starts_with("SERVICES")
+        {
+            ObjGroupClass::Services
+        } else if s.starts_with("BAAA")
+            || s.starts_with("RAAA")
+            || s.starts_with("NAAA")
+            || s.starts_with("AAA")
+        {
+            ObjGroupClass::Aaa
+        } else if s.starts_with("BLR")
+            || s.starts_with("RLR")
+            || s.starts_with("NLR")
+            || s.starts_with("LR")
+        {
+            ObjGroupClass::Lr
+        } else if s.starts_with("BMR")
+            || s.starts_with("RMR")
+            || s.starts_with("NMR")
+            || s.starts_with("MR")
+        {
+            ObjGroupClass::Mr
+        } else if s.starts_with("BSR")
+            || s.starts_with("RSR")
+            || s.starts_with("NSR")
+            || s.starts_with("SR")
+        {
+            ObjGroupClass::Sr
+        } else if s.starts_with("BARMOR")
+            || s.starts_with("RARMOR")
+            || s.starts_with("NARMOR")
+            || s.starts_with("ARMOR")
+        {
+            ObjGroupClass::Armor
+        } else {
+            ObjGroupClass::Other
         }
     }
 }

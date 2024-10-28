@@ -36,8 +36,8 @@ use bfprotocols::{
         group::GroupId,
         objective::{ObjectiveId, ObjectiveKind},
     },
+    perf::PerfInner,
     stats::StatKind,
-    perf::PerfInner
 };
 use chrono::prelude::*;
 use compact_str::CompactString;
@@ -415,6 +415,14 @@ impl Db {
                         .context("moving farp pad")?;
                     self.ephemeral.set_pad_template_used(pad_template.clone());
                 }
+            }
+            Ok(())
+        };
+        spawn_deployed_and_logistics().context("spawning deployed and logistics")?;
+        self.setup_warehouses_after_load(spctx.lua())
+            .context("setting up warehouses")?;
+        let mut respawn_services = || -> Result<()> {
+            for (_, obj) in self.persisted.objectives.iter_mut_cow() {
                 if let Some(groups) = obj.groups.get(&obj.owner) {
                     for gid in groups {
                         let group = group!(self, gid)?;
@@ -428,9 +436,7 @@ impl Db {
             }
             Ok(())
         };
-        spawn_deployed_and_logistics().context("spawning deployed and logistics")?;
-        self.setup_warehouses_after_load(spctx.lua())
-            .context("setting up warehouses")?;
+        respawn_services().context("respawning services")?;
         let mut mark_deployed_and_logistics = || -> Result<()> {
             let groups = self
                 .persisted
@@ -496,7 +502,7 @@ impl Db {
                 }
                 self.ephemeral.stat(StatKind::Life {
                     id: ucid,
-                    lives: player.lives.clone()
+                    lives: player.lives.clone(),
                 });
                 self.ephemeral.dirty();
             }

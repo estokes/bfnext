@@ -676,8 +676,7 @@ impl Db {
                         for uid in &group.units {
                             unit_mut!(self, uid)?.dead = false;
                         }
-                        if obj.spawned || class == ObjGroupClass::Services && !obj.kind.is_airbase()
-                        {
+                        if obj.spawned || class == ObjGroupClass::Services {
                             self.ephemeral.push_spawn(gid)
                         }
                         self.update_objective_status(&oid, now)?;
@@ -826,8 +825,7 @@ impl Db {
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
                     let group = group!(self, gid)?;
                     let farp = obj.kind.is_farp();
-                    let services = group.class.is_services() && !obj.kind.is_airbase();
-                    if !farp && !services {
+                    if !farp && !group.class.is_services() {
                         for uid in &group.units {
                             let unit = unit_mut!(self, uid)?;
                             if !obj.zone.contains(unit.pos) {
@@ -847,7 +845,7 @@ impl Db {
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
                     let group = group!(self, gid)?;
                     let farp = obj.kind.is_farp();
-                    let services = group.class.is_services() && !obj.kind.is_airbase();
+                    let services = group.class.is_services();
                     if !farp && !services && group_health!(self, gid)?.0 > 0 {
                         match group.kind {
                             Some(_) => {

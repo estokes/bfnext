@@ -3,6 +3,9 @@ name = "bfdb"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "bfdb"
+
 [dependencies]
 anyhow = { workspace = true }
 arrayvec = { workspace = true }
@@ -10,6 +13,7 @@ bfprotocols = { version = "0.1.0", path = "../bfprotocols" }
 bincode = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+clap = { workspace = true }
 compact_str = { workspace = true }
 dcso3 = { version = "0.1", path = "../dcso3" }
 enumflags2 = { workspace = true }

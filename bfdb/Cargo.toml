@@ -3,26 +3,30 @@ name = "bfdb"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
+anyhow = { workspace = true }
+arrayvec = { workspace = true }
 bfprotocols = { version = "0.1.0", path = "../bfprotocols" }
-dcso3 = { version = "0.1", path = "../dcso3" }
-sled-typed = { version = "0.1", path = "../sled-typed" }
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_derive = { workspace = true }
-compact_str = { workspace = true }
+bincode = { workspace = true }
 bytes = { workspace = true }
-fxhash = { workspace = true }
+chrono = { workspace = true }
+compact_str = { workspace = true }
+dcso3 = { version = "0.1", path = "../dcso3" }
 enumflags2 = { workspace = true }
+futures = { workspace = true }
+fxhash = { workspace = true }
+log = { workspace = true }
+mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
+netidx-protocols = { workspace = true }
+netidx = { workspace = true }
+paste = { workspace = true }
+pin-project = { workspace = true }
+serde_derive = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+sled-typed = { version = "0.1", path = "../sled-typed" }
 sled = { workspace = true }
 smallvec = { workspace = true }
-chrono = { workspace = true }
-anyhow = { workspace = true }
-paste = { workspace = true }
-arrayvec = { workspace = true }
-bincode = { workspace = true }
-pin-project = { workspace = true }
+tokio = { workspace = true }
 uuid = { workspace = true }
+warp = { workspace = true }

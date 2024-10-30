@@ -21,11 +21,15 @@ use dcso3::{
     String,
 };
 use enumflags2::BitFlags;
+use fxhash::FxHashMap;
+use log::error;
+use netidx::{path::Path as NetidxPath, subscriber::Subscriber};
 use serde::{Deserialize, Serialize};
 use sled::{transaction::TransactionError, Db};
 use sled_typed::Tree;
 use smallvec::{smallvec, SmallVec};
-use std::str::FromStr;
+use std::{ops::Deref, path::Path, str::FromStr, sync::Arc, time::Duration};
+use tokio::task;
 use uuid::Uuid;
 
 db_id!(KillId);
@@ -33,35 +37,35 @@ db_id!(RoundId);
 db_id!(SortieId);
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-struct Aggregates {
-    air_kills: u32,
-    ground_kills: u32,
-    captures: u32,
-    repairs: u32,
-    supply_transfers: u32,
-    troops: u32,
-    farps: u32,
-    deploys: u32,
-    actions: u32,
-    deaths: u32,
-    hours: f32,
-    donated_points: u32,
+pub(crate) struct Aggregates {
+    pub(crate) air_kills: u32,
+    pub(crate) ground_kills: u32,
+    pub(crate) captures: u32,
+    pub(crate) repairs: u32,
+    pub(crate) supply_transfers: u32,
+    pub(crate) troops: u32,
+    pub(crate) farps: u32,
+    pub(crate) deploys: u32,
+    pub(crate) actions: u32,
+    pub(crate) deaths: u32,
+    pub(crate) hours: f32,
+    pub(crate) donated_points: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Pilot {
-    name: ArrayVec<String, 8>,
-    total: Aggregates,
-    token: ArrayVec<Uuid, 4>,
+pub(crate) struct Pilot {
+    pub(crate) name: ArrayVec<String, 8>,
+    pub(crate) total: Aggregates,
+    pub(crate) token: ArrayVec<Uuid, 4>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PilotRoundInfo {
-    points: i32,
-    side: (DateTime<Utc>, Side),
-    slot: Option<Slot>,
-    lives: ArrayVec<(LifeType, DateTime<Utc>, u8), 5>,
-    connected: Option<(DateTime<Utc>, String)>,
+pub(crate) struct PilotRoundInfo {
+    pub(crate) points: i32,
+    pub(crate) side: (DateTime<Utc>, Side),
+    pub(crate) slot: Option<Slot>,
+    pub(crate) lives: ArrayVec<(LifeType, DateTime<Utc>, u8), 5>,
+    pub(crate) connected: Option<(DateTime<Utc>, String)>,
 }
 
 impl Default for PilotRoundInfo {
@@ -77,42 +81,42 @@ impl Default for PilotRoundInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Sortie {
-    vehicle: Vehicle,
-    takeoff: DateTime<Utc>,
-    land: Option<DateTime<Utc>>,
+pub(crate) struct Sortie {
+    pub(crate) vehicle: Vehicle,
+    pub(crate) takeoff: DateTime<Utc>,
+    pub(crate) land: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Slot {
-    id: SlotId,
-    time: DateTime<Utc>,
-    vehicle: Option<Vehicle>,
-    sortie: Option<SortieId>,
+pub(crate) struct Slot {
+    pub(crate) id: SlotId,
+    pub(crate) time: DateTime<Utc>,
+    pub(crate) vehicle: Option<Vehicle>,
+    pub(crate) sortie: Option<SortieId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Unit {
-    group: Option<GroupId>,
-    owner: Side,
-    typ: Vehicle,
-    tags: UnitTags,
-    pos: Pos,
-    dead: bool,
+pub(crate) struct Unit {
+    pub(crate) group: Option<GroupId>,
+    pub(crate) owner: Side,
+    pub(crate) typ: Vehicle,
+    pub(crate) tags: UnitTags,
+    pub(crate) pos: Pos,
+    pub(crate) dead: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Objective {
-    name: String,
-    pos: LLPos,
-    kind: ObjectiveKind,
-    by: Option<Ucid>,
-    owner: Side,
-    last_change: DateTime<Utc>,
-    health: u8,
-    logi: u8,
-    supply: u8,
-    fuel: u8,
+pub(crate) struct Objective {
+    pub(crate) name: String,
+    pub(crate) pos: LLPos,
+    pub(crate) kind: ObjectiveKind,
+    pub(crate) by: Option<Ucid>,
+    pub(crate) owner: Side,
+    pub(crate) last_change: DateTime<Utc>,
+    pub(crate) health: u8,
+    pub(crate) logi: u8,
+    pub(crate) supply: u8,
+    pub(crate) fuel: u8,
 }
 
 #[derive(Clone)]
@@ -251,31 +255,31 @@ impl Pilots {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-struct Round {
-    start: DateTime<Utc>,
-    end: Option<DateTime<Utc>>,
-    winner: Option<Side>,
+pub(crate) struct Round {
+    pub(crate) start: DateTime<Utc>,
+    pub(crate) end: Option<DateTime<Utc>>,
+    pub(crate) winner: Option<Side>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SessionEnd {
-    time: DateTime<Utc>,
-    frame: HistogramSer,
-    api: ApiPerfInner,
-    engine: PerfInner,
+pub(crate) struct SessionEnd {
+    pub(crate) time: DateTime<Utc>,
+    pub(crate) frame: HistogramSer,
+    pub(crate) api: ApiPerfInner,
+    pub(crate) engine: PerfInner,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Session {
-    stop_time: Option<DateTime<Utc>>,
-    end: Option<SessionEnd>,
-    cfg: Cfg,
+pub(crate) struct Session {
+    pub(crate) stop_time: Option<DateTime<Utc>>,
+    pub(crate) end: Option<SessionEnd>,
+    pub(crate) cfg: Cfg,
 }
 
-type Scenario = String;
+pub(crate) type Scenario = String;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-enum GroupKind {
+pub(crate) enum GroupKind {
     Deployed { name: String, by: Ucid },
     Troop { name: String, by: Ucid },
     Action { name: String, by: Ucid },
@@ -289,10 +293,10 @@ impl Default for GroupKind {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct Group {
-    owner: Side,
-    units: SmallVec<[EnId; 16]>,
-    kind: GroupKind,
+pub(crate) struct Group {
+    pub(crate) owner: Side,
+    pub(crate) units: SmallVec<[EnId; 16]>,
+    pub(crate) kind: GroupKind,
 }
 
 #[derive(Debug, Clone)]
@@ -322,7 +326,9 @@ impl StatCtx {
 }
 
 #[derive(Clone)]
-struct StatsDb {
+pub(crate) struct StatsDbInner {
+    subscriber: Subscriber,
+    base: NetidxPath,
     db: Db,
     pilots: Pilots,
     seq: Tree<(Scenario, RoundId), SeqId>,
@@ -336,6 +342,22 @@ struct StatsDb {
     objectives: Tree<(RoundId, ObjectiveId), Objective>,
     equipment: Tree<(RoundId, ObjectiveId, String), u32>,
     liquids: Tree<(RoundId, ObjectiveId, LiquidType), u32>,
+}
+
+pub(crate) struct StatsDb(Arc<StatsDbInner>);
+
+impl Clone for StatsDb {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
+
+impl Deref for StatsDb {
+    type Target = StatsDbInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 macro_rules! abort {
@@ -352,22 +374,87 @@ fn txn_err(e: TransactionError<anyhow::Error>) -> anyhow::Error {
 }
 
 impl StatsDb {
-    fn new(db: &Db) -> Result<Self> {
-        Ok(Self {
+    pub(crate) fn new<P: AsRef<Path>>(
+        subscriber: Subscriber,
+        db: P,
+        base: NetidxPath,
+    ) -> Result<Self> {
+        let db = sled::open(db.as_ref())?;
+        let t = Self(Arc::new(StatsDbInner {
+            subscriber,
+            base,
             db: db.clone(),
-            pilots: Pilots::new(db)?,
-            seq: Tree::open(db, "seq")?,
-            round: Tree::open(db, "round")?,
-            session: Tree::open(db, "session")?,
-            kills: Tree::open(db, "kills")?,
-            shared_kills: Tree::open(db, "shared_kills")?,
-            units: Tree::open(db, "units")?,
-            groups: Tree::open(db, "groups")?,
-            detected: Tree::open(db, "detected")?,
-            objectives: Tree::open(db, "objectives")?,
-            equipment: Tree::open(db, "equipment")?,
-            liquids: Tree::open(db, "liquids")?,
-        })
+            pilots: Pilots::new(&db)?,
+            seq: Tree::open(&db, "seq")?,
+            round: Tree::open(&db, "round")?,
+            session: Tree::open(&db, "session")?,
+            kills: Tree::open(&db, "kills")?,
+            shared_kills: Tree::open(&db, "shared_kills")?,
+            units: Tree::open(&db, "units")?,
+            groups: Tree::open(&db, "groups")?,
+            detected: Tree::open(&db, "detected")?,
+            objectives: Tree::open(&db, "objectives")?,
+            equipment: Tree::open(&db, "equipment")?,
+            liquids: Tree::open(&db, "liquids")?,
+        }));
+        let _t = t.clone();
+        task::spawn(async move {
+            if let Err(e) = _t.background_loop().await {
+                error!("background task failed {e:?}")
+            }
+        });
+        Ok(t)
+    }
+
+    async fn background_loop(self) -> Result<()> {
+        use futures::{channel::mpsc, select_biased, prelude::*};
+        use netidx::{resolver_client::ChangeTracker, subscriber::{Dval, UpdatesFlags, SubId, Event, Value}};
+        use tokio::time;
+        let resolver = self.subscriber.resolver();
+        let mut timer = time::interval(Duration::from_secs(1));
+        let mut ctx: FxHashMap<SubId, (Dval, StatCtx)> = FxHashMap::default();
+        let mut by_path: FxHashMap<NetidxPath, SubId> = FxHashMap::default();
+        let mut ct = ChangeTracker::new(self.base.clone());
+        let (tx_res, mut rx_res) = mpsc::channel(10);
+        loop {
+            select_biased! {
+                _ = timer.tick().fuse() => match resolver.check_changed(&mut ct).await {
+                    Err(e) => error!("failed to check changed {e:?}"),
+                    Ok(false) => (),
+                    Ok(true) => {
+                        for path in resolver.list(self.base.clone()).await?.drain(..) {
+                            let path = dbg!(path.append("log"));
+                            if !by_path.contains_key(&path) {
+                                let dv = self.subscriber.subscribe(path.clone());
+                                dv.updates(UpdatesFlags::empty(), tx_res.clone());
+                                let id = dv.id();
+                                ctx.insert(id, (dv, StatCtx::default()));
+                                by_path.insert(path, id);
+                            }
+                        }
+                    }
+                },
+                mut ev = rx_res.select_next_some() => {
+                    for (id, ev) in ev.drain(..) {
+                        if let Some((_dv, ctx)) = ctx.get_mut(&id) {
+                            if let Event::Update(Value::String(v)) = ev {
+                                let st: Stat = match serde_json::from_str(&v) {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        error!("failed to parse stat {e:?}");
+                                        continue
+                                    }
+                                };
+                                if let Err(e) = task::block_in_place(|| self.add_stat(ctx, st)) {
+                                    error!("failed to add stat {e:?}")
+                                }
+                            }
+                        }
+                    }
+                },
+                complete => break Ok(()),
+            }
+        }
     }
 
     fn new_round(
@@ -529,7 +616,7 @@ impl StatsDb {
         Ok(())
     }
 
-    pub fn add_stat(&self, ctx: &mut StatCtx, stat: Stat) -> Result<()> {
+    fn add_stat(&self, ctx: &mut StatCtx, stat: Stat) -> Result<()> {
         if let Some(ctx) = &ctx.0 {
             if stat.seq <= ctx.seq {
                 return Ok(());

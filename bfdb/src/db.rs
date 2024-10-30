@@ -423,7 +423,7 @@ impl StatsDb {
                     Ok(false) => (),
                     Ok(true) => {
                         for path in resolver.list(self.base.clone()).await?.drain(..) {
-                            let path = dbg!(path.append("log"));
+                            let path = dbg!(path.append("stats"));
                             if !by_path.contains_key(&path) {
                                 let dv = self.subscriber.subscribe(path.clone());
                                 dv.updates(UpdatesFlags::empty(), tx_res.clone());

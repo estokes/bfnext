@@ -87,7 +87,7 @@ async fn logger_loop(
                     for cl in &subs {
                         contents.update_subscriber(&mut batch, *cl, Value::String(c.clone()))
                     }
-                    batch.commit(None).await;
+                    batch.commit(Some(Duration::from_secs(10))).await;
                     batch = publisher.start_batch();
                 }
                 ToLogger::Close(ch) => {

@@ -6,6 +6,10 @@ edition = "2021"
 [[bin]]
 name = "bfdb"
 
+[[bin]]
+name = "test"
+path = "src/test.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 arrayvec = { workspace = true }

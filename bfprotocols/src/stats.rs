@@ -59,7 +59,6 @@ pub enum DetectionSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
 pub enum StatKind {
     NewRound {
         sortie: String,
@@ -217,7 +216,6 @@ pub enum StatKind {
 pub struct Stat {
     pub seq: SeqId,
     pub time: DateTime<Utc>,
-    #[serde(flatten)]
     pub kind: StatKind,
 }
 

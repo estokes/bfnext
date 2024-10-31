@@ -46,7 +46,7 @@ pin-project = { version = "1" }
 rand = { version = "0.8" }
 regex = { version = "1" }
 serde_derive = "1"
-serde_json = "1"
+serde_json = { version = "1" }
 serde = { version = "1", features = ["rc"] }
 simplelog = "0.12"
 sled = { version = "0.34" }

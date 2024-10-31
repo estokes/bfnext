@@ -10,6 +10,10 @@ name = "bfdb"
 name = "test"
 path = "src/test.rs"
 
+[[bin]]
+name = "migrate"
+path = "src/migrate.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 arrayvec = { workspace = true }

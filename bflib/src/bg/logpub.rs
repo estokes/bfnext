@@ -58,6 +58,7 @@ async fn logger_loop(
                     file.seek(SeekFrom::Start(0)).await?;
                     let mut bufreader = BufReader::new(file);
                     buf.clear();
+                    let mut n = 0;
                     loop {
                         if bufreader.read_line(&mut buf).await? == 0 {
                             break
@@ -66,6 +67,12 @@ async fn logger_loop(
                         buf.clear();
                         let chars = Chars::from_bytes(bytes.split().freeze()).unwrap();
                         contents.update_subscriber(&mut batch, cl, Value::String(chars));
+                        n += 1;
+                        if n > 500 {
+                            n = 0;
+                            batch.commit(None).await;
+                            batch = publisher.start_batch();
+                        }
                     }
                     file = bufreader.into_inner();
                     batch.commit(None).await;

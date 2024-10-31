@@ -30,6 +30,7 @@ env_logger = "0.11.0"
 fixedstr = { version = "0.5.5", features = ["serde"] }
 futures = { version = "0.3" }
 fxhash = "0.2"
+handlebars = { version = "6" }
 hdrhistogram = { version = "7" }
 humantime = { version = "2" }
 immutable-chunkmap = { version = "2.0.4", features = ["serde"] }
@@ -57,5 +58,5 @@ zstd = { version = "0.13" }
 
 [workspace]
 resolver = "2"
-members = ["dcso3", "bflib", "bfdb", "bfprotocols", "sled-typed"]
+members = ["dcso3", "bflib", "bfdb", "bfprotocols", "yats"]
 exclude = ["bftools"]

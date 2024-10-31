@@ -26,7 +26,7 @@ use log::error;
 use netidx::{path::Path as NetidxPath, subscriber::Subscriber};
 use serde::{Deserialize, Serialize};
 use sled::{transaction::TransactionError, Db};
-use sled_typed::Tree;
+use yats::Tree;
 use smallvec::{smallvec, SmallVec};
 use std::{ops::Deref, path::Path, str::FromStr, sync::Arc, time::Duration};
 use tokio::task;

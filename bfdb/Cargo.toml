@@ -19,6 +19,7 @@ dcso3 = { version = "0.1", path = "../dcso3" }
 enumflags2 = { workspace = true }
 futures = { workspace = true }
 fxhash = { workspace = true }
+handlebars = { workspace = true }
 log = { workspace = true }
 mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
 netidx-protocols = { workspace = true }
@@ -28,7 +29,7 @@ pin-project = { workspace = true }
 serde_derive = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
-sled-typed = { version = "0.1", path = "../sled-typed" }
+yats = { version = "0.1", path = "../yats" }
 sled = { workspace = true }
 smallvec = { workspace = true }
 tokio = { workspace = true }

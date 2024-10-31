@@ -5,7 +5,7 @@ use futures::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
     },
-    select, StreamExt,
+    select_biased, StreamExt,
 };
 use fxhash::FxHashSet;
 use log::error;
@@ -47,7 +47,7 @@ async fn logger_loop(
     let mut buf = String::new();
     let mut bytes = BytesMut::new();
     loop {
-        select! {
+        select_biased! {
             e = events.select_next_some() => match e {
                 Event::Destroyed(_) => return Ok(()),
                 Event::Unsubscribe(_, cl) => {

@@ -27,6 +27,7 @@ struct Args {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
+    env_logger::init();
     let args = Args::parse();
     let subscriber = SubscriberBuilder::new()
         .config(Config::load_default()?)

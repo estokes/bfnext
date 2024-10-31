@@ -330,6 +330,7 @@ impl Logs {
 
     async fn write_stat(&mut self, stat: StatKind) -> Result<()> {
         let mut buf = encode(&Stat::new(stat))?;
+        buf.put_u8(0xA);
         match self {
             Self::Netidx { stats, .. } => {
                 let buf = Chars::from_bytes(buf.freeze())?;
@@ -338,10 +339,7 @@ impl Logs {
             Self::Files {
                 stats_file: Some(stats_file),
                 ..
-            } => {
-                buf.put_u8(0xA);
-                Ok(stats_file.write_all_buf(&mut buf).await?)
-            }
+            } => Ok(stats_file.write_all_buf(&mut buf).await?),
             Self::Files { .. } => bail!("stats file is closed"),
         }
     }
@@ -445,7 +443,7 @@ impl Logs {
     async fn shutdown(&mut self) {
         match self {
             Self::Netidx { publisher, .. } => publisher.clone().shutdown().await,
-            Self::Files { .. } => ()
+            Self::Files { .. } => (),
         }
     }
 }
@@ -457,7 +455,11 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
     let mut _rpcs: Option<Rpcs> = None;
     while let Some(msg) = rx.recv().await {
         match msg {
-            Task::CfgLoaded { sortie, cfg, admin_channel } => {
+            Task::CfgLoaded {
+                sortie,
+                cfg,
+                admin_channel,
+            } => {
                 if let Some(base) = cfg.netidx_base.as_ref() {
                     let base = base.append(&sortie);
                     let cfg = match Config::load_default() {
@@ -515,7 +517,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                         eprintln!("could not write log line {e:?}")
                     }
                 }
-            }
+            },
             Task::LogPerf {
                 players,
                 perf,

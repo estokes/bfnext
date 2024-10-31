@@ -22,7 +22,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
-use log::error;
+use log::{error, info};
 use netidx::{path::Path as NetidxPath, subscriber::Subscriber};
 use serde::{Deserialize, Serialize};
 use sled::{transaction::TransactionError, Db};
@@ -441,10 +441,11 @@ impl StatsDb {
                                 let st: Stat = match serde_json::from_str(&v) {
                                     Ok(s) => s,
                                     Err(e) => {
-                                        error!("failed to parse stat {e:?}");
+                                        error!("failed to parse stat {v} {e:?}");
                                         continue
                                     }
                                 };
+                                info!("adding stat {st:?}");
                                 if let Err(e) = task::block_in_place(|| self.add_stat(ctx, st)) {
                                     error!("failed to add stat {e:?}")
                                 }

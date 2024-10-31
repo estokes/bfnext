@@ -14,7 +14,7 @@ use netidx::{
     path::Path,
     publisher::{Event, Publisher, Value},
 };
-use std::{io::SeekFrom, path::PathBuf};
+use std::{io::SeekFrom, path::PathBuf, time::Duration};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncBufReadExt, AsyncSeekExt, AsyncWriteExt, BufReader},
@@ -70,12 +70,12 @@ async fn logger_loop(
                         n += 1;
                         if n > 500 {
                             n = 0;
-                            batch.commit(None).await;
+                            batch.commit(Some(Duration::from_secs(10))).await;
                             batch = publisher.start_batch();
                         }
                     }
                     file = bufreader.into_inner();
-                    batch.commit(None).await;
+                    batch.commit(Some(Duration::from_secs(10))).await;
                     batch = publisher.start_batch();
                 },
             },

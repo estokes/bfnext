@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use db::StatsDb;
 use netidx::{config::Config, path::Path as NetidxPath, subscriber::SubscriberBuilder};
+use regex::Regex;
 use std::{future, path::PathBuf};
 
 mod db;
@@ -23,6 +24,12 @@ struct Args {
     /// The private key to use for TLS
     #[arg(short, long)]
     key: Option<PathBuf>,
+    /// Include only scenarios that match the given regex
+    #[arg(long)]
+    include: Option<Regex>,
+    /// Exclude scenarios that match the given regex
+    #[arg(long)]
+    exclude: Option<Regex>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -32,6 +39,12 @@ async fn main() -> Result<()> {
     let subscriber = SubscriberBuilder::new()
         .config(Config::load_default()?)
         .build()?;
-    let db = StatsDb::new(subscriber.clone(), args.db, args.base)?;
+    let db = StatsDb::new(
+        subscriber.clone(),
+        args.db,
+        args.base,
+        args.include,
+        args.exclude,
+    )?;
     future::pending().await
 }

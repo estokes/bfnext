@@ -24,13 +24,14 @@ use enumflags2::BitFlags;
 use fxhash::FxHashMap;
 use log::{error, info};
 use netidx::{path::Path as NetidxPath, subscriber::Subscriber};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sled::{transaction::TransactionError, Db};
-use yats::Tree;
 use smallvec::{smallvec, SmallVec};
 use std::{ops::Deref, path::Path, str::FromStr, sync::Arc, time::Duration};
 use tokio::task;
 use uuid::Uuid;
+use yats::Tree;
 
 db_id!(KillId);
 db_id!(RoundId);
@@ -329,6 +330,8 @@ impl StatCtx {
 pub(crate) struct StatsDbInner {
     subscriber: Subscriber,
     base: NetidxPath,
+    include: Option<Regex>,
+    exclude: Option<Regex>,
     db: Db,
     pilots: Pilots,
     seq: Tree<(Scenario, RoundId), SeqId>,
@@ -378,11 +381,15 @@ impl StatsDb {
         subscriber: Subscriber,
         db: P,
         base: NetidxPath,
+        include: Option<Regex>,
+        exclude: Option<Regex>,
     ) -> Result<Self> {
         let db = sled::open(db.as_ref())?;
         let t = Self(Arc::new(StatsDbInner {
             subscriber,
             base,
+            include,
+            exclude,
             db: db.clone(),
             pilots: Pilots::new(&db)?,
             seq: Tree::open(&db, "seq")?,
@@ -407,8 +414,11 @@ impl StatsDb {
     }
 
     async fn background_loop(self) -> Result<()> {
-        use futures::{channel::mpsc, select_biased, prelude::*};
-        use netidx::{resolver_client::ChangeTracker, subscriber::{Dval, UpdatesFlags, SubId, Event, Value}};
+        use futures::{channel::mpsc, prelude::*, select_biased};
+        use netidx::{
+            resolver_client::ChangeTracker,
+            subscriber::{Dval, Event, SubId, UpdatesFlags, Value},
+        };
         use tokio::time;
         let resolver = self.subscriber.resolver();
         let mut timer = time::interval(Duration::from_secs(1));
@@ -423,13 +433,19 @@ impl StatsDb {
                     Ok(false) => (),
                     Ok(true) => {
                         for path in resolver.list(self.base.clone()).await?.drain(..) {
-                            let path = dbg!(path.append("stats"));
-                            if !by_path.contains_key(&path) {
-                                let dv = self.subscriber.subscribe(path.clone());
-                                dv.updates(UpdatesFlags::empty(), tx_res.clone());
-                                let id = dv.id();
-                                ctx.insert(id, (dv, StatCtx::default()));
-                                by_path.insert(path, id);
+                            if let Some(sortie) = NetidxPath::basename(&path) {
+                                if self.include.as_ref().map(|r| r.is_match(sortie)).unwrap_or(true)
+                                    && !self.exclude.as_ref().map(|r| r.is_match(sortie)).unwrap_or(false)
+                                {
+                                    let path = path.append("stats");
+                                    if !by_path.contains_key(&path) {
+                                        let dv = self.subscriber.subscribe(path.clone());
+                                        dv.updates(UpdatesFlags::empty(), tx_res.clone());
+                                        let id = dv.id();
+                                        ctx.insert(id, (dv, StatCtx::default()));
+                                        by_path.insert(path, id);
+                                    }
+                                }
                             }
                         }
                     }

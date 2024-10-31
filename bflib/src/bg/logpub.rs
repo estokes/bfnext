@@ -68,7 +68,7 @@ async fn logger_loop(
                         let chars = Chars::from_bytes(bytes.split().freeze()).unwrap();
                         contents.update_subscriber(&mut batch, cl, Value::String(chars));
                         n += 1;
-                        if n > 500 {
+                        if n >= 99 {
                             n = 0;
                             batch.commit(Some(Duration::from_secs(10))).await;
                             batch = publisher.start_batch();

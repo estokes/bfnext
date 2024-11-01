@@ -29,7 +29,7 @@ use bfprotocols::{
     perf::Perf,
     stats::StatKind,
 };
-use chrono::{prelude::*, Duration};
+use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
     coalition::Side,
@@ -52,7 +52,12 @@ use netidx::publisher::Value as NetIdxValue;
 use parking_lot::{Condvar, Mutex};
 use regex::{Regex, RegexBuilder};
 use smallvec::{smallvec, SmallVec};
-use std::{mem, str::FromStr, sync::Arc};
+use std::{
+    mem,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::oneshot;
 
 #[derive(Debug, Clone, Copy)]
@@ -250,7 +255,7 @@ impl FromStr for AdminCommand {
                         None
                     } else {
                         let dur = humantime::Duration::from_str(dur)?;
-                        Some(Utc::now() + Duration::seconds(dur.as_secs() as i64))
+                        Some(Utc::now() + chrono::Duration::seconds(dur.as_secs() as i64))
                     };
                     Ok(Self::Ban {
                         player: player.into(),
@@ -703,12 +708,13 @@ pub(super) fn admin_shutdown(
         ));
         ctx.do_bg_task(Task::Stat(se));
     }
-    ctx.do_bg_task(Task::Shutdown);
-    ctx.do_bg_task(Task::Sync(Arc::clone(&wait)));
+    ctx.do_bg_task(Task::Shutdown(Arc::clone(&wait)));
     let &(ref lock, ref cvar) = &*wait;
     let mut synced = lock.lock();
-    if !*synced {
-        cvar.wait_for(&mut synced, std::time::Duration::from_secs(60));
+    let start = Instant::now();
+    let wait = Duration::from_secs(60);
+    while !*synced && start.elapsed() < wait {
+        cvar.wait_for(&mut synced, wait - start.elapsed());
     }
     Net::singleton(lua)?.dostring_in(DcsLuaEnvironment::Server, "DCS.exitProcess()".into())?;
     Ok(())

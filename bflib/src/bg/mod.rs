@@ -251,8 +251,7 @@ pub(super) enum Task {
         perf: Perf,
         api_perf: ApiPerf,
     },
-    Sync(Arc<(Mutex<bool>, Condvar)>),
-    Shutdown,
+    Shutdown(Arc<(Mutex<bool>, Condvar)>),
     Stat(StatKind),
     RotateStats,
 }
@@ -525,13 +524,14 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
             } => {
                 logs.log_perf(players, &perf.stat(), &api_perf.stat()).await;
             }
-            Task::Shutdown => logs.shutdown().await,
-            Task::Sync(a) => {
+            Task::Shutdown(a) => {
+                logs.shutdown().await;
                 let &(ref lock, ref cvar) = &*a;
                 let mut synced = lock.lock();
                 *synced = true;
                 cvar.notify_all();
-            }
+                break
+            },
             Task::Stat(st) => {
                 if let Err(e) = logs.write_stat(st).await {
                     eprintln!("could not write stat {e:?}")

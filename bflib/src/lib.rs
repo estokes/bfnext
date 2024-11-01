@@ -61,7 +61,7 @@ use dcso3::{
     timer::Timer,
     trigger::Trigger,
     unit::{ClassUnit, Unit},
-    world::{MarkPanel, World},
+    world::{HandlerId, MarkPanel, World},
     HooksLua, LuaEnv, MizLua, String, Vector2,
 };
 use ewr::Ewr;
@@ -230,6 +230,7 @@ struct JtacSlotIfo {
 #[derive(Debug, Default)]
 struct Context {
     sortie: String,
+    event_handler_id: Option<HandlerId>,
     miz_state_path: PathBuf,
     shutdown: Option<AutoShutdown>,
     last_perf_log: DateTime<Utc>,
@@ -1145,6 +1146,11 @@ fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<(
                 Err(e) => error!("failed to run timed events {:?}", e),
                 Ok(AdminResult::Shutdown) => {
                     println!("initiating DCS shutdown");
+                    if let Some(id) = unsafe { Context::get_mut() }.event_handler_id.take() {
+                        World::singleton(lua)?
+                            .remove_event_handler(id)
+                            .context("removing event handler")?
+                    }
                     Net::singleton(lua)?.dostring_in(
                         DcsLuaEnvironment::Server,
                         "DCS.setUserCallbacks({}); DCS.exitProcess()".into(),
@@ -1166,9 +1172,11 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     let miz = Miz::singleton(lua)?;
     ctx.idx = miz.index().context("indexing the mission")?;
     info!("adding event handlers");
-    World::singleton(lua)?
-        .add_event_handler(on_event)
-        .context("adding event handlers")?;
+    ctx.event_handler_id = Some(
+        World::singleton(lua)?
+            .add_event_handler(on_event)
+            .context("adding event handlers")?,
+    );
     let sortie = miz.sortie().context("getting the sortie")?;
     let path = {
         let s = Env::singleton(lua)?.get_value_dict_by_key(sortie)?;

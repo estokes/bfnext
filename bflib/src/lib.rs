@@ -1144,10 +1144,12 @@ fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<(
                 Ok(AdminResult::Continue) => (),
                 Err(e) => error!("failed to run timed events {:?}", e),
                 Ok(AdminResult::Shutdown) => {
+                    println!("initiating DCS shutdown");
                     Net::singleton(lua)?.dostring_in(
                         DcsLuaEnvironment::Server,
                         "DCS.setUserCallbacks({}); DCS.exitProcess()".into(),
                     )?;
+                    println!("removing timer event");
                     return Ok(None);
                 }
             }

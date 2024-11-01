@@ -644,7 +644,7 @@ impl StatsDb {
                 bail!("NewRound should only appear at the beginning of the stats or after RoundEnd")
             }
             match self.seq.scan_prefix(sortie)?.next_back().transpose()? {
-                None => return dbg!(self.new_round(ctx, stat.time, sortie.clone(), stat.seq)),
+                None => return self.new_round(ctx, stat.time, sortie.clone(), stat.seq),
                 Some(((_, round), seq)) => match self.round.get(&(sortie.clone(), round))? {
                     Some(r) if r.end.is_none() => {
                         ctx.0 = Some(StatCtxInner {
@@ -652,10 +652,10 @@ impl StatsDb {
                             seq,
                             sortie: sortie.clone(),
                         });
-                        return dbg!(Ok(()));
+                        return Ok(());
                     }
                     Some(_) | None => {
-                        return dbg!(self.new_round(ctx, stat.time, sortie.clone(), stat.seq))
+                        return self.new_round(ctx, stat.time, sortie.clone(), stat.seq)
                     }
                 },
             }
@@ -663,7 +663,7 @@ impl StatsDb {
         if let StatKind::RoundEnd { winner } = &stat.kind {
             return self.round_end(ctx, stat.time, *winner);
         }
-        let ctx = dbg!(ctx.get_mut()?);
+        let ctx = ctx.get_mut()?;
         match stat.kind {
             StatKind::NewRound { .. } | StatKind::RoundEnd { .. } => unreachable!(),
             StatKind::SessionStart { stop, cfg } => {

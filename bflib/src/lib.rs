@@ -386,20 +386,18 @@ fn on_player_try_connect(
 
 fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
     let start_ts = Utc::now();
+    let ctx = unsafe { Context::get_mut() };
+    let perf = &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks;
     info!(
         "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
         id, msg, all
     );
-    let r = chatcmd::process(unsafe { Context::get_mut() }, lua, start_ts, id, msg);
-    record_perf(
-        &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
-        start_ts,
-    );
+    let r = chatcmd::process(ctx, lua, start_ts, id, msg);
+    record_perf(perf, start_ts);
     match r {
         Ok(s) => Ok(s),
         Err(e) => {
-            unsafe { Context::get_mut() }
-                .db
+            ctx.db
                 .ephemeral
                 .msgs()
                 .send(MsgTyp::Chat(Some(id)), format_compact!("{e}"));
@@ -533,6 +531,7 @@ fn unit_killed(
 
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
+    let ctx = unsafe { Context::get_mut() };
     let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     match &ev {
         Event::MarkAdded(e) | Event::MarkChange(e) | Event::MarkRemoved(e)
@@ -542,7 +541,6 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         }
         ev => info!("onEvent: {:?}", ev),
     }
-    let ctx = unsafe { Context::get_mut() };
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
@@ -1034,9 +1032,8 @@ fn run_slow_timed_events(
     Ok(AdminResult::Continue)
 }
 
-fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<AdminResult> {
+fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<AdminResult> {
     let ts = Utc::now();
-    let ctx = unsafe { Context::get_mut() };
     let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
@@ -1141,12 +1138,13 @@ fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<(
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
         move |lua, _, now| {
-            match run_timed_events(lua, &path) {
+            let ctx = unsafe { Context::get_mut() };
+            match run_timed_events(ctx, lua, &path) {
                 Ok(AdminResult::Continue) => (),
                 Err(e) => error!("failed to run timed events {:?}", e),
                 Ok(AdminResult::Shutdown) => {
                     println!("initiating DCS shutdown");
-                    if let Some(id) = unsafe { Context::get_mut() }.event_handler_id.take() {
+                    if let Some(id) = ctx.event_handler_id.take() {
                         World::singleton(lua)?
                             .remove_event_handler(id)
                             .context("removing event handler")?

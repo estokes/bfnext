@@ -441,8 +441,12 @@ impl Logs {
 
     async fn shutdown(&mut self) {
         match self {
-            Self::Netidx { publisher, .. } => publisher.clone().shutdown().await,
             Self::Files { .. } => (),
+            Self::Netidx { publisher, log, stats, .. } => {
+                let _ = log.close().await;
+                let _ = stats.close().await;
+                publisher.clone().shutdown().await
+            },
         }
     }
 }
@@ -525,11 +529,14 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                 logs.log_perf(players, &perf.stat(), &api_perf.stat()).await;
             }
             Task::Shutdown(a) => {
+                println!("starting netidx shutdown");
                 logs.shutdown().await;
+                println!("netidx shutdown complete");
                 let &(ref lock, ref cvar) = &*a;
                 let mut synced = lock.lock();
                 *synced = true;
                 cvar.notify_all();
+                println!("condvar signaled, exiting background loop");
                 break
             },
             Task::Stat(st) => {
@@ -575,7 +582,8 @@ pub(super) fn init(write_dir: PathBuf) -> UnboundedSender<Task> {
                     .enable_all()
                     .build()
                     .expect("could not initialize async runtime");
-                rt.block_on(background_loop(write_dir, rx))
+                rt.block_on(background_loop(write_dir, rx));
+                println!("background thread exiting")
             });
             tx
         }

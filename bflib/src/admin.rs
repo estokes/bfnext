@@ -709,14 +709,16 @@ pub(super) fn admin_shutdown(
         ctx.do_bg_task(Task::Stat(se));
     }
     ctx.do_bg_task(Task::Shutdown(Arc::clone(&wait)));
+    let start = Instant::now();
+    let wait_for = Duration::from_secs(60);
     let &(ref lock, ref cvar) = &*wait;
     let mut synced = lock.lock();
-    let start = Instant::now();
-    let wait = Duration::from_secs(60);
-    while !*synced && start.elapsed() < wait {
-        cvar.wait_for(&mut synced, wait - start.elapsed());
+    while !*synced && start.elapsed() < wait_for {
+        cvar.wait_for(&mut synced, wait_for - start.elapsed());
     }
+    println!("background shutdown complete");
     Net::singleton(lua)?.dostring_in(DcsLuaEnvironment::Server, "DCS.exitProcess()".into())?;
+    println!("dcs shutdown initiated");
     Ok(())
 }
 

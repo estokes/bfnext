@@ -683,6 +683,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             Context::reset();
             Perf::reset();
             Context::get_mut().init_async_bg(lua.inner())?;
+            return Ok(()) // avoid record perf with a reset perf context
         },
         _ => (),
     }

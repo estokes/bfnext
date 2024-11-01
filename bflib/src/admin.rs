@@ -34,7 +34,7 @@ use compact_str::format_compact;
 use dcso3::{
     coalition::Side,
     degrees_to_radians,
-    net::{DcsLuaEnvironment, Net, PlayerId, Ucid},
+    net::{Net, PlayerId, Ucid},
     object::DcsObject,
     perf::Perf as ApiPerf,
     pointing_towards2,

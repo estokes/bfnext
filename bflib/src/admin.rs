@@ -78,6 +78,12 @@ impl FromStr for WarehouseKind {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum AdminResult {
+    Shutdown,
+    Continue,
+}
+
 #[derive(Debug, Clone)]
 pub enum AdminCommand {
     Help,
@@ -684,7 +690,7 @@ pub(super) fn admin_shutdown(
     ctx: &mut Context,
     lua: MizLua,
     reset: Option<Option<Side>>,
-) -> Result<()> {
+) -> Result<AdminResult> {
     let wait = Arc::new((Mutex::new(false), Condvar::new()));
     let se = {
         let perf = unsafe { Perf::get_mut() };
@@ -716,10 +722,7 @@ pub(super) fn admin_shutdown(
     while !*synced && start.elapsed() < wait_for {
         cvar.wait_for(&mut synced, wait_for - start.elapsed());
     }
-    println!("background shutdown complete");
-    Net::singleton(lua)?.dostring_in(DcsLuaEnvironment::Server, "DCS.exitProcess()".into())?;
-    println!("dcs shutdown initiated");
-    Ok(())
+    Ok(AdminResult::Shutdown)
 }
 
 fn add_admin(ctx: &mut Context, player: &String) -> Result<()> {
@@ -800,11 +803,12 @@ pub(super) enum Caller {
     External(oneshot::Sender<NetIdxValue>),
 }
 
-pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
+pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<AdminResult> {
     let mut cmds = mem::take(&mut ctx.admin_commands);
     while let Some((cmd, ch)) = ctx.external_admin_commands.pop() {
         cmds.push((Caller::External(ch), cmd));
     }
+    let mut result = AdminResult::Continue;
     for (caller, cmd) in cmds.drain(..) {
         let mut replies: SmallVec<[NetIdxValue; 4]> = smallvec![];
         macro_rules! reply_ok {
@@ -962,7 +966,10 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 Err(e) => reply_err!("could not reset {player} lives {:?}", e),
             },
             AdminCommand::Shutdown => match admin_shutdown(ctx, lua, None) {
-                Ok(()) => reply_ok!("shutting down"),
+                Ok(s) => {
+                    result = s;
+                    reply_ok!("shutting down")
+                }
                 Err(e) => reply_err!("failed to shutdown {:?}", e),
             },
             AdminCommand::AddAdmin { player } => match add_admin(ctx, &player) {
@@ -994,7 +1001,10 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
                 Err(e) => reply_err!("could not remark {objective} {e:?}"),
             },
             AdminCommand::Reset { winner } => match admin_shutdown(ctx, lua, Some(winner)) {
-                Ok(()) => reply_ok!("the state has been reset"),
+                Ok(s) => {
+                    result = s;
+                    reply_ok!("the state has been reset");
+                }
                 Err(e) => reply_err!("the state could not be reset {e:?}"),
             },
         }
@@ -1010,5 +1020,5 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
         }
     }
     ctx.admin_commands = cmds;
-    Ok(())
+    Ok(result)
 }

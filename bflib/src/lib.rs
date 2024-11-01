@@ -28,7 +28,7 @@ mod spawnctx;
 
 extern crate nalgebra as na;
 use crate::db::player::SlotAuth;
-use admin::{run_admin_commands, AdminCommand};
+use admin::{run_admin_commands, AdminCommand, AdminResult};
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use bfprotocols::{
     cfg::{Cfg, LifeType},
@@ -55,7 +55,7 @@ use dcso3::{
     event::Event,
     hooks::UserHooks,
     lfs::Lfs,
-    net::{Net, PlayerId, SlotId, Ucid},
+    net::{DcsLuaEnvironment, Net, PlayerId, SlotId, Ucid},
     object::{DcsObject, DcsOid},
     perf::record_perf,
     timer::Timer,
@@ -820,7 +820,7 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
     Ok(())
 }
 
-fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) {
+fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) -> Result<AdminResult> {
     if let Some(asd) = ctx.shutdown.as_mut() {
         if asd.when - now <= Duration::minutes(30) && !asd.thirty_minute_warning {
             asd.thirty_minute_warning = true;
@@ -852,9 +852,10 @@ fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) {
                 .panel_to_all(60, true, "The server will restart in one minute")
         }
         if now > asd.when {
-            let _ = admin::admin_shutdown(ctx, lua, None);
+            return admin::admin_shutdown(ctx, lua, None);
         }
     }
+    Ok(AdminResult::Continue)
 }
 
 fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) {
@@ -949,11 +950,15 @@ fn run_slow_timed_events(
     perf: &mut PerfInner,
     path: &PathBuf,
     ts: DateTime<Utc>,
-) -> Result<()> {
+) -> Result<AdminResult> {
     let freq = Duration::seconds(ctx.db.ephemeral.cfg.slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
         ctx.last_slow_timed_events = ts;
-        check_auto_shutdown(ctx, lua, ts);
+        match check_auto_shutdown(ctx, lua, ts) {
+            Ok(AdminResult::Continue) => (),
+            Ok(AdminResult::Shutdown) => return Ok(AdminResult::Shutdown),
+            Err(e) => error!("failed to check for auto shutdown {e:?}"),
+        }
         for (oid, vh) in ctx.db.ephemeral.warehouses_to_sync() {
             if let Err(e) = ctx.db.sync_vehicle_at_obj(lua, oid, vh.clone()) {
                 error!(
@@ -1025,10 +1030,10 @@ fn run_slow_timed_events(
         record_perf(&mut perf.snapshot, now);
         record_perf(&mut perf.slow_timed, start_ts);
     }
-    Ok(())
+    Ok(AdminResult::Continue)
 }
 
-fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
+fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<AdminResult> {
     let ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
@@ -1066,8 +1071,10 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
         }
     }
     record_perf(&mut perf.player_positions, ts);
-    if let Err(e) = run_slow_timed_events(lua, ctx, perf, path, ts) {
-        error!("error running slow timed events {:?}", e)
+    match run_slow_timed_events(lua, ctx, perf, path, ts) {
+        Ok(AdminResult::Continue) => (),
+        Ok(AdminResult::Shutdown) => return Ok(AdminResult::Shutdown),
+        Err(e) => error!("error running slow timed events {:?}", e),
     }
     if let Some(slot) = ctx.menu_init_queue.shift_remove_index(0) {
         if let Err(e) = menu::init_for_slot(ctx, lua, &slot) {
@@ -1113,8 +1120,10 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     if let Err(e) = ctx.db.logistics_step(lua, perf, ts) {
         error!("error running logistics events {e:?}")
     }
-    if let Err(e) = run_admin_commands(ctx, lua) {
-        error!("failed to run admin commands {e:?}")
+    match run_admin_commands(ctx, lua) {
+        Err(e) => error!("failed to run admin commands {e:?}"),
+        Ok(AdminResult::Continue) => (),
+        Ok(AdminResult::Shutdown) => return Ok(AdminResult::Shutdown),
     }
     if let Err(e) = run_action_commands(ctx, perf, lua) {
         error!("failed to run action commands {e:?}")
@@ -1122,7 +1131,7 @@ fn run_timed_events(lua: MizLua, path: &PathBuf) -> Result<()> {
     ctx.load_state.step();
     record_perf(&mut perf.timed_events, ts);
     ctx.log_perf(now);
-    Ok(())
+    Ok(AdminResult::Continue)
 }
 
 fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<()> {
@@ -1131,8 +1140,16 @@ fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<(
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();
         move |lua, _, now| {
-            if let Err(e) = run_timed_events(lua, &path) {
-                error!("failed to run timed events {:?}", e)
+            match run_timed_events(lua, &path) {
+                Ok(AdminResult::Continue) => (),
+                Err(e) => error!("failed to run timed events {:?}", e),
+                Ok(AdminResult::Shutdown) => {
+                    Net::singleton(lua)?.dostring_in(
+                        DcsLuaEnvironment::Server,
+                        "DCS.setUserCallbacks({}); DCS.exitProcess()".into(),
+                    )?;
+                    return Ok(None);
+                }
             }
             Ok(Some(now + 1.))
         }

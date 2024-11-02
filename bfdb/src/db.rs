@@ -633,6 +633,18 @@ impl StatsDb {
         Ok(())
     }
 
+    pub(crate) fn pilots(&self) -> impl Iterator<Item = Result<(Ucid, String)>> {
+        self.pilots.pilots.iter().map(|r| {
+            let (ucid, pilot) = r?;
+            let name = pilot
+                .name
+                .last()
+                .map(|s| s.clone())
+                .unwrap_or(String::default());
+            Ok((ucid, name))
+        })
+    }
+
     fn add_stat(&self, ctx: &mut StatCtx, stat: Stat) -> Result<()> {
         if let Some(ctx) = &ctx.0 {
             if stat.seq <= ctx.seq {

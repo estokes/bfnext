@@ -609,6 +609,10 @@ fn default_cull_after() -> u32 {
     1800
 }
 
+fn default_lock_sides() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {
@@ -673,6 +677,10 @@ pub struct Cfg {
     /// how close must artillery be to participate in an artillery mission
     /// (meters).
     pub artillery_mission_range: u32,
+    /// If true players will be locked to the side they initially
+    /// choose for the duration of the round
+    #[serde(default = "default_lock_sides")]
+    pub lock_sides: bool,
     /// how many times a user may switch sides in a given round,
     /// or None for unlimited side switches
     #[serde(default)]

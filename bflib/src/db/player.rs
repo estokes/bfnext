@@ -382,7 +382,11 @@ impl Db {
             return SlotAuth::Yes(None);
         }
         if slot_side != player.side {
-            return SlotAuth::ObjectiveNotOwned(player.side);
+            if self.ephemeral.cfg.lock_sides {
+                return SlotAuth::ObjectiveNotOwned(player.side);
+            } else {
+                player.side = slot_side;
+            }
         }
         match slot {
             SlotId::Spectator => unreachable!(),

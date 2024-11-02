@@ -1800,6 +1800,7 @@ impl Default for Cfg {
             crate_load_distance: 50,
             crate_spread: 250,
             artillery_mission_range: 15000,
+            lock_sides: true,
             side_switches: Some(1),
             max_crates: Some(4),
             default_lives: FxHashMap::from_iter([

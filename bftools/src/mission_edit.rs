@@ -596,20 +596,20 @@ enum SlotType {
 struct VehicleTemplates {
     plane_slots: HashMap<Side, HashMap<String, Group<'static>>>,
     helicopter_slots: HashMap<Side, HashMap<String, Group<'static>>>,
-    payload: HashMap<String, Table<'static>>,
-    prop_aircraft: HashMap<String, Table<'static>>,
-    radio: HashMap<String, Table<'static>>,
-    frequency: HashMap<String, Value<'static>>,
+    payload: HashMap<Side, HashMap<String, Table<'static>>>,
+    prop_aircraft: HashMap<Side, HashMap<String, Table<'static>>>,
+    radio: HashMap<Side, HashMap<String, Table<'static>>>,
+    frequency: HashMap<Side, HashMap<String, Value<'static>>>,
 }
 
 impl VehicleTemplates {
     fn new(wep: &LoadedMiz) -> Result<Self> {
         let mut plane_slots: HashMap<Side, HashMap<String, Group>> = HashMap::new();
         let mut helicopter_slots: HashMap<Side, HashMap<String, Group>> = HashMap::new();
-        let mut payload: HashMap<String, Table> = HashMap::new();
-        let mut prop_aircraft: HashMap<String, Table> = HashMap::new();
-        let mut radio: HashMap<String, Table> = HashMap::new();
-        let mut frequency: HashMap<String, Value> = HashMap::new();
+        let mut payload: HashMap<Side, HashMap<String, Table>> = HashMap::new();
+        let mut prop_aircraft: HashMap<Side, HashMap<String, Table>> = HashMap::new();
+        let mut radio: HashMap<Side, HashMap<String, Table>> = HashMap::new();
+        let mut frequency: HashMap<Side, HashMap<String, Value>> = HashMap::new();
         for (side, coa) in [Side::Blue, Side::Red]
             .into_iter()
             .map(|side| (side, wep.mission.coalition(side)))
@@ -645,16 +645,22 @@ impl VehicleTemplates {
                         .insert(unit_type.clone(), group.clone());
                         info!("adding payload template: {unit_type}");
                         if let Ok(w) = unit.raw_get("payload") {
-                            payload.insert(unit_type.clone(), w);
+                            payload
+                                .entry(side)
+                                .or_default()
+                                .insert(unit_type.clone(), w);
                         }
                         if let Ok(w) = unit.raw_get("AddPropAircraft") {
-                            prop_aircraft.insert(unit_type.clone(), w);
+                            prop_aircraft
+                                .entry(side)
+                                .or_default()
+                                .insert(unit_type.clone(), w);
                         }
                         if let Ok(w) = unit.raw_get("Radio") {
-                            radio.insert(unit_type.clone(), w);
+                            radio.entry(side).or_default().insert(unit_type.clone(), w);
                         }
                         if let Ok(v) = unit.raw_get("frequency") {
-                            frequency.insert(unit_type, v);
+                            frequency.entry(side).or_default().insert(unit_type, v);
                         }
                     }
                 }
@@ -858,12 +864,11 @@ impl VehicleTemplates {
         let mut stn = 1u64;
         //apply weapon/APA templates to mission table in self
         info!("replacing slots with template payloads");
-        for coa in base
-            .mission
-            .raw_get::<_, Table>("coalition")?
-            .pairs::<Value, Table>()
+        for (side, coa) in Side::ALL
+            .into_iter()
+            .map(|side| (side, base.mission.coalition(side)))
         {
-            let coa = coa?.1;
+            let coa = coa?;
             for country in coa.raw_get::<_, Table>("country")?.pairs::<Value, Table>() {
                 let country = country?.1;
                 for group in vehicle(&country, "plane")
@@ -882,11 +887,15 @@ impl VehicleTemplates {
                             continue;
                         }
                         let unit_type: String = unit.raw_get("type")?;
-                        match self.payload.get(&unit_type) {
+                        match self.payload.get(&side).and_then(|t| t.get(&unit_type)) {
                             Some(w) => unit.set("payload", w.deep_clone(lua)?)?,
-                            None => warn!("no payload table for {unit_type}"),
+                            None => warn!("no payload table for {side}/{unit_type}"),
                         }
-                        let stn_string = match self.prop_aircraft.get(&unit_type) {
+                        let stn_string = match self
+                            .prop_aircraft
+                            .get(&side)
+                            .and_then(|t| t.get(&unit_type))
+                        {
                             None => String::from(""),
                             Some(tmpl) => {
                                 let tmpl = tmpl.deep_clone(lua)?;
@@ -905,10 +914,10 @@ impl VehicleTemplates {
                                 stn
                             }
                         };
-                        if let Some(w) = self.radio.get(&unit_type) {
+                        if let Some(w) = self.radio.get(&side).and_then(|t| t.get(&unit_type)) {
                             unit.set("Radio", w.deep_clone(lua)?)?
                         }
-                        if let Some(v) = self.frequency.get(&unit_type) {
+                        if let Some(v) = self.frequency.get(&side).and_then(|t| t.get(&unit_type)) {
                             unit.set("frequency", v.deep_clone(lua)?)?
                         }
                         increment_key(&mut replace_count, &unit_type);
@@ -930,9 +939,13 @@ impl VehicleTemplates {
                                 if let Some(cnt) = slots
                                     .entry(trigger_zone.objective_name.clone())
                                     .or_insert_with(|| {
-                                        HashMap::from_iter(
-                                            self.payload.keys().map(|typ| (typ.clone(), 0)),
-                                        )
+                                        let mut tbl = HashMap::default();
+                                        if let Some(t) = self.payload.get(&side) {
+                                            for k in t.keys() {
+                                                tbl.insert(k.clone(), 0);
+                                            }
+                                        }
+                                        tbl
                                     })
                                     .get_mut(&unit_type)
                                 {

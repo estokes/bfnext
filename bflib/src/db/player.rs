@@ -259,7 +259,11 @@ impl Db {
             .fold(false, |res, (_, obj)| {
                 res || (obj.owner == player.side && obj.zone.contains(position))
             });
-        if is_on_owned_objective {
+        if !self.ephemeral.cfg.limited_lives {
+            player.airborne = Some(life_type);
+            self.ephemeral.dirty();
+            Ok(TakeoffRes::NoLifeTaken)
+        } else if is_on_owned_objective {
             // paranoia
             if *player_lives == 0 {
                 return Ok(TakeoffRes::OutOfLives);
@@ -320,12 +324,16 @@ impl Db {
                 inst.position.p.z = position.y;
                 inst.landed_at_objective = Some(oid);
             }
-            self.ephemeral.stat(StatKind::Life {
-                id: ucid,
-                lives: player.lives.clone(),
-            });
             self.ephemeral.dirty();
-            Some(life_type)
+            if !self.ephemeral.cfg.limited_lives {
+                None
+            } else {
+                self.ephemeral.stat(StatKind::Life {
+                    id: ucid,
+                    lives: player.lives.clone(),
+                });
+                Some(life_type)
+            }
         } else {
             None
         }

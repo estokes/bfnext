@@ -1811,6 +1811,7 @@ impl Default for Cfg {
                 (LifeType::Recon, (6, 21600)),
             ]),
             life_types: default_life_types(),
+            limited_lives: true,
             actions: FxHashMap::from_iter([
                 (Side::Red, default_red_actions()),
                 (Side::Blue, default_blue_actions()),

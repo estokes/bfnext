@@ -613,6 +613,10 @@ fn default_lock_sides() -> bool {
     true
 }
 
+fn default_limited_lives() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {
@@ -693,6 +697,10 @@ pub struct Cfg {
     /// the life reset configuration for each life type. A pair
     /// of number of lives per reset, and reset time in seconds.
     pub default_lives: FxHashMap<LifeType, (u8, u32)>,
+    /// If true, lives will be limited according to the default_lives
+    /// and life_types specification
+    #[serde(default = "default_limited_lives")]
+    pub limited_lives: bool,
     /// Available actions per side
     #[serde(default)]
     pub actions: FxHashMap<Side, IndexMap<String, Action, FxBuildHasher>>,

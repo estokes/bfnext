@@ -1777,6 +1777,9 @@ impl Default for Cfg {
                 logistics_transfer: 15,
                 capture: 15,
                 tk_window: 5,
+                provisional: false,
+                airframe_cost: FxHashMap::default(),
+                weapon_cost: FxHashMap::default(),
             }),
             warehouse: Some(WarehouseConfig {
                 hub_max: 25,

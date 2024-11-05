@@ -441,18 +441,41 @@ fn default_tk_window() -> u32 {
     24
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PointsCfg {
+    /// Bonus issued to new players when they register
     pub new_player_join: u32,
+    /// Points awarded for each air kill
     pub air_kill: u32,
+    /// Base points awared for each ground kill
     pub ground_kill: u32,
+    /// Bonus points awarded to heavy sam kills
     pub lr_sam_bonus: u32,
+    /// Points awarded for repairing base logistics
     pub logistics_repair: u32,
+    /// Points awarded for logistics transfers
     pub logistics_transfer: u32,
+    /// Points awarded for base capture
     pub capture: u32,
+    /// How many hours before previous team kills are forgotten for
+    /// the purposes of computing points
     #[serde(default = "default_tk_window")]
     pub tk_window: u32,
+    /// If provisional is true then points earned in a sortie are only
+    /// committed to the player's points balance when they land at a
+    /// friendly objective
+    #[serde(default)]
+    pub provisional: bool,
+    /// How many points does it cost to slot in a given airframe. This
+    /// need not cover all airframes on the server, and the default is 0.
+    #[serde(default)]
+    pub airframe_cost: FxHashMap<Vehicle, u32>,
+    /// How many points does it cost to load a given weapon. This need
+    /// not cover all weapons, and the default is zero. This must be
+    /// combined with airframe_cost in order to be effective.
+    #[serde(default)]
+    pub weapon_cost: FxHashMap<String, u32>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

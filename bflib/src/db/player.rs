@@ -52,6 +52,11 @@ pub enum SlotAuth {
     ObjectiveNotOwned(Side),
     ObjectiveHasNoLogistics,
     NoLives(LifeType),
+    NoPoints {
+        vehicle: Vehicle,
+        cost: u32,
+        balance: i32,
+    },
     NotRegistered(Side),
     VehicleNotAvailable(Vehicle),
     Denied,
@@ -67,6 +72,7 @@ pub enum TakeoffRes {
     TookLife(LifeType),
     NoLifeTaken,
     OutOfLives,
+    OutOfPoints,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -101,12 +107,15 @@ pub struct Player {
     pub changing_slots: bool,
     #[serde(skip)]
     pub jtac_or_spectators: bool,
+    #[serde(skip)]
+    pub provisional_points: i32,
 }
 
 impl Db {
     pub fn player_deslot(&mut self, ucid: &Ucid) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             player.airborne = None;
+            player.provisional_points = 0;
             if let Some((slot, _)) = player.current_slot.take() {
                 let _ = self
                     .ephemeral
@@ -251,7 +260,6 @@ impl Db {
         if let Some((_, Some(inst))) = &mut player.current_slot {
             inst.landed_at_objective = None;
         }
-        self.ephemeral.stat(StatKind::Takeoff { id: ucid });
         let is_on_owned_objective = self
             .persisted
             .objectives
@@ -259,7 +267,21 @@ impl Db {
             .fold(false, |res, (_, obj)| {
                 res || (obj.owner == player.side && obj.zone.contains(position))
             });
-        if !self.ephemeral.cfg.limited_lives {
+        let cost = match self.ephemeral.cfg.points.as_ref() {
+            None => 0,
+            Some(points) => {
+                let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+                if cost > 0 && player.points < cost as i32 {
+                    return Ok(TakeoffRes::OutOfPoints);
+                } else if cost > 0 {
+                    cost
+                } else {
+                    0
+                }
+            }
+        };
+        let typ = sifo.typ.clone();
+        let res = if !self.ephemeral.cfg.limited_lives {
             player.airborne = Some(life_type);
             self.ephemeral.dirty();
             Ok(TakeoffRes::NoLifeTaken)
@@ -279,7 +301,13 @@ impl Db {
             Ok(TakeoffRes::TookLife(life_type))
         } else {
             Ok(TakeoffRes::NoLifeTaken)
+        };
+        if cost > 0 {
+            self.adjust_points(&ucid, -(cost as i32), typ.as_str());
+            self.ephemeral.dirty();
         }
+        self.ephemeral.stat(StatKind::Takeoff { id: ucid });
+        res
     }
 
     pub fn land(&mut self, slot: SlotId, position: Vector2) -> Option<LifeType> {
@@ -324,14 +352,29 @@ impl Db {
                 inst.position.p.z = position.y;
                 inst.landed_at_objective = Some(oid);
             }
+            let lives = player.lives.clone();
+            if let Some(points) = self.ephemeral.cfg.points.as_ref() {
+                let is_provisional = points.provisional;
+                let provisional_points = player.provisional_points;
+                let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+                let typ = sifo.typ.clone();
+                player.provisional_points = 0;
+                if cost > 0 {
+                    self.adjust_points(&ucid, cost as i32, typ.as_str());
+                }
+                if is_provisional && provisional_points > 0 {
+                    self.adjust_points(
+                        &ucid,
+                        provisional_points as i32,
+                        "provisional points committed",
+                    );
+                }
+            }
             self.ephemeral.dirty();
             if !self.ephemeral.cfg.limited_lives {
                 None
             } else {
-                self.ephemeral.stat(StatKind::Life {
-                    id: ucid,
-                    lives: player.lives.clone(),
-                });
+                self.ephemeral.stat(StatKind::Life { id: ucid, lives });
                 Some(life_type)
             }
         } else {
@@ -456,6 +499,16 @@ impl Db {
                         }));
                     };
                 }
+                if let Some(points) = self.ephemeral.cfg.points.as_ref() {
+                    let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+                    if cost > 0 && player.points < cost as i32 {
+                        return SlotAuth::NoPoints {
+                            cost,
+                            vehicle: sifo.typ.clone(),
+                            balance: player.points,
+                        };
+                    }
+                }
                 loop {
                     match player.lives.get(&life_type).map(|t| *t) {
                         None => {
@@ -507,6 +560,7 @@ impl Db {
                     .ephemeral
                     .cfg
                     .points
+                    .as_ref()
                     .map(|p| p.new_player_join as i32)
                     .unwrap_or(0);
                 self.persisted.players.insert_cow(
@@ -520,6 +574,7 @@ impl Db {
                         crates: SetS::new(),
                         airborne: None,
                         points,
+                        provisional_points: 0,
                         current_slot: None,
                         changing_slots: false,
                         jtac_or_spectators: true,
@@ -729,6 +784,7 @@ impl Db {
             }),
         ));
         player.changing_slots = false;
+        player.provisional_points = 0;
         self.ephemeral.dirty();
         Ok(())
     }
@@ -944,7 +1000,7 @@ impl Db {
     }
 
     pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: &Dead) {
-        let mut hit_by: SmallVec<[&Ucid; 16]> = smallvec![];
+        let mut hit_by: SmallVec<[(Ucid, bool); 16]> = smallvec![];
         let valid_shots = || {
             // why are you hitting yourself
             dead.shots
@@ -969,18 +1025,28 @@ impl Db {
                 })
         };
         for shot in valid_shots() {
-            if let Some(ucid) = shot.shooter.ucid() {
-                if shot.hit && !hit_by.contains(&ucid) {
-                    hit_by.push(ucid);
-                }
+            let k = match shot.shooter {
+                Who::Player { ucid, .. } => (ucid, true),
+                Who::AI { ucid, .. } => match ucid {
+                    Some(ucid) => (ucid, false),
+                    None => continue,
+                },
+            };
+            if shot.hit && !hit_by.contains(&k) {
+                hit_by.push(k)
             }
         }
         if hit_by.is_empty() {
             for shot in valid_shots() {
-                if let Some(ucid) = shot.shooter.ucid() {
-                    if dead.time - shot.time <= Duration::minutes(3) && !hit_by.contains(&ucid) {
-                        hit_by.push(ucid);
-                    }
+                let k = match shot.shooter {
+                    Who::Player { ucid, .. } => (ucid, true),
+                    Who::AI { ucid, .. } => match ucid {
+                        Some(ucid) => (ucid, false),
+                        None => continue,
+                    },
+                };
+                if dead.time - shot.time <= Duration::minutes(3) && !hit_by.contains(&k) {
+                    hit_by.push(k);
                 }
             }
         }
@@ -1019,26 +1085,32 @@ impl Db {
                     })
                 }
             };
-            for ucid in hit_by {
-                if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
-                    let msg = if player.side != *dead.victim.side() {
-                        player.points += pps;
-                        let tp = player.points;
+            for (ucid, provisional) in hit_by {
+                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+                    let msg = if player.side == *dead.victim.side() {
+                        self.apply_teamkill_penalty(ucid, total_points, &victim_info)
+                    } else {
+                        let tp = if provisional {
+                            player.provisional_points += pps;
+                            player.provisional_points
+                        } else {
+                            player.points += pps;
+                            player.points
+                        };
+                        let pm = if provisional { " provisional" } else { "" };
                         match &victim_info {
-                            None => format_compact!("{tp}(+{pps}) points"),
+                            None => format_compact!("{tp}(+{pps}){pm} points"),
                             Some(vi) => {
                                 if vi.ai_deployable {
                                     format_compact!(
-                                        "{tp}(+{pps}) points, killed {}'s deployed ai unit",
+                                        "{tp}(+{pps}){pm} points, killed {}'s deployed ai unit",
                                         vi.name
                                     )
                                 } else {
-                                    format_compact!("{tp}(+{pps}) points, killed {}", vi.name)
+                                    format_compact!("{tp}(+{pps}){pm} points, killed {}", vi.name)
                                 }
                             }
                         }
-                    } else {
-                        self.apply_teamkill_penalty(*ucid, total_points, &victim_info)
                     };
                     debug!("{ucid} kill message: {msg}");
                     self.ephemeral

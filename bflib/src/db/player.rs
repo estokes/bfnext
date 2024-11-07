@@ -237,8 +237,10 @@ impl Db {
         &mut self,
         time: DateTime<Utc>,
         slot: SlotId,
-        position: Vector2,
+        unit: Unit<'_>
     ) -> Result<TakeoffRes> {
+        let pos = unit.get_point()?;
+        let pos = Vector2::new(pos.x, pos.z);
         let sifo = self
             .ephemeral
             .slot_info

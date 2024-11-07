@@ -641,11 +641,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 let id = unit.object_id()?;
                 let slot = unit.slot()?;
                 if ctx.airborne.insert(id.clone()) && ctx.recently_landed.remove(&id).is_none() {
-                    let pos = unit.get_point()?;
-                    match ctx
-                        .db
-                        .takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z))
-                    {
+                    match ctx.db.takeoff(Utc::now(), slot.clone(), unit) {
                         Err(e) => error!("could not process takeoff, {:?}", e),
                         Ok(TakeoffRes::NoLifeTaken) => (),
                         Ok(TakeoffRes::TookLife(typ)) => {

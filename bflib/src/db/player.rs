@@ -999,7 +999,7 @@ impl Db {
         }
     }
 
-    pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: &Dead) {
+    pub fn award_kill_points(&mut self, cfg: &PointsCfg, dead: &Dead) {
         let mut hit_by: SmallVec<[(Ucid, bool); 16]> = smallvec![];
         let valid_shots = || {
             // why are you hitting yourself

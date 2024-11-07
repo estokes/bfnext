@@ -417,6 +417,17 @@ fn try_occupy_slot(
     let now = Utc::now();
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::Denied => Ok(false),
+        SlotAuth::NoPoints {
+            vehicle,
+            cost,
+            balance,
+        } => {
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                format_compact!("{vehicle} costs {cost}, you have {balance}"),
+            );
+            Ok(false)
+        }
         SlotAuth::NoLives(typ) => {
             let msg = match lives(&mut ctx.db, &ifo.ucid, Some(typ)) {
                 Ok(s) => s,
@@ -643,9 +654,9 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                             }
                             let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
                         }
-                        Ok(TakeoffRes::OutOfLives) => {
+                        Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
                             if let Err(e) = e.initiator.destroy() {
-                                error!("failed to destroy unit that took off without lives {e:?}")
+                                error!("failed to destroy unit that took off without lives or points {e:?}")
                             }
                         }
                     }
@@ -683,7 +694,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             Context::reset();
             Perf::reset();
             Context::get_mut().init_async_bg(lua.inner())?;
-            return Ok(()) // avoid record perf with a reset perf context
+            return Ok(()); // avoid record perf with a reset perf context
         },
         _ => (),
     }
@@ -968,12 +979,15 @@ fn run_slow_timed_events(
             }
         }
         return_lives(lua, ctx, ts);
-        for dead in ctx.shots_out.bring_out_your_dead(ts) {
-            info!("kill {:?}", dead);
-            if let Some(points) = ctx.db.ephemeral.cfg.points {
-                ctx.db.award_kill_points(points, &dead)
+        {
+            let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
+            for dead in ctx.shots_out.bring_out_your_dead(ts) {
+                info!("kill {:?}", dead);
+                if let Some(points) = cfg.points.as_ref() {
+                    ctx.db.award_kill_points(points, &dead)
+                }
+                ctx.do_bg_task(Task::Stat(StatKind::Kill(dead)));
             }
-            ctx.do_bg_task(Task::Stat(StatKind::Kill(dead)));
         }
         let start_ts = Utc::now();
         if let Err(e) = ctx.db.maybe_do_repairs(ts) {

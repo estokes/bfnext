@@ -32,6 +32,25 @@ function start() {
     # accept packets related to existing connections
     iptables -A INPUT -i $WAN -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
+    # Netidx resolver
+    iptables -A INPUT -i $WAN -p tcp --dport 4645 -j ACCEPT
+
+    # Netidx Publishers and SRS servers tcp
+    iptables -A INPUT -i $WAN -p tcp --dport 5000:6000 -j ACCEPT
+
+    # SRS Server UDP
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT0 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT1 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT2 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT3 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT4 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT5 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT6 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT7 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT8 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT9 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT10 -j ACCEPT
+
     # DCS Server
     iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT0 -j ACCEPT
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT0 -j ACCEPT
@@ -55,30 +74,6 @@ function start() {
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT9 -j ACCEPT
     iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT10 -j ACCEPT
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT10 -j ACCEPT
-
-    # SRS Server
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT0 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT0 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT1 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT1 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT2 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT2 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT3 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT3 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT4 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT4 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT5 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT5 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT6 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT6 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT7 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT7 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT8 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT8 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT9 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT9 -j ACCEPT
-    iptables -A INPUT -i $WAN -p tcp --dport $SRS_PORT10 -j ACCEPT
-    iptables -A INPUT -i $WAN -p udp --dport $SRS_PORT10 -j ACCEPT
 
     # SSH
     iptables -A INPUT -i $WAN -p tcp --dport 22 -j ACCEPT

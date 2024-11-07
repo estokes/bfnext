@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{group::DeployKind, Db, MapS, SetS};
+use super::{ephemeral::SlotInfo, group::DeployKind, Db, MapS, SetS};
 use crate::{maybe, maybe_mut, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
@@ -232,20 +232,19 @@ impl Db {
         }
     }
 
-    fn compute_loadout_cost(&self, unit: &Unit) -> Result<u32> {
+    fn compute_flight_cost(&self, sifo: &SlotInfo, unit: &Unit) -> Result<u32> {
         match self.ephemeral.cfg.points.as_ref() {
             None => Ok(0),
             Some(points) => {
-                if points.weapon_cost.is_empty() {
-                    return Ok(0);
-                }
-                let mut cost = 0;
-                for ammo in unit.get_ammo()? {
-                    let ammo = ammo?;
-                    let typ = ammo.type_name()?;
-                    if let Some(unit_cost) = points.weapon_cost.get(&typ) {
-                        let n = ammo.count()?;
-                        cost += n * (*unit_cost);
+                let mut cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+                if !points.weapon_cost.is_empty() {
+                    for ammo in unit.get_ammo().context("getting ammo")? {
+                        let ammo = ammo.context("unwrapping ammo")?;
+                        let typ = ammo.type_name().context("getting ammo type name")?;
+                        if let Some(unit_cost) = points.weapon_cost.get(&typ) {
+                            let n = ammo.count().context("getting ammo count")?;
+                            cost += n * (*unit_cost);
+                        }
                     }
                 }
                 Ok(cost)
@@ -259,28 +258,17 @@ impl Db {
         slot: SlotId,
         unit: &Unit,
     ) -> Result<TakeoffRes> {
-        let position = unit.get_point()?;
-        let position = Vector2::new(position.x, position.z);
+        let position = unit.get_ground_position()?.0;
         let sifo = self
             .ephemeral
             .slot_info
             .get(&slot)
             .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
-        let cost = match self.ephemeral.cfg.points.as_ref() {
-            None => 0,
-            Some(points) => {
-                let airframe_cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
-                let loadout_cost = match self
-                    .compute_loadout_cost(unit)
-                    .context("computing loadout cost")
-                {
-                    Ok(cost) => cost,
-                    Err(e) => {
-                        error!("failed to compute loadout cost {e:?}");
-                        0
-                    },
-                };
-                airframe_cost + loadout_cost
+        let cost = match self.compute_flight_cost(&sifo, unit) {
+            Ok(cost) => cost,
+            Err(e) => {
+                error!("failed to compute flight cost {e:?}");
+                0
             }
         };
         let (ucid, player) = self
@@ -336,10 +324,17 @@ impl Db {
         res
     }
 
-    pub fn land(&mut self, slot: SlotId, position: Vector2) -> Option<LifeType> {
+    pub fn land(&mut self, slot: SlotId, position: Vector2, unit: &Unit) -> Option<LifeType> {
         let sifo = match self.ephemeral.slot_info.get(&slot) {
             Some(sifo) => sifo,
             None => return None,
+        };
+        let cost = match self.compute_flight_cost(&sifo, unit) {
+            Ok(cost) => cost,
+            Err(e) => {
+                error!("failed to compute flight cost {e:?}");
+                0
+            }
         };
         let (ucid, player) = match self
             .ephemeral
@@ -382,7 +377,6 @@ impl Db {
             if let Some(points) = self.ephemeral.cfg.points.as_ref() {
                 let is_provisional = points.provisional;
                 let provisional_points = player.provisional_points;
-                let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
                 let typ = sifo.typ.clone();
                 player.provisional_points = 0;
                 if cost > 0 {

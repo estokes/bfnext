@@ -756,7 +756,7 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
             let unit = or_false!(Unit::get_instance(lua, id));
             let pos = or_false!(unit.get_ground_position());
             let slot = or_false!(unit.slot());
-            if let Some(typ) = db.land(slot.clone(), pos.0) {
+            if let Some(typ) = db.land(slot.clone(), pos.0, &unit) {
                 returned.push((typ, slot));
                 return false;
             }

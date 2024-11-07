@@ -72,7 +72,6 @@ pub enum TakeoffRes {
     TookLife(LifeType),
     NoLifeTaken,
     OutOfLives,
-    OutOfPoints,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -233,19 +232,57 @@ impl Db {
         }
     }
 
+    fn compute_loadout_cost(&self, unit: &Unit) -> Result<u32> {
+        match self.ephemeral.cfg.points.as_ref() {
+            None => Ok(0),
+            Some(points) => {
+                if points.weapon_cost.is_empty() {
+                    return Ok(0);
+                }
+                let mut cost = 0;
+                for ammo in unit.get_ammo()? {
+                    let ammo = ammo?;
+                    let typ = ammo.type_name()?;
+                    if let Some(unit_cost) = points.weapon_cost.get(&typ) {
+                        let n = ammo.count()?;
+                        cost += n * (*unit_cost);
+                    }
+                }
+                Ok(cost)
+            }
+        }
+    }
+
     pub fn takeoff(
         &mut self,
         time: DateTime<Utc>,
         slot: SlotId,
-        unit: Unit<'_>
+        unit: &Unit,
     ) -> Result<TakeoffRes> {
-        let pos = unit.get_point()?;
-        let pos = Vector2::new(pos.x, pos.z);
+        let position = unit.get_point()?;
+        let position = Vector2::new(position.x, position.z);
         let sifo = self
             .ephemeral
             .slot_info
             .get(&slot)
             .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
+        let cost = match self.ephemeral.cfg.points.as_ref() {
+            None => 0,
+            Some(points) => {
+                let airframe_cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+                let loadout_cost = match self
+                    .compute_loadout_cost(unit)
+                    .context("computing loadout cost")
+                {
+                    Ok(cost) => cost,
+                    Err(e) => {
+                        error!("failed to compute loadout cost {e:?}");
+                        0
+                    },
+                };
+                airframe_cost + loadout_cost
+            }
+        };
         let (ucid, player) = self
             .ephemeral
             .players_by_slot
@@ -269,19 +306,6 @@ impl Db {
             .fold(false, |res, (_, obj)| {
                 res || (obj.owner == player.side && obj.zone.contains(position))
             });
-        let cost = match self.ephemeral.cfg.points.as_ref() {
-            None => 0,
-            Some(points) => {
-                let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
-                if cost > 0 && player.points < cost as i32 {
-                    return Ok(TakeoffRes::OutOfPoints);
-                } else if cost > 0 {
-                    cost
-                } else {
-                    0
-                }
-            }
-        };
         let typ = sifo.typ.clone();
         let res = if !self.ephemeral.cfg.limited_lives {
             player.airborne = Some(life_type);

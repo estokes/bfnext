@@ -641,7 +641,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 let id = unit.object_id()?;
                 let slot = unit.slot()?;
                 if ctx.airborne.insert(id.clone()) && ctx.recently_landed.remove(&id).is_none() {
-                    match ctx.db.takeoff(Utc::now(), slot.clone(), unit) {
+                    match ctx.db.takeoff(Utc::now(), slot.clone(), &unit) {
                         Err(e) => error!("could not process takeoff, {:?}", e),
                         Ok(TakeoffRes::NoLifeTaken) => (),
                         Ok(TakeoffRes::TookLife(typ)) => {
@@ -650,7 +650,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                             }
                             let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
                         }
-                        Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
+                        Ok(TakeoffRes::OutOfLives) => {
                             if let Err(e) = e.initiator.destroy() {
                                 error!("failed to destroy unit that took off without lives or points {e:?}")
                             }

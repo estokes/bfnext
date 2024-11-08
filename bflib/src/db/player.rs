@@ -72,6 +72,7 @@ pub enum TakeoffRes {
     TookLife(LifeType),
     NoLifeTaken,
     OutOfLives,
+    OutOfPoints,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -232,9 +233,9 @@ impl Db {
         }
     }
 
-    fn compute_flight_cost(&self, sifo: &SlotInfo, unit: &Unit) -> Result<u32> {
+    fn compute_flight_cost(&self, sifo: &SlotInfo, unit: &Unit) -> Result<(u32, bool)> {
         match self.ephemeral.cfg.points.as_ref() {
-            None => Ok(0),
+            None => Ok((0, false)),
             Some(points) => {
                 let mut cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
                 if !points.weapon_cost.is_empty() {
@@ -247,7 +248,7 @@ impl Db {
                         }
                     }
                 }
-                Ok(cost)
+                Ok((cost, points.strict))
             }
         }
     }
@@ -264,11 +265,11 @@ impl Db {
             .slot_info
             .get(&slot)
             .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
-        let cost = match self.compute_flight_cost(&sifo, unit) {
+        let (cost, strict) = match self.compute_flight_cost(&sifo, unit) {
             Ok(cost) => cost,
             Err(e) => {
                 error!("failed to compute flight cost {e:?}");
-                0
+                (0, false)
             }
         };
         let (ucid, player) = self
@@ -295,7 +296,9 @@ impl Db {
                 res || (obj.owner == player.side && obj.zone.contains(position))
             });
         let typ = sifo.typ.clone();
-        let res = if !self.ephemeral.cfg.limited_lives {
+        let res = if strict && cost as i32 > player.points {
+            return Ok(TakeoffRes::OutOfPoints);
+        } else if !self.ephemeral.cfg.limited_lives {
             player.airborne = Some(life_type);
             self.ephemeral.dirty();
             Ok(TakeoffRes::NoLifeTaken)
@@ -329,11 +332,11 @@ impl Db {
             Some(sifo) => sifo,
             None => return None,
         };
-        let cost = match self.compute_flight_cost(&sifo, unit) {
+        let (cost, _) = match self.compute_flight_cost(&sifo, unit) {
             Ok(cost) => cost,
             Err(e) => {
                 error!("failed to compute flight cost {e:?}");
-                0
+                (0, false)
             }
         };
         let (ucid, player) = match self

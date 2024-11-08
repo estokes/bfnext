@@ -1780,6 +1780,8 @@ impl Default for Cfg {
                 provisional: false,
                 airframe_cost: FxHashMap::default(),
                 weapon_cost: FxHashMap::default(),
+                strict: false,
+                periodic_point_gain: (0, 0)
             }),
             warehouse: Some(WarehouseConfig {
                 hub_max: 25,

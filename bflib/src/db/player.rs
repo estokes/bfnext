@@ -718,7 +718,7 @@ impl Db {
                 let (cost, strict, cost_msg) = self.compute_flight_cost(sifo, &unit)?;
                 if cost > 0 {
                     let m = if strict && cost as i32 > balance {
-                        format_compact!("Your flight will cost {cost}, and have {balance}. {cost_msg}")
+                        format_compact!("Your flight will cost {cost}, and you have {balance}. {cost_msg}")
                     } else {
                         format_compact!("Your flight will cost {cost}. {cost_msg}")
                     };

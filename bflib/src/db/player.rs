@@ -82,6 +82,7 @@ pub struct InstancedPlayer {
     pub typ: Vehicle,
     pub in_air: bool,
     pub landed_at_objective: Option<ObjectiveId>,
+    pub stopped_at_objective: bool,
     pub moved: Option<DateTime<Utc>>,
 }
 
@@ -233,22 +234,27 @@ impl Db {
         }
     }
 
-    fn compute_flight_cost(&self, sifo: &SlotInfo, unit: &Unit) -> Result<(u32, bool)> {
+    fn compute_flight_cost(&self, sifo: &SlotInfo, unit: &Unit) -> Result<(u32, bool, String)> {
+        use std::fmt::Write;
+        let mut m = String::from("");
         match self.ephemeral.cfg.points.as_ref() {
-            None => Ok((0, false)),
+            None => Ok((0, false, m)),
             Some(points) => {
                 let mut cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+                write!(m, "{cost} for {}", sifo.typ).unwrap();
                 if !points.weapon_cost.is_empty() {
                     for ammo in unit.get_ammo().context("getting ammo")? {
                         let ammo = ammo.context("unwrapping ammo")?;
                         let typ = ammo.type_name().context("getting ammo type name")?;
                         if let Some(unit_cost) = points.weapon_cost.get(&typ) {
                             let n = ammo.count().context("getting ammo count")?;
-                            cost += n * (*unit_cost);
+                            let wcost = n * (*unit_cost);
+                            write!(m, ", {wcost} for {n}x{typ}").unwrap();
+                            cost += wcost;
                         }
                     }
                 }
-                Ok((cost, points.strict))
+                Ok((cost, points.strict, m))
             }
         }
     }
@@ -265,11 +271,11 @@ impl Db {
             .slot_info
             .get(&slot)
             .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
-        let (cost, strict) = match self.compute_flight_cost(&sifo, unit) {
+        let (cost, strict, cost_msg) = match self.compute_flight_cost(&sifo, unit) {
             Ok(cost) => cost,
             Err(e) => {
                 error!("failed to compute flight cost {e:?}");
-                (0, false)
+                (0, false, String::from(""))
             }
         };
         let (ucid, player) = self
@@ -295,7 +301,6 @@ impl Db {
             .fold(false, |res, (_, obj)| {
                 res || (obj.owner == player.side && obj.zone.contains(position))
             });
-        let typ = sifo.typ.clone();
         let res = if strict && cost as i32 > player.points {
             return Ok(TakeoffRes::OutOfPoints);
         } else if !self.ephemeral.cfg.limited_lives {
@@ -320,7 +325,7 @@ impl Db {
             Ok(TakeoffRes::NoLifeTaken)
         };
         if cost > 0 {
-            self.adjust_points(&ucid, -(cost as i32), typ.as_str());
+            self.adjust_points(&ucid, -(cost as i32), cost_msg.as_str());
             self.ephemeral.dirty();
         }
         self.ephemeral.stat(StatKind::Takeoff { id: ucid });
@@ -332,11 +337,11 @@ impl Db {
             Some(sifo) => sifo,
             None => return None,
         };
-        let (cost, _) = match self.compute_flight_cost(&sifo, unit) {
+        let (cost, _, cost_msg) = match self.compute_flight_cost(&sifo, unit) {
             Ok(cost) => cost,
             Err(e) => {
                 error!("failed to compute flight cost {e:?}");
-                (0, false)
+                (0, false, String::from(""))
             }
         };
         let (ucid, player) = match self
@@ -380,10 +385,9 @@ impl Db {
             if let Some(points) = self.ephemeral.cfg.points.as_ref() {
                 let is_provisional = points.provisional;
                 let provisional_points = player.provisional_points;
-                let typ = sifo.typ.clone();
                 player.provisional_points = 0;
                 if cost > 0 {
-                    self.adjust_points(&ucid, cost as i32, typ.as_str());
+                    self.adjust_points(&ucid, cost as i32, cost_msg.as_str());
                 }
                 if is_provisional && provisional_points > 0 {
                     self.adjust_points(
@@ -663,6 +667,7 @@ impl Db {
         let mut unit: Option<Unit> = None;
         let coord = Coord::singleton(lua)?;
         for ucid in ids {
+            let mut inform_cost = None;
             if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                 if let Some((slot, Some(inst))) = &mut player.current_slot {
                     if let Some(id) = self.ephemeral.object_id_by_slot.get(slot) {
@@ -674,10 +679,16 @@ impl Db {
                             Ok(instance) => {
                                 let pos = instance.get_position()?;
                                 if (inst.position.p.0 - pos.p.0).magnitude_squared() > 1.0 {
+                                    if inst.stopped_at_objective {
+                                        inform_cost = Some((*slot, player.points));
+                                    }
+                                    inst.stopped_at_objective = false;
                                     inst.position = pos;
                                     inst.velocity = instance.get_velocity()?.0;
                                     inst.in_air = instance.in_air()?;
                                     inst.moved = Some(now);
+                                } else if inst.landed_at_objective.is_some() {
+                                    inst.stopped_at_objective = true;
                                 }
                                 unit = Some(instance);
                                 self.ephemeral.stat(StatKind::Position {
@@ -696,6 +707,22 @@ impl Db {
                             }
                         }
                     }
+                }
+            }
+            if let (Some(unit), Some((slot, balance))) = (&unit, inform_cost) {
+                let sifo = self
+                    .ephemeral
+                    .slot_info
+                    .get(&slot)
+                    .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
+                let (cost, strict, cost_msg) = self.compute_flight_cost(sifo, &unit)?;
+                if cost > 0 {
+                    let m = if strict && cost as i32 > balance {
+                        format_compact!("Your flight will cost {cost}, and have {balance}. {cost_msg}")
+                    } else {
+                        format_compact!("Your flight will cost {cost}. {cost_msg}")
+                    };
+                    self.ephemeral.panel_to_player(&self.persisted, 60, ucid, m)
                 }
             }
         }
@@ -803,6 +830,7 @@ impl Db {
                 in_air: unit.in_air()?,
                 typ: Vehicle::from(unit.get_type_name()?),
                 landed_at_objective,
+                stopped_at_objective: true,
                 moved: None,
             }),
         ));

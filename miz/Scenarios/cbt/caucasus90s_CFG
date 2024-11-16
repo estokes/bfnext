@@ -22,7 +22,15 @@
     "lr_sam_bonus": 5,
     "logistics_repair": 50,
     "logistics_transfer": 5,
-    "capture": 50
+    "capture": 50,
+    "airframe_cost": {
+      "M-2000C": 50
+    },
+    "weapon_cost": {
+      "weapons.missiles.Matra Super 530D": 10
+    },
+    "strict": true,
+    "provisional": true
   },
   "repair_time": 1800,
   "repair_crate": {

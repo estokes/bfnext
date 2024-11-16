@@ -775,7 +775,13 @@ impl Db {
                         id: oid,
                         by: st.ucid,
                     });
-                    if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_repair) {
+                    if let Some(amount) = self
+                        .ephemeral
+                        .cfg
+                        .points
+                        .as_ref()
+                        .map(|p| p.logistics_repair)
+                    {
                         self.adjust_points(&st.ucid, amount as i32, "for logistics repair");
                     }
                     let obj = objective!(self, oid)?;
@@ -805,7 +811,13 @@ impl Db {
                         to,
                         by: st.ucid,
                     });
-                    if let Some(amount) = self.ephemeral.cfg.points.map(|p| p.logistics_transfer) {
+                    if let Some(amount) = self
+                        .ephemeral
+                        .cfg
+                        .points
+                        .as_ref()
+                        .map(|p| p.logistics_transfer)
+                    {
                         self.adjust_points(&st.ucid, amount as i32, "for supply transfer");
                     }
                     return Ok(Unpakistan::TransferedSupplies(

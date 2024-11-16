@@ -15,13 +15,13 @@ for more details.
 */
 
 use anyhow::{anyhow, Context, Result};
-use netidx::path::Path as NetIdxPath;
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{coalition::Side, controller::AltType, net::Ucid, String};
 use enumflags2::{bitflags, BitFlags};
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
+use netidx::path::Path as NetIdxPath;
 use regex::Regex;
 use serde_derive::{Deserialize, Serialize};
 use std::{
@@ -164,7 +164,7 @@ pub enum UnitTag {
     Driveable,
     AWACS,
     Link16,
-    Boat
+    Boat,
 }
 
 #[derive(
@@ -441,18 +441,54 @@ fn default_tk_window() -> u32 {
     24
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PointsCfg {
+    /// Bonus issued to new players when they register
     pub new_player_join: u32,
+    /// Points awarded for each air kill
     pub air_kill: u32,
+    /// Base points awared for each ground kill
     pub ground_kill: u32,
+    /// Bonus points awarded to heavy sam kills
     pub lr_sam_bonus: u32,
+    /// Points awarded for repairing base logistics
     pub logistics_repair: u32,
+    /// Points awarded for logistics transfers
     pub logistics_transfer: u32,
+    /// Points awarded for base capture
     pub capture: u32,
+    /// How many hours before previous team kills are forgotten for
+    /// the purposes of computing the penalty of a team kill.
     #[serde(default = "default_tk_window")]
     pub tk_window: u32,
+    /// If provisional is true then points earned in a sortie are only
+    /// committed to the player's points balance when they land at a
+    /// friendly objective
+    #[serde(default)]
+    pub provisional: bool,
+    /// If strict is true then the player cannot take off when their
+    /// loadout or airframe costs more points than they have. They
+    /// will be deleted on takeoff, and no points or lives will be
+    /// deducted. If struct is false then the player's points will go
+    /// negative if they take off with an airframe/loadout that
+    /// exceeds their current balance.
+    #[serde(default)]
+    pub strict: bool,
+    /// How many points does it cost to slot in a given airframe. This
+    /// need not cover all airframes on the server, and the default is 0.
+    #[serde(default)]
+    pub airframe_cost: FxHashMap<Vehicle, u32>,
+    /// How many points does it cost to load a given weapon. This need
+    /// not cover all weapons, and the default is zero.
+    #[serde(default)]
+    pub weapon_cost: FxHashMap<String, u32>,
+    /// How many points do connected players automatically gain per
+    /// time interval. This is a pair of the number of points with the
+    /// interval in seconds. The number of points CAN be negative, the
+    /// interval must be positive. The default is (0, 0)
+    #[serde(default)]
+    pub periodic_point_gain: (i32, u32),
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

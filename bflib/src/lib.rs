@@ -62,7 +62,7 @@ use dcso3::{
     trigger::Trigger,
     unit::{ClassUnit, Unit},
     world::{HandlerId, MarkPanel, World},
-    HooksLua, LuaEnv, MizLua, String, Vector2,
+    HooksLua, LuaEnv, MizLua, String,
 };
 use ewr::Ewr;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -248,6 +248,7 @@ struct Context {
     menu_init_queue: IndexSet<SlotId, FxBuildHasher>,
     last_frame: Option<DateTime<Utc>>,
     last_slow_timed_events: DateTime<Utc>,
+    last_periodic_points: DateTime<Utc>,
     last_unit_position: usize,
     last_player_position: usize,
     subscribed_jtac_menus: FxHashMap<SlotId, JtacSlotIfo>,
@@ -417,6 +418,17 @@ fn try_occupy_slot(
     let now = Utc::now();
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
         SlotAuth::Denied => Ok(false),
+        SlotAuth::NoPoints {
+            vehicle,
+            cost,
+            balance,
+        } => {
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                format_compact!("{vehicle} costs {cost}, you have {balance}"),
+            );
+            Ok(false)
+        }
         SlotAuth::NoLives(typ) => {
             let msg = match lives(&mut ctx.db, &ifo.ucid, Some(typ)) {
                 Ok(s) => s,
@@ -630,11 +642,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 let id = unit.object_id()?;
                 let slot = unit.slot()?;
                 if ctx.airborne.insert(id.clone()) && ctx.recently_landed.remove(&id).is_none() {
-                    let pos = unit.get_point()?;
-                    match ctx
-                        .db
-                        .takeoff(Utc::now(), slot.clone(), Vector2::new(pos.x, pos.z))
-                    {
+                    match ctx.db.takeoff(Utc::now(), slot.clone(), &unit) {
                         Err(e) => error!("could not process takeoff, {:?}", e),
                         Ok(TakeoffRes::NoLifeTaken) => (),
                         Ok(TakeoffRes::TookLife(typ)) => {
@@ -643,9 +651,9 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                             }
                             let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
                         }
-                        Ok(TakeoffRes::OutOfLives) => {
+                        Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
                             if let Err(e) = e.initiator.destroy() {
-                                error!("failed to destroy unit that took off without lives {e:?}")
+                                error!("failed to destroy unit that took off without lives or points {e:?}")
                             }
                         }
                     }
@@ -683,7 +691,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             Context::reset();
             Perf::reset();
             Context::get_mut().init_async_bg(lua.inner())?;
-            return Ok(()) // avoid record perf with a reset perf context
+            return Ok(()); // avoid record perf with a reset perf context
         },
         _ => (),
     }
@@ -749,7 +757,7 @@ fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
             let unit = or_false!(Unit::get_instance(lua, id));
             let pos = or_false!(unit.get_ground_position());
             let slot = or_false!(unit.slot());
-            if let Some(typ) = db.land(slot.clone(), pos.0) {
+            if let Some(typ) = db.land(slot.clone(), pos.0, &unit) {
                 returned.push((typ, slot));
                 return false;
             }
@@ -944,6 +952,21 @@ fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
     }
 }
 
+fn award_periodic_points(ctx: &mut Context, ts: DateTime<Utc>) {
+    if let Some(points) = ctx.db.ephemeral.cfg.points.as_ref() {
+        let (award, period) = points.periodic_point_gain;
+        if award != 0 && period > 0 {
+            let elapsed = (ts - ctx.last_periodic_points).num_seconds();
+            if elapsed >= period as i64 {
+                ctx.last_periodic_points = ts;
+                for ifo in ctx.connected.info_by_player_id.values() {
+                    ctx.db.adjust_points(&ifo.ucid, award, "periodic award")
+                }
+            }
+        }
+    }
+}
+
 fn run_slow_timed_events(
     lua: MizLua,
     ctx: &mut Context,
@@ -953,7 +976,8 @@ fn run_slow_timed_events(
 ) -> Result<AdminResult> {
     let freq = Duration::seconds(ctx.db.ephemeral.cfg.slow_timed_events_freq as i64);
     if ts - ctx.last_slow_timed_events >= freq {
-        ctx.last_slow_timed_events = ts;
+        let start_ts = Utc::now();
+        ctx.last_slow_timed_events = start_ts;
         match check_auto_shutdown(ctx, lua, ts) {
             Ok(AdminResult::Continue) => (),
             Ok(AdminResult::Shutdown) => return Ok(AdminResult::Shutdown),
@@ -968,14 +992,16 @@ fn run_slow_timed_events(
             }
         }
         return_lives(lua, ctx, ts);
-        for dead in ctx.shots_out.bring_out_your_dead(ts) {
-            info!("kill {:?}", dead);
-            if let Some(points) = ctx.db.ephemeral.cfg.points {
-                ctx.db.award_kill_points(points, &dead)
+        {
+            let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
+            for dead in ctx.shots_out.bring_out_your_dead(ts) {
+                info!("kill {:?}", dead);
+                if let Some(points) = cfg.points.as_ref() {
+                    ctx.db.award_kill_points(points, &dead)
+                }
+                ctx.do_bg_task(Task::Stat(StatKind::Kill(dead)));
             }
-            ctx.do_bg_task(Task::Stat(StatKind::Kill(dead)));
         }
-        let start_ts = Utc::now();
         if let Err(e) = ctx.db.maybe_do_repairs(ts) {
             error!("error doing repairs {:?}", e)
         }
@@ -1028,6 +1054,7 @@ fn run_slow_timed_events(
             ctx.do_bg_task(bg::Task::SaveState(path.clone(), snap));
         }
         record_perf(&mut perf.snapshot, now);
+        award_periodic_points(ctx, start_ts);
         record_perf(&mut perf.slow_timed, start_ts);
     }
     Ok(AdminResult::Continue)

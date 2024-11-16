@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{group::DeployKind, Db, MapS, SetS};
+use super::{ephemeral::SlotInfo, group::DeployKind, Db, MapS, SetS};
 use crate::{maybe, maybe_mut, objective_mut};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
@@ -52,6 +52,11 @@ pub enum SlotAuth {
     ObjectiveNotOwned(Side),
     ObjectiveHasNoLogistics,
     NoLives(LifeType),
+    NoPoints {
+        vehicle: Vehicle,
+        cost: u32,
+        balance: i32,
+    },
     NotRegistered(Side),
     VehicleNotAvailable(Vehicle),
     Denied,
@@ -67,6 +72,7 @@ pub enum TakeoffRes {
     TookLife(LifeType),
     NoLifeTaken,
     OutOfLives,
+    OutOfPoints,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -76,6 +82,7 @@ pub struct InstancedPlayer {
     pub typ: Vehicle,
     pub in_air: bool,
     pub landed_at_objective: Option<ObjectiveId>,
+    pub stopped_at_objective: bool,
     pub moved: Option<DateTime<Utc>>,
 }
 
@@ -101,12 +108,15 @@ pub struct Player {
     pub changing_slots: bool,
     #[serde(skip)]
     pub jtac_or_spectators: bool,
+    #[serde(skip)]
+    pub provisional_points: i32,
 }
 
 impl Db {
     pub fn player_deslot(&mut self, ucid: &Ucid) {
         if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
             player.airborne = None;
+            player.provisional_points = 0;
             if let Some((slot, _)) = player.current_slot.take() {
                 let _ = self
                     .ephemeral
@@ -224,17 +234,50 @@ impl Db {
         }
     }
 
+    fn compute_flight_cost(&self, sifo: &SlotInfo, unit: &Unit) -> Result<(u32, bool, String)> {
+        use std::fmt::Write;
+        let mut m = String::from("");
+        match self.ephemeral.cfg.points.as_ref() {
+            None => Ok((0, false, m)),
+            Some(points) => {
+                let mut cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+                write!(m, "{cost} for {}", sifo.typ).unwrap();
+                if !points.weapon_cost.is_empty() {
+                    for ammo in unit.get_ammo().context("getting ammo")? {
+                        let ammo = ammo.context("unwrapping ammo")?;
+                        let typ = ammo.type_name().context("getting ammo type name")?;
+                        if let Some(unit_cost) = points.weapon_cost.get(&typ) {
+                            let n = ammo.count().context("getting ammo count")?;
+                            let wcost = n * (*unit_cost);
+                            write!(m, ", {wcost} for {n}x{typ}").unwrap();
+                            cost += wcost;
+                        }
+                    }
+                }
+                Ok((cost, points.strict, m))
+            }
+        }
+    }
+
     pub fn takeoff(
         &mut self,
         time: DateTime<Utc>,
         slot: SlotId,
-        position: Vector2,
+        unit: &Unit,
     ) -> Result<TakeoffRes> {
+        let position = unit.get_ground_position()?.0;
         let sifo = self
             .ephemeral
             .slot_info
             .get(&slot)
             .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
+        let (cost, strict, cost_msg) = match self.compute_flight_cost(&sifo, unit) {
+            Ok(cost) => cost,
+            Err(e) => {
+                error!("failed to compute flight cost {e:?}");
+                (0, false, String::from(""))
+            }
+        };
         let (ucid, player) = self
             .ephemeral
             .players_by_slot
@@ -251,7 +294,6 @@ impl Db {
         if let Some((_, Some(inst))) = &mut player.current_slot {
             inst.landed_at_objective = None;
         }
-        self.ephemeral.stat(StatKind::Takeoff { id: ucid });
         let is_on_owned_objective = self
             .persisted
             .objectives
@@ -259,7 +301,9 @@ impl Db {
             .fold(false, |res, (_, obj)| {
                 res || (obj.owner == player.side && obj.zone.contains(position))
             });
-        if !self.ephemeral.cfg.limited_lives {
+        let res = if strict && cost as i32 > player.points {
+            return Ok(TakeoffRes::OutOfPoints);
+        } else if !self.ephemeral.cfg.limited_lives {
             player.airborne = Some(life_type);
             self.ephemeral.dirty();
             Ok(TakeoffRes::NoLifeTaken)
@@ -279,13 +323,26 @@ impl Db {
             Ok(TakeoffRes::TookLife(life_type))
         } else {
             Ok(TakeoffRes::NoLifeTaken)
+        };
+        if cost > 0 {
+            self.adjust_points(&ucid, -(cost as i32), cost_msg.as_str());
+            self.ephemeral.dirty();
         }
+        self.ephemeral.stat(StatKind::Takeoff { id: ucid });
+        res
     }
 
-    pub fn land(&mut self, slot: SlotId, position: Vector2) -> Option<LifeType> {
+    pub fn land(&mut self, slot: SlotId, position: Vector2, unit: &Unit) -> Option<LifeType> {
         let sifo = match self.ephemeral.slot_info.get(&slot) {
             Some(sifo) => sifo,
             None => return None,
+        };
+        let (cost, _, cost_msg) = match self.compute_flight_cost(&sifo, unit) {
+            Ok(cost) => cost,
+            Err(e) => {
+                error!("failed to compute flight cost {e:?}");
+                (0, false, String::from(""))
+            }
         };
         let (ucid, player) = match self
             .ephemeral
@@ -324,14 +381,27 @@ impl Db {
                 inst.position.p.z = position.y;
                 inst.landed_at_objective = Some(oid);
             }
+            let lives = player.lives.clone();
+            if let Some(points) = self.ephemeral.cfg.points.as_ref() {
+                let is_provisional = points.provisional;
+                let provisional_points = player.provisional_points;
+                player.provisional_points = 0;
+                if cost > 0 {
+                    self.adjust_points(&ucid, cost as i32, cost_msg.as_str());
+                }
+                if is_provisional && provisional_points > 0 {
+                    self.adjust_points(
+                        &ucid,
+                        provisional_points as i32,
+                        "provisional points committed",
+                    );
+                }
+            }
             self.ephemeral.dirty();
             if !self.ephemeral.cfg.limited_lives {
                 None
             } else {
-                self.ephemeral.stat(StatKind::Life {
-                    id: ucid,
-                    lives: player.lives.clone(),
-                });
+                self.ephemeral.stat(StatKind::Life { id: ucid, lives });
                 Some(life_type)
             }
         } else {
@@ -456,6 +526,16 @@ impl Db {
                         }));
                     };
                 }
+                if let Some(points) = self.ephemeral.cfg.points.as_ref() {
+                    let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+                    if cost > 0 && player.points < cost as i32 {
+                        return SlotAuth::NoPoints {
+                            cost,
+                            vehicle: sifo.typ.clone(),
+                            balance: player.points,
+                        };
+                    }
+                }
                 loop {
                     match player.lives.get(&life_type).map(|t| *t) {
                         None => {
@@ -507,6 +587,7 @@ impl Db {
                     .ephemeral
                     .cfg
                     .points
+                    .as_ref()
                     .map(|p| p.new_player_join as i32)
                     .unwrap_or(0);
                 self.persisted.players.insert_cow(
@@ -520,6 +601,7 @@ impl Db {
                         crates: SetS::new(),
                         airborne: None,
                         points,
+                        provisional_points: 0,
                         current_slot: None,
                         changing_slots: false,
                         jtac_or_spectators: true,
@@ -585,6 +667,7 @@ impl Db {
         let mut unit: Option<Unit> = None;
         let coord = Coord::singleton(lua)?;
         for ucid in ids {
+            let mut inform_cost = None;
             if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                 if let Some((slot, Some(inst))) = &mut player.current_slot {
                     if let Some(id) = self.ephemeral.object_id_by_slot.get(slot) {
@@ -596,10 +679,16 @@ impl Db {
                             Ok(instance) => {
                                 let pos = instance.get_position()?;
                                 if (inst.position.p.0 - pos.p.0).magnitude_squared() > 1.0 {
+                                    if inst.stopped_at_objective {
+                                        inform_cost = Some((*slot, player.points));
+                                    }
+                                    inst.stopped_at_objective = false;
                                     inst.position = pos;
                                     inst.velocity = instance.get_velocity()?.0;
                                     inst.in_air = instance.in_air()?;
                                     inst.moved = Some(now);
+                                } else if inst.landed_at_objective.is_some() {
+                                    inst.stopped_at_objective = true;
                                 }
                                 unit = Some(instance);
                                 self.ephemeral.stat(StatKind::Position {
@@ -618,6 +707,22 @@ impl Db {
                             }
                         }
                     }
+                }
+            }
+            if let (Some(unit), Some((slot, balance))) = (&unit, inform_cost) {
+                let sifo = self
+                    .ephemeral
+                    .slot_info
+                    .get(&slot)
+                    .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
+                let (cost, strict, cost_msg) = self.compute_flight_cost(sifo, &unit)?;
+                if cost > 0 {
+                    let m = if strict && cost as i32 > balance {
+                        format_compact!("Your flight will cost {cost}, and you have {balance}. {cost_msg}")
+                    } else {
+                        format_compact!("Your flight will cost {cost}. {cost_msg}")
+                    };
+                    self.ephemeral.panel_to_player(&self.persisted, 60, ucid, m)
                 }
             }
         }
@@ -725,10 +830,12 @@ impl Db {
                 in_air: unit.in_air()?,
                 typ: Vehicle::from(unit.get_type_name()?),
                 landed_at_objective,
+                stopped_at_objective: true,
                 moved: None,
             }),
         ));
         player.changing_slots = false;
+        player.provisional_points = 0;
         self.ephemeral.dirty();
         Ok(())
     }
@@ -943,8 +1050,8 @@ impl Db {
         }
     }
 
-    pub fn award_kill_points(&mut self, cfg: PointsCfg, dead: &Dead) {
-        let mut hit_by: SmallVec<[&Ucid; 16]> = smallvec![];
+    pub fn award_kill_points(&mut self, cfg: &PointsCfg, dead: &Dead) {
+        let mut hit_by: SmallVec<[(Ucid, bool); 16]> = smallvec![];
         let valid_shots = || {
             // why are you hitting yourself
             dead.shots
@@ -969,18 +1076,28 @@ impl Db {
                 })
         };
         for shot in valid_shots() {
-            if let Some(ucid) = shot.shooter.ucid() {
-                if shot.hit && !hit_by.contains(&ucid) {
-                    hit_by.push(ucid);
-                }
+            let k = match shot.shooter {
+                Who::Player { ucid, .. } => (ucid, true),
+                Who::AI { ucid, .. } => match ucid {
+                    Some(ucid) => (ucid, false),
+                    None => continue,
+                },
+            };
+            if shot.hit && !hit_by.contains(&k) {
+                hit_by.push(k)
             }
         }
         if hit_by.is_empty() {
             for shot in valid_shots() {
-                if let Some(ucid) = shot.shooter.ucid() {
-                    if dead.time - shot.time <= Duration::minutes(3) && !hit_by.contains(&ucid) {
-                        hit_by.push(ucid);
-                    }
+                let k = match shot.shooter {
+                    Who::Player { ucid, .. } => (ucid, true),
+                    Who::AI { ucid, .. } => match ucid {
+                        Some(ucid) => (ucid, false),
+                        None => continue,
+                    },
+                };
+                if dead.time - shot.time <= Duration::minutes(3) && !hit_by.contains(&k) {
+                    hit_by.push(k);
                 }
             }
         }
@@ -1019,26 +1136,32 @@ impl Db {
                     })
                 }
             };
-            for ucid in hit_by {
-                if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
-                    let msg = if player.side != *dead.victim.side() {
-                        player.points += pps;
-                        let tp = player.points;
+            for (ucid, provisional) in hit_by {
+                if let Some(player) = self.persisted.players.get_mut_cow(&ucid) {
+                    let msg = if player.side == *dead.victim.side() {
+                        self.apply_teamkill_penalty(ucid, total_points, &victim_info)
+                    } else {
+                        let tp = if provisional {
+                            player.provisional_points += pps;
+                            player.provisional_points
+                        } else {
+                            player.points += pps;
+                            player.points
+                        };
+                        let pm = if provisional { " provisional" } else { "" };
                         match &victim_info {
-                            None => format_compact!("{tp}(+{pps}) points"),
+                            None => format_compact!("{tp}(+{pps}){pm} points"),
                             Some(vi) => {
                                 if vi.ai_deployable {
                                     format_compact!(
-                                        "{tp}(+{pps}) points, killed {}'s deployed ai unit",
+                                        "{tp}(+{pps}){pm} points, killed {}'s deployed ai unit",
                                         vi.name
                                     )
                                 } else {
-                                    format_compact!("{tp}(+{pps}) points, killed {}", vi.name)
+                                    format_compact!("{tp}(+{pps}){pm} points, killed {}", vi.name)
                                 }
                             }
                         }
-                    } else {
-                        self.apply_teamkill_penalty(*ucid, total_points, &victim_info)
                     };
                     debug!("{ucid} kill message: {msg}");
                     self.ephemeral

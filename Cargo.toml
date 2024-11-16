@@ -37,6 +37,7 @@ immutable-chunkmap = { version = "2.0.4", features = ["serde"] }
 indexmap = { version = "2", features = ["serde"] }
 log = "0.4.20"
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
+netidx-archive = { version = "0.26" }
 netidx-protocols = { version = "0.26" }
 netidx = { version = "0.26" }
 once_cell = "1"

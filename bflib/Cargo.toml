@@ -28,6 +28,7 @@ mlua = { version = "0.9.8", features = ["lua51", "module", "serialize"] }
 nalgebra = { workspace = true }
 netidx = { workspace = true }
 netidx-protocols = { workspace = true }
+netidx-archive = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }

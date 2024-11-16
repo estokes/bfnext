@@ -17,6 +17,7 @@ for more details.
 mod logpub;
 mod perf;
 mod rpcs;
+mod statspub;
 
 use crate::{admin::AdminCommand, db::persisted::Persisted};
 use anyhow::{anyhow, bail, Result};

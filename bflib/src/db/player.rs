@@ -1077,7 +1077,7 @@ impl Db {
         };
         for shot in valid_shots() {
             let k = match shot.shooter {
-                Who::Player { ucid, .. } => (ucid, true),
+                Who::Player { ucid, .. } => (ucid, cfg.provisional),
                 Who::AI { ucid, .. } => match ucid {
                     Some(ucid) => (ucid, false),
                     None => continue,
@@ -1090,7 +1090,7 @@ impl Db {
         if hit_by.is_empty() {
             for shot in valid_shots() {
                 let k = match shot.shooter {
-                    Who::Player { ucid, .. } => (ucid, true),
+                    Who::Player { ucid, .. } => (ucid, cfg.provisional),
                     Who::AI { ucid, .. } => match ucid {
                         Some(ucid) => (ucid, false),
                         None => continue,

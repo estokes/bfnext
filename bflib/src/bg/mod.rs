@@ -579,7 +579,7 @@ pub(super) fn init(write_dir: PathBuf) -> UnboundedSender<Task> {
             TXCOM.set(tx.clone()).expect("txcom is already set");
             setup_logger(tx.clone());
             thread::spawn(move || {
-                let rt = Builder::new_current_thread()
+                let rt = Builder::new_multi_thread()
                     .enable_all()
                     .build()
                     .expect("could not initialize async runtime");

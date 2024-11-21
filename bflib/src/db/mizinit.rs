@@ -37,7 +37,7 @@ use bfprotocols::{
         objective::{ObjectiveId, ObjectiveKind},
     },
     perf::PerfInner,
-    stats::StatKind,
+    stats::Stat,
 };
 use chrono::prelude::*;
 use compact_str::CompactString;
@@ -139,7 +139,7 @@ impl Db {
         }
         let pos = zone.pos();
         let llpos = Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
-        self.ephemeral.stat(StatKind::Objective {
+        self.ephemeral.stat(Stat::Objective {
             name: name.clone(),
             id,
             kind: obj.kind.clone(),
@@ -492,7 +492,7 @@ impl Db {
                 if *lives >= self.ephemeral.cfg.default_lives[&lt].0 {
                     player.lives.remove_cow(&lt);
                 }
-                self.ephemeral.stat(StatKind::Life {
+                self.ephemeral.stat(Stat::Life {
                     id: ucid,
                     lives: player.lives.clone(),
                 });

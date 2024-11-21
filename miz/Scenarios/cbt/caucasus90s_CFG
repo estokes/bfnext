@@ -143,6 +143,7 @@
   "crate_spread": 500,
   "artillery_mission_range": 15000,
   "side_switches": 1,
+  "lock_sides": false,
   "max_crates": 6,
   "life_types": {
     "MB-339A": "Recon",

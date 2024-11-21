@@ -1,14 +1,22 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
-use netidx::{chars::Chars, path::Path, publisher::Publisher};
+use netidx::{
+    chars::Chars,
+    path::Path,
+    publisher::{Publisher, Value},
+    subscriber::Event,
+};
 use netidx_archive::{
     config::{self, Config},
+    logfile::{BatchItem, Id, BATCH_POOL},
     logfile_collection::ArchiveCollectionWriter,
     recorder::Recorder,
 };
 use std::path::PathBuf;
+use tokio::task;
 
 pub(super) struct Statspub {
+    id: Id,
     log: ArchiveCollectionWriter,
     recorder: Recorder,
 }
@@ -17,7 +25,7 @@ impl Statspub {
     pub(super) async fn new(publisher: Publisher, write_dir: PathBuf, base: Path) -> Result<Self> {
         let mut config = config::file::Config::default();
         let mut shard = None;
-        config.archive_directory = write_dir.join("stats");
+        config.archive_directory = write_dir;
         config.archive_cmds = None;
         let r = config
             .record
@@ -35,6 +43,7 @@ impl Statspub {
             .as_mut()
             .ok_or_else(|| anyhow!("no publish config"))?;
         p.base = base.append("stats");
+        let base = p.base.clone();
         let shard = shard.ok_or_else(|| anyhow!("no shard"))?;
         let config = Config::try_from(config)?;
         let recorder = Recorder::start_with(config, Some(publisher), None)
@@ -62,10 +71,27 @@ impl Statspub {
                 .notify_rotated(shard_id, now, reader)
                 .context("notify rotate")?
         }
-        Ok(Self { log, recorder })
+        let id = match log.id_for_path(&base) {
+            Some(id) => id,
+            None => {
+                log.add_paths([&base])?;
+                task::block_in_place(|| log.flush_pathindex())?;
+                log.id_for_path(&base)
+                    .ok_or_else(|| anyhow!("no id after adding id"))?
+            }
+        };
+        Ok(Self { id, log, recorder })
     }
 
-    pub(super) async fn append(&mut self, ts: DateTime<Utc>, c: Chars) -> Result<()> {
-        unimplemented!()
+    /// This will block
+    pub(super) fn append(&mut self, ts: DateTime<Utc>, c: Chars) -> Result<()> {
+        let mut batch = BATCH_POOL.take();
+        batch.push(BatchItem(self.id, Event::Update(Value::String(c))));
+        self.log.add_batch(false, ts, &batch)
+    }
+
+    /// Flush the log
+    pub(super) fn flush(&mut self) -> Result<()> {
+        self.log.flush_current()
     }
 }

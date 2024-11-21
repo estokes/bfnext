@@ -25,7 +25,7 @@ use bfprotocols::{
     cfg::Vehicle,
     db::objective::{ObjectiveId, ObjectiveKind},
     perf::{Perf, PerfInner},
-    stats::StatKind,
+    stats::Stat,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -120,7 +120,7 @@ impl Transfer {
             TransferItem::Equipment(name) => {
                 let d = &mut src.warehouse.equipment[name].stored;
                 *d -= self.amount;
-                db.ephemeral.stat(StatKind::EquipmentInventory {
+                db.ephemeral.stat(Stat::EquipmentInventory {
                     id: src.id,
                     item: name.clone(),
                     amount: *d,
@@ -129,7 +129,7 @@ impl Transfer {
             TransferItem::Liquid(name) => {
                 let d = &mut src.warehouse.liquids[name].stored;
                 *d -= self.amount;
-                db.ephemeral.stat(StatKind::LiquidInventory {
+                db.ephemeral.stat(Stat::LiquidInventory {
                     id: src.id,
                     item: *name,
                     amount: *d,
@@ -145,7 +145,7 @@ impl Transfer {
                     .get_or_default_cow(name.clone())
                     .stored;
                 *d += self.amount;
-                db.ephemeral.stat(StatKind::EquipmentInventory {
+                db.ephemeral.stat(Stat::EquipmentInventory {
                     id: dst.id,
                     item: name.clone(),
                     amount: *d,
@@ -154,7 +154,7 @@ impl Transfer {
             TransferItem::Liquid(name) => {
                 let d = &mut dst.warehouse.liquids.get_or_default_cow(*name).stored;
                 *d += self.amount;
-                db.ephemeral.stat(StatKind::LiquidInventory {
+                db.ephemeral.stat(Stat::LiquidInventory {
                     id: dst.id,
                     item: *name,
                     amount: *d,
@@ -920,7 +920,7 @@ impl Db {
             }
             obj.fuel = if n == 0 { 0 } else { (sum / n) as u8 };
             if current_supply != obj.supply || current_fuel != obj.fuel {
-                self.ephemeral.stat(StatKind::ObjectiveSupply {
+                self.ephemeral.stat(Stat::ObjectiveSupply {
                     id: obj.id,
                     supply: obj.supply,
                     fuel: obj.fuel,

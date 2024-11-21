@@ -34,7 +34,7 @@ use bfprotocols::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
     },
-    stats::StatKind,
+    stats::Stat,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
@@ -433,7 +433,7 @@ impl Db {
         self.ephemeral.airbase_by_oid.remove(oid);
         self.ephemeral.remove_objective_markup(oid);
         self.ephemeral
-            .stat(StatKind::ObjectiveDestroyed { id: *oid });
+            .stat(Stat::ObjectiveDestroyed { id: *oid });
         self.ephemeral.dirty();
         Ok(())
     }
@@ -568,7 +568,7 @@ impl Db {
         }
         let pos = obj.zone.pos();
         let llpos = Coord::singleton(lua)?.lo_to_ll(LuaVec3(Vector3::new(pos.x, 0., pos.y)))?;
-        self.ephemeral.stat(StatKind::Objective {
+        self.ephemeral.stat(Stat::Objective {
             name: name.clone(),
             id: obj.id,
             kind: obj.kind.clone(),
@@ -618,7 +618,7 @@ impl Db {
             obj.last_change_ts = now;
             (obj.kind.clone(), health, logi)
         };
-        self.ephemeral.stat(StatKind::ObjectiveHealth {
+        self.ephemeral.stat(Stat::ObjectiveHealth {
             id: *oid,
             last_change: now,
             health,
@@ -1095,7 +1095,7 @@ impl Db {
                         }
                     }
                 }
-                self.ephemeral.stat(StatKind::Capture {
+                self.ephemeral.stat(Stat::Capture {
                     id: oid,
                     side: new_owner,
                     by: ucids.clone(),

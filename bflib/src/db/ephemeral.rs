@@ -38,7 +38,7 @@ use bfprotocols::{
         objective::ObjectiveId,
     },
     perf::PerfInner,
-    stats::StatKind,
+    stats::Stat,
 };
 use chrono::prelude::*;
 use compact_str::format_compact;
@@ -205,7 +205,7 @@ impl Ephemeral {
         }
     }
 
-    pub fn stat(&self, stat: StatKind) {
+    pub fn stat(&self, stat: Stat) {
         self.do_bg(Task::Stat(stat))
     }
 

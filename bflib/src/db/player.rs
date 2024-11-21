@@ -21,7 +21,7 @@ use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
     db::{group::GroupId, objective::ObjectiveId},
     shots::{Dead, Who},
-    stats::{self, EnId, StatKind},
+    stats::{self, EnId, Stat},
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -122,7 +122,7 @@ impl Db {
                     .ephemeral
                     .player_deslot(&self.persisted, &slot, Some(*ucid));
             }
-            self.ephemeral.stat(StatKind::Deslot { id: *ucid });
+            self.ephemeral.stat(Stat::Deslot { id: *ucid });
             self.ephemeral.dirty()
         }
     }
@@ -161,7 +161,7 @@ impl Db {
                 );
                 self.ephemeral
                     .panel_to_player(&self.persisted, 10, target, msg);
-                self.ephemeral.stat(StatKind::PointsTransfer {
+                self.ephemeral.stat(Stat::PointsTransfer {
                     from: *source,
                     to: *target,
                     points: amount,
@@ -178,7 +178,7 @@ impl Db {
 
     pub fn player_reset_lives(&mut self, ucid: &Ucid) -> Result<()> {
         maybe_mut!(self.persisted.players, ucid, "player")?.lives = MapS::new();
-        self.ephemeral.stat(StatKind::Life {
+        self.ephemeral.stat(Stat::Life {
             id: *ucid,
             lives: MapS::new(),
         });
@@ -314,7 +314,7 @@ impl Db {
             } else {
                 player.airborne = Some(life_type);
                 *player_lives -= 1;
-                self.ephemeral.stat(StatKind::Life {
+                self.ephemeral.stat(Stat::Life {
                     id: ucid,
                     lives: player.lives.clone(),
                 });
@@ -328,7 +328,7 @@ impl Db {
             self.adjust_points(&ucid, -(cost as i32), cost_msg.as_str());
             self.ephemeral.dirty();
         }
-        self.ephemeral.stat(StatKind::Takeoff { id: ucid });
+        self.ephemeral.stat(Stat::Takeoff { id: ucid });
         res
     }
 
@@ -369,7 +369,7 @@ impl Db {
                     None
                 }
             });
-        self.ephemeral.stat(StatKind::Land { id: ucid });
+        self.ephemeral.stat(Stat::Land { id: ucid });
         if let Some(oid) = on_owned_objective {
             *player_lives += 1;
             player.airborne = None;
@@ -401,7 +401,7 @@ impl Db {
             if !self.ephemeral.cfg.limited_lives {
                 None
             } else {
-                self.ephemeral.stat(StatKind::Life { id: ucid, lives });
+                self.ephemeral.stat(Stat::Life { id: ucid, lives });
                 Some(life_type)
             }
         } else {
@@ -431,7 +431,7 @@ impl Db {
             self.ephemeral.dirty();
         }
         if reset {
-            self.ephemeral.stat(StatKind::Life {
+            self.ephemeral.stat(Stat::Life {
                 id: *ucid,
                 lives: player.lives.clone(),
             });
@@ -547,7 +547,7 @@ impl Db {
                             );
                             if time - reset >= reset_after {
                                 player.lives.remove_cow(&life_type);
-                                self.ephemeral.stat(StatKind::Life {
+                                self.ephemeral.stat(Stat::Life {
                                     id: *ucid,
                                     lives: player.lives.clone(),
                                 });
@@ -609,7 +609,7 @@ impl Db {
                         player_team_kills: MapS::new(),
                     },
                 );
-                self.ephemeral.stat(StatKind::Register {
+                self.ephemeral.stat(Stat::Register {
                     initial_points: points,
                     name,
                     side,
@@ -624,8 +624,7 @@ impl Db {
     pub fn force_sideswitch_player(&mut self, ucid: &Ucid, side: Side) -> Result<()> {
         let player = maybe_mut!(self.persisted.players, ucid, "no such player")?;
         player.side = side;
-        self.ephemeral
-            .stat(StatKind::Sideswitch { id: *ucid, side });
+        self.ephemeral.stat(Stat::Sideswitch { id: *ucid, side });
         self.ephemeral.dirty();
         Ok(())
     }
@@ -648,8 +647,7 @@ impl Db {
                         None => (),
                     }
                     player.side = side;
-                    self.ephemeral
-                        .stat(StatKind::Sideswitch { id: *ucid, side });
+                    self.ephemeral.stat(Stat::Sideswitch { id: *ucid, side });
                     self.ephemeral.dirty();
                     Ok(())
                 }
@@ -691,7 +689,7 @@ impl Db {
                                     inst.stopped_at_objective = true;
                                 }
                                 unit = Some(instance);
-                                self.ephemeral.stat(StatKind::Position {
+                                self.ephemeral.stat(Stat::Position {
                                     id: EnId::Player(*ucid),
                                     pos: stats::Pos {
                                         pos: coord.lo_to_ll(inst.position.p)?,
@@ -718,7 +716,9 @@ impl Db {
                 let (cost, strict, cost_msg) = self.compute_flight_cost(sifo, &unit)?;
                 if cost > 0 {
                     let m = if strict && cost as i32 > balance {
-                        format_compact!("Your flight will cost {cost}, and you have {balance}. {cost_msg}")
+                        format_compact!(
+                            "Your flight will cost {cost}, and you have {balance}. {cost_msg}"
+                        )
                     } else {
                         format_compact!("Your flight will cost {cost}. {cost_msg}")
                     };
@@ -916,7 +916,7 @@ impl Db {
                 self.ephemeral.push_sync_warehouse(oid, inst.typ.clone());
             }
         }
-        self.ephemeral.stat(StatKind::Disconnect { id: *ucid });
+        self.ephemeral.stat(Stat::Disconnect { id: *ucid });
         self.player_deslot(ucid);
     }
 
@@ -1013,7 +1013,7 @@ impl Db {
                         }
                     }
                 };
-                self.ephemeral.stat(StatKind::Life {
+                self.ephemeral.stat(Stat::Life {
                     id: shooter,
                     lives: player.lives.clone(),
                 });
@@ -1177,7 +1177,7 @@ impl Db {
             let pp = player.points;
             if amount != 0 {
                 let m = format_compact!("{}({}) points {}", pp, amount, why);
-                self.ephemeral.stat(StatKind::Points {
+                self.ephemeral.stat(Stats::Points {
                     points: amount,
                     reason: m.clone().into(),
                     id: *ucid,

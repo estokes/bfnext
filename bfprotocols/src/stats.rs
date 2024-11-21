@@ -22,8 +22,6 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::fmt;
 
-atomic_id!(SeqId);
-
 pub type MapS<K, V> = immutable_chunkmap::map::Map<K, V, 16>;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -59,7 +57,7 @@ pub enum DetectionSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum StatKind {
+pub enum Stat {
     NewRound {
         sortie: String,
     },
@@ -210,22 +208,4 @@ pub enum StatKind {
         id: Ucid,
         token: String,
     },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Stat {
-    pub seq: SeqId,
-    pub time: DateTime<Utc>,
-    pub kind: StatKind,
-}
-
-impl Stat {
-    pub fn new(kind: StatKind) -> Self {
-        let time = Utc::now();
-        Self {
-            time,
-            seq: SeqId::new(),
-            kind,
-        }
-    }
 }

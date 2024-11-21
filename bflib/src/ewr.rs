@@ -22,7 +22,7 @@ use crate::{
     landcache::LandCache,
 };
 use anyhow::Result;
-use bfprotocols::stats::{DetectionSource, EnId, StatKind};
+use bfprotocols::stats::{DetectionSource, EnId, Stat};
 use chrono::prelude::*;
 use dcso3::{
     azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid, radians_to_degrees, MizLua,
@@ -200,7 +200,7 @@ impl Ewr {
             for (id, track) in tracks.iter_mut() {
                 if track.was_detected != track.detected {
                     track.was_detected = track.detected;
-                    db.ephemeral.stat(StatKind::Detected {
+                    db.ephemeral.stat(Stat::Detected {
                         id: *id,
                         detected: track.was_detected,
                         source: DetectionSource::EWR,

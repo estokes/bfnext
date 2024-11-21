@@ -28,7 +28,7 @@ use bfprotocols::{
 };
 use bfprotocols::{
     db::group::{GroupId, UnitId},
-    stats::StatKind,
+    stats::Stat,
 };
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
@@ -382,7 +382,7 @@ impl Db {
                 }
             }
         }
-        self.ephemeral.stat(StatKind::GroupDeleted { id: *gid });
+        self.ephemeral.stat(Stat::GroupDeleted { id: *gid });
         Ok(())
     }
 
@@ -806,7 +806,7 @@ impl Db {
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
-            self.ephemeral.stat(StatKind::Unit {
+            self.ephemeral.stat(Stat::Unit {
                 id: EnId::Unit(*uid),
                 gid: Some(unit.group),
                 owner: unit.side,
@@ -834,7 +834,7 @@ impl Db {
                     return Ok(None);
                 }
             };
-            self.ephemeral.stat(StatKind::Unit {
+            self.ephemeral.stat(Stat::Unit {
                 id: EnId::Player(ucid),
                 gid: None,
                 owner: si.side,
@@ -1060,7 +1060,7 @@ impl Db {
                     spunit.airborne_velocity = None;
                     None
                 };
-                self.ephemeral.stat(StatKind::Position {
+                self.ephemeral.stat(Stat::Position {
                     id: EnId::Unit(*uid),
                     pos: stats::Pos {
                         pos: coord.lo_to_ll(pos.p)?,

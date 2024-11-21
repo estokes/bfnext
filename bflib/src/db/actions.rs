@@ -16,7 +16,7 @@ use bfprotocols::{
     },
     db::{group::GroupId, objective::ObjectiveId},
     perf::PerfInner,
-    stats::StatKind,
+    stats::Stat,
 };
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
@@ -388,7 +388,7 @@ impl Db {
             },
         };
         if let Some(ucid) = ucid.as_ref() {
-            self.ephemeral.stat(StatKind::Action {
+            self.ephemeral.stat(Stat::Action {
                 by: *ucid,
                 action: cmd.name.clone(),
                 gid,
@@ -1699,7 +1699,7 @@ impl Db {
         }
         let oid = obj.id;
         if let Some(ucid) = ucid {
-            self.ephemeral.stat(StatKind::Repair { id: oid, by: ucid });
+            self.ephemeral.stat(Stat::Repair { id: oid, by: ucid });
         }
         self.repair_one_logi_step(side, Utc::now(), oid)?;
         Ok(())
@@ -1728,7 +1728,7 @@ impl Db {
         let src = src.id;
         let tgt = tgt.id;
         if let Some(ucid) = ucid {
-            self.ephemeral.stat(StatKind::SupplyTransfer {
+            self.ephemeral.stat(Stat::SupplyTransfer {
                 from: src,
                 to: tgt,
                 by: ucid,
@@ -1789,7 +1789,7 @@ impl Db {
             BitFlags::empty(),
             None,
         )?;
-        self.ephemeral.stat(StatKind::DeployGroup {
+        self.ephemeral.stat(Stat::DeployGroup {
             gid,
             deployable: dep,
             by: ucid,
@@ -1855,7 +1855,7 @@ impl Db {
             BitFlags::empty(),
             None,
         )?;
-        self.ephemeral.stat(StatKind::DeployTroop {
+        self.ephemeral.stat(Stat::DeployTroop {
             troop,
             by: ucid,
             gid,

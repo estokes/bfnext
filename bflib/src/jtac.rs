@@ -25,7 +25,7 @@ use bfprotocols::{
         group::{GroupId, UnitId},
         objective::ObjectiveId,
     },
-    stats::{DetectionSource, EnId, StatKind},
+    stats::{DetectionSource, EnId, Stat},
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -1276,7 +1276,7 @@ impl Jtacs {
                 } else {
                     if detected.was_detected != detected.detected {
                         detected.was_detected = detected.detected;
-                        db.ephemeral.stat(StatKind::Detected {
+                        db.ephemeral.stat(Stat::Detected {
                             id: *id,
                             detected: detected.detected,
                             source: DetectionSource::Jtac,

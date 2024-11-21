@@ -11,7 +11,7 @@ use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use bfprotocols::{
     cfg::{Action, ActionKind},
     db::group::GroupId,
-    stats::StatKind,
+    stats::Stat,
     perf::PerfInner
 };
 use chrono::{prelude::*, Duration};
@@ -414,7 +414,7 @@ fn bind_command(ctx: &mut Context, id: PlayerId, s: &str) {
                     .ephemeral
                     .msgs()
                     .send(MsgTyp::Chat(Some(id)), "Success");
-                ctx.do_bg_task(Task::Stat(StatKind::Bind {
+                ctx.do_bg_task(Task::Stat(Stat::Bind {
                     id: ifo.ucid,
                     token: s.into(),
                 }))

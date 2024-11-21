@@ -34,7 +34,7 @@ use bfprotocols::{
     cfg::{Cfg, LifeType},
     db::objective::ObjectiveId,
     perf::{Perf, PerfInner},
-    stats::StatKind,
+    stats::Stat,
 };
 use bg::Task;
 use chatcmd::run_action_commands;
@@ -373,7 +373,7 @@ fn on_player_try_connect(
         return Ok(Some(String::from(format_compact!("{e}"))));
     }
     ctx.db.player_connected(ucid, name.clone());
-    ctx.do_bg_task(Task::Stat(StatKind::Connect {
+    ctx.do_bg_task(Task::Stat(Stat::Connect {
         id: ucid,
         addr,
         name,
@@ -481,7 +481,7 @@ fn try_occupy_slot(
         SlotAuth::Yes(typ) => {
             ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
             ctx.subscribed_jtac_menus.remove(&slot);
-            ctx.do_bg_task(Task::Stat(StatKind::Slot {
+            ctx.do_bg_task(Task::Stat(Stat::Slot {
                 id: ifo.ucid,
                 slot,
                 typ,
@@ -999,7 +999,7 @@ fn run_slow_timed_events(
                 if let Some(points) = cfg.points.as_ref() {
                     ctx.db.award_kill_points(points, &dead)
                 }
-                ctx.do_bg_task(Task::Stat(StatKind::Kill(dead)));
+                ctx.do_bg_task(Task::Stat(Stat::Kill(dead)));
             }
         }
         if let Err(e) = ctx.db.maybe_do_repairs(ts) {
@@ -1226,7 +1226,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     let to_bg = ctx.to_background.as_ref().unwrap().clone();
     if !path.exists() {
         debug!("saved state doesn't exist, starting from default");
-        ctx.do_bg_task(Task::Stat(StatKind::NewRound {
+        ctx.do_bg_task(Task::Stat(Stat::NewRound {
             sortie: ctx.sortie.clone(),
         }));
         ctx.db = Db::init(lua, cfg, &ctx.idx, &miz, to_bg).context("initalizing the mission")?;
@@ -1240,7 +1240,7 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         .cfg
         .shutdown
         .map(|hrs| AutoShutdown::new(Utc::now() + Duration::hours(hrs as i64)));
-    ctx.do_bg_task(Task::Stat(StatKind::SessionStart {
+    ctx.do_bg_task(Task::Stat(Stat::SessionStart {
         stop: ctx.shutdown.map(|a| a.when),
         cfg: Box::new((*ctx.db.ephemeral.cfg).clone()),
     }));

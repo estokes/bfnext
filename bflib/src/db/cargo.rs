@@ -28,7 +28,7 @@ use bfprotocols::{
         group::GroupId,
         objective::{ObjectiveId, ObjectiveKind},
     },
-    stats::StatKind,
+    stats::Stat,
 };
 use chrono::prelude::*;
 use compact_str::{format_compact, CompactString};
@@ -771,7 +771,7 @@ impl Db {
                 } else {
                     self.repair_one_logi_step(st.side, Utc::now(), oid)?;
                     self.delete_group(base_repairs.keys().next().unwrap())?;
-                    self.ephemeral.stat(StatKind::Repair {
+                    self.ephemeral.stat(Stat::Repair {
                         id: oid,
                         by: st.ucid,
                     });
@@ -806,7 +806,7 @@ impl Db {
                 {
                     self.transfer_supplies(lua, from, to)?;
                     self.delete_group(&gid)?;
-                    self.ephemeral.stat(StatKind::SupplyTransfer {
+                    self.ephemeral.stat(Stat::SupplyTransfer {
                         from,
                         to,
                         by: st.ucid,
@@ -856,7 +856,7 @@ impl Db {
                                 }
                                 let oid = self
                                     .add_farp(lua, &spctx, idx, st.side, centroid, &spec, parts)?;
-                                self.ephemeral.stat(StatKind::DeployFarp {
+                                self.ephemeral.stat(Stat::DeployFarp {
                                     oid,
                                     by: st.ucid,
                                     deployable: dep,
@@ -887,7 +887,7 @@ impl Db {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
-                                self.ephemeral.stat(StatKind::DeployGroup {
+                                self.ephemeral.stat(Stat::DeployGroup {
                                     gid,
                                     by: st.ucid,
                                     deployable: dep.clone(),
@@ -1207,7 +1207,7 @@ impl Db {
             None,
         ) {
             Ok(gid) => {
-                self.ephemeral.stat(StatKind::DeployTroop {
+                self.ephemeral.stat(Stat::DeployTroop {
                     gid,
                     troop: troop_cfg.name.clone(),
                     by: ucid,

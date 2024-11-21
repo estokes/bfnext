@@ -27,7 +27,7 @@ use bfprotocols::{
     cfg::Cfg,
     db::{group::GroupId, objective::ObjectiveId},
     perf::Perf,
-    stats::StatKind,
+    stats::Stat,
 };
 use chrono::prelude::*;
 use compact_str::format_compact;
@@ -695,7 +695,7 @@ pub(super) fn admin_shutdown(
     let se = {
         let perf = unsafe { Perf::get_mut() };
         let api_perf = unsafe { ApiPerf::get_mut() };
-        StatKind::SessionEnd {
+        Stat::SessionEnd {
             perf: (*perf.inner).clone(),
             frame: (*perf.frame).clone(),
             api_perf: (*api_perf.0).clone(),
@@ -704,8 +704,7 @@ pub(super) fn admin_shutdown(
     if let Some(winner) = reset {
         ctx.do_bg_task(Task::ResetState(ctx.miz_state_path.clone()));
         ctx.do_bg_task(Task::Stat(se));
-        ctx.do_bg_task(Task::Stat(StatKind::RoundEnd { winner }));
-        ctx.do_bg_task(Task::RotateStats);
+        ctx.do_bg_task(Task::Stat(Stat::RoundEnd { winner }));
     } else {
         return_lives(lua, ctx, DateTime::<Utc>::MAX_UTC);
         ctx.do_bg_task(Task::SaveState(

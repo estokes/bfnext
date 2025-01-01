@@ -17,7 +17,7 @@ default = []
 perf = []
 
 [dependencies]
-mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
+mlua = { version = "0.9.9", features = ["lua51", "serialize"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_derive = { workspace = true }

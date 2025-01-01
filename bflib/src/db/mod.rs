@@ -27,7 +27,6 @@ use bfprotocols::{
         group::{GroupId, UnitId},
         objective::ObjectiveId,
     },
-    stats::SeqId,
 };
 use dcso3::{
     centroid3d,
@@ -200,7 +199,6 @@ impl Db {
             persisted,
             ephemeral: Ephemeral::default(),
         };
-        SeqId::setseq(db.persisted.seq);
         ObjectiveId::setseq(max(db.persisted.oid, ObjectiveId::seq()));
         GroupId::setseq(max(db.persisted.gid, GroupId::seq()));
         UnitId::setseq(max(db.persisted.uid, UnitId::seq()));
@@ -210,7 +208,6 @@ impl Db {
 
     pub fn maybe_snapshot(&mut self) -> Option<Persisted> {
         if self.ephemeral.take_dirty() {
-            self.persisted.seq = SeqId::seq();
             self.persisted.oid = ObjectiveId::seq();
             self.persisted.gid = GroupId::seq();
             self.persisted.uid = UnitId::seq();

@@ -155,6 +155,7 @@ pub struct Ephemeral {
     despawnq: VecDeque<(GroupId, Despawn)>,
     sync_warehouse: Vec<(ObjectiveId, Vehicle)>,
     pub(super) msgs: MsgQ,
+    pub(super) victory: Option<(DateTime<Utc>, Side)>,
 }
 
 impl Default for Ephemeral {
@@ -191,6 +192,7 @@ impl Default for Ephemeral {
             sync_warehouse: Vec::default(),
             msgs: MsgQ::default(),
             logistics_stage: LogiStage::default(),
+            victory: None,
         }
     }
 }

@@ -30,7 +30,7 @@ futures = { workspace = true }
 fxhash = { workspace = true }
 handlebars = { workspace = true }
 log = { workspace = true }
-mlua = { version = "0.9.8", features = ["lua51", "serialize"] }
+mlua = { version = "0.9.9", features = ["lua51", "serialize"] }
 netidx-protocols = { workspace = true }
 netidx = { workspace = true }
 paste = { workspace = true }

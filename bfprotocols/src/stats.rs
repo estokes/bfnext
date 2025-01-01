@@ -9,7 +9,6 @@ use crate::{
 };
 use chrono::prelude::*;
 use dcso3::{
-    atomic_id,
     coalition::Side,
     coord::LLPos,
     net::{SlotId, Ucid},

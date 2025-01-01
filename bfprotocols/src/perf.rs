@@ -282,10 +282,13 @@ impl Clone for Perf {
 
 impl Perf {
     pub unsafe fn get_mut() -> &'static mut Perf {
-        match PERF.as_mut() {
+        #[allow(static_mut_refs)]
+        let perf = PERF.as_mut();
+        match perf {
             Some(perf) => perf,
             None => {
                 PERF = Some(Perf::default());
+                #[allow(static_mut_refs)]
                 PERF.as_mut().unwrap()
             }
         }

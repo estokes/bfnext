@@ -29,7 +29,7 @@ use crate::{
 };
 use anyhow::{anyhow, Context, Result};
 use bfprotocols::{
-    cfg::{Deployable, DeployableLogistics, UnitTag},
+    cfg::{Deployable, DeployableLogistics, UnitTag, VictoryCondition},
     db::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
@@ -432,8 +432,7 @@ impl Db {
         self.persisted.farps.remove_cow(oid);
         self.ephemeral.airbase_by_oid.remove(oid);
         self.ephemeral.remove_objective_markup(oid);
-        self.ephemeral
-            .stat(Stat::ObjectiveDestroyed { id: *oid });
+        self.ephemeral.stat(Stat::ObjectiveDestroyed { id: *oid });
         self.ephemeral.dirty();
         Ok(())
     }
@@ -995,6 +994,43 @@ impl Db {
             }
         }
         cap
+    }
+
+    pub fn check_victory(&mut self, now: DateTime<Utc>) -> Option<Side> {
+        self.ephemeral.cfg.auto_reset.and_then(|vc| {
+            if let Some((vts, side)) = self.ephemeral.victory {
+                let delay = Duration::seconds(vc.delay as i64);
+                let elapsed = now - vts;
+                if elapsed >= delay {
+                    return Some(side);
+                } else {
+                    self.ephemeral.msgs().panel_to_all(
+                        10,
+                        true,
+                        format_compact!(
+                            "{side} has won. The server will reset in {}",
+                            delay - elapsed
+                        ),
+                    );
+                    return None;
+                }
+            }
+            let VictoryCondition::MapOwned { fraction } = vc.condition;
+            let (blue, red, neutral, total) = self.persisted.objectives.into_iter().fold(
+                (0., 0., 0., 0.),
+                |(blue, red, neutral, total), (_, obj)| match obj.owner {
+                    Side::Blue => (blue + 1., red, neutral, total + 1.),
+                    Side::Red => (blue, red + 1., neutral, total + 1.),
+                    Side::Neutral => (blue, red, neutral + 1., total + 1.),
+                },
+            );
+            if blue + neutral / total >= fraction {
+                self.ephemeral.victory = Some((now, Side::Blue));
+            } else if red + neutral / total >= fraction {
+                self.ephemeral.victory = Some((now, Side::Red));
+            }
+            None
+        })
     }
 
     pub fn check_capture(

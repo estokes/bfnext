@@ -637,6 +637,23 @@ impl NameFilter {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum VictoryCondition {
+    /// Victory is triggered when the specified percentage of the map
+    /// is owned by a given team, or is neutral. Every objective is
+    /// considered equally in this calculation. Must be between 0 and 1
+    MapOwned { fraction: f64 },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct AutoResetOnVictory {
+    /// What victory condition triggers an automatic reset
+    pub condition: VictoryCondition,
+    /// How long, in seconds, must the condition hold before reset is
+    /// tiggered
+    pub delay: u32,
+}
+
 fn default_msgs_per_second() -> usize {
     5
 }
@@ -658,6 +675,10 @@ fn default_limited_lives() -> bool {
 pub struct Cfg {
     #[serde(default)]
     pub netidx_base: Option<NetIdxPath>,
+    /// if specified, automatically reset the server state and record
+    /// a victory in the stats when the condition is met.
+    #[serde(default)]
+    pub auto_reset: Option<AutoResetOnVictory>,
     /// ucids in this list are able to run admin commands
     #[serde(default)]
     pub admins: FxHashMap<Ucid, String>,

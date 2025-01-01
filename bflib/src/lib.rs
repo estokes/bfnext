@@ -267,10 +267,13 @@ impl Context {
     //   that isn't so hard to guarantee
     unsafe fn get_mut() -> &'static mut Self {
         static mut SELF: Option<Context> = None;
-        match SELF.as_mut() {
+        #[allow(static_mut_refs)]
+        let t = SELF.as_mut();
+        match t {
             Some(ctx) => ctx,
             None => {
                 SELF = Some(Context::default());
+                #[allow(static_mut_refs)]
                 SELF.as_mut().unwrap()
             }
         }
@@ -862,6 +865,9 @@ fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) -> Re
         if now > asd.when {
             return admin::admin_shutdown(ctx, lua, None);
         }
+    }
+    if let Some(victor) = ctx.db.check_victory(now) {
+        return admin::admin_shutdown(ctx, lua, Some(Some(victor)));
     }
     Ok(AdminResult::Continue)
 }

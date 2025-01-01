@@ -24,7 +24,7 @@ humantime = { workspace = true }
 immutable-chunkmap = { workspace = true }
 indexmap = { workspace = true }
 log = { workspace = true }
-mlua = { version = "0.9.8", features = ["lua51", "module", "serialize"] }
+mlua = { version = "0.9.9", features = ["lua51", "module", "serialize"] }
 nalgebra = { workspace = true }
 netidx = { workspace = true }
 netidx-protocols = { workspace = true }

@@ -1751,6 +1751,10 @@ impl Default for Cfg {
     fn default() -> Self {
         Self {
             netidx_base: Some(NetIdxPath::from("/fowl-engine")),
+            auto_reset: Some(AutoResetOnVictory {
+                condition: VictoryCondition::MapOwned { fraction: 1. },
+                delay: 60,
+            }),
             admins: FxHashMap::from_iter([(
                 "f279deb7a6b62c96a78eca3ddb2bd8d0".parse().unwrap(),
                 "REAPER 32 | EvilKipper".into(),
@@ -1781,7 +1785,7 @@ impl Default for Cfg {
                 airframe_cost: FxHashMap::default(),
                 weapon_cost: FxHashMap::default(),
                 strict: false,
-                periodic_point_gain: (0, 0)
+                periodic_point_gain: (0, 0),
             }),
             warehouse: Some(WarehouseConfig {
                 hub_max: 25,

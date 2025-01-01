@@ -1177,7 +1177,7 @@ impl Db {
             let pp = player.points;
             if amount != 0 {
                 let m = format_compact!("{}({}) points {}", pp, amount, why);
-                self.ephemeral.stat(Stats::Points {
+                self.ephemeral.stat(Stat::Points {
                     points: amount,
                     reason: m.clone().into(),
                     id: *ucid,

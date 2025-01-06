@@ -9,7 +9,7 @@ use bfprotocols::{
     },
     perf::PerfInner,
     shots::{Dead, Who},
-    stats::{DetectionSource, EnId, Pos, SeqId, Stat, Stat},
+    stats::{DetectionSource, EnId, Pos, Stat},
 };
 use chrono::prelude::*;
 use dcso3::{
@@ -302,9 +302,9 @@ pub(crate) struct Group {
 
 #[derive(Debug, Clone)]
 struct StatCtxInner {
-    sortie: String,
-    seq: SeqId,
+    sortie: Scenario,
     round: RoundId,
+    seq: DateTime<Utc>
 }
 
 #[derive(Debug, Clone, Default)]

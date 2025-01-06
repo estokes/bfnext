@@ -1,13 +1,16 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
+use arcstr::ArcStr;
+use bfprotocols::stats::{Stat, PATH};
 use chrono::prelude::*;
 use netidx::{
     chars::Chars,
     path::Path,
     publisher::{Publisher, Value},
+    resolver_client::GlobSet,
     subscriber::Event,
 };
 use netidx_archive::{
-    config::{self, Config},
+    config::{ConfigBuilder, PublishConfigBuilder, RecordConfigBuilder},
     logfile::{BatchItem, Id, BATCH_POOL},
     logfile_collection::ArchiveCollectionWriter,
     recorder::Recorder,
@@ -15,44 +18,38 @@ use netidx_archive::{
 use std::path::PathBuf;
 use tokio::task;
 
+use super::encode;
+
 pub(super) struct Statspub {
     id: Id,
     log: ArchiveCollectionWriter,
-    recorder: Recorder,
+    _recorder: Recorder,
 }
 
 impl Statspub {
     pub(super) async fn new(publisher: Publisher, write_dir: PathBuf, base: Path) -> Result<Self> {
-        let mut config = config::file::Config::default();
-        let mut shard = None;
-        config.archive_directory = write_dir;
-        config.archive_cmds = None;
-        let r = config
-            .record
-            .as_mut()
-            .ok_or_else(|| anyhow!("missing record"))?;
-        for (name, sh) in r.shards.iter_mut() {
-            if shard.is_some() {
-                bail!("more than one shard")
-            }
-            shard = Some(name.clone());
-            sh.spec = vec![]; // don't start the record process
-        }
-        let p = config
-            .publish
-            .as_mut()
-            .ok_or_else(|| anyhow!("no publish config"))?;
-        p.base = base.append("stats");
-        let base = p.base.clone();
-        let shard = shard.ok_or_else(|| anyhow!("no shard"))?;
-        let config = Config::try_from(config)?;
+        let shard = ArcStr::from("0");
+        let config = ConfigBuilder::default()
+            .archive_directory(write_dir)
+            .publish(
+                PublishConfigBuilder::default()
+                    .base(base)
+                    .build()?,
+            )
+            .record([(
+                shard.clone(),
+                RecordConfigBuilder::default()
+                    .spec(GlobSet::new(true, vec![])?)
+                    .build()?,
+            )])
+            .build()?;
         let recorder = Recorder::start_with(config, Some(publisher), None)
             .await
             .context("starting recorder tasks")?;
         let shard_id = *recorder
             .shards
             .by_name
-            .get(shard.as_str())
+            .get(&shard)
             .ok_or_else(|| anyhow!("no shard id for shard {shard}"))?;
         let mut log = recorder
             .shards
@@ -71,23 +68,26 @@ impl Statspub {
                 .notify_rotated(shard_id, now, reader)
                 .context("notify rotate")?
         }
-        let id = match log.id_for_path(&base) {
+        let id = match log.id_for_path(&Path::from(PATH)) {
             Some(id) => id,
             None => {
-                log.add_paths([&base])?;
+                log.add_paths([&Path::from(PATH)])?;
                 task::block_in_place(|| log.flush_pathindex())?;
-                log.id_for_path(&base)
+                log.id_for_path(&Path::from(PATH))
                     .ok_or_else(|| anyhow!("no id after adding id"))?
             }
         };
-        Ok(Self { id, log, recorder })
+        Ok(Self { id, log, _recorder: recorder })
     }
 
-    /// This will block
-    pub(super) fn append(&mut self, ts: DateTime<Utc>, c: Chars) -> Result<()> {
-        let mut batch = BATCH_POOL.take();
-        batch.push(BatchItem(self.id, Event::Update(Value::String(c))));
-        self.log.add_batch(false, ts, &batch)
+    /// This will not block
+    pub(super) fn append(&mut self, ts: DateTime<Utc>, stat: &Stat) -> Result<()> {
+        task::block_in_place(|| {
+            let mut batch = BATCH_POOL.take();
+            let buf = Chars::from_bytes(encode(&stat)?.freeze())?;
+            batch.push(BatchItem(self.id, Event::Update(Value::String(buf))));
+            self.log.add_batch(false, ts, &batch)
+        })
     }
 
     /// Flush the log

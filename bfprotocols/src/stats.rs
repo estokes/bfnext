@@ -21,6 +21,9 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::fmt;
 
+/// the path in the archive of the stats
+pub const PATH: &str = "/stats";
+
 pub type MapS<K, V> = immutable_chunkmap::map::Map<K, V, 16>;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

@@ -260,9 +260,7 @@ pub(super) enum Task {
 enum Logs {
     Netidx {
         publisher: Publisher,
-        base: NetIdxPath,
         perf: PubPerf,
-        stats_path: PathBuf,
         stats: Statspub,
         log: LogPublisher,
     },
@@ -318,13 +316,10 @@ impl Logs {
         }
     }
 
-    fn write_stat(&mut self, stat: Stat) -> Result<()> {
+    fn write_stat(&mut self, stat: &Stat) -> Result<()> {
         match self {
             Self::Files { .. } => Ok(()),
-            Self::Netidx { stats, .. } => task::block_in_place(|| -> Result<()> {
-                let buf = Chars::from_bytes(encode(&stat)?.freeze())?;
-                stats.append(Utc::now(), buf)
-            }),
+            Self::Netidx { stats, .. } => stats.append(Utc::now(), stat),
         }
     }
 
@@ -366,8 +361,6 @@ impl Logs {
                     let log = LogPublisher::new(publisher.clone(), log_path, base.append("log"))?;
                     Ok::<_, anyhow::Error>(Self::Netidx {
                         publisher: publisher.clone(),
-                        base,
-                        stats_path: stats_path.clone(),
                         perf,
                         stats,
                         log,
@@ -504,8 +497,8 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                 break;
             }
             Task::Stat(st) => {
-                if let Err(e) = logs.write_stat(st) {
-                    eprintln!("could not write stat {e:?}")
+                if let Err(e) = logs.write_stat(&st) {
+                    eprintln!("could not write stat {st:?} {e:?}")
                 }
             }
         }

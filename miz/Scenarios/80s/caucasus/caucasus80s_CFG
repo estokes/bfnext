@@ -18,7 +18,7 @@
   "name_filter": "^[!-~][!-~ ]*$",
   "shutdown": 5,
   "points": {
-    "new_player_join": 10,
+    "new_player_join": 100,
     "air_kill": 25,
     "ground_kill": 2,
     "lr_sam_bonus": 5,

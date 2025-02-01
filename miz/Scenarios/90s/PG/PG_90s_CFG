@@ -257,9 +257,9 @@
             }
           }
         },
-        "cost": 100,
-        "penalty": 100,
-        "limit": null
+        "cost": 600,
+        "penalty": 150,
+        "limit": 2
       },
       "paratroops": {
         "kind": {
@@ -302,9 +302,9 @@
             "speed": 80
           }
         },
-        "cost": 100,
-        "penalty": 25,
-        "limit": null
+        "cost": 500,
+        "penalty": 150,
+        "limit": 2
       },
       "deploy-ewr": {
         "kind": {
@@ -371,9 +371,9 @@
             }
           }
         },
-        "cost": 25,
-        "penalty": 25,
-        "limit": null
+        "cost": 150,
+        "penalty": 50,
+        "limit": 2
       },
       "move": {
         "kind": {
@@ -397,9 +397,9 @@
             "speed": 250
           }
         },
-        "cost": 100,
-        "penalty": 25,
-        "limit": null
+        "cost": 500,
+        "penalty": 150,
+        "limit": 2
       },
       "awacs": {
         "kind": {
@@ -428,7 +428,7 @@
         "kind": "AwacsWaypoint",
         "cost": 10,
         "penalty": null,
-        "limit": null
+        "limit": 2
       },
       "attack-waypoint": {
         "kind": "AttackersWaypoint",
@@ -458,9 +458,9 @@
             }
           }
         },
-        "cost": 100,
-        "penalty": 100,
-        "limit": null
+        "cost": 600,
+        "penalty": 150,
+        "limit": 2
       },
       "basket-tanker": {
         "kind": {
@@ -519,9 +519,9 @@
             "speed": 60
           }
         },
-        "cost": 100,
-        "penalty": 25,
-        "limit": null
+        "cost": 500,
+        "penalty": 150,
+        "limit": 2
       },
       "deploy-ewr": {
         "kind": {
@@ -588,9 +588,9 @@
             }
           }
         },
-        "cost": 25,
-        "penalty": 25,
-        "limit": null
+        "cost": 150,
+        "penalty": 50,
+        "limit": 2
       },
       "boom-tanker": {
         "kind": {
@@ -630,9 +630,9 @@
             "speed": 250
           }
         },
-        "cost": 100,
-        "penalty": 25,
-        "limit": null
+        "cost": 500,
+        "penalty": 150,
+        "limit": 2
       },
       "awacs": {
         "kind": {

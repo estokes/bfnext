@@ -371,8 +371,8 @@
             }
           }
         },
-        "cost": 150,
-        "penalty": 50,
+        "cost": 75,
+        "penalty": 25,
         "limit": 2
       },
       "move": {
@@ -588,8 +588,8 @@
             }
           }
         },
-        "cost": 150,
-        "penalty": 50,
+        "cost": 75,
+        "penalty": 25,
         "limit": 2
       },
       "boom-tanker": {

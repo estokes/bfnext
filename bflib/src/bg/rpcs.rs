@@ -143,15 +143,16 @@ impl Rpcs {
             publisher,
             base.append("tim"),
             "Cause an explosion on the specified mark",
-            |c: RpcCall, key: Chars, size: usize| {
+            |c: RpcCall, key: Chars, size: usize, alt: Option<i64>| {
                 let (tx, rx) = oneshot::channel();
-                let cmd = AdminCommand::Tim { key: key.as_ref().into(), size };
+                let cmd = AdminCommand::Tim { key: key.as_ref().into(), size, alt: alt.map(|i| i as isize) };
                 _q.push((cmd, tx));
                 Some((c, rx))
             },
             Some(wait.clone()),
             key: Chars = Value::Null; "The text in the mark you want to blow up",
-            size: usize = 3000; "The size of the explosion in kg of TNT"
+            size: usize = 3000; "The size of the explosion in kg of TNT",
+            alt: Option<i64> = Value::Null; "The altitude of the explosion"
         )?;
         let _q = Arc::clone(&q);
         let spawn = define_rpc!(

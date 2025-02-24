@@ -103,6 +103,7 @@ pub enum AdminCommand {
     Tim {
         key: String,
         size: usize,
+        alt: Option<isize>,
     },
     Spawn {
         key: String,
@@ -170,7 +171,7 @@ impl AdminCommand {
             "tick: execute a logistics tick now",
             "deliver: execute a logistics delivery now",
             "repair <airbase>: repair one step at the specified airbase",
-            "tim <key> [size]: create explosions of [size] default 3000 at every f10 mark with text <key>",
+            "tim <key> [size] [alt]: create explosions of [size] default 3000 at every f10 mark with text <key>",
             "spawn <key>: spawn at f10 mark. <key> <troop|deployable> <side> <heading> <name>",
             "switch <side> <alias|playerid|ucid>: force side switch a player",
             "ban <duration|forever> <alias|playerid|ucid>: kick a player and ban them. e.g. ban 10days D4n",
@@ -227,18 +228,30 @@ impl FromStr for AdminCommand {
         } else if let Some(s) = s.strip_prefix("repair ") {
             Ok(Self::Repair { airbase: s.into() })
         } else if let Some(s) = s.strip_prefix("tim ") {
-            match s.split_once(" ") {
-                None => Ok(Self::Tim {
+            match &s.split(" ").collect::<SmallVec<[&str; 4]>>()[..] {
+                [] => Ok(Self::Tim {
                     key: String::from(s),
                     size: 3000,
+                    alt: None,
                 }),
-                Some((key, size)) => {
+                [key, size] => {
                     let size = size.parse::<usize>()?;
                     Ok(Self::Tim {
-                        key: String::from(key),
+                        key: String::from(*key),
                         size,
+                        alt: None 
                     })
                 }
+                [key, size, alt] => {
+                    let size = size.parse::<usize>()?;
+                    let alt = alt.parse::<isize>()?;
+                    Ok(Self::Tim {
+                        key: String::from(*key),
+                        size,
+                        alt: Some(alt)
+                    })
+                }
+                _ => bail!("tim <mark> [size] [alt]")
             }
         } else if let Some(s) = s.strip_prefix("spawn ") {
             Ok(Self::Spawn { key: s.into() })
@@ -880,16 +893,19 @@ pub(super) fn run_admin_commands(ctx: &mut Context, lua: MizLua) -> Result<Admin
                     Err(e) => reply_ok!("failed to repair {e:?}"),
                 }
             }
-            AdminCommand::Tim { key, size } => {
+            AdminCommand::Tim { key, size, alt } => {
                 let mut to_remove: SmallVec<[MarkId; 8]> = smallvec![];
                 let act = Trigger::singleton(lua)?.action()?;
                 for mk in World::singleton(lua)?
                     .get_mark_panels()
                     .context("getting marks")?
                 {
-                    let mk = mk?;
+                    let mut mk = mk?;
                     if mk.text == key {
                         to_remove.push(mk.id);
+                        if let Some(alt) = alt {
+                            mk.pos.y = alt as f64;
+                        }
                         act.explosion(mk.pos, size as f32)
                             .context("making boom beserker!")?;
                     }

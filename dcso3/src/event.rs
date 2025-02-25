@@ -11,11 +11,16 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.
 */
 
+use std::cell::RefCell;
+
+use crate::value_to_json;
+
 use super::{
     as_tbl, as_tbl_ref, lua_err, object::Object, unit::Unit, weapon::Weapon, world::MarkPanel,
     String, Time,
 };
 use anyhow::{bail, Result};
+use fxhash::FxHashMap;
 use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::Serialize;
@@ -308,14 +313,21 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> Resul
 
 impl<'lua> FromLua<'lua> for Event<'lua> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
+        thread_local! {
+            static CTX: RefCell<FxHashMap<usize, String>> = RefCell::new(FxHashMap::default());
+        }
         let id = as_tbl_ref("Event", &value)
             .map_err(lua_err)?
             .raw_get("id")?;
-        match translate(lua, id, value) {
+        match translate(lua, id, value.clone()) {
             Ok(ev) => Ok(ev),
             Err(e) => {
-                error!("error translating event {id}: {:?}", e);
-                Err(lua_err(e))
+                CTX.with_borrow_mut(|ctx| {
+                    let s = value_to_json(ctx, None, &value);
+                    ctx.clear();
+                    error!("error translating event {id}: {e:?}, value: {s}");
+                    Err(lua_err(e))
+                })
             }
         }
     }

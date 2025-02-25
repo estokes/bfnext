@@ -19,14 +19,7 @@ use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
-    backtrace::Backtrace,
-    borrow::Borrow,
-    collections::hash_map::Entry,
-    f64,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Deref, DerefMut, Sub},
-    panic::{self, AssertUnwindSafe},
+    backtrace::Backtrace, borrow::Borrow, cell::RefCell, collections::hash_map::Entry, f64, fmt::Debug, marker::PhantomData, ops::{Add, AddAssign, Deref, DerefMut, Sub}, panic::{self, AssertUnwindSafe}
 };
 
 pub mod airbase;
@@ -450,8 +443,7 @@ macro_rules! wrapped_table {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 match self.t.raw_get::<&str, Value>("id_") {
                     Ok(Value::Nil) => {
-                        let mut tbl = fxhash::FxHashMap::default();
-                        let v = crate::value_to_json(&mut tbl, None, &Value::Table(self.t.clone()));
+                        let v = crate::value_to_json(&Value::Table(self.t.clone()));
                         write!(f, "{v}")
                     }
                     Ok(v) => {
@@ -1264,44 +1256,54 @@ impl<'lua, T: FromLua<'lua> + IntoLua<'lua> + 'lua> Sequence<'lua, T> {
     }
 }
 
-pub fn value_to_json(
-    ctx: &mut FxHashMap<usize, String>,
-    key: Option<&str>,
-    v: &Value,
-) -> serde_json::Value {
-    use serde_json::{json, Map, Value as JVal};
-    match v {
-        Value::Nil => JVal::Null,
-        Value::Boolean(b) => json!(b),
-        Value::LightUserData(_) => json!("<LightUserData>"),
-        Value::Integer(i) => json!(*i),
-        Value::Number(i) => json!(*i),
-        Value::UserData(_) => json!("<UserData>"),
-        Value::String(s) => json!(s),
-        Value::Function(_) => json!("<Function>"),
-        Value::Thread(_) => json!("<Thread>"),
-        Value::Error(e) => json!(format!("{e}")),
-        Value::Table(tbl) => {
-            let address = tbl.to_pointer() as usize;
-            match ctx.entry(address) {
-                Entry::Occupied(e) => json!(format!("<Table(0x{:x} {})>", address, e.get())),
-                Entry::Vacant(e) => {
-                    e.insert(String::from(key.unwrap_or("Root")));
-                    let mut map = Map::new();
-                    for pair in tbl.clone().pairs::<Value, Value>() {
-                        let (k, v) = pair.unwrap();
-                        let k = match value_to_json(ctx, None, &k) {
-                            JVal::String(s) => s,
-                            v => v.to_string(),
-                        };
-                        let v = value_to_json(ctx, Some(k.as_str()), &v);
-                        map.insert(k, v);
+pub fn value_to_json(v: &Value) -> serde_json::Value {
+    thread_local! {
+        static CTX: RefCell<FxHashMap<usize, String>> = RefCell::new(FxHashMap::default());
+    }
+    fn inner(
+        ctx: &mut FxHashMap<usize, String>,
+        key: Option<&str>,
+        v: &Value,
+    ) -> serde_json::Value {
+        use serde_json::{json, Map, Value as JVal};
+        match v {
+            Value::Nil => JVal::Null,
+            Value::Boolean(b) => json!(b),
+            Value::LightUserData(_) => json!("<LightUserData>"),
+            Value::Integer(i) => json!(*i),
+            Value::Number(i) => json!(*i),
+            Value::UserData(_) => json!("<UserData>"),
+            Value::String(s) => json!(s),
+            Value::Function(_) => json!("<Function>"),
+            Value::Thread(_) => json!("<Thread>"),
+            Value::Error(e) => json!(format!("{e}")),
+            Value::Table(tbl) => {
+                let address = tbl.to_pointer() as usize;
+                match ctx.entry(address) {
+                    Entry::Occupied(e) => json!(format!("<Table(0x{:x} {})>", address, e.get())),
+                    Entry::Vacant(e) => {
+                        e.insert(String::from(key.unwrap_or("Root")));
+                        let mut map = Map::new();
+                        for pair in tbl.clone().pairs::<Value, Value>() {
+                            let (k, v) = pair.unwrap();
+                            let k = match inner(ctx, None, &k) {
+                                JVal::String(s) => s,
+                                v => v.to_string(),
+                            };
+                            let v = inner(ctx, Some(k.as_str()), &v);
+                            map.insert(k, v);
+                        }
+                        JVal::Object(map)
                     }
-                    JVal::Object(map)
                 }
             }
         }
     }
+    CTX.with_borrow_mut(|ctx| {
+        let r = inner(ctx, None, v);
+        ctx.clear();
+        r
+    })
 }
 
 pub fn centroid2d(points: impl IntoIterator<Item = Vector2>) -> Vector2 {

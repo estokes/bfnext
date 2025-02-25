@@ -197,6 +197,7 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
             t,
             lua: lua.inner(),
         };
+        /*
         if !t.is_exist()? {
             warn!("{} is an invalid unit", id.id);
             bail!("{} is an invalid unit", id.id)
@@ -206,6 +207,7 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
             warn!("{} is dead", id.id);
             bail!("{} is dead", id.id)
         }
+        */
         Ok(t)
     }
 
@@ -221,6 +223,7 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
 
     fn change_instance(self, id: &DcsOid<Self::Class>) -> Result<Self> {
         self.raw_set("id_", id.id)?;
+        /*
         if !self.is_exist()? {
             warn!("{} is an invalid unit", id.id);
             bail!("{} is an invalid unit", id.id)
@@ -230,12 +233,14 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
             warn!("{} is dead", id.id);
             bail!("{} is dead", id.id)
         }
+        */
         Ok(self)
     }
 
     fn change_instance_dyn<T>(self, id: &DcsOid<T>) -> Result<Self> {
         id.check_implements(MizLua(self.lua), "Unit")?;
         self.t.raw_set("id_", id.id)?;
+        /*
         if !self.is_exist()? {
             warn!("{} is an invalid unit", id.id);
             bail!("{} is an invalid unit", id.id)
@@ -245,6 +250,7 @@ impl<'lua> DcsObject<'lua> for Unit<'lua> {
             warn!("{} is dead", id.id);
             bail!("{} is dead", id.id)
         }
+        */
         Ok(self)
     }
 }

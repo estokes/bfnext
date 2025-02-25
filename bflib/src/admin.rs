@@ -45,7 +45,6 @@ use dcso3::{
     MizLua, String, Vector2,
 };
 use enumflags2::BitFlags;
-use fxhash::FxHashMap;
 use log::warn;
 use mlua::Value;
 use netidx::publisher::Value as NetIdxValue;
@@ -685,11 +684,10 @@ fn admin_log_desc(ctx: &Context, lua: MizLua, ucid: &Ucid) -> Result<()> {
         .get_object_id_by_slot(&slot)
         .ok_or_else(|| anyhow!("player {ucid} unit not found"))?;
     let unit = Unit::get_instance(lua, &id).context("getting unit")?;
-    let mut tbl = FxHashMap::default();
     let desc = Value::Table(unit.get_desc().context("getting desc")?);
-    let desc = value_to_json(&mut tbl, None, &desc);
+    let desc = value_to_json(&desc);
     let ammo = Value::Table(unit.get_ammo().context("getting ammo")?.into_inner());
-    let ammo = value_to_json(&mut tbl, None, &ammo);
+    let ammo = value_to_json(&ammo);
     warn!("{desc}\n{ammo}");
     Ok(())
 }

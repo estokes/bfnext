@@ -669,6 +669,7 @@ impl Db {
             if let Some(player) = self.persisted.players.get_mut_cow(ucid) {
                 if let Some((slot, Some(inst))) = &mut player.current_slot {
                     if let Some(id) = self.ephemeral.object_id_by_slot.get(slot) {
+                        info!("getting position for {id:?}");
                         let instance = match unit.take() {
                             Some(unit) => unit.change_instance(id),
                             None => Unit::get_instance(lua, id),

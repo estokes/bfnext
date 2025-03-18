@@ -29,7 +29,6 @@ use dcso3::{
     airbase::Airbase,
     coalition::Side,
     coord::Coord,
-    env::miz,
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
     unit::{ClassUnit, Unit},

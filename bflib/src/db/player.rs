@@ -676,9 +676,15 @@ impl Db {
                         let instance = match instance {
                             Ok(i) => Ok(i),
                             Err(e) => match self.ephemeral.uid_by_object_id.get(&id) {
-                                None => Err(e),
+                                None => {
+                                    warn!("no uid for {id:?}");
+                                    Err(e)
+                                },
                                 Some(uid) => match self.persisted.units.get(uid) {
-                                    None => Err(e),
+                                    None => {
+                                        warn!("no unit {uid:?}");
+                                        Err(e)
+                                    },
                                     Some(ifo) => {
                                         warn!("failed to get unit by id, trying by name");
                                         Unit::get_by_name(lua, &ifo.name)

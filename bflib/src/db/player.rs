@@ -271,6 +271,7 @@ impl Db {
             .slot_info
             .get(&slot)
             .ok_or_else(|| anyhow!("could not find slot {:?}", slot))?;
+        /*
         let (cost, strict, cost_msg) = match self.compute_flight_cost(&sifo, unit) {
             Ok(cost) => cost,
             Err(e) => {
@@ -278,6 +279,8 @@ impl Db {
                 (0, false, String::from(""))
             }
         };
+        */
+        let (cost, strict, cost_msg) = (0, false, String::from(""));
         let (ucid, player) = self
             .ephemeral
             .players_by_slot

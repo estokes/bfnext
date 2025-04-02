@@ -1281,7 +1281,7 @@ impl<'lua> IntoLua<'lua> for Command {
             Self::EPLRS { enable, group } => {
                 root.raw_set("id", "EPLRS")?;
                 params.raw_set("value", enable)?;
-                if let Some(group) = group { 
+                if let Some(group) = group {
                     params.raw_set("groupId", group)?;
                 }
             }
@@ -1490,6 +1490,7 @@ pub enum AirOption<'lua> {
     RtbOnBingo(bool),
     RtbOnOutOfAmmo(bool),
     Silence(bool),
+    AllowFormationSideSwap(bool),
 }
 
 impl<'lua> IntoLua<'lua> for AirOption<'lua> {
@@ -1512,7 +1513,10 @@ impl<'lua> IntoLua<'lua> for AirOption<'lua> {
             Self::RadarUsing(v) => v.into_lua(lua),
             Self::ReactionOnThreat(v) => v.into_lua(lua),
             Self::Roe(v) => v.into_lua(lua),
-            Self::RtbOnBingo(v) | Self::RtbOnOutOfAmmo(v) | Self::Silence(v) => v.into_lua(lua),
+            Self::RtbOnBingo(v)
+            | Self::RtbOnOutOfAmmo(v)
+            | Self::Silence(v)
+            | Self::AllowFormationSideSwap(v) => v.into_lua(lua),
         }
     }
 }
@@ -1540,6 +1544,7 @@ impl<'lua> AirOption<'lua> {
             Self::RtbOnBingo(_) => 6,
             Self::RtbOnOutOfAmmo(_) => 10,
             Self::Silence(_) => 7,
+            Self::AllowFormationSideSwap(_) => 35,
         }
     }
 
@@ -1571,6 +1576,7 @@ impl<'lua> AirOption<'lua> {
             6 => Ok(Self::RtbOnBingo(FromLua::from_lua(val, lua)?)),
             10 => Ok(Self::RtbOnOutOfAmmo(FromLua::from_lua(val, lua)?)),
             7 => Ok(Self::Silence(FromLua::from_lua(val, lua)?)),
+            35 => Ok(Self::AllowFormationSideSwap(FromLua::from_lua(val, lua)?)),
             e => Err(err(&format_compact!("invalid AirOption {e}"))),
         }
     }
@@ -1596,6 +1602,7 @@ pub enum GroundOption {
     EngageAirWeapons(bool),
     Formation(VehicleFormation),
     Roe(GroundRoe),
+    AllowFormationSideSwap(bool),
 }
 
 impl<'lua> IntoLua<'lua> for GroundOption {
@@ -1607,6 +1614,7 @@ impl<'lua> IntoLua<'lua> for GroundOption {
             Self::EngageAirWeapons(v) => v.into_lua(lua),
             Self::Formation(v) => v.into_lua(lua),
             Self::Roe(v) => v.into_lua(lua),
+            Self::AllowFormationSideSwap(v) => v.into_lua(lua),
         }
     }
 }
@@ -1620,6 +1628,7 @@ impl GroundOption {
             Self::EngageAirWeapons(_) => 20,
             Self::Formation(_) => 5,
             Self::Roe(_) => 0,
+            Self::AllowFormationSideSwap(_) => 35,
         }
     }
 
@@ -1633,6 +1642,7 @@ impl GroundOption {
             24 => Ok(Self::AcEngagementRangeRestriction(FromLua::from_lua(
                 val, lua,
             )?)),
+            35 => Ok(Self::AllowFormationSideSwap(FromLua::from_lua(val, lua)?)),
             e => Err(err(&format_compact!("unknown GroundOption {e}"))),
         }
     }

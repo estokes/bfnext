@@ -271,6 +271,13 @@ impl SlotId {
         }
     }
 
+    pub fn is_multicrew(&self) -> bool {
+        match self {
+            Self::MultiCrew(_, _) => true,
+            _ => false,
+        }
+    }
+
     pub fn as_unit_id(&self) -> Option<UnitId> {
         match self {
             Self::Unit(i) => Some(UnitId::from(*i)),

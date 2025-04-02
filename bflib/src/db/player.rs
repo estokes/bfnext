@@ -490,77 +490,96 @@ impl Db {
                 }
             }
             SlotId::Unit(_) | SlotId::MultiCrew(_, _) => {
-                let sifo = match self.ephemeral.slot_info.get(&slot) {
-                    Some(sifo) => sifo,
-                    None => {
-                        player.changing_slots = true;
-                        player.jtac_or_spectators = false;
-                        return SlotAuth::Yes(None); // it's a multicrew slot
-                    }
+                if self.ephemeral.slot_info.contains_key(&slot) {
+                    self.try_occupy_slot_deferred(time, ucid, slot)
+                } else {
+                    player.changing_slots = true;
+                    player.jtac_or_spectators = false;
+                    return SlotAuth::Yes(None);
+                }
+            }
+        }
+    }
+
+    pub fn try_occupy_slot_deferred(
+        &mut self,
+        time: DateTime<Utc>,
+        ucid: &Ucid,
+        slot: SlotId,
+    ) -> SlotAuth {
+        let sifo = match self.ephemeral.slot_info.get(&slot) {
+            None => return SlotAuth::Denied,
+            Some(sifo) => sifo,
+        };
+        let player = match self.persisted.players.get_mut_cow(ucid) {
+            Some(player) => player,
+            None => {
+                if slot.is_spectator() {
+                    return SlotAuth::Yes(None);
+                }
+                return SlotAuth::NotRegistered(sifo.side);
+            }
+        };
+        let objective = match self.persisted.objectives.get(&sifo.objective) {
+            Some(o) if o.owner != Side::Neutral => o,
+            Some(_) | None => return SlotAuth::ObjectiveNotOwned(player.side),
+        };
+        if objective.owner != player.side {
+            return SlotAuth::ObjectiveNotOwned(player.side);
+        }
+        if objective.captureable() {
+            return SlotAuth::ObjectiveHasNoLogistics;
+        }
+        let life_type = self.ephemeral.cfg.life_types[&sifo.typ];
+        macro_rules! yes {
+            () => {
+                match objective.warehouse.equipment.get(sifo.typ.as_str()) {
+                    Some(inv) if inv.stored > 0 => (),
+                    Some(_) | None => break SlotAuth::VehicleNotAvailable(sifo.typ.clone()),
+                }
+                player.changing_slots = false;
+                player.jtac_or_spectators = false;
+                break SlotAuth::Yes(Some(stats::Unit {
+                    typ: sifo.typ.clone(),
+                    tags: self
+                        .ephemeral
+                        .cfg
+                        .unit_classification
+                        .get(&sifo.typ)
+                        .map(|t| *t)
+                        .unwrap_or_default(),
+                }));
+            };
+        }
+        if let Some(points) = self.ephemeral.cfg.points.as_ref() {
+            let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
+            if cost > 0 && player.points < cost as i32 {
+                return SlotAuth::NoPoints {
+                    cost,
+                    vehicle: sifo.typ.clone(),
+                    balance: player.points,
                 };
-                let objective = match self.persisted.objectives.get(&sifo.objective) {
-                    Some(o) if o.owner != Side::Neutral => o,
-                    Some(_) | None => return SlotAuth::ObjectiveNotOwned(player.side),
-                };
-                if objective.owner != player.side {
-                    return SlotAuth::ObjectiveNotOwned(player.side);
+            }
+        }
+        loop {
+            match player.lives.get(&life_type).map(|t| *t) {
+                None => {
+                    yes!();
                 }
-                if objective.captureable() {
-                    return SlotAuth::ObjectiveHasNoLogistics;
-                }
-                let life_type = self.ephemeral.cfg.life_types[&sifo.typ];
-                macro_rules! yes {
-                    () => {
-                        match objective.warehouse.equipment.get(sifo.typ.as_str()) {
-                            Some(inv) if inv.stored > 0 => (),
-                            Some(_) | None => break SlotAuth::VehicleNotAvailable(sifo.typ.clone()),
-                        }
-                        player.changing_slots = true;
-                        player.jtac_or_spectators = false;
-                        break SlotAuth::Yes(Some(stats::Unit {
-                            typ: sifo.typ.clone(),
-                            tags: self
-                                .ephemeral
-                                .cfg
-                                .unit_classification
-                                .get(&sifo.typ)
-                                .map(|t| *t)
-                                .unwrap_or_default(),
-                        }));
-                    };
-                }
-                if let Some(points) = self.ephemeral.cfg.points.as_ref() {
-                    let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
-                    if cost > 0 && player.points < cost as i32 {
-                        return SlotAuth::NoPoints {
-                            cost,
-                            vehicle: sifo.typ.clone(),
-                            balance: player.points,
-                        };
+                Some((reset, n)) => {
+                    let reset_after =
+                        Duration::seconds(self.ephemeral.cfg.default_lives[&life_type].1 as i64);
+                    if time - reset >= reset_after {
+                        player.lives.remove_cow(&life_type);
+                        self.ephemeral.stat(Stat::Life {
+                            id: *ucid,
+                            lives: player.lives.clone(),
+                        });
+                        self.ephemeral.dirty = true;
+                    } else if n == 0 {
+                        break SlotAuth::NoLives(life_type);
                     }
-                }
-                loop {
-                    match player.lives.get(&life_type).map(|t| *t) {
-                        None => {
-                            yes!();
-                        }
-                        Some((reset, n)) => {
-                            let reset_after = Duration::seconds(
-                                self.ephemeral.cfg.default_lives[&life_type].1 as i64,
-                            );
-                            if time - reset >= reset_after {
-                                player.lives.remove_cow(&life_type);
-                                self.ephemeral.stat(Stat::Life {
-                                    id: *ucid,
-                                    lives: player.lives.clone(),
-                                });
-                                self.ephemeral.dirty = true;
-                            } else if n == 0 {
-                                break SlotAuth::NoLives(life_type);
-                            }
-                            yes!();
-                        }
-                    }
+                    yes!();
                 }
             }
         }
@@ -682,12 +701,12 @@ impl Db {
                                 None => {
                                     warn!("no uid for {id:?}");
                                     Err(e)
-                                },
+                                }
                                 Some(uid) => match self.persisted.units.get(uid) {
                                     None => {
                                         warn!("no unit {uid:?}");
                                         Err(e)
-                                    },
+                                    }
                                     Some(ifo) => {
                                         warn!("failed to get unit by id, trying by name");
                                         Unit::get_by_name(lua, &ifo.name)

@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{coalition::Side, controller::AltType, net::Ucid, String};
@@ -839,6 +839,34 @@ impl Cfg {
             .with_context(|| format_compact!("opening {:?}", path))?;
         serde_json::to_writer_pretty(fd, self).context("serializing cfg")?;
         fs::rename(&path, Self::path(miz_state_path)).context("moving new file into place")?;
+        Ok(())
+    }
+
+    pub fn check_vehicle_has_threat_distance(&self, vehicle: &Vehicle) -> Result<()> {
+        match self.threatened_distance.get(vehicle) {
+            Some(_) => (),
+            None => bail!(
+                "vehicle {:?} doesn't have a configured theatened distance",
+                vehicle
+            ),
+        }
+        Ok(())
+    }
+
+    pub fn check_vehicle_has_life_type(&self, vehicle: &Vehicle) -> Result<()> {
+        match self.life_types.get(vehicle) {
+            None => bail!("vehicle {:?} doesn't have a configured life type", vehicle),
+            Some(typ) => match self.default_lives.get(&typ) {
+                Some((n, f)) if *n > 0 && *f > 0 => (),
+                None => bail!("vehicle {:?} has no configured life type", vehicle),
+                Some((n, f)) => {
+                    bail!(
+                        "vehicle {:?} life type {:?} has no configured lives ({n}) or negative reset time ({f})",
+                        vehicle, typ
+                    )
+                }
+            },
+        }
         Ok(())
     }
 }

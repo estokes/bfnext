@@ -217,13 +217,9 @@ impl Db {
         for unit in slot.units()? {
             let unit = unit?;
             let vehicle = Vehicle::from(unit.typ()?);
-            match self.ephemeral.cfg.threatened_distance.get(&vehicle) {
-                Some(_) => (),
-                None => bail!(
-                    "vehicle {:?} doesn't have a configured theatened distance",
-                    vehicle
-                ),
-            }
+            self.ephemeral
+                .cfg
+                .check_vehicle_has_threat_distance(&vehicle)?;
             if unit.skill()? != Skill::Client {
                 continue;
             }
@@ -245,19 +241,7 @@ impl Db {
                     }
                 }
             };
-            match self.ephemeral.cfg.life_types.get(&vehicle) {
-                None => bail!("vehicle {:?} doesn't have a configured life type", vehicle),
-                Some(typ) => match self.ephemeral.cfg.default_lives.get(&typ) {
-                    Some((n, f)) if *n > 0 && *f > 0 => (),
-                    None => bail!("vehicle {:?} has no configured life type", vehicle),
-                    Some((n, f)) => {
-                        bail!(
-                            "vehicle {:?} life type {:?} has no configured lives ({n}) or negative reset time ({f})",
-                            vehicle, typ
-                        )
-                    }
-                },
-            }
+            self.ephemeral.cfg.check_vehicle_has_life_type(&vehicle)?;
             self.ephemeral.slot_info.insert(
                 id.clone(),
                 SlotInfo {

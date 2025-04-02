@@ -14,7 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{objective::ObjGroupClass, Db, SetS};
+use super::{ephemeral::SlotInfo, objective::ObjGroupClass, player::SlotAuth, Db, SetS};
 use crate::{
     group, group_by_name, group_health, group_mut,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
@@ -36,6 +36,7 @@ use dcso3::{
     azumith3d, centroid2d, centroid3d, change_heading,
     coalition::Side,
     coord::Coord,
+    env::miz,
     env::miz::{Group, GroupKind, MizIndex},
     group::GroupCategory,
     land::{Land, SurfaceType},
@@ -823,35 +824,76 @@ impl Db {
             return Ok(None);
         }
         let slot = unit.slot()?;
-        if let Some(si) = self.ephemeral.slot_info.get(&slot) {
-            let name = unit.get_player_name()?;
-            let ifo = name.and_then(|name| connected.get_by_name(&name));
-            let ucid = match ifo {
-                Some(ifo) => ifo.ucid,
-                None => {
-                    error!("slot {slot} born with no player in it");
+        let (si, deferred_validate) = match self.ephemeral.slot_info.get(&slot) {
+            Some(si) => (si, false),
+            None => {
+                // it's a dynamic slot
+                let typ = Vehicle::from(unit.as_object()?.get_type_name()?);
+                let pos = unit.get_ground_position()?;
+                let obj = Db::objective_near_point(&self.persisted.objectives, pos.0, |_| true)
+                    .map(|(_, _, o)| o)
+                    .ok_or_else(|| anyhow!("dynamic slot not near any objective"))?;
+                let gid = unit.get_group()?.id()?;
+                self.ephemeral.slot_info.insert(
+                    slot,
+                    SlotInfo {
+                        typ,
+                        objective: obj.id,
+                        ground_start: false,
+                        miz_gid: miz::GroupId::from(gid.inner()),
+                        side: obj.owner,
+                    },
+                );
+                (&self.ephemeral.slot_info[&slot], true)
+            }
+        };
+        let name = unit.get_player_name()?;
+        let ifo = name.and_then(|name| connected.get_by_name(&name));
+        let ucid = match ifo {
+            Some(ifo) => ifo.ucid,
+            None => {
+                error!("slot {slot} born with no player in it");
+                unit.clone().destroy()?;
+                return Ok(None);
+            }
+        };
+        let side = si.side;
+        let typ = si.typ.clone();
+        let objective = si.objective;
+        let tags = *self
+            .ephemeral
+            .cfg
+            .unit_classification
+            .get(&typ)
+            .unwrap_or(&UnitTags::default());
+        if deferred_validate {
+            match self.try_occupy_slot_deferred(Utc::now(), &ucid, slot) {
+                SlotAuth::Yes(typ) => {
+                    self.ephemeral.stat(Stat::Slot {
+                        id: ucid,
+                        slot,
+                        typ,
+                    });
+                }
+                _ => {
                     unit.clone().destroy()?;
                     return Ok(None);
                 }
-            };
-            self.ephemeral.stat(Stat::Unit {
-                id: EnId::Player(ucid),
-                gid: None,
-                owner: si.side,
-                typ: stats::Unit {
-                    typ: si.typ.clone(),
-                    tags: self.ephemeral.cfg.unit_classification[&si.typ],
-                },
-                pos: stats::Pos {
-                    pos: Coord::singleton(lua)?.lo_to_ll(unit.get_point()?)?,
-                    velocity: Vector3::default(),
-                },
-            });
-            self.player_entered_slot(lua, id, unit, slot, si.objective, ucid)
-                .context("entering player into slot")?;
-            return Ok(Some(slot));
+            }
         }
-        Ok(None)
+        self.ephemeral.stat(Stat::Unit {
+            id: EnId::Player(ucid),
+            gid: None,
+            owner: side,
+            typ: stats::Unit { typ, tags },
+            pos: stats::Pos {
+                pos: Coord::singleton(lua)?.lo_to_ll(unit.get_point()?)?,
+                velocity: Vector3::default(),
+            },
+        });
+        self.player_entered_slot(lua, id, unit, slot, objective, ucid)
+            .context("entering player into slot")?;
+        Ok(Some(slot))
     }
 
     pub fn static_born(&mut self, st: &StaticObject) -> Result<()> {

@@ -238,13 +238,21 @@ impl Db {
                         .get_item_count(name.clone())
                         .with_context(|| format_compact!("getting {name} from the warehouse"))?;
                     if qty > 0 {
+                        let category = typ.category().context("getting category")?;
                         production.equipment.insert(
                             name.clone(),
                             Equipment {
-                                category: typ.category().context("getting category")?,
+                                category,
                                 production: qty,
                             },
                         );
+                        if category.is_aircraft() {
+                            let vehicle = Vehicle::from(name.clone());
+                            self.ephemeral
+                                .cfg
+                                .check_vehicle_has_threat_distance(&vehicle)?;
+                            self.ephemeral.cfg.check_vehicle_has_life_type(&vehicle)?;
+                        }
                     }
                     for name in LiquidType::ALL {
                         let qty = w.get_liquid_amount(name).context("getting liquid amount")?;

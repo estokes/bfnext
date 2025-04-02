@@ -1,3 +1,7 @@
+## 0.1.8
+
+- add new controller options used by the mission editor
+
 ## 0.1.7
 
 - add stats for Land.isVisible and Land.getHeight
@@ -7,7 +11,6 @@
 - add optional DCS api performance stats tracking. Enable the feature
   "perf" and the perf::Perf struct will contain hdrhistograms of the
   time various important DCS api calls take
-
 
 ## 0.1.5
 

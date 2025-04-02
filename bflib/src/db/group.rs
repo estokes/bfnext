@@ -55,6 +55,13 @@ use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, collections::VecDeque};
 
+#[derive(Debug, Clone)]
+pub enum BirthRes {
+    None,
+    OccupiedSlot(SlotId),
+    DynamicSlotDenied(Ucid, SlotAuth),
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
     Objective,
@@ -794,7 +801,7 @@ impl Db {
         lua: MizLua,
         unit: &Unit,
         connected: &Connected,
-    ) -> Result<Option<SlotId>> {
+    ) -> Result<BirthRes> {
         let id = unit.object_id()?;
         let name = unit.get_name()?;
         if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
@@ -821,7 +828,7 @@ impl Db {
                     velocity: unit.airborne_velocity.unwrap_or_default(),
                 },
             });
-            return Ok(None);
+            return Ok(BirthRes::None);
         }
         let slot = unit.slot()?;
         let (si, deferred_validate) = match self.ephemeral.slot_info.get(&slot) {
@@ -854,7 +861,7 @@ impl Db {
             None => {
                 error!("slot {slot} born with no player in it");
                 unit.clone().destroy()?;
-                return Ok(None);
+                return Ok(BirthRes::None);
             }
         };
         let side = si.side;
@@ -875,9 +882,9 @@ impl Db {
                         typ,
                     });
                 }
-                _ => {
+                a => {
                     unit.clone().destroy()?;
-                    return Ok(None);
+                    return Ok(BirthRes::DynamicSlotDenied(ucid, a));
                 }
             }
         }
@@ -893,7 +900,7 @@ impl Db {
         });
         self.player_entered_slot(lua, id, unit, slot, objective, ucid)
             .context("entering player into slot")?;
-        Ok(Some(slot))
+        Ok(BirthRes::OccupiedSlot(slot))
     }
 
     pub fn static_born(&mut self, st: &StaticObject) -> Result<()> {

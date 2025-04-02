@@ -42,6 +42,7 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use crossbeam::queue::SegQueue;
 use db::{
+    group::BirthRes,
     player::{RegErr, TakeoffRes},
     Db,
 };
@@ -410,6 +411,57 @@ fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) 
     }
 }
 
+fn process_slot_rejection(ctx: &mut Context, id: PlayerId, ucid: Ucid, rej: SlotAuth) {
+    match rej {
+        SlotAuth::Denied => {
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                format_compact!("access to slot is denied"),
+            );
+        }
+        SlotAuth::NoPoints {
+            vehicle,
+            cost,
+            balance,
+        } => {
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                format_compact!("{vehicle} costs {cost}, you have {balance}"),
+            );
+        }
+        SlotAuth::NoLives(typ) => {
+            let msg = match lives(&mut ctx.db, &ucid, Some(typ)) {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("failed to get lives for {} {:?}", ucid, e);
+                    "".into()
+                }
+            };
+            ctx.db.ephemeral.msgs().send(
+                MsgTyp::Chat(Some(id)),
+                format_compact!("you have no {:?} lives remaining. {}", typ, msg),
+            );
+        }
+        SlotAuth::VehicleNotAvailable(vehicle) => {
+            let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+        }
+        SlotAuth::ObjectiveHasNoLogistics => {
+            let msg = format_compact!("Objective is capturable");
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+        }
+        SlotAuth::ObjectiveNotOwned(side) => {
+            let msg = String::from(format_compact!(
+                "{:?} does not own the objective associated with this slot",
+                side
+            ));
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
+        }
+        SlotAuth::NotRegistered(_) => warn!("unexpected NotRegistered"),
+        SlotAuth::Yes(_) => warn!("slot was not rejected!"),
+    }
+}
+
 fn try_occupy_slot(
     ctx: &mut Context,
     lua: HooksLua,
@@ -420,42 +472,6 @@ fn try_occupy_slot(
 ) -> Result<bool> {
     let now = Utc::now();
     match ctx.db.try_occupy_slot(now, side, slot, &ifo.ucid) {
-        SlotAuth::Denied => Ok(false),
-        SlotAuth::NoPoints {
-            vehicle,
-            cost,
-            balance,
-        } => {
-            ctx.db.ephemeral.msgs().send(
-                MsgTyp::Chat(Some(id)),
-                format_compact!("{vehicle} costs {cost}, you have {balance}"),
-            );
-            Ok(false)
-        }
-        SlotAuth::NoLives(typ) => {
-            let msg = match lives(&mut ctx.db, &ifo.ucid, Some(typ)) {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("failed to get lives for {} {:?}", ifo.ucid, e);
-                    "".into()
-                }
-            };
-            ctx.db.ephemeral.msgs().send(
-                MsgTyp::Chat(Some(id)),
-                format_compact!("you have no {:?} lives remaining. {}", typ, msg),
-            );
-            Ok(false)
-        }
-        SlotAuth::VehicleNotAvailable(vehicle) => {
-            let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            Ok(false)
-        }
-        SlotAuth::ObjectiveHasNoLogistics => {
-            let msg = format_compact!("Objective is capturable");
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            Ok(false)
-        }
         SlotAuth::NotRegistered(side) => {
             let name = ifo.name.clone();
             match ctx.db.register_player(ifo.ucid, name.clone(), side) {
@@ -473,14 +489,6 @@ fn try_occupy_slot(
                 }
             }
         }
-        SlotAuth::ObjectiveNotOwned(side) => {
-            let msg = String::from(format_compact!(
-                "{:?} does not own the objective associated with this slot",
-                side
-            ));
-            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
-            Ok(false)
-        }
         SlotAuth::Yes(typ) => {
             ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
             ctx.subscribed_jtac_menus.remove(&slot);
@@ -490,6 +498,10 @@ fn try_occupy_slot(
                 typ,
             }));
             Ok(true)
+        }
+        rej => {
+            process_slot_rejection(ctx, id, ifo.ucid, rej);
+            Ok(false)
         }
     }
 }
@@ -560,9 +572,14 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
                 match ctx.db.unit_born(lua, &unit, &ctx.connected) {
-                    Ok(None) => (),
-                    Ok(Some(slot)) => {
+                    Ok(BirthRes::None) => (),
+                    Ok(BirthRes::OccupiedSlot(slot)) => {
                         ctx.menu_init_queue.insert(slot);
+                    }
+                    Ok(BirthRes::DynamicSlotDenied(ucid, rej)) => {
+                        if let Some(id) = ctx.connected.id_by_ucid.get(&ucid) {
+                            process_slot_rejection(ctx, *id, ucid, rej)
+                        }
                     }
                     Err(e) => {
                         error!("unit born failed {:?} {:?}", unit, e);

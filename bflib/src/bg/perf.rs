@@ -90,6 +90,7 @@ pub struct PubPerf {
     snapshot: PubHistStat,
     logistics: PubHistStat,
     logistics_distribute: PubHistStat,
+    logistics_transfer: PubHistStat,
     logistics_deliver: PubHistStat,
     logistics_sync_from: PubHistStat,
     logistics_sync_to: PubHistStat,
@@ -145,6 +146,7 @@ impl PubPerf {
             logistics,
             logistics_distribute,
             logistics_deliver,
+            logistics_transfer,
             logistics_sync_from,
             logistics_sync_to,
             logistics_items,
@@ -196,6 +198,7 @@ impl PubPerf {
             land_is_visible: PubHistStat::new(publisher, &base, land_is_visible)?,
             logistics: PubHistStat::new(publisher, &base, logistics)?,
             logistics_deliver: PubHistStat::new(publisher, &base, logistics_deliver)?,
+            logistics_transfer: PubHistStat::new(publisher, &base, logistics_transfer)?,
             logistics_distribute: PubHistStat::new(publisher, &base, logistics_distribute)?,
             logistics_sync_from: PubHistStat::new(publisher, &base, logistics_sync_from)?,
             logistics_sync_to: PubHistStat::new(publisher, &base, logistics_sync_to)?,
@@ -251,6 +254,7 @@ impl PubPerf {
             snapshot,
             logistics,
             logistics_distribute,
+            logistics_transfer,
             logistics_deliver,
             logistics_sync_from,
             logistics_sync_to,
@@ -298,6 +302,7 @@ impl PubPerf {
         self.land_get_height.update(batch, land_get_height);
         self.land_is_visible.update(batch, land_is_visible);
         self.logistics_deliver.update(batch, logistics_deliver);
+        self.logistics_transfer.update(batch, logistics_transfer);
         self.logistics_distribute
             .update(batch, logistics_distribute);
         self.logistics_sync_from.update(batch, logistics_sync_from);

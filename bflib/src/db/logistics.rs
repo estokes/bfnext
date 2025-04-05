@@ -15,11 +15,12 @@ for more details.
 */
 
 use super::{
-    ephemeral::{Equipment, LogiStage, Production},
+    ephemeral::{Equipment, Production},
     objective::Objective,
+    persisted::Persisted,
     Db, Map, MapS, SetS,
 };
-use crate::{admin::WarehouseKind, maybe, objective, objective_mut};
+use crate::{admin::WarehouseKind, maybe, objective, objective_mut, Task};
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::Vehicle,
@@ -39,9 +40,10 @@ use dcso3::{
     MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
-use log::{error, info, warn};
+use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
+use tokio::sync::mpsc::UnboundedSender;
 use std::{
     cmp::{max, min},
     collections::hash_map::Entry,
@@ -49,6 +51,29 @@ use std::{
     ops::{AddAssign, SubAssign},
     sync::Arc,
 };
+
+#[derive(Debug, Clone)]
+pub enum LogiStage {
+    Complete {
+        last_tick: DateTime<Utc>,
+    },
+    SyncFromWarehouses {
+        objectives: SmallVec<[ObjectiveId; 128]>,
+    },
+    SyncToWarehouses {
+        objectives: SmallVec<[ObjectiveId; 128]>,
+    },
+    ExecuteTransfers {
+        transfers: Vec<Transfer>,
+    },
+    Init,
+}
+
+impl Default for LogiStage {
+    fn default() -> Self {
+        Self::Init
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct Inventory {
@@ -106,7 +131,7 @@ enum TransferItem {
 }
 
 #[derive(Debug, Clone)]
-struct Transfer {
+pub struct Transfer {
     source: ObjectiveId,
     target: ObjectiveId,
     amount: u32,
@@ -114,29 +139,39 @@ struct Transfer {
 }
 
 impl Transfer {
-    fn execute(&self, db: &mut Db) -> Result<()> {
-        let src = objective_mut!(db, self.source)?;
+    fn execute(&self, db: &mut Persisted, to_bg: &Option<UnboundedSender<Task>>) -> Result<()> {
+        let src = db
+            .objectives
+            .get_mut_cow(&self.source)
+            .ok_or_else(|| anyhow!("no such objective {:?}", self.source))?;
         match &self.item {
             TransferItem::Equipment(name) => {
                 let d = &mut src.warehouse.equipment[name].stored;
                 *d -= self.amount;
-                db.ephemeral.stat(Stat::EquipmentInventory {
-                    id: src.id,
-                    item: name.clone(),
-                    amount: *d,
-                });
+                if let Some(to_bg) = to_bg.as_ref() {
+                    let _ = to_bg.send(Task::Stat(Stat::EquipmentInventory {
+                        id: src.id,
+                        item: name.clone(),
+                        amount: *d,
+                    }));
+                }
             }
             TransferItem::Liquid(name) => {
                 let d = &mut src.warehouse.liquids[name].stored;
                 *d -= self.amount;
-                db.ephemeral.stat(Stat::LiquidInventory {
-                    id: src.id,
-                    item: *name,
-                    amount: *d,
-                });
+                if let Some(to_bg) = to_bg.as_ref() {
+                    let _ = to_bg.send(Task::Stat(Stat::LiquidInventory {
+                        id: src.id,
+                        item: *name,
+                        amount: *d,
+                    }));
+                }
             }
         }
-        let dst = objective_mut!(db, self.target)?;
+        let dst = db
+            .objectives
+            .get_mut_cow(&self.target)
+            .ok_or_else(|| anyhow!("no such objective {:?}", self.target))?;
         match &self.item {
             TransferItem::Equipment(name) => {
                 let d = &mut dst
@@ -145,20 +180,24 @@ impl Transfer {
                     .get_or_default_cow(name.clone())
                     .stored;
                 *d += self.amount;
-                db.ephemeral.stat(Stat::EquipmentInventory {
-                    id: dst.id,
-                    item: name.clone(),
-                    amount: *d,
-                });
+                if let Some(to_bg) = to_bg.as_ref() {
+                    let _ = to_bg.send(Task::Stat(Stat::EquipmentInventory {
+                        id: dst.id,
+                        item: name.clone(),
+                        amount: *d,
+                    }));
+                }
             }
             TransferItem::Liquid(name) => {
                 let d = &mut dst.warehouse.liquids.get_or_default_cow(*name).stored;
                 *d += self.amount;
-                db.ephemeral.stat(Stat::LiquidInventory {
-                    id: dst.id,
-                    item: *name,
-                    amount: *d,
-                });
+                if let Some(to_bg) = to_bg.as_ref() {
+                    let _ = to_bg.send(Task::Stat(Stat::LiquidInventory {
+                        id: dst.id,
+                        item: *name,
+                        amount: *d,
+                    }));
+                }
             }
         }
         Ok(())
@@ -238,12 +277,9 @@ impl Db {
                         .get_item_count(name.clone())
                         .with_context(|| format_compact!("getting {name} from the warehouse"))?;
                     if qty > 0 {
-                        production.equipment.insert(
-                            name.clone(),
-                            Equipment {
-                                production: qty,
-                            },
-                        );
+                        production
+                            .equipment
+                            .insert(name.clone(), Equipment { production: qty });
                         let category = typ.category().context("getting category")?;
                         if category.is_aircraft() {
                             let vehicle = Vehicle::from(name.clone());
@@ -462,7 +498,8 @@ impl Db {
         match &mut self.ephemeral.logistics_stage {
             LogiStage::Init
             | LogiStage::SyncFromWarehouses { .. }
-            | LogiStage::SyncToWarehouses { .. } => (),
+            | LogiStage::SyncToWarehouses { .. }
+            | LogiStage::ExecuteTransfers { .. } => (),
             LogiStage::Complete { last_tick } => {
                 *last_tick = DateTime::<Utc>::MIN_UTC;
             }
@@ -514,28 +551,58 @@ impl Db {
                     }
                     None => {
                         let sts = Utc::now();
-                        if self.persisted.logistics_ticks_since_delivery >= ticks_per_delivery {
+                        let transfers = if self.persisted.logistics_ticks_since_delivery
+                            >= ticks_per_delivery
+                        {
                             self.persisted.logistics_ticks_since_delivery = 0;
-                            if let Err(e) = self.deliver_production() {
-                                error!("failed to deliver production {:?}", e)
-                            }
+                            let v = match self.deliver_production() {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    error!("failed to deliver production {:?}", e);
+                                    vec![]
+                                }
+                            };
                             record_perf(&mut perf.logistics_deliver, sts);
+                            v
                         } else {
                             self.persisted.logistics_ticks_since_delivery += 1;
-                            if let Err(e) = self.deliver_supplies_from_logistics_hubs() {
-                                error!("failed to deliver supplies from hubs {:?}", e)
-                            }
+                            let v = match self.deliver_supplies_from_logistics_hubs() {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    error!("failed to deliver supplies from hubs {:?}", e);
+                                    vec![]
+                                }
+                            };
                             record_perf(&mut perf.logistics_distribute, sts);
-                        }
-                        let objectives = self
-                            .persisted
-                            .objectives
-                            .into_iter()
-                            .map(|(id, _)| *id)
-                            .collect();
-                        self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses { objectives }
+                            v
+                        };
+                        self.ephemeral.logistics_stage = LogiStage::ExecuteTransfers { transfers };
                     }
                 },
+                LogiStage::ExecuteTransfers { transfers } if transfers.is_empty() => {
+                    let st = Utc::now();
+                    self.balance_logistics_hubs()?;
+                    let objectives = self
+                        .persisted
+                        .objectives
+                        .into_iter()
+                        .map(|(id, _)| *id)
+                        .collect();
+                    self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses { objectives };
+                    record_perf(&mut perf.logistics_transfer, st);
+                }
+                LogiStage::ExecuteTransfers { transfers } => {
+                    let st = Utc::now();
+                    while let Some(tr) = transfers.pop() {
+                        if let Err(e) = tr.execute(&mut self.persisted, &self.ephemeral.to_bg) {
+                            error!("executing transfer {:?} {e:?}", tr)
+                        }
+                        if Utc::now() - st > Duration::milliseconds(6) {
+                            break;
+                        }
+                    }
+                    record_perf(&mut perf.logistics_transfer, st);
+                }
                 LogiStage::SyncToWarehouses { objectives } => match objectives.pop() {
                     None => self.ephemeral.logistics_stage = LogiStage::Complete { last_tick: ts },
                     Some(oid) => {
@@ -660,14 +727,12 @@ impl Db {
         Ok(())
     }
 
-    pub fn deliver_production(&mut self) -> Result<()> {
+    pub fn deliver_production(&mut self) -> Result<Vec<Transfer>> {
         if self.ephemeral.cfg.warehouse.is_none() {
-            return Ok(());
+            return Ok(vec![]);
         }
-        let st = Utc::now();
         self.setup_supply_lines()
             .context("setting up supply lines")?;
-        info!("setup supply lines {}", Utc::now() - st);
         let mut deliver_produced_supplies = || -> Result<()> {
             for side in Side::ALL {
                 let production = match self.ephemeral.production_by_side.get(&side) {
@@ -692,15 +757,10 @@ impl Db {
             }
             Ok(())
         };
-        let st = Utc::now();
         deliver_produced_supplies().context("delivering produced supplies")?;
-        info!("deliver produced supplies {}", Utc::now() - st);
         self.ephemeral.dirty();
-        let st = Utc::now();
         self.deliver_supplies_from_logistics_hubs()
-            .context("delivering supplies from logistics hubs")?;
-        info!("deliver from logi hubs {}", Utc::now() - st);
-        Ok(())
+            .context("delivering supplies from logistics hubs")
     }
 
     pub fn sync_vehicle_at_obj(
@@ -722,7 +782,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn deliver_supplies_from_logistics_hubs(&mut self) -> Result<()> {
+    pub fn deliver_supplies_from_logistics_hubs(&mut self) -> Result<Vec<Transfer>> {
         self.update_supply_status()
             .context("updating supply status")?;
         let mut transfers: Vec<Transfer> = vec![];
@@ -791,21 +851,10 @@ impl Db {
                     }
                 };
             }
-            let st = Utc::now();
             schedule_transfers!(TransferItem::Equipment, equipment, get_equipment);
             schedule_transfers!(TransferItem::Liquid, liquids, get_liquids);
-            info!("schedule transferrs {}", Utc::now() - st);
         }
-        let st = Utc::now();
-        for tr in transfers.drain(..) {
-            tr.execute(self)
-                .with_context(|| format_compact!("executing transfer {:?}", tr))?
-        }
-        info!("execute transferrs {}", Utc::now() - st);
-        let st = Utc::now();
-        self.balance_logistics_hubs()?;
-        info!("balancing logi hubs {}", Utc::now() - st);
-        Ok(())
+        Ok(transfers)
     }
 
     fn balance_logistics_hubs(&mut self) -> Result<()> {
@@ -888,7 +937,7 @@ impl Db {
             schedule_transfers!(TransferItem::Equipment, equipment, get_equipment);
             schedule_transfers!(TransferItem::Liquid, liquids, get_liquids);
             for tr in transfers.drain(..) {
-                tr.execute(self)
+                tr.execute(&mut self.persisted, &self.ephemeral.to_bg)
                     .with_context(|| format_compact!("executing transfer {:?}", tr))?
             }
             self.ephemeral.dirty();
@@ -1024,7 +1073,7 @@ impl Db {
         compute!(equipment, Equipment);
         compute!(liquids, Liquid);
         for tr in transfers {
-            tr.execute(self)?
+            tr.execute(&mut self.persisted, &self.ephemeral.to_bg)?
         }
         sync_obj_to_warehouse(objective!(self, from)?, &from_wh)?;
         sync_obj_to_warehouse(objective!(self, to)?, &to_wh)?;

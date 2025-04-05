@@ -15,9 +15,8 @@ for more details.
 */
 
 use super::{
-    ephemeral::LogiStage,
     group::{DeployKind, SpawnedUnit},
-    logistics::{Inventory, Warehouse},
+    logistics::{Inventory, LogiStage, Warehouse},
     Db, Map, MapM, MapS, Set,
 };
 use crate::{
@@ -587,16 +586,18 @@ impl Db {
         self.init_farp_warehouse(&oid)
             .context("initializing farp warehouse")?;
         self.setup_supply_lines().context("setup supply lines")?;
-        self.deliver_supplies_from_logistics_hubs()
+        let trs = self
+            .deliver_supplies_from_logistics_hubs()
             .context("distributing supplies")?;
-        self.ephemeral.logistics_stage = LogiStage::SyncToWarehouses {
-            objectives: self
-                .persisted
-                .objectives
-                .into_iter()
-                .map(|(oid, _)| *oid)
-                .collect(),
-        };
+        match &mut self.ephemeral.logistics_stage {
+            LogiStage::ExecuteTransfers { transfers } => transfers.extend(trs),
+            stage @ (LogiStage::Complete { .. }
+            | LogiStage::Init
+            | LogiStage::SyncFromWarehouses { .. }
+            | LogiStage::SyncToWarehouses { .. }) => {
+                *stage = LogiStage::ExecuteTransfers { transfers: trs };
+            }
+        }
         self.ephemeral
             .create_objective_markup(&self.persisted, objective!(self, oid)?);
         self.ephemeral.dirty();

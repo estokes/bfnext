@@ -17,6 +17,7 @@ for more details.
 use super::{
     cargo::Cargo,
     group::{SpawnedGroup, SpawnedUnit},
+    logistics::LogiStage,
     markup::ObjectiveMarkup,
     objective::Objective,
     persisted::Persisted,
@@ -80,26 +81,6 @@ pub struct SlotInfo {
     pub side: Side,
 }
 
-#[derive(Debug, Clone)]
-pub enum LogiStage {
-    Complete {
-        last_tick: DateTime<Utc>,
-    },
-    SyncFromWarehouses {
-        objectives: SmallVec<[ObjectiveId; 128]>,
-    },
-    SyncToWarehouses {
-        objectives: SmallVec<[ObjectiveId; 128]>,
-    },
-    Init,
-}
-
-impl Default for LogiStage {
-    fn default() -> Self {
-        Self::Init
-    }
-}
-
 #[derive(Debug, Clone, Default)]
 pub(super) struct DeployableIndex {
     pub(super) deployables_by_name: FxHashMap<String, Deployable>,
@@ -125,7 +106,7 @@ pub(super) struct Production {
 pub struct Ephemeral {
     pub(super) dirty: bool,
     pub cfg: Arc<Cfg>,
-    to_bg: Option<UnboundedSender<Task>>,
+    pub(super) to_bg: Option<UnboundedSender<Task>>,
     pub(super) players_by_slot: IndexMap<SlotId, Ucid, FxBuildHasher>,
     pub(super) cargo: FxHashMap<SlotId, Cargo>,
     pub(super) deployable_idx: FxHashMap<Side, Arc<DeployableIndex>>,

@@ -55,7 +55,7 @@ use dcso3::{
     static_object::ClassStatic,
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    warehouse::{LiquidType, WSCategory},
+    warehouse::LiquidType,
     MizLua, Position3, String, Vector2,
 };
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -112,7 +112,6 @@ pub(super) struct DeployableIndex {
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Equipment {
-    pub(super) category: WSCategory,
     pub(super) production: u32,
 }
 
@@ -656,12 +655,6 @@ impl Ephemeral {
                 self.msgs().panel_to_group(duration, false, miz_id, msg);
             }
         }
-    }
-
-    pub(super) fn has_slot_typ(&self, oid: &ObjectiveId, typ: &str) -> bool {
-        self.slot_info
-            .values()
-            .any(|si| &si.objective == oid && si.typ.as_str() == typ)
     }
 
     pub(super) fn set_cfg(

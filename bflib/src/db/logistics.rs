@@ -39,7 +39,7 @@ use dcso3::{
     MizLua, String, Vector2,
 };
 use fxhash::FxHashMap;
-use log::{error, warn};
+use log::{error, info, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::{
@@ -238,14 +238,13 @@ impl Db {
                         .get_item_count(name.clone())
                         .with_context(|| format_compact!("getting {name} from the warehouse"))?;
                     if qty > 0 {
-                        let category = typ.category().context("getting category")?;
                         production.equipment.insert(
                             name.clone(),
                             Equipment {
-                                category,
                                 production: qty,
                             },
                         );
+                        let category = typ.category().context("getting category")?;
                         if category.is_aircraft() {
                             let vehicle = Vehicle::from(name.clone());
                             self.ephemeral
@@ -279,13 +278,11 @@ impl Db {
             None => return Ok(()),
         };
         for (name, equip) in &production.equipment {
-            if !equip.category.is_aircraft() {
-                let inv = Inventory {
-                    stored: 0,
-                    capacity: equip.production * whcfg.airbase_max,
-                };
-                obj.warehouse.equipment.insert_cow(name.clone(), inv);
-            }
+            let inv = Inventory {
+                stored: 0,
+                capacity: equip.production * whcfg.airbase_max,
+            };
+            obj.warehouse.equipment.insert_cow(name.clone(), inv);
         }
         for (name, qty) in &production.liquids {
             let inv = Inventory {
@@ -311,15 +308,10 @@ impl Db {
                 Some(q) => Arc::clone(q),
             };
             for (name, equip) in &production.equipment {
-                let aircraft = equip.category.is_aircraft();
                 for (oid, obj) in self.persisted.objectives.iter_mut_cow() {
                     if obj.owner == side {
                         let hub = self.persisted.logistics_hubs.contains(&oid);
                         let capacity = whcfg.capacity(hub, equip.production);
-                        if aircraft && !(hub || self.ephemeral.has_slot_typ(&obj.id, name.as_str()))
-                        {
-                            continue;
-                        }
                         let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
                         inv.capacity = capacity;
                         inv.stored = capacity;
@@ -437,12 +429,6 @@ impl Db {
                     }
                     for (name, eqip) in &prod.equipment {
                         let capacity = whcfg.capacity(hub, eqip.production);
-                        if eqip.category.is_aircraft() {
-                            let include = hub || self.ephemeral.has_slot_typ(oid, name.as_str());
-                            if !include {
-                                continue;
-                            }
-                        }
                         let inv = obj.warehouse.equipment.get_or_default_cow(name.clone());
                         inv.capacity = capacity;
                     }
@@ -585,15 +571,8 @@ impl Db {
         map.for_each(|name, _| {
             match production.equipment.get(&name) {
                 Some(equip) => {
-                    let aircraft = equip.category.is_aircraft();
-                    if aircraft && !(hub || self.ephemeral.has_slot_typ(&obj.id, name.as_str())) {
-                        let inv = obj.warehouse.equipment.get_or_default_cow(name);
-                        inv.capacity = 0;
-                        inv.stored = 0;
-                    } else {
-                        let inv = obj.warehouse.equipment.get_or_default_cow(name);
-                        inv.capacity = whcfg.capacity(hub, equip.production);
-                    }
+                    let inv = obj.warehouse.equipment.get_or_default_cow(name);
+                    inv.capacity = whcfg.capacity(hub, equip.production);
                 }
                 None => {
                     if let Some(_) = other_production.equipment.get(&name) {
@@ -685,8 +664,10 @@ impl Db {
         if self.ephemeral.cfg.warehouse.is_none() {
             return Ok(());
         }
+        let st = Utc::now();
         self.setup_supply_lines()
             .context("setting up supply lines")?;
+        info!("setup supply lines {}", Utc::now() - st);
         let mut deliver_produced_supplies = || -> Result<()> {
             for side in Side::ALL {
                 let production = match self.ephemeral.production_by_side.get(&side) {
@@ -711,10 +692,14 @@ impl Db {
             }
             Ok(())
         };
+        let st = Utc::now();
         deliver_produced_supplies().context("delivering produced supplies")?;
+        info!("deliver produced supplies {}", Utc::now() - st);
         self.ephemeral.dirty();
+        let st = Utc::now();
         self.deliver_supplies_from_logistics_hubs()
             .context("delivering supplies from logistics hubs")?;
+        info!("deliver from logi hubs {}", Utc::now() - st);
         Ok(())
     }
 
@@ -806,14 +791,21 @@ impl Db {
                     }
                 };
             }
+            let st = Utc::now();
             schedule_transfers!(TransferItem::Equipment, equipment, get_equipment);
             schedule_transfers!(TransferItem::Liquid, liquids, get_liquids);
+            info!("schedule transferrs {}", Utc::now() - st);
         }
+        let st = Utc::now();
         for tr in transfers.drain(..) {
             tr.execute(self)
                 .with_context(|| format_compact!("executing transfer {:?}", tr))?
         }
-        self.balance_logistics_hubs()
+        info!("execute transferrs {}", Utc::now() - st);
+        let st = Utc::now();
+        self.balance_logistics_hubs()?;
+        info!("balancing logi hubs {}", Utc::now() - st);
+        Ok(())
     }
 
     fn balance_logistics_hubs(&mut self) -> Result<()> {

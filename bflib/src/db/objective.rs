@@ -37,6 +37,7 @@ use bfprotocols::{
 };
 use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
+use core::f64;
 use dcso3::{
     airbase::Airbase,
     azumith2d_to, centroid2d,
@@ -223,7 +224,7 @@ impl Zone {
         }
     }
 
-    // returns the radius of the smallest circle that contains the zone
+    /// returns the radius of the smallest circle that contains the zone
     pub fn radius(&self) -> f64 {
         match self {
             Self::Circle { radius, .. } => *radius,
@@ -238,6 +239,35 @@ impl Zone {
                     }
                 })
                 .sqrt(),
+        }
+    }
+
+    /// scale the zone by the specified factor which must be non
+    /// negative.
+    pub fn scale(&self, factor: f64) -> Self {
+        match self {
+            Self::Quad { pos, points } => Self::Quad {
+                pos: *pos,
+                points: points.scale(factor),
+            },
+            Self::Circle { pos, radius } => {
+                let factor = factor.clamp(0., f64::INFINITY);
+                Self::Circle {
+                    pos: *pos,
+                    radius: *radius * factor,
+                }
+            }
+        }
+    }
+
+    /// returns true if the specified circle is totally contained by the zone
+    pub fn contains_circle(&self, center: Vector2, radius: f64) -> bool {
+        match self {
+            Self::Quad { pos: _, points } => points.contains_circle(center, radius),
+            Self::Circle { pos, radius: r } => {
+                let d = na::distance(&center.into(), &pos.into());
+                *r >= radius + d
+            }
         }
     }
 }

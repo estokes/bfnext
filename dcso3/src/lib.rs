@@ -14,6 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE.
 extern crate nalgebra as na;
 use anyhow::{anyhow, bail, Result};
 use compact_str::CompactString;
+use core::f64;
 use fxhash::FxHashMap;
 use log::error;
 use mlua::{prelude::*, Value};
@@ -261,6 +262,29 @@ impl Quad2 {
 
     pub fn center(&self) -> Vector2 {
         centroid2d([self.p0.0, self.p1.0, self.p2.0, self.p3.0])
+    }
+
+    /// Scale this quad by the specified factor. The factor must be
+    /// positive. Numbers less than 1 will make the quad smaller,
+    /// numbers greater than 1 will make it bigger. If a negative
+    /// number is provided then 0 will be used.
+    pub fn scale(&self, factor: f64) -> Self {
+        let factor = factor.clamp(0., f64::INFINITY);
+        let center = self.center();
+        let p0 = (center - self.p0.0).normalize();
+        let p1 = (center - self.p1.0).normalize();
+        let p2 = (center - self.p2.0).normalize();
+        let p3 = (center - self.p3.0).normalize();
+        let pd0 = na::distance(&center.into(), &self.p0.0.into()) * factor;
+        let pd1 = na::distance(&center.into(), &self.p1.0.into()) * factor;
+        let pd2 = na::distance(&center.into(), &self.p2.0.into()) * factor;
+        let pd3 = na::distance(&center.into(), &self.p3.0.into()) * factor;
+        Self {
+            p0: LuaVec2(p0 * pd0),
+            p1: LuaVec2(p1 * pd1),
+            p2: LuaVec2(p2 * pd2),
+            p3: LuaVec2(p3 * pd3),
+        }
     }
 
     /// return true if the specified circle is fully contained within the quad.

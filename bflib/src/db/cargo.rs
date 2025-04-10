@@ -639,7 +639,7 @@ impl Db {
                 check |= logistics || obj.owner == side;
                 check && (logistics || obj.threatened) && {
                     let dist = na::distance_squared(&obj.zone.pos().into(), &centroid.into());
-                    dist <= excl_dist_sq || obj.zone.contains(centroid.into())
+                    dist <= excl_dist_sq || obj.zone.scale(1.1).contains(centroid.into())
                 }
             })
         }

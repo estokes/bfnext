@@ -139,6 +139,23 @@ impl ObjectiveMarkup {
         t.name = format_compact!("{} {}", obj.name, obj.kind.name()).into();
         let opos = obj.zone.pos();
         let pos3 = Vector3::new(opos.x, 0., opos.y);
+        macro_rules! threat_circle {
+            ($radius:expr) => {
+                msgq.circle_to_all(
+                    all_spec,
+                    t.threatened_ring,
+                    CircleSpec {
+                        center: LuaVec3(pos3),
+                        radius: (cfg.logistics_exclusion as f64).max(radius * 1.1),
+                        color: Color::yellow(if obj.threatened { 0.75 } else { 0. }),
+                        fill_color: Color::white(0.),
+                        line_type: LineType::Solid,
+                        read_only: true,
+                    },
+                    None,
+                )
+            };
+        }
         match obj.zone {
             Zone::Circle { radius, .. } => {
                 msgq.circle_to_all(
@@ -154,8 +171,9 @@ impl ObjectiveMarkup {
                     },
                     None,
                 );
+                threat_circle!(radius);
             }
-            Zone::Quad { points, .. } => {
+            Zone::Quad { points, pos } => {
                 msgq.quad_to_all(
                     all_spec,
                     t.owner_ring,
@@ -171,21 +189,28 @@ impl ObjectiveMarkup {
                     },
                     None,
                 );
+                if !points.contains_circle(pos, cfg.logistics_exclusion as f64) {
+                    threat_circle!(0.);
+                } else {
+                    let points = points.scale(1.1);
+                    msgq.quad_to_all(
+                        all_spec,
+                        t.threatened_ring,
+                        QuadSpec {
+                            p0: LuaVec3(Vector3::new(points.p0.x, 0., points.p0.y)),
+                            p1: LuaVec3(Vector3::new(points.p1.x, 0., points.p1.y)),
+                            p2: LuaVec3(Vector3::new(points.p2.x, 0., points.p2.y)),
+                            p3: LuaVec3(Vector3::new(points.p3.x, 0., points.p3.y)),
+                            color: Color::yellow(if obj.threatened { 0.75 } else { 0. }),
+                            fill_color: Color::white(0.),
+                            line_type: LineType::Solid,
+                            read_only: true,
+                        },
+                        None,
+                    );
+                }
             }
         }
-        msgq.circle_to_all(
-            all_spec,
-            t.threatened_ring,
-            CircleSpec {
-                center: LuaVec3(pos3),
-                radius: cfg.logistics_exclusion as f64,
-                color: Color::yellow(if obj.threatened { 0.75 } else { 0. }),
-                fill_color: Color::white(0.),
-                line_type: LineType::Solid,
-                read_only: true,
-            },
-            None,
-        );
         match obj.zone {
             Zone::Circle { pos: _, radius } => {
                 msgq.circle_to_all(
@@ -203,6 +228,7 @@ impl ObjectiveMarkup {
                 );
             }
             Zone::Quad { pos: _, points } => {
+                let points = points.scale(0.9);
                 msgq.quad_to_all(
                     all_spec,
                     t.capturable_ring,

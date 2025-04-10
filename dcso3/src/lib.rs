@@ -19,7 +19,15 @@ use log::error;
 use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
 use std::{
-    backtrace::Backtrace, borrow::Borrow, cell::RefCell, collections::hash_map::Entry, f64, fmt::Debug, marker::PhantomData, ops::{Add, AddAssign, Deref, DerefMut, Sub}, panic::{self, AssertUnwindSafe}
+    backtrace::Backtrace,
+    borrow::Borrow,
+    cell::RefCell,
+    collections::hash_map::Entry,
+    f64,
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Add, AddAssign, Deref, DerefMut, Sub},
+    panic::{self, AssertUnwindSafe},
 };
 
 pub mod airbase;
@@ -38,6 +46,7 @@ pub mod lfs;
 pub mod mission_commands;
 pub mod net;
 pub mod object;
+pub mod perf;
 pub mod spot;
 pub mod static_object;
 pub mod timer;
@@ -46,7 +55,6 @@ pub mod unit;
 pub mod warehouse;
 pub mod weapon;
 pub mod world;
-pub mod perf;
 
 #[macro_export]
 macro_rules! atomic_id {
@@ -253,6 +261,21 @@ impl Quad2 {
 
     pub fn center(&self) -> Vector2 {
         centroid2d([self.p0.0, self.p1.0, self.p2.0, self.p3.0])
+    }
+
+    /// return true if the specified circle is fully contained within the quad.
+    pub fn contains_circle(&self, center: Vector2, radius: f64) -> bool {
+        fn distance_to_segment(p: Vector2, a: Vector2, b: Vector2) -> f64 {
+            let ap = p - a;
+            let ab = b - a;
+            let t = (ap.dot(&ab) / ab.dot(&ab)).clamp(0., 1.);
+            na::distance(&p.into(), &(a + t * ab).into())
+        }
+        self.contains(LuaVec2(center))
+            && distance_to_segment(center, self.p0.0, self.p1.0) >= radius
+            && distance_to_segment(center, self.p1.0, self.p2.0) >= radius
+            && distance_to_segment(center, self.p2.0, self.p3.0) >= radius
+            && distance_to_segment(center, self.p3.0, self.p0.0) >= radius
     }
 }
 

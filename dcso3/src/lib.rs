@@ -279,10 +279,10 @@ impl Quad2 {
         let pd2 = na::distance(&center.into(), &self.p2.0.into()) * factor;
         let pd3 = na::distance(&center.into(), &self.p3.0.into()) * factor;
         Self {
-            p0: LuaVec2(p0 * pd0),
-            p1: LuaVec2(p1 * pd1),
-            p2: LuaVec2(p2 * pd2),
-            p3: LuaVec2(p3 * pd3),
+            p0: LuaVec2(center + p0 * pd0),
+            p1: LuaVec2(center + p1 * pd1),
+            p2: LuaVec2(center + p2 * pd2),
+            p3: LuaVec2(center + p3 * pd3),
         }
     }
 

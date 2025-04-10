@@ -20,8 +20,9 @@ use dcso3::{
     coalition::Side,
     controller::{MissionPoint, PointType},
     country::Country,
-    env::miz::{Group, Miz, Property, Skill, TriggerZoneTyp},
-    normal2, path, pointing_towards2, DcsTableExt, LuaVec2, Quad2, Sequence, String, Vector2,
+    env::miz::{self, Group, Miz, Property, Skill, TriggerZoneTyp},
+    normal2, path, pointing_towards2, value_to_json, DcsTableExt, LuaVec2, Quad2, Sequence, String,
+    Vector2,
 };
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value};
@@ -34,9 +35,12 @@ use std::{
     io::{self, BufWriter},
     panic::AssertUnwindSafe,
     path::{Path, PathBuf},
+    ptr,
     str::FromStr,
 };
 use zip::{read::ZipArchive, write::FileOptions, ZipWriter};
+
+static mut LUA: *const Lua = ptr::null();
 
 pub trait DeepClone<'lua>: IntoLua<'lua> + FromLua<'lua> + Clone {
     fn deep_clone(&self, lua: &'lua Lua) -> Result<Self>;
@@ -73,28 +77,23 @@ where
 }
 
 struct TriggerZone {
-    x: f32,
-    y: f32,
-    radius: f32,
+    inner: miz::TriggerZone<'static>,
     objective_name: String,
     spawn_count: HashMap<String, isize>,
 }
 
 impl TriggerZone {
-    pub fn new(zone: &Table) -> Result<Option<Self>> {
-        let name: String = zone.get("name")?;
-        let x: f32 = zone.get("x")?;
-        let y: f32 = zone.get("y")?;
-        let radius: f32 = zone.get("radius")?;
+    pub fn new(zone: &Table<'static>) -> Result<Option<Self>> {
+        let zone = zone.clone();
+        let inner = miz::TriggerZone::from_lua(Value::Table(zone), unsafe { &*LUA })?;
+        let name = inner.name()?;
         if name.starts_with('O') {
             if name.len() < 5 {
                 bail!("trigger name {name} too short")
             }
             let t = TriggerZone {
+                inner,
                 objective_name: String::from(&name[4..]),
-                x,
-                y,
-                radius,
                 spawn_count: HashMap::new(),
             };
             info!("added objective {}", &name[4..]);
@@ -104,12 +103,12 @@ impl TriggerZone {
         }
     }
 
-    pub fn vec2_in_zone(&self, x: f32, y: f32) -> bool {
-        let dist = ((self.x - x).powi(2) + (self.y - y).powi(2)).sqrt();
-        if dist <= self.radius {
-            return true;
-        };
-        false
+    pub fn contains(&self, v: Vector2) -> Result<bool> {
+        let pos = self.inner.pos()?;
+        match self.inner.typ()? {
+            TriggerZoneTyp::Quad(q) => Ok(q.contains(LuaVec2(pos))),
+            TriggerZoneTyp::Circle { radius } => Ok(radius >= na::distance(&v.into(), &pos.into())),
+        }
     }
 }
 
@@ -923,8 +922,10 @@ impl VehicleTemplates {
                         increment_key(&mut replace_count, &unit_type);
                         let x = unit.get("x")?;
                         let y = unit.get("y")?;
+                        let mut found = false;
                         for trigger_zone in &mut *objectives {
-                            if trigger_zone.vec2_in_zone(x, y) {
+                            if trigger_zone.contains(Vector2::new(x, y))? {
+                                found = true;
                                 let count =
                                     increment_key(&mut trigger_zone.spawn_count, &unit_type);
                                 let new_name = String::from(format_compact!(
@@ -953,6 +954,12 @@ impl VehicleTemplates {
                                 }
                                 break;
                             }
+                        }
+                        if !found {
+                            bail!(
+                                "unit {} is not associated with an objective",
+                                value_to_json(&Value::Table(unit.clone()))
+                            )
                         }
                     }
                 }
@@ -1138,6 +1145,10 @@ fn compile_objectives(base: &LoadedMiz) -> Result<Vec<TriggerZone>> {
 pub fn run(cfg: &MizCmd) -> Result<()> {
     let lua = Box::leak(Box::new(Lua::new()));
     lua.gc_stop();
+    let lua = unsafe {
+        LUA = lua;
+        &*LUA
+    };
     let mut base = LoadedMiz::new(lua, &cfg.base).context("loading base mission")?;
     let mut objectives = compile_objectives(&base).context("compiling objectives")?;
     let vehicle_templates = {

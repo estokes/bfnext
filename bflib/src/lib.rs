@@ -244,6 +244,7 @@ struct Context {
     to_background: Option<UnboundedSender<bg::Task>>,
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
+    pending_takeoff: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
     shots_out: ShotDb,
     menu_init_queue: IndexSet<SlotId, FxBuildHasher>,
@@ -556,6 +557,38 @@ fn unit_killed(
     Ok(())
 }
 
+fn deferred_takeoff(lua: MizLua, ctx: &mut Context, id: DcsOid<ClassUnit>) {
+    let unit = match Unit::get_instance(lua, &id) {
+        Ok(unit) => unit,
+        Err(e) => {
+            error!("could not get unit for deferred takeoff {e:?}");
+            return;
+        }
+    };
+    let slot = match unit.slot() {
+        Ok(slot) => slot,
+        Err(e) => {
+            error!("could not get unit slot {e:?}");
+            return;
+        }
+    };
+    match ctx.db.takeoff(Utc::now(), slot.clone(), &unit) {
+        Err(e) => error!("could not process takeoff, {:?}", e),
+        Ok(TakeoffRes::NoLifeTaken) => (),
+        Ok(TakeoffRes::TookLife(typ)) => {
+            if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
+                error!("could not display life taken message {:?}", e)
+            }
+            let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
+        }
+        Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
+            if let Err(e) = unit.destroy() {
+                error!("failed to destroy unit that took off without lives or points {e:?}")
+            }
+        }
+    }
+}
+
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
@@ -660,30 +693,15 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Takeoff(e) | Event::PostponedTakeoff(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.object_id()?;
-                let slot = unit.slot()?;
                 if ctx.airborne.insert(id.clone()) && ctx.recently_landed.remove(&id).is_none() {
-                    match ctx.db.takeoff(Utc::now(), slot.clone(), &unit) {
-                        Err(e) => error!("could not process takeoff, {:?}", e),
-                        Ok(TakeoffRes::NoLifeTaken) => (),
-                        Ok(TakeoffRes::TookLife(typ)) => {
-                            if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
-                                error!("could not display life taken message {:?}", e)
-                            }
-                            let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
-                        }
-                        Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
-                            if let Err(e) = e.initiator.destroy() {
-                                error!("failed to destroy unit that took off without lives or points {e:?}")
-                            }
-                        }
-                    }
+                    ctx.pending_takeoff.insert(id);
                 }
             }
         }
         Event::Land(e) | Event::PostponedLand(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.object_id()?;
-                if ctx.airborne.remove(&id) {
+                if ctx.airborne.remove(&id) && ctx.pending_takeoff.remove(&id) {
                     ctx.recently_landed.insert(id, Utc::now());
                 }
             }
@@ -1016,6 +1034,7 @@ fn run_slow_timed_events(
         }
         return_lives(lua, ctx, ts);
         {
+            // report kills
             let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
             for dead in ctx.shots_out.bring_out_your_dead(ts) {
                 info!("kill {:?}", dead);
@@ -1023,6 +1042,13 @@ fn run_slow_timed_events(
                     ctx.db.award_kill_points(points, &dead)
                 }
                 ctx.do_bg_task(Task::Stat(Stat::Kill(dead)));
+            }
+        }
+        {
+            // process deferred takeoffs
+            let pending: SmallVec<[DcsOid<ClassUnit>; 8]> = ctx.pending_takeoff.drain().collect();
+            for id in pending {
+                deferred_takeoff(lua, ctx, id)
             }
         }
         if let Err(e) = ctx.db.maybe_do_repairs(ts) {

@@ -261,11 +261,12 @@ impl Zone {
     }
 
     /// returns true if the specified circle is totally contained by the zone
+    #[allow(unused)]
     pub fn contains_circle(&self, center: Vector2, radius: f64) -> bool {
         match self {
             Self::Quad { pos: _, points } => points.contains_circle(center, radius),
             Self::Circle { pos, radius: r } => {
-                let d = na::distance(&center.into(), &pos.into());
+                let d = na::distance(&center.into(), &(*pos).into());
                 *r >= radius + d
             }
         }

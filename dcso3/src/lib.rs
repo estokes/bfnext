@@ -14,7 +14,6 @@ FITNESS FOR A PARTICULAR PURPOSE.
 extern crate nalgebra as na;
 use anyhow::{anyhow, bail, Result};
 use compact_str::CompactString;
-use core::f64;
 use fxhash::FxHashMap;
 use log::error;
 use mlua::{prelude::*, Value};

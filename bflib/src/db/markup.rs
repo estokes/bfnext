@@ -146,7 +146,7 @@ impl ObjectiveMarkup {
                     t.threatened_ring,
                     CircleSpec {
                         center: LuaVec3(pos3),
-                        radius: (cfg.logistics_exclusion as f64).max(radius * 1.1),
+                        radius: (cfg.logistics_exclusion as f64).max($radius * 1.1),
                         color: Color::yellow(if obj.threatened { 0.75 } else { 0. }),
                         fill_color: Color::white(0.),
                         line_type: LineType::Solid,

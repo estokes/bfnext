@@ -43,7 +43,6 @@ use fxhash::FxHashMap;
 use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use tokio::sync::mpsc::UnboundedSender;
 use std::{
     cmp::{max, min},
     collections::hash_map::Entry,
@@ -51,6 +50,7 @@ use std::{
     ops::{AddAssign, SubAssign},
     sync::Arc,
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
 pub enum LogiStage {
@@ -676,7 +676,7 @@ impl Db {
             .into_iter()
             .fold(Ok::<_, anyhow::Error>(None), |acc, id| {
                 let logi = objective!(self, id)?;
-                if logi.owner != obj.owner {
+                if obj.logistics_detached || logi.owner != obj.owner {
                     acc
                 } else {
                     let dist =

@@ -101,6 +101,22 @@ impl Db {
             bail!("invalid objective type for {name}, expected AB, FO, of LO")
         };
         let id = ObjectiveId::new();
+        let mut logistics_detached = false;
+        for pr in zone.properties()? {
+            let pr = pr?;
+            if &*pr.key == "LOGISTICS_DETACHED" {
+                let v = pr.value.to_ascii_lowercase();
+                if &*v == "true" {
+                    logistics_detached = true;
+                } else if &*v == "false" {
+                    logistics_detached = false;
+                } else {
+                    bail!("invalid value of LOGISTICS_DETACHED {v}")
+                }
+            } else {
+                bail!("invalid objective property {pr:?}")
+            }
+        }
         let zone = match zone.typ()? {
             TriggerZoneTyp::Quad(points) => Zone::Quad {
                 pos: centroid2d([points.p0.0, points.p1.0, points.p2.0, points.p3.0]),
@@ -130,6 +146,7 @@ impl Db {
             last_change_ts: Utc::now(),
             last_threatened_ts: Utc::now(),
             warehouse: Warehouse::default(),
+            logistics_detached,
             last_activate: DateTime::<Utc>::default(),
             // initialized by load
             threat_pos3: Vector3::default(),

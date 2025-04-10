@@ -297,6 +297,8 @@ pub struct Objective {
     pub(super) warehouse: Warehouse,
     #[serde(default)]
     pub(super) zone: Zone,
+    #[serde(default)]
+    pub(super) logistics_detached: bool,
     #[serde(skip)]
     pub(super) spawned: bool,
     #[serde(skip)]
@@ -584,6 +586,7 @@ impl Db {
             enabled: true,
             threatened: true,
             warehouse: Warehouse::default(),
+            logistics_detached: false,
             last_threatened_ts: now,
             last_change_ts: now,
             last_activate: DateTime::<Utc>::default(),

@@ -243,6 +243,7 @@ struct Context {
     action_commands: Vec<(PlayerId, String)>,
     to_background: Option<UnboundedSender<bg::Task>>,
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
+    recently_born: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
     captureable: FxHashMap<ObjectiveId, usize>,
     shots_out: ShotDb,
@@ -571,6 +572,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     match ev {
         Event::Birth(b) => {
             if let Ok(unit) = b.initiator.as_unit() {
+                ctx.recently_born.insert(unit.object_id()?, Utc::now());
                 match ctx.db.unit_born(lua, &unit, &ctx.connected) {
                     Ok(BirthRes::None) => (),
                     Ok(BirthRes::OccupiedSlot(slot)) => {
@@ -661,7 +663,10 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.object_id()?;
                 let slot = unit.slot()?;
-                if ctx.airborne.insert(id.clone()) && ctx.recently_landed.remove(&id).is_none() {
+                if !ctx.recently_born.contains_key(&id)
+                    && ctx.airborne.insert(id.clone())
+                    && ctx.recently_landed.remove(&id).is_none()
+                {
                     match ctx.db.takeoff(Utc::now(), slot, &unit) {
                         Err(e) => error!("could not process takeoff, {:?}", e),
                         Ok(TakeoffRes::NoLifeTaken) => (),
@@ -683,7 +688,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Land(e) | Event::PostponedLand(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.object_id()?;
-                if ctx.airborne.remove(&id) {
+                if !ctx.recently_born.contains_key(&id) && ctx.airborne.remove(&id) {
                     ctx.recently_landed.insert(id, Utc::now());
                 }
             }
@@ -1015,6 +1020,8 @@ fn run_slow_timed_events(
             }
         }
         return_lives(lua, ctx, ts);
+        ctx.recently_born
+            .retain(|_, ts| start_ts - *ts <= Duration::seconds(5));
         {
             // report kills
             let cfg = Arc::clone(&ctx.db.ephemeral.cfg);

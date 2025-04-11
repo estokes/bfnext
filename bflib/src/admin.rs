@@ -18,7 +18,7 @@ use crate::{
     bg::Task,
     db::{group::DeployKind, Db, SetS},
     msgq::MsgTyp,
-    return_lives,
+    process_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
     Context,
 };
@@ -238,7 +238,7 @@ impl FromStr for AdminCommand {
                     Ok(Self::Tim {
                         key: String::from(*key),
                         size,
-                        alt: None 
+                        alt: None,
                     })
                 }
                 [key, size, alt] => {
@@ -247,10 +247,10 @@ impl FromStr for AdminCommand {
                     Ok(Self::Tim {
                         key: String::from(*key),
                         size,
-                        alt: Some(alt)
+                        alt: Some(alt),
                     })
                 }
-                _ => bail!("tim <mark> [size] [alt]")
+                _ => bail!("tim <mark> [size] [alt]"),
             }
         } else if let Some(s) = s.strip_prefix("spawn ") {
             Ok(Self::Spawn { key: s.into() })
@@ -717,7 +717,7 @@ pub(super) fn admin_shutdown(
         ctx.do_bg_task(Task::Stat(se));
         ctx.do_bg_task(Task::Stat(Stat::RoundEnd { winner }));
     } else {
-        return_lives(lua, ctx, DateTime::<Utc>::MAX_UTC);
+        process_lives(lua, ctx, DateTime::<Utc>::MAX_UTC);
         ctx.do_bg_task(Task::SaveState(
             ctx.miz_state_path.clone(),
             ctx.db.persisted.clone(),

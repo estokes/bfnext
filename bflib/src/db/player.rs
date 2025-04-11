@@ -264,8 +264,8 @@ impl Db {
         time: DateTime<Utc>,
         slot: SlotId,
         unit: &Unit,
+        position: Vector2,
     ) -> Result<TakeoffRes> {
-        let position = unit.get_ground_position()?.0;
         let sifo = self
             .ephemeral
             .slot_info

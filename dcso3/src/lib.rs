@@ -270,10 +270,10 @@ impl Quad2 {
     pub fn scale(&self, factor: f64) -> Self {
         let factor = factor.clamp(0., f64::INFINITY);
         let center = self.center();
-        let p0 = (center - self.p0.0).normalize();
-        let p1 = (center - self.p1.0).normalize();
-        let p2 = (center - self.p2.0).normalize();
-        let p3 = (center - self.p3.0).normalize();
+        let p0 = (self.p0.0 - center).normalize();
+        let p1 = (self.p1.0 - center).normalize();
+        let p2 = (self.p2.0 - center).normalize();
+        let p3 = (self.p3.0 - center).normalize();
         let pd0 = na::distance(&center.into(), &self.p0.0.into()) * factor;
         let pd1 = na::distance(&center.into(), &self.p1.0.into()) * factor;
         let pd2 = na::distance(&center.into(), &self.p2.0.into()) * factor;

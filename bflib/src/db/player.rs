@@ -687,25 +687,6 @@ impl Db {
                             Some(unit) => unit.change_instance(id),
                             None => Unit::get_instance(lua, id),
                         };
-                        let instance = match instance {
-                            Ok(i) => Ok(i),
-                            Err(e) => match self.ephemeral.uid_by_object_id.get(&id) {
-                                None => {
-                                    warn!("no uid for {id:?}");
-                                    Err(e)
-                                }
-                                Some(uid) => match self.persisted.units.get(uid) {
-                                    None => {
-                                        warn!("no unit {uid:?}");
-                                        Err(e)
-                                    }
-                                    Some(ifo) => {
-                                        warn!("failed to get unit by id, trying by name");
-                                        Unit::get_by_name(lua, &ifo.name)
-                                    }
-                                },
-                            },
-                        };
                         match instance {
                             Ok(instance) => {
                                 let pos = instance.get_position()?;
@@ -734,7 +715,7 @@ impl Db {
                                 warn!(
                                     "updating player positions, skipping invalid unit {ucid:?}, {id:?}, player {e:?}",
                                 );
-                                dead.push(id.clone())
+                                // dead.push(id.clone())
                             }
                         }
                     }

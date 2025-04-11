@@ -63,7 +63,7 @@ use dcso3::{
     trigger::Trigger,
     unit::{ClassUnit, Unit},
     world::{HandlerId, MarkPanel, World},
-    HooksLua, LuaEnv, MizLua, String, Vector2,
+    HooksLua, LuaEnv, MizLua, String, 
 };
 use ewr::Ewr;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -242,7 +242,6 @@ struct Context {
     admin_commands: Vec<(admin::Caller, AdminCommand)>,
     action_commands: Vec<(PlayerId, String)>,
     to_background: Option<UnboundedSender<bg::Task>>,
-    recently_tookoff: FxHashMap<DcsOid<ClassUnit>, Vector2>,
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     recently_born: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     airborne: FxHashSet<DcsOid<ClassUnit>>,
@@ -558,32 +557,6 @@ fn unit_killed(
     Ok(())
 }
 
-fn deferred_takeoff(
-    lua: MizLua,
-    ctx: &mut Context,
-    id: DcsOid<ClassUnit>,
-    position: Vector2,
-) -> Result<()> {
-    let unit = Unit::get_instance(lua, &id)?;
-    let slot = unit.slot()?;
-    match ctx.db.takeoff(Utc::now(), slot, &unit, position) {
-        Err(e) => error!("could not process takeoff, {:?}", e),
-        Ok(TakeoffRes::NoLifeTaken) => (),
-        Ok(TakeoffRes::TookLife(typ)) => {
-            if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
-                error!("could not display life taken message {:?}", e)
-            }
-            let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
-        }
-        Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
-            if let Err(e) = unit.destroy() {
-                error!("failed to destroy unit that took off without lives or points {e:?}")
-            }
-        }
-    }
-    Ok(())
-}
-
 fn on_event(lua: MizLua, ev: Event) -> Result<()> {
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
@@ -693,8 +666,23 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                     && ctx.airborne.insert(id.clone())
                     && ctx.recently_landed.remove(&id).is_none()
                 {
+                    let slot = unit.slot()?;
                     let position = unit.get_ground_position()?.0;
-                    ctx.recently_tookoff.insert(id, position);
+                    match ctx.db.takeoff(Utc::now(), slot, &unit, position) {
+                        Err(e) => error!("could not process takeoff, {:?}", e),
+                        Ok(TakeoffRes::NoLifeTaken) => (),
+                        Ok(TakeoffRes::TookLife(typ)) => {
+                            if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
+                                error!("could not display life taken message {:?}", e)
+                            }
+                            let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
+                        }
+                        Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
+                            if let Err(e) = unit.destroy() {
+                                error!("failed to destroy unit that took off without lives or points {e:?}")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -779,7 +767,7 @@ fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &s
     Ok(())
 }
 
-fn process_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
+fn return_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
     macro_rules! or_false {
         ($e:expr) => {
             match $e {
@@ -787,12 +775,6 @@ fn process_lives(lua: MizLua, ctx: &mut Context, ts: DateTime<Utc>) {
                 Err(_) => return false,
             }
         };
-    }
-    let takeoffs: SmallVec<[_; 8]> = ctx.recently_tookoff.drain().collect();
-    for (id, pos) in takeoffs {
-        if let Err(e) = deferred_takeoff(lua, ctx, id, pos) {
-            error!("failed to process deferred takeoff {e:?}")
-        }
     }
     let db = &mut ctx.db;
     let mut returned: SmallVec<[(LifeType, SlotId); 4]> = smallvec![];
@@ -1038,7 +1020,7 @@ fn run_slow_timed_events(
                 )
             }
         }
-        process_lives(lua, ctx, ts);
+        return_lives(lua, ctx, ts);
         ctx.recently_born
             .retain(|_, ts| start_ts - *ts <= Duration::seconds(5));
         {

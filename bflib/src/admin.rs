@@ -18,7 +18,7 @@ use crate::{
     bg::Task,
     db::{group::DeployKind, Db, SetS},
     msgq::MsgTyp,
-    process_lives,
+    return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
     Context,
 };
@@ -717,7 +717,7 @@ pub(super) fn admin_shutdown(
         ctx.do_bg_task(Task::Stat(se));
         ctx.do_bg_task(Task::Stat(Stat::RoundEnd { winner }));
     } else {
-        process_lives(lua, ctx, DateTime::<Utc>::MAX_UTC);
+        return_lives(lua, ctx, DateTime::<Utc>::MAX_UTC);
         ctx.do_bg_task(Task::SaveState(
             ctx.miz_state_path.clone(),
             ctx.db.persisted.clone(),

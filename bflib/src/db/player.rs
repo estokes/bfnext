@@ -26,7 +26,13 @@ use bfprotocols::{
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    airbase::Airbase, coalition::Side, coord::Coord, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, unit::{ClassUnit, Unit}, value_to_json, MizLua, Position3, String, Vector2, Vector3
+    airbase::Airbase,
+    coalition::Side,
+    coord::Coord,
+    net::{SlotId, Ucid},
+    object::{DcsObject, DcsOid},
+    unit::{ClassUnit, Unit},
+    MizLua, Position3, String, Vector2, Vector3,
 };
 use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
@@ -71,6 +77,7 @@ pub enum TakeoffRes {
 
 #[derive(Debug, Clone, Default)]
 pub struct InstancedPlayer {
+    pub unit_name: String,
     pub position: Position3,
     pub velocity: Vector3,
     pub typ: Vehicle,
@@ -687,6 +694,13 @@ impl Db {
                             Some(unit) => unit.change_instance(id),
                             None => Unit::get_instance(lua, id),
                         };
+                        let instance = match instance {
+                            Ok(i) => Ok(i),
+                            Err(_) => {
+                                warn!("failed to get unit by id, trying by name");
+                                Unit::get_by_name(lua, &inst.unit_name)
+                            }
+                        };
                         match instance {
                             Ok(instance) => {
                                 let pos = instance.get_position()?;
@@ -715,7 +729,7 @@ impl Db {
                                 warn!(
                                     "updating player positions, skipping invalid unit {ucid:?}, {id:?}, player {e:?}",
                                 );
-                                // dead.push(id.clone())
+                                dead.push(id.clone())
                             }
                         }
                     }
@@ -839,6 +853,7 @@ impl Db {
         player.current_slot = Some((
             slot,
             Some(InstancedPlayer {
+                unit_name: unit.get_name()?,
                 position,
                 velocity: unit.get_velocity()?.0,
                 in_air: unit.in_air()?,

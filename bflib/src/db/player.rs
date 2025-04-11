@@ -26,13 +26,7 @@ use bfprotocols::{
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
-    airbase::Airbase,
-    coalition::Side,
-    coord::Coord,
-    net::{SlotId, Ucid},
-    object::{DcsObject, DcsOid},
-    unit::{ClassUnit, Unit},
-    MizLua, Position3, String, Vector2, Vector3,
+    airbase::Airbase, coalition::Side, coord::Coord, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, unit::{ClassUnit, Unit}, value_to_json, MizLua, Position3, String, Vector2, Vector3
 };
 use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
@@ -246,6 +240,7 @@ impl Db {
                     for ammo in unit.get_ammo().context("getting ammo")? {
                         let ammo = ammo.context("unwrapping ammo")?;
                         let typ = ammo.type_name().context("getting ammo type name")?;
+                        info!("ammo of type {typ} loaded");
                         if let Some(unit_cost) = points.weapon_cost.get(&typ) {
                             let n = ammo.count().context("getting ammo count")?;
                             let wcost = n * (*unit_cost);

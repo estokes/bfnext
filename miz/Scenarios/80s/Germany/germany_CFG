@@ -722,7 +722,7 @@
         ],
         "template": "DEPSA6",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 50,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -751,7 +751,7 @@
           "max_drop_speed": 50
         },
         "logistics": null,
-        "cost": 50,
+        "cost": 25,
         "ewr": {
           "range": 30000
         },
@@ -764,7 +764,7 @@
         ],
         "template": "DEPSA11",
         "persist": "Forever",
-        "limit": 4,
+        "limit": 50,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -801,7 +801,7 @@
           "max_drop_speed": 50
         },
         "logistics": null,
-        "cost": 100,
+        "cost": 30,
         "ewr": {
           "range": 60000
         },
@@ -814,7 +814,7 @@
         ],
         "template": "DEPSA15",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 20,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -828,7 +828,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 100,
+        "cost": 60,
         "ewr": {
           "range": 20000
         },
@@ -841,7 +841,7 @@
         ],
         "template": "DEPSA8",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -855,7 +855,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 25,
+        "cost": 15,
         "ewr": null,
         "jtac": null
       },
@@ -891,7 +891,7 @@
         ],
         "template": "DEPSHILKA",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -916,7 +916,7 @@
         ],
         "template": "DEPTUNGUSKA",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 80,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -930,7 +930,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 25,
+        "cost": 15,
         "ewr": null,
         "jtac": null
       },
@@ -941,7 +941,7 @@
         ],
         "template": "DEPSA13",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -955,7 +955,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 25,
+        "cost": 10,
         "ewr": null,
         "jtac": null
       },
@@ -1070,7 +1070,7 @@
         ],
         "template": "DEP1L13",
         "persist": "Forever",
-        "limit": 15,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1133,13 +1133,13 @@
         ],
         "template": "DEPROLAND",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
             "name": "Roland",
             "weight": 1500,
-            "required": 4,
+            "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
@@ -1147,7 +1147,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 50,
+        "cost": 15,
         "ewr": {
           "range": 20000
         },
@@ -1160,7 +1160,7 @@
         ],
         "template": "DEPHAWK",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1205,7 +1205,7 @@
           "max_drop_speed": 50
         },
         "logistics": null,
-        "cost": 75,
+        "cost": 25,
         "ewr": {
           "range": 60000
         },
@@ -1218,7 +1218,7 @@
         ],
         "template": "DEPAVENGER",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1232,7 +1232,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 25,
+        "cost": 15,
         "ewr": null,
         "jtac": null
       },
@@ -1243,7 +1243,7 @@
         ],
         "template": "DEPLINEBACKER",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1257,7 +1257,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 25,
+        "cost": 10,
         "ewr": null,
         "jtac": null
       },
@@ -1268,7 +1268,7 @@
         ],
         "template": "DEPGEPARD",
         "persist": "Forever",
-        "limit": 15,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1282,7 +1282,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 25,
+        "cost": 10,
         "ewr": null,
         "jtac": null
       },
@@ -1293,7 +1293,7 @@
         ],
         "template": "DEPVULKAN",
         "persist": "Forever",
-        "limit": 20,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1307,7 +1307,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 15,
+        "cost": 10,
         "ewr": null,
         "jtac": null
       },
@@ -1422,7 +1422,7 @@
         ],
         "template": "DEPFPS117",
         "persist": "Forever",
-        "limit": 15,
+        "limit": 100,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -2209,7 +2209,8 @@
   "extra_fixed_wing_objectives": [
     "Bitburg",
 	"Tempelhof",
-	"Hamburg"
+	"Hamburg",
+	"Merseburg"
   ],
   "jtac_priority": [
     [

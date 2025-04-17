@@ -369,14 +369,14 @@
               "kind": "FixedWing",
               "duration": 12,
               "template": "RDRONE",
-              "altitude": 7000,
+              "altitude": 7500,
               "altitude_typ": "BARO",
               "speed": 90
             }
           }
         },
-        "cost": 75,
-        "penalty": 25,
+        "cost": 100,
+        "penalty": 50,
         "limit": 2
       },
       "move": {
@@ -586,14 +586,14 @@
               "kind": "FixedWing",
               "duration": 12,
               "template": "BDRONE",
-              "altitude": 7000,
+              "altitude": 7500,
               "altitude_typ": "BARO",
               "speed": 90
             }
           }
         },
-        "cost": 75,
-        "penalty": 25,
+        "cost": 100,
+        "penalty": 50,
         "limit": 2
       },
       "boom-tanker": {

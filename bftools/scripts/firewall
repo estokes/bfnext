@@ -11,6 +11,7 @@ DCS_PORT7=10315
 DCS_PORT8=10316
 DCS_PORT9=10317
 DCS_PORT10=10318
+DCS_PORT11=10319
 SRS_PORT0=5002
 SRS_PORT1=5003
 SRS_PORT2=5004
@@ -74,6 +75,8 @@ function start() {
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT9 -j ACCEPT
     iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT10 -j ACCEPT
     iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT10 -j ACCEPT
+    iptables -A INPUT -i $WAN -p tcp --dport $DCS_PORT11 -j ACCEPT
+    iptables -A INPUT -i $WAN -p udp --dport $DCS_PORT11 -j ACCEPT
 
     # SSH
     iptables -A INPUT -i $WAN -p tcp --dport 22 -j ACCEPT

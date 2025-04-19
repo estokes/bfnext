@@ -26,7 +26,7 @@ use dcso3::{
 fn load_troops(lua: MizLua, arg: ArgTuple<GroupId, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &arg.fst).context("getting slot for group")?;
-    match ctx.db.load_troops(lua, &ctx.idx, &slot, &arg.snd) {
+    match ctx.db.load_troops(lua, &slot, &arg.snd) {
         Ok((tr, oid)) => {
             let (n, oldest) = ctx
                 .db
@@ -98,7 +98,7 @@ fn unload_troops(lua: MizLua, gid: GroupId) -> Result<()> {
 fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
-    match ctx.db.extract_troops(lua, &ctx.idx, &slot) {
+    match ctx.db.extract_troops(lua, &slot) {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} extracted {} troops from the field", tr.name);

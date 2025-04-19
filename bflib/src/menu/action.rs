@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use super::{ArgPent, ArgQuad, ArgTriple};
 use crate::{
     db::{
@@ -27,6 +25,7 @@ use dcso3::{
     LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
+use std::sync::Arc;
 
 fn run_action(
     ctx: &mut Context,

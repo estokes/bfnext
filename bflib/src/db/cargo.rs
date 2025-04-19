@@ -355,13 +355,12 @@ impl Db {
         self.persisted.deployed.contains(gid)
     }
 
-    pub fn cargo_capacity(&self, unit: &dcso3::env::miz::Unit) -> Result<CargoConfig> {
-        let vehicle = Vehicle::from(unit.typ()?);
+    pub fn cargo_capacity(&self, vehicle: &Vehicle) -> Result<CargoConfig> {
         let cargo_capacity = self
             .ephemeral
             .cfg
             .cargo
-            .get(&vehicle)
+            .get(vehicle)
             .ok_or_else(|| anyhow!("{:?} can't carry cargo", vehicle))
             .map(|c| *c)?;
         Ok(cargo_capacity)
@@ -1024,27 +1023,20 @@ impl Db {
         Ok(crate_cfg)
     }
 
-    pub fn unit_cargo_cfg(
-        &self,
-        lua: MizLua,
-        idx: &MizIndex,
-        slot: &SlotId,
-    ) -> Result<(CargoConfig, Side, String)> {
-        let uifo = slot_miz_unit(lua, idx, slot)?;
-        let side = uifo.side;
-        let unit_name = uifo.unit.name()?;
-        let cargo_capacity = self.cargo_capacity(&uifo.unit)?;
+    pub fn unit_cargo_cfg(&self, slot: &SlotId) -> Result<(CargoConfig, Side, String)> {
+        let si = self
+            .ephemeral
+            .get_slot_info(slot)
+            .ok_or_else(|| anyhow!("no such slot"))?;
+        let side = si.side;
+        let unit_name = si.unit_name.clone();
+        let cargo_capacity = self.cargo_capacity(&si.typ)?;
         Ok((cargo_capacity, side, unit_name))
     }
 
-    pub fn load_nearby_crate(
-        &mut self,
-        lua: MizLua,
-        idx: &MizIndex,
-        slot: &SlotId,
-    ) -> Result<Crate> {
+    pub fn load_nearby_crate(&mut self, lua: MizLua, slot: &SlotId) -> Result<Crate> {
         let st = SlotStats::get(self, lua, slot)?;
-        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
+        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(slot)?;
         let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
         if cargo_capacity.crate_slots as usize <= cargo.num_crates()
             || cargo_capacity.total_slots as usize <= cargo.num_total()
@@ -1079,11 +1071,10 @@ impl Db {
     pub fn load_troops(
         &mut self,
         lua: MizLua,
-        idx: &MizIndex,
         slot: &SlotId,
         name: &str,
     ) -> Result<(Troop, ObjectiveId)> {
-        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
+        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(slot)?;
         let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let (origin, _) = self.point_near_logistics(side, point)?;
@@ -1251,8 +1242,8 @@ impl Db {
         Ok(troop_cfg)
     }
 
-    pub fn extract_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {
-        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(lua, idx, slot)?;
+    pub fn extract_troops(&mut self, lua: MizLua, slot: &SlotId) -> Result<Troop> {
+        let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(slot)?;
         let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         let (gid, ucid, origin, troop_cfg) = {

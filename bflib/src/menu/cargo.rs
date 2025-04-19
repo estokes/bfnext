@@ -16,13 +16,10 @@ for more details.
 
 use super::{player_name, slot_for_group, ArgTuple};
 use crate::{
-    db::{
-        self,
-        cargo::{Cargo, Oldest, SlotStats},
-    },
+    db::cargo::{Cargo, Oldest, SlotStats},
     Context,
 };
-use anyhow::{Context as ErrContext, Result};
+use anyhow::{anyhow, Context as ErrContext, Result};
 use bfprotocols::cfg::{Cfg, LimitEnforceTyp};
 use compact_str::{format_compact, CompactString, ToCompactString};
 use dcso3::{
@@ -55,7 +52,7 @@ fn unpakistan(lua: MizLua, gid: GroupId) -> Result<()> {
 fn load_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
-    match ctx.db.load_nearby_crate(lua, &ctx.idx, &slot) {
+    match ctx.db.load_nearby_crate(lua, &slot) {
         Ok(cr) => {
             let (dep_name, limit_enforce, limit) = match ctx.db.deployable_by_crate(&side, &cr.name)
             {
@@ -124,13 +121,17 @@ fn unload_crate(lua: MizLua, gid: GroupId) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId) -> Result<()> {
+pub(crate) fn list_cargo_for_slot(ctx: &mut Context, slot: &SlotId) -> Result<()> {
     let cargo = Cargo::default();
     let cargo = ctx.db.list_cargo(&slot).unwrap_or(&cargo);
-    let uinfo = db::cargo::slot_miz_unit(lua, &ctx.idx, &slot).context("getting slot miz unit")?;
+    let sifo = ctx
+        .db
+        .ephemeral
+        .get_slot_info(slot)
+        .ok_or_else(|| anyhow!("invalid slot"))?;
     let capacity = ctx
         .db
-        .cargo_capacity(&uinfo.unit)
+        .cargo_capacity(&sifo.typ)
         .context("getting unit cargo capacity")?;
     let mut msg = CompactString::new("Current Cargo\n----------------------------\n");
     msg.push_str(&format_compact!(
@@ -180,7 +181,7 @@ pub(crate) fn list_cargo_for_slot(lua: MizLua, ctx: &mut Context, slot: &SlotId)
 pub fn list_current_cargo(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (_side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
-    list_cargo_for_slot(lua, ctx, &slot)
+    list_cargo_for_slot(ctx, &slot)
 }
 
 fn list_nearby_crates(lua: MizLua, gid: GroupId) -> Result<()> {
@@ -334,7 +335,7 @@ pub(super) fn add_cargo_menu_for_group(
     let mut created_menus: FxHashMap<String, GroupSubMenu> = FxHashMap::default();
     for dep in cfg.deployables.get(side).unwrap_or(&vec![]) {
         if dep.crates.is_empty() && dep.repair_crate.is_none() {
-            continue
+            continue;
         }
         let name = dep.path.last().unwrap();
         let root = dep

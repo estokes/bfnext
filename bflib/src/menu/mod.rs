@@ -201,6 +201,10 @@ where
 
 fn slot_for_group(lua: MizLua, ctx: &Context, gid: &GroupId) -> Result<(Side, SlotId)> {
     let miz = Miz::singleton(lua)?;
+    // dynamic slot
+    if let Some((slot, si)) = ctx.db.ephemeral.get_slot_info_by_miz_gid(gid) {
+        return Ok((si.side, slot));
+    }
     let group = miz
         .get_group(&ctx.idx, gid)
         .with_context(|| format_compact!("getting group {:?} from miz", gid))?

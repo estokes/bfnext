@@ -63,7 +63,7 @@ use dcso3::{
     trigger::Trigger,
     unit::{ClassUnit, Unit},
     world::{HandlerId, MarkPanel, World},
-    HooksLua, LuaEnv, MizLua, String, 
+    HooksLua, LuaEnv, MizLua, String,
 };
 use ewr::Ewr;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -675,7 +675,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                             if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
                                 error!("could not display life taken message {:?}", e)
                             }
-                            let _ = menu::cargo::list_cargo_for_slot(lua, ctx, &slot);
+                            let _ = menu::cargo::list_cargo_for_slot(ctx, &slot);
                         }
                         Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
                             if let Err(e) = unit.destroy() {

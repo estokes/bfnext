@@ -841,16 +841,19 @@ impl Db {
                     .map(|(_, _, o)| o)
                     .ok_or_else(|| anyhow!("dynamic slot not near any objective"))?;
                 let gid = unit.get_group()?.id()?;
+                let gid = miz::GroupId::from(gid.inner());
                 self.ephemeral.slot_info.insert(
                     slot,
                     SlotInfo {
                         typ,
+                        unit_name: unit.get_name()?,
                         objective: obj.id,
                         ground_start: false,
-                        miz_gid: miz::GroupId::from(gid.inner()),
+                        miz_gid: gid,
                         side: obj.owner,
                     },
                 );
+                self.ephemeral.slot_by_miz_gid.insert(gid, slot);
                 (&self.ephemeral.slot_info[&slot], true)
             }
         };

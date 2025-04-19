@@ -696,6 +696,32 @@ impl Jtac {
         Ok(())
     }
 
+    pub fn relay_target(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
+        match self.target.as_mut() {
+            None => bail!("no target"),
+            Some(target) => {
+                let name = db.group(gid)?.name.clone();
+                let shooter = Group::get_by_name(lua, &name)
+                    .with_context(|| format_compact!("getting group {}", name))?;
+                let target = match &target.id {
+                    EnId::Unit(id) => Unit::get_by_name(lua, &db.unit(id)?.name)?,
+                    EnId::Player(id) => match db.player(id) {
+                        None => bail!("no player"),
+                        Some(pl) => match &pl.current_slot {
+                            None => bail!("player not slotted"),
+                            Some((_, Some(inst))) => Unit::get_by_name(lua, &inst.unit_name)?,
+                            Some((_, None)) => bail!("player not instanced"),
+                        },
+                    },
+                };
+                shooter
+                    .get_controller()?
+                    .know_target(target.as_object()?, true, true)?
+            }
+        }
+        Ok(())
+    }
+
     fn update_target_position(&mut self, lua: MizLua, db: &Db) -> Result<()> {
         if let Some(target) = &self.target {
             let (pos, velocity) = match &target.id {

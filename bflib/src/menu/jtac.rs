@@ -202,6 +202,34 @@ fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> R
     Ok(())
 }
 
+fn jtac_relay_target(lua: MizLua, arg: ArgTriple<JtId, DbGid, Ucid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
+    match jtac.relay_target(&ctx.db, lua, &arg.snd) {
+        Ok(()) => {
+            let (near, name) = change_info(jtac, &ctx.db, &arg.trd);
+            let msg = format_compact!(
+                "TARGET RELAYED to {}\ndirected by jtac {} near {}\nrequested by {}",
+                arg.snd,
+                arg.fst,
+                near,
+                name
+            );
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_side(10, false, jtac.side(), msg)
+        }
+        Err(e) => {
+            let msg = format!("jtac {} could not relay target {:?}", arg.fst, e);
+            ctx.db
+                .ephemeral
+                .panel_to_player(&ctx.db.persisted, 10, &arg.trd, msg);
+        }
+    }
+    Ok(())
+}
+
 fn jtac_adjust_solution(_lua: MizLua, arg: ArgQuad<DbGid, AdjustmentDir, u16, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let side = ctx.db.group(&arg.fst)?.side;
@@ -363,6 +391,17 @@ fn add_artillery_menu_for_jtac(
             )?;
             Ok(())
         };
+        mc.add_command_for_group(
+            mizgid,
+            "Relay Target".into(),
+            Some(root.clone()),
+            jtac_relay_target,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: ucid,
+            },
+        )?;
         mc.add_command_for_group(
             mizgid,
             "Fire One".into(),

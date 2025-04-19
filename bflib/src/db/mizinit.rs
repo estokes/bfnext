@@ -263,6 +263,7 @@ impl Db {
                 id.clone(),
                 SlotInfo {
                     typ: vehicle,
+                    unit_name: unit.name()?,
                     objective: obj,
                     ground_start,
                     miz_gid: slot.id()?,

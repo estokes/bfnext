@@ -74,6 +74,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug, Clone)]
 pub struct SlotInfo {
+    pub unit_name: String,
     pub typ: Vehicle,
     pub objective: ObjectiveId,
     pub ground_start: bool,
@@ -119,6 +120,7 @@ pub struct Ephemeral {
     pub(super) object_id_by_gid: FxHashMap<GroupId, DcsOid<ClassGroup>>,
     pub(super) gid_by_object_id: FxHashMap<DcsOid<ClassGroup>, GroupId>,
     pub(super) uid_by_static: FxHashMap<DcsOid<ClassStatic>, UnitId>,
+    pub(super) slot_by_miz_gid: FxHashMap<miz::GroupId, SlotId>,
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
     pub(super) slot_info: FxHashMap<SlotId, SlotInfo>,
     used_pad_templates: FxHashSet<String>,
@@ -153,6 +155,7 @@ impl Default for Ephemeral {
             uid_by_object_id: FxHashMap::default(),
             object_id_by_slot: FxHashMap::default(),
             slot_by_object_id: FxHashMap::default(),
+            slot_by_miz_gid: FxHashMap::default(),
             object_id_by_gid: FxHashMap::default(),
             gid_by_object_id: FxHashMap::default(),
             uid_by_static: FxHashMap::default(),
@@ -193,6 +196,12 @@ impl Ephemeral {
 
     pub fn get_slot_info(&self, slot: &SlotId) -> Option<&SlotInfo> {
         self.slot_info.get(slot)
+    }
+
+    pub fn get_slot_info_by_miz_gid(&self, gid: &miz::GroupId) -> Option<(SlotId, &SlotInfo)> {
+        self.slot_by_miz_gid
+            .get(gid)
+            .and_then(|sl| self.slot_info.get(sl).map(|s| (*sl, s)))
     }
 
     pub fn create_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {

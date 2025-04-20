@@ -714,9 +714,11 @@ impl Jtac {
                         },
                     },
                 };
-                shooter
-                    .get_controller()?
-                    .know_target(target.as_object()?, true, true)?
+                for unit in shooter.get_units()? {
+                    unit?
+                        .get_controller()?
+                        .know_target(target.as_object()?, true, true)?
+                }
             }
         }
         Ok(())

@@ -702,6 +702,7 @@ impl Jtac {
         match self.target.as_mut() {
             None => bail!("no target"),
             Some(target) => {
+                let land = Land::singleton(lua)?;
                 let name = db.group(gid)?.name.clone();
                 let shooter = Group::get_by_name(lua, &name)
                     .with_context(|| format_compact!("getting group {}", name))?;
@@ -716,6 +717,7 @@ impl Jtac {
                         },
                     },
                 };
+                let pos = target.get_ground_position()?;
                 let task = Task::AttackUnit {
                     unit: target.id()?,
                     params: AttackParams {
@@ -736,8 +738,8 @@ impl Jtac {
                         helipad: None,
                         time_re_fu_ar: None,
                         link_unit: None,
-                        pos: LuaVec2(apos),
-                        alt: land.get_height(LuaVec2(apos))?,
+                        pos,
+                        alt: land.get_height(pos)?,
                         alt_typ: Some(AltType::BARO),
                         speed: 0.,
                         speed_locked: None,
@@ -747,7 +749,7 @@ impl Jtac {
                         task: Box::new(task),
                     }],
                 };
-                let con = group.get_controller().context("getting controller")?;
+                let con = shooter.get_controller().context("getting controller")?;
                 con.set_task(task)?;
             }
         }

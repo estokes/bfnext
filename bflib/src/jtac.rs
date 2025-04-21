@@ -666,8 +666,8 @@ impl Jtac {
                     radius: None,
                     expend_qty: Some(n as i64),
                     weapon_type: None,
-                    altitude: Some(land.get_height(LuaVec2(pos))?),
-                    altitude_type: Some(AltType::BARO),
+                    altitude: Some(0.),
+                    altitude_type: Some(AltType::RADIO),
                 };
                 let task = Task::Mission {
                     airborne: Some(false),
@@ -679,8 +679,8 @@ impl Jtac {
                         time_re_fu_ar: None,
                         link_unit: None,
                         pos: LuaVec2(apos),
-                        alt: land.get_height(LuaVec2(apos))?,
-                        alt_typ: Some(AltType::BARO),
+                        alt: 0.,
+                        alt_typ: Some(AltType::RADIO),
                         speed: 0.,
                         speed_locked: None,
                         eta: None,

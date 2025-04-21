@@ -35,7 +35,7 @@ use compact_str::{format_compact, CompactString};
 use dcso3::{
     azumith2d, azumith2d_to, azumith3d, centroid2d,
     coalition::Side,
-    env::miz::{Miz, MizIndex, UnitInfo},
+    env::miz::MizIndex,
     land::Land,
     net::{SlotId, Ucid},
     radians_to_degrees,
@@ -156,19 +156,6 @@ impl SlotStats {
             ucid,
         })
     }
-}
-
-pub fn slot_miz_unit<'lua>(
-    lua: MizLua<'lua>,
-    idx: &MizIndex,
-    slot: &SlotId,
-) -> Result<UnitInfo<'lua>> {
-    let miz = Miz::singleton(lua)?;
-    let uid = slot
-        .as_unit_id()
-        .ok_or_else(|| anyhow!("player is in jtac"))?;
-    miz.get_unit(idx, &uid)?
-        .ok_or_else(|| anyhow!("unknown slot"))
 }
 
 impl Db {
@@ -1136,7 +1123,11 @@ impl Db {
             bail!("you must land to unload troops")
         }
         let unit_name = unit.get_name()?;
-        let side = slot_miz_unit(lua, idx, slot)?.side;
+        let side = self
+            .ephemeral
+            .get_slot_info(slot)
+            .ok_or_else(|| anyhow!("no slot info for {slot:?}"))?
+            .side;
         let pos = unit.get_position()?;
         let oid = Db::objective_near_point(
             &self.persisted.objectives,
@@ -1217,7 +1208,7 @@ impl Db {
         }
     }
 
-    pub fn return_troops(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Troop> {
+    pub fn return_troops(&mut self, lua: MizLua, slot: &SlotId) -> Result<Troop> {
         let cargo = self.ephemeral.cargo.get(slot);
         if cargo.map(|c| c.troops.is_empty()).unwrap_or(true) {
             bail!("no troops onboard")
@@ -1227,7 +1218,11 @@ impl Db {
             bail!("you must land to return your troops")
         }
         let unit_name = unit.get_name()?;
-        let side = slot_miz_unit(lua, idx, slot)?.side;
+        let side = self
+            .ephemeral
+            .get_slot_info(slot)
+            .ok_or_else(|| anyhow!("no slot info for {slot:?}"))?
+            .side;
         let pos = unit.get_position()?;
         let point = Vector2::new(pos.p.x, pos.p.z);
         if self.point_near_logistics(side, point).is_err() {

@@ -116,7 +116,7 @@ fn extract_troops(lua: MizLua, gid: GroupId) -> Result<()> {
 fn return_troops(lua: MizLua, gid: GroupId) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let (side, slot) = slot_for_group(lua, ctx, &gid).context("getting slot for group")?;
-    match ctx.db.return_troops(lua, &ctx.idx, &slot) {
+    match ctx.db.return_troops(lua, &slot) {
         Ok(tr) => {
             let player = player_name(&ctx.db, &slot);
             let msg = format_compact!("{player} returned {} troops", tr.name);

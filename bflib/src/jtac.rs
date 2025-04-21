@@ -143,6 +143,7 @@ impl ArtilleryAdjustment {
             } else {
                 let impact = Vector2::new(pos.x, pos.z);
                 self.adjust = self.target - impact;
+                self.tracked = None;
                 return Ok(true);
             }
         }

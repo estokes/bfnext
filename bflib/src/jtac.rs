@@ -38,12 +38,12 @@ use dcso3::{
     group::Group,
     land::Land,
     net::{SlotId, Ucid},
-    normal2,
     object::{DcsObject, DcsOid},
     radians_to_degrees, simple_enum,
     spot::{ClassSpot, Spot},
     trigger::{MarkId, SmokeColor, Trigger},
     unit::{ClassUnit, Unit},
+    weapon::Weapon,
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
@@ -54,7 +54,7 @@ use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
-use std::{collections::hash_map::Entry, fmt, str::FromStr};
+use std::{collections::hash_map::Entry, fmt, mem, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
@@ -127,17 +127,26 @@ simple_enum!(AdjustmentDir, u8, [
     Right => 3
 ]);
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone)]
 pub struct ArtilleryAdjustment {
-    pub short_long: i16,
-    pub left_right: i16,
+    adjust: Vector2,
+    target: Vector2,
+    group: Vec<DcsOid<ClassUnit>>,
+    tracked: Option<(Weapon<'static>, Vector3)>,
 }
 
 impl ArtilleryAdjustment {
-    fn compute_final_solution(&self, ip: Vector2, tp: Vector2) -> Vector2 {
-        let v = (tp - ip).normalize();
-        let normal = normal2(v) * self.left_right.signum() as f64;
-        tp + (v * self.short_long as f64) + (normal * self.left_right as f64)
+    fn compute_adjustment(&mut self) -> Result<bool> {
+        if let Some((weapon, pos)) = &mut self.tracked {
+            if let Ok(true) = weapon.is_exist() {
+                *pos = weapon.as_object()?.get_point()?.0;
+            } else {
+                let impact = Vector2::new(pos.x, pos.z);
+                self.adjust = self.target - impact;
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 
@@ -649,18 +658,19 @@ impl Jtac {
         &mut self,
         db: &Db,
         lua: MizLua,
-        adjustment: ArtilleryAdjustment,
+        tracking: &mut FxHashMap<DcsOid<ClassUnit>, GroupId>,
+        adjustment: &mut ArtilleryAdjustment,
         gid: &GroupId,
         n: u8,
     ) -> Result<()> {
         match self.target.as_mut() {
             None => bail!("no target"),
             Some(target) => {
-                let land = Land::singleton(lua)?;
                 let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
                 let pos = Vector2::new(target.pos.x, target.pos.z);
-                let pos = adjustment.compute_final_solution(apos, pos);
+                adjustment.target = pos;
+                let pos = pos + adjustment.adjust;
                 let task = Task::FireAtPoint {
                     point: LuaVec2(pos),
                     radius: None,
@@ -691,6 +701,15 @@ impl Jtac {
                 };
                 let group = Group::get_by_name(lua, &name)
                     .with_context(|| format_compact!("getting group {}", name))?;
+                for id in adjustment.group.drain(..) {
+                    tracking.remove(&id);
+                }
+                for unit in group.get_units()? {
+                    let unit = unit?;
+                    let id = unit.object_id()?;
+                    tracking.insert(id.clone(), *gid);
+                    adjustment.group.push(id);
+                }
                 let con = group.get_controller().context("getting controller")?;
                 con.set_task(task)?;
             }
@@ -702,7 +721,6 @@ impl Jtac {
         match self.target.as_mut() {
             None => bail!("no target"),
             Some(target) => {
-                let land = Land::singleton(lua)?;
                 let name = db.group(gid)?.name.clone();
                 let shooter = Group::get_by_name(lua, &name)
                     .with_context(|| format_compact!("getting group {}", name))?;
@@ -875,6 +893,7 @@ pub struct Jtacs {
     jtacs: FxHashMap<Side, FxHashMap<JtId, Jtac>>,
     detected: FxHashMap<Side, FxHashMap<EnId, Detected>>,
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
+    tracking: FxHashMap<DcsOid<ClassUnit>, GroupId>,
     code_by_location: LocByCode,
     menu_dirty: FxHashMap<Side, FxHashSet<ObjectiveId>>,
 }
@@ -903,21 +922,63 @@ impl Jtacs {
         self.jtacs.values_mut().flat_map(|jtx| jtx.values_mut())
     }
 
-    pub fn adjust_artillery_solution(&mut self, arty: &GroupId, dir: AdjustmentDir, mag: u16) {
-        let adj = self.artillery_adjustment.entry(*arty).or_default();
-        match dir {
-            AdjustmentDir::Long => adj.short_long -= mag as i16,
-            AdjustmentDir::Short => adj.short_long += mag as i16,
-            AdjustmentDir::Left => adj.left_right -= mag as i16,
-            AdjustmentDir::Right => adj.left_right += mag as i16,
+    pub fn track_shot(&mut self, shooter: DcsOid<ClassUnit>, weapon: &Weapon) -> Result<()> {
+        if let Some(gid) = self.tracking.get(&shooter) {
+            if let Some(adj) = self.artillery_adjustment.get_mut(gid) {
+                if adj.tracked.is_none() {
+                    let pos = weapon.as_object()?.get_point()?;
+                    let weapon =
+                        unsafe { mem::transmute::<Weapon<'_>, Weapon<'static>>(weapon.clone()) };
+                    adj.tracked = Some((weapon, pos.0));
+                }
+            }
         }
+        Ok(())
     }
 
-    pub fn get_artillery_adjustment(&mut self, arty: &GroupId) -> ArtilleryAdjustment {
-        self.artillery_adjustment
-            .get(arty)
-            .map(|a| *a)
-            .unwrap_or_default()
+    pub fn update_shots(&mut self, db: &mut Db) -> Result<()> {
+        for (gid, adj) in self.artillery_adjustment.iter_mut() {
+            if let Ok(true) = adj.compute_adjustment() {
+                for id in adj.group.drain(..) {
+                    self.tracking.remove(&id);
+                }
+                if let Ok(arty) = db.group(gid) {
+                    let side = arty.side;
+                    db.ephemeral.msgs().panel_to_side(
+                        10,
+                        false,
+                        side,
+                        format!("Artillery solution adjusted for {gid}"),
+                    )
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn artillery_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        jtid: &JtId,
+        shooter: &GroupId,
+        n: u8,
+    ) -> Result<()> {
+        let jtac = self
+            .jtacs
+            .iter_mut()
+            .find_map(|(_, jtx)| jtx.get_mut(&jtid))
+            .ok_or_else(|| anyhow!("no such jtac"))?;
+        let adjustment = self
+            .artillery_adjustment
+            .entry(*shooter)
+            .or_insert_with(|| ArtilleryAdjustment {
+                adjust: Vector2::zeros(),
+                target: Vector2::zeros(),
+                group: vec![],
+                tracked: None,
+            });
+        jtac.artillery_mission(db, lua, &mut self.tracking, adjustment, &shooter, n)
     }
 
     /// set part of the laser code, defined by the scale of the passed in number. For example,

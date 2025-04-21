@@ -635,6 +635,9 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::Shot(e) => {
+            if let Err(e) = ctx.jtac.track_shot(e.initiator.object_id()?, &e.weapon) {
+                error!("failed to track shot {:?}", e)
+            }
             if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, e) {
                 error!("error processing shot event {:?}", e)
             }
@@ -1321,6 +1324,9 @@ fn on_simulation_frame(_: HooksLua) -> Result<()> {
         None => {
             ctx.last_frame = Some(now);
         }
+    }
+    if let Err(e) = ctx.jtac.update_shots(&mut ctx.db) {
+        error!("failed to update shots {e:?}")
     }
     Ok(())
 }

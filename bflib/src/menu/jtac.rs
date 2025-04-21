@@ -21,7 +21,7 @@ use crate::{
         group::DeployKind,
         Db,
     },
-    jtac::{AdjustmentDir, JtId, Jtac, Jtacs},
+    jtac::{JtId, Jtac, Jtacs},
     spawnctx::SpawnCtx,
     Context,
 };
@@ -177,10 +177,12 @@ fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
 
 fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
-    let adjustment = ctx.jtac.get_artillery_adjustment(&arg.snd);
-    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
-    match jtac.artillery_mission(&ctx.db, lua, adjustment, &arg.snd, arg.trd) {
+    match ctx
+        .jtac
+        .artillery_mission(&ctx.db, lua, &arg.fst, &arg.snd, arg.trd)
+    {
         Ok(()) => {
+            let jtac = get_jtac(&ctx.jtac, &arg.fst).context("getting jtac")?;
             let (near, name) = change_info(jtac, &ctx.db, &arg.fth);
             let msg =
                 format_compact!(
@@ -227,41 +229,6 @@ fn jtac_relay_target(lua: MizLua, arg: ArgTriple<JtId, DbGid, Ucid>) -> Result<(
                 .panel_to_player(&ctx.db.persisted, 10, &arg.trd, msg);
         }
     }
-    Ok(())
-}
-
-fn jtac_adjust_solution(_lua: MizLua, arg: ArgQuad<DbGid, AdjustmentDir, u16, Ucid>) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let side = ctx.db.group(&arg.fst)?.side;
-    ctx.jtac
-        .adjust_artillery_solution(&arg.fst, arg.snd, arg.trd);
-    let a = ctx.jtac.get_artillery_adjustment(&arg.fst);
-    let name = ctx
-        .db
-        .player(&arg.fth)
-        .map(|p| p.name.clone())
-        .unwrap_or("unknown".into());
-    ctx.db.ephemeral.msgs().panel_to_side(
-        10,
-        false,
-        side,
-        format_compact!(
-            "artillery solution for {} adjusted now {:?}\nrequested by {}",
-            arg.fst,
-            a,
-            name
-        ),
-    );
-    Ok(())
-}
-
-fn jtac_show_adjustment(_lua: MizLua, arg: ArgTuple<Ucid, DbGid>) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let a = ctx.jtac.get_artillery_adjustment(&arg.snd);
-    let msg = format_compact!("adjustment for {} is {:?}", arg.snd, a);
-    ctx.db
-        .ephemeral
-        .panel_to_player(&ctx.db.persisted, 10, &arg.fst, msg);
     Ok(())
 }
 
@@ -340,57 +307,6 @@ fn add_artillery_menu_for_jtac(
     for gid in arty {
         let root =
             mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
-        let add_adjust = |root: &GroupSubMenu, dir: AdjustmentDir| -> Result<()> {
-            mc.add_command_for_group(
-                mizgid,
-                "10m".into(),
-                Some(root.clone()),
-                jtac_adjust_solution,
-                ArgQuad {
-                    fst: *gid,
-                    snd: dir,
-                    trd: 10,
-                    fth: ucid,
-                },
-            )?;
-            mc.add_command_for_group(
-                mizgid,
-                "25m".into(),
-                Some(root.clone()),
-                jtac_adjust_solution,
-                ArgQuad {
-                    fst: *gid,
-                    snd: dir,
-                    trd: 25,
-                    fth: ucid,
-                },
-            )?;
-            mc.add_command_for_group(
-                mizgid,
-                "50m".into(),
-                Some(root.clone()),
-                jtac_adjust_solution,
-                ArgQuad {
-                    fst: *gid,
-                    snd: dir,
-                    trd: 50,
-                    fth: ucid,
-                },
-            )?;
-            mc.add_command_for_group(
-                mizgid,
-                "100m".into(),
-                Some(root.clone()),
-                jtac_adjust_solution,
-                ArgQuad {
-                    fst: *gid,
-                    snd: dir,
-                    trd: 100,
-                    fth: ucid,
-                },
-            )?;
-            Ok(())
-        };
         mc.add_command_for_group(
             mizgid,
             "Relay Target".into(),
@@ -464,24 +380,6 @@ fn add_artillery_menu_for_jtac(
                 fth: ucid,
             },
         )?;
-        mc.add_command_for_group(
-            mizgid,
-            "Show Adjustment".into(),
-            Some(root.clone()),
-            jtac_show_adjustment,
-            ArgTuple {
-                fst: ucid,
-                snd: *gid,
-            },
-        )?;
-        let short = mc.add_submenu_for_group(mizgid, "Report Short".into(), Some(root.clone()))?;
-        add_adjust(&short, AdjustmentDir::Short)?;
-        let long = mc.add_submenu_for_group(mizgid, "Report Long".into(), Some(root.clone()))?;
-        add_adjust(&long, AdjustmentDir::Long)?;
-        let left = mc.add_submenu_for_group(mizgid, "Report Left".into(), Some(root.clone()))?;
-        add_adjust(&left, AdjustmentDir::Left)?;
-        let right = mc.add_submenu_for_group(mizgid, "Report Right".into(), Some(root.clone()))?;
-        add_adjust(&right, AdjustmentDir::Right)?;
     }
     Ok(())
 }

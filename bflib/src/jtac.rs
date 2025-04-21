@@ -31,7 +31,9 @@ use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use dcso3::{
     coalition::Side,
-    controller::{ActionTyp, AltType, MissionPoint, PointType, Task, VehicleFormation},
+    controller::{
+        ActionTyp, AltType, AttackParams, MissionPoint, PointType, Task, VehicleFormation,
+    },
     cvt_err, err,
     group::Group,
     land::Land,
@@ -714,11 +716,39 @@ impl Jtac {
                         },
                     },
                 };
-                for unit in shooter.get_units()? {
-                    unit?
-                        .get_controller()?
-                        .know_target(target.as_object()?, true, true)?
-                }
+                let task = Task::AttackUnit {
+                    unit: target.id()?,
+                    params: AttackParams {
+                        altitude: None,
+                        attack_qty: None,
+                        direction: None,
+                        expend: None,
+                        group_attack: Some(true),
+                        weapon_type: None,
+                    },
+                };
+                let task = Task::Mission {
+                    airborne: Some(false),
+                    route: vec![MissionPoint {
+                        action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2(apos),
+                        alt: land.get_height(LuaVec2(apos))?,
+                        alt_typ: Some(AltType::BARO),
+                        speed: 0.,
+                        speed_locked: None,
+                        eta: None,
+                        eta_locked: None,
+                        name: None,
+                        task: Box::new(task),
+                    }],
+                };
+                let con = group.get_controller().context("getting controller")?;
+                con.set_task(task)?;
             }
         }
         Ok(())

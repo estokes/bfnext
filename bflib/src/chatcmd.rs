@@ -442,6 +442,10 @@ fn jtac_command(ctx: &mut Context, id: PlayerId, s: &str) {
         ctx.db
             .ephemeral
             .msgs()
+            .send(MsgTyp::Chat(Some(id)), "-jtac <id> smoke");
+        ctx.db
+            .ephemeral
+            .msgs()
             .send(MsgTyp::Chat(Some(id)), "-jtac <id> arty <id> <n>");
         ctx.db
             .ephemeral
@@ -497,6 +501,14 @@ fn run_jtac_command(
             lua,
             ArgTuple {
                 fst: Some(ucid),
+                snd: jtid,
+            },
+        )?
+    } else if let Some(_) = cmd.strip_prefix("smoke") {
+        menu::jtac::jtac_smoke_target(
+            lua,
+            ArgTuple {
+                fst: ucid,
                 snd: jtid,
             },
         )?

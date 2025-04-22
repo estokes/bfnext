@@ -134,7 +134,7 @@ fn jtac_toggle_ir_pointer(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> 
     Ok(())
 }
 
-fn jtac_smoke_target(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
+pub fn jtac_smoke_target(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
     let (near, name) = change_info(jtac, &ctx.db, &arg.fst);

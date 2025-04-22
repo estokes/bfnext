@@ -136,7 +136,7 @@ pub struct ArtilleryAdjustment {
 }
 
 impl ArtilleryAdjustment {
-    fn compute_adjustment(&mut self) -> Result<bool> {
+    fn compute_adjustment(&mut self) -> Result<(bool, bool)> {
         if let Some((weapon, pos)) = &mut self.tracked {
             if let Ok(true) = weapon.is_exist() {
                 *pos = weapon.as_object()?.get_point()?.0;
@@ -146,13 +146,14 @@ impl ArtilleryAdjustment {
                 let mag = error.magnitude() * 0.5;
                 let dir = error.normalize();
                 self.tracked = None;
-                if mag > 30. {
+                let adjust = mag > 30.;
+                if adjust {
                     self.adjust = dir * mag;
-                    return Ok(true);
                 }
+                return Ok((true, adjust));
             }
         }
-        Ok(false)
+        Ok((false, false))
     }
 }
 
@@ -944,18 +945,20 @@ impl Jtacs {
 
     pub fn update_shots(&mut self, db: &mut Db) -> Result<()> {
         for (gid, adj) in self.artillery_adjustment.iter_mut() {
-            if let Ok(true) = adj.compute_adjustment() {
+            if let Ok((true, adjusted)) = adj.compute_adjustment() {
                 for id in adj.group.drain(..) {
                     self.tracking.remove(&id);
                 }
-                if let Ok(arty) = db.group(gid) {
-                    let side = arty.side;
-                    db.ephemeral.msgs().panel_to_side(
-                        10,
-                        false,
-                        side,
-                        format!("Artillery solution adjusted for {gid}"),
-                    )
+                if adjusted {
+                    if let Ok(arty) = db.group(gid) {
+                        let side = arty.side;
+                        db.ephemeral.msgs().panel_to_side(
+                            10,
+                            false,
+                            side,
+                            format!("Artillery solution adjusted for {gid}"),
+                        )
+                    }
                 }
             }
         }

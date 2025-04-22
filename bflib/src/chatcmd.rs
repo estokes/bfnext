@@ -497,8 +497,13 @@ fn run_jtac_command(
         };
         menu::jtac::jtac_shift(lua, arg)?;
     } else if let Some(_) = cmd.strip_prefix("status") {
+        let panel_to_side = ctx
+            .db
+            .player(&ucid)
+            .map(|p| p.jtac_or_spectators)
+            .unwrap_or(true);
         let arg = ArgTuple {
-            fst: Some(ucid),
+            fst: (!panel_to_side).then_some(ucid),
             snd: jtid,
         };
         menu::jtac::jtac_status(lua, arg)?

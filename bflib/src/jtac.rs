@@ -142,9 +142,14 @@ impl ArtilleryAdjustment {
                 *pos = weapon.as_object()?.get_point()?.0;
             } else {
                 let impact = Vector2::new(pos.x, pos.z);
-                self.adjust = self.target - impact;
+                let error = self.target - impact;
+                let mag = error.magnitude() * 0.5;
+                let dir = error.normalize();
                 self.tracked = None;
-                return Ok(true);
+                if mag > 30. {
+                    self.adjust = dir * mag;
+                    return Ok(true);
+                }
             }
         }
         Ok(false)

@@ -484,6 +484,24 @@ fn run_jtac_command(
         .get(&id)
         .ok_or_else(|| anyhow!("unknown player"))?
         .ucid;
+    match (ctx.jtac.get(&jtid), ctx.db.player(&ucid)) {
+        (Ok(jtac), Some(player)) => {
+            if jtac.side() != player.side {
+                ctx.db.ephemeral.msgs().send(
+                    MsgTyp::Chat(Some(id)),
+                    "you can't give orders to enemy jtacs",
+                );
+                return Ok(());
+            }
+        }
+        (Err(_), _) | (_, None) => {
+            ctx.db
+                .ephemeral
+                .msgs()
+                .send(MsgTyp::Chat(Some(id)), "no such jtac {jtid}");
+            return Ok(());
+        }
+    }
     if let Some(_) = cmd.strip_prefix("autoshift") {
         let arg = ArgTuple {
             fst: ucid,

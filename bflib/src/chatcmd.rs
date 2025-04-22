@@ -434,6 +434,10 @@ fn jtac_command(ctx: &mut Context, id: PlayerId, s: &str) {
         ctx.db
             .ephemeral
             .msgs()
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> pointer");
+        ctx.db
+            .ephemeral
+            .msgs()
             .send(MsgTyp::Chat(Some(id)), " -jtac <id> shift");
         ctx.db
             .ephemeral
@@ -479,27 +483,31 @@ fn run_jtac_command(
     jtid: JtId,
     cmd: String,
 ) -> Result<()> {
+    macro_rules! error {
+        ($msg:literal) => {error!($msg,)};
+        ($msg:literal, $($arg:expr),*) => {{
+            ctx.db
+                .ephemeral
+                .msgs()
+                .send(MsgTyp::Chat(Some(id)), format_compact!($msg, $($arg),*));
+            return Ok(());
+        }};
+    }
     let ucid = ctx
         .connected
         .get(&id)
         .ok_or_else(|| anyhow!("unknown player"))?
         .ucid;
-    match (ctx.jtac.get(&jtid), ctx.db.player(&ucid)) {
-        (Ok(jtac), Some(player)) => {
-            if jtac.side() != player.side {
-                ctx.db.ephemeral.msgs().send(
-                    MsgTyp::Chat(Some(id)),
-                    "you can't give orders to enemy jtacs",
-                );
-                return Ok(());
+    let side = match ctx.db.player(&ucid) {
+        Some(player) => player.side,
+        None => error!("no such player {ucid}"),
+    };
+    match ctx.jtac.get(&jtid) {
+        Err(_) => error!("no such jtac {jtid}"),
+        Ok(jtac) => {
+            if jtac.side() != side {
+                error!("you can't give orders to enemy jtacs")
             }
-        }
-        (Err(_), _) | (_, None) => {
-            ctx.db
-                .ephemeral
-                .msgs()
-                .send(MsgTyp::Chat(Some(id)), "no such jtac {jtid}");
-            return Ok(());
         }
     }
     if let Some(_) = cmd.strip_prefix("autoshift") {
@@ -531,6 +539,36 @@ fn run_jtac_command(
             snd: jtid,
         };
         menu::jtac::jtac_smoke_target(lua, arg)?
+    } else if let Some(_) = cmd.strip_prefix("pointer") {
+        let arg = ArgTuple {
+            fst: ucid,
+            snd: jtid,
+        };
+        menu::jtac::jtac_toggle_ir_pointer(lua, arg)?
+    } else if let Some(s) = cmd.strip_prefix("bomber") {
+        let name = s.trim();
+        let name = if name != "" {
+            Some(String::from(name))
+        } else {
+            let bomber_missions = ctx.db.ephemeral.cfg.actions.get(&side);
+            bomber_missions.iter().find_map(|acts| {
+                acts.iter().find_map(|(n, a)| match a.kind {
+                    ActionKind::Bomber(_) => Some(n.clone()),
+                    _ => None,
+                })
+            })
+        };
+        match name {
+            None => error!("no bomber mission(s)"),
+            Some(name) => {
+                let arg = ArgTriple {
+                    fst: jtid,
+                    snd: ucid,
+                    trd: name,
+                };
+                menu::jtac::call_bomber(lua, arg)?
+            }
+        }
     } else if let Some(s) = cmd.strip_prefix("code ") {
         let code = match s.parse::<u16>() {
             Ok(c) => c,
@@ -552,23 +590,11 @@ fn run_jtac_command(
         if let Some((aid, n)) = arty.split_once(" ") {
             let aid = match aid.parse::<GroupId>() {
                 Ok(id) => id,
-                Err(_) => {
-                    ctx.db
-                        .ephemeral
-                        .msgs()
-                        .send(MsgTyp::Chat(Some(id)), "invalid arty group id {id}");
-                    return Ok(());
-                }
+                Err(_) => error!("invalid arty group id {id}"),
             };
             let n = match n.parse::<u8>() {
                 Ok(n) => n,
-                Err(_) => {
-                    ctx.db.ephemeral.msgs().send(
-                        MsgTyp::Chat(Some(id)),
-                        "expected a number of shots between 0 and 255",
-                    );
-                    return Ok(());
-                }
+                Err(_) => error!("expected a number of shots between 0 and 255"),
             };
             let arg = ArgQuad {
                 fst: jtid,
@@ -578,16 +604,10 @@ fn run_jtac_command(
             };
             menu::jtac::jtac_artillery_mission(lua, arg)?
         } else {
-            ctx.db
-                .ephemeral
-                .msgs()
-                .send(MsgTyp::Chat(Some(id)), "arty expected <id> and <n>");
+            error!("arty expected <id> and <n>")
         }
     } else {
-        ctx.db
-            .ephemeral
-            .msgs()
-            .send(MsgTyp::Chat(Some(id)), "invalid jtac command {s}");
+        error!("invalid jtac command {cmd}")
     }
     Ok(())
 }

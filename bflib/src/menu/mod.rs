@@ -71,10 +71,10 @@ where
 }
 
 #[derive(Debug)]
-struct ArgTriple<T, U, V> {
-    fst: T,
-    snd: U,
-    trd: V,
+pub struct ArgTriple<T, U, V> {
+    pub fst: T,
+    pub snd: U,
+    pub trd: V,
 }
 
 impl<'lua, T, U, V> IntoLua<'lua> for ArgTriple<T, U, V>

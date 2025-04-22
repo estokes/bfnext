@@ -4,7 +4,7 @@ use crate::{
     db::{actions::ActionCmd, group::DeployKind, player::RegErr},
     jtac::JtId,
     lives,
-    menu::{self, ArgQuad, ArgTuple},
+    menu::{self, ArgQuad, ArgTriple, ArgTuple},
     msgq::MsgTyp,
     spawnctx::SpawnCtx,
     Context,
@@ -446,6 +446,10 @@ fn jtac_command(ctx: &mut Context, id: PlayerId, s: &str) {
         ctx.db
             .ephemeral
             .msgs()
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> code <code>");
+        ctx.db
+            .ephemeral
+            .msgs()
             .send(MsgTyp::Chat(Some(id)), " -jtac <id> arty <id> <n>");
         ctx.db
             .ephemeral
@@ -481,37 +485,46 @@ fn run_jtac_command(
         .ok_or_else(|| anyhow!("unknown player"))?
         .ucid;
     if let Some(_) = cmd.strip_prefix("autoshift") {
-        menu::jtac::jtac_toggle_auto_shift(
-            lua,
-            ArgTuple {
-                fst: ucid,
-                snd: jtid,
-            },
-        )?;
+        let arg = ArgTuple {
+            fst: ucid,
+            snd: jtid,
+        };
+        menu::jtac::jtac_toggle_auto_shift(lua, arg)?;
     } else if let Some(_) = cmd.strip_prefix("shift") {
-        menu::jtac::jtac_shift(
-            lua,
-            ArgTuple {
-                fst: ucid,
-                snd: jtid,
-            },
-        )?;
+        let arg = ArgTuple {
+            fst: ucid,
+            snd: jtid,
+        };
+        menu::jtac::jtac_shift(lua, arg)?;
     } else if let Some(_) = cmd.strip_prefix("status") {
-        menu::jtac::jtac_status(
-            lua,
-            ArgTuple {
-                fst: Some(ucid),
-                snd: jtid,
-            },
-        )?
+        let arg = ArgTuple {
+            fst: Some(ucid),
+            snd: jtid,
+        };
+        menu::jtac::jtac_status(lua, arg)?
     } else if let Some(_) = cmd.strip_prefix("smoke") {
-        menu::jtac::jtac_smoke_target(
-            lua,
-            ArgTuple {
-                fst: ucid,
-                snd: jtid,
-            },
-        )?
+        let arg = ArgTuple {
+            fst: ucid,
+            snd: jtid,
+        };
+        menu::jtac::jtac_smoke_target(lua, arg)?
+    } else if let Some(s) = cmd.strip_prefix("code ") {
+        let code = match s.parse::<u16>() {
+            Ok(c) => c,
+            Err(_) => {
+                ctx.db
+                    .ephemeral
+                    .msgs()
+                    .send(MsgTyp::Chat(Some(id)), "invalid laser code {s}");
+                return Ok(());
+            }
+        };
+        let arg = ArgTriple {
+            fst: jtid,
+            snd: code,
+            trd: ucid,
+        };
+        menu::jtac::jtac_set_code(lua, arg)?
     } else if let Some(arty) = cmd.strip_prefix("arty ") {
         if let Some((aid, n)) = arty.split_once(" ") {
             let aid = match aid.parse::<GroupId>() {
@@ -534,15 +547,13 @@ fn run_jtac_command(
                     return Ok(());
                 }
             };
-            menu::jtac::jtac_artillery_mission(
-                lua,
-                ArgQuad {
-                    fst: jtid,
-                    snd: aid,
-                    trd: n,
-                    fth: ucid,
-                },
-            )?
+            let arg = ArgQuad {
+                fst: jtid,
+                snd: aid,
+                trd: n,
+                fth: ucid,
+            };
+            menu::jtac::jtac_artillery_mission(lua, arg)?
         } else {
             ctx.db
                 .ephemeral

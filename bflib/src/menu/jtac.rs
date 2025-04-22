@@ -279,7 +279,7 @@ fn jtac_filter(lua: MizLua, arg: ArgTriple<JtId, u64, Ucid>) -> Result<()> {
     Ok(())
 }
 
-fn jtac_set_code(lua: MizLua, arg: ArgTriple<JtId, u16, Ucid>) -> Result<()> {
+pub fn jtac_set_code(lua: MizLua, arg: ArgTriple<JtId, u16, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     ctx.jtac
         .set_code_part(lua, &arg.fst, arg.snd)

@@ -155,7 +155,7 @@ impl ArtilleryAdjustment {
                 self.tracked = None;
                 let adjust = mag > 5.;
                 if adjust {
-                    self.adjust = dir * mag;
+                    self.adjust += dir * mag;
                 }
                 return Ok((true, adjust));
             }

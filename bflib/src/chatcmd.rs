@@ -426,31 +426,31 @@ fn bind_command(ctx: &mut Context, id: PlayerId, s: &str) {
 }
 
 fn jtac_command(ctx: &mut Context, id: PlayerId, s: &str) {
-    if s.trim() == "help" {
+    if s.trim().eq_ignore_ascii_case("help") {
         ctx.db
             .ephemeral
             .msgs()
-            .send(MsgTyp::Chat(Some(id)), "-jtac <id> autoshift");
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> autoshift");
         ctx.db
             .ephemeral
             .msgs()
-            .send(MsgTyp::Chat(Some(id)), "-jtac <id> shift");
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> shift");
         ctx.db
             .ephemeral
             .msgs()
-            .send(MsgTyp::Chat(Some(id)), "-jtac <id> status");
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> status");
         ctx.db
             .ephemeral
             .msgs()
-            .send(MsgTyp::Chat(Some(id)), "-jtac <id> smoke");
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> smoke");
         ctx.db
             .ephemeral
             .msgs()
-            .send(MsgTyp::Chat(Some(id)), "-jtac <id> arty <id> <n>");
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> arty <id> <n>");
         ctx.db
             .ephemeral
             .msgs()
-            .send(MsgTyp::Chat(Some(id)), "-jtac <id> bomber");
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> bomber");
     } else if let Some((jtid, cmd)) = s.split_once(" ") {
         if let Ok(jtid) = jtid.parse::<JtId>() {
             ctx.jtac_commands.push((id, jtid, cmd.into()));

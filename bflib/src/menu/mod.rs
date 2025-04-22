@@ -38,9 +38,9 @@ use mlua::{prelude::*, Value};
 use std::sync::Arc;
 
 #[derive(Debug)]
-struct ArgTuple<T, U> {
-    fst: T,
-    snd: U,
+pub struct ArgTuple<T, U> {
+    pub fst: T,
+    pub snd: U,
 }
 
 impl<'lua, T, U> IntoLua<'lua> for ArgTuple<T, U>
@@ -109,11 +109,11 @@ where
 }
 
 #[derive(Debug)]
-struct ArgQuad<T, U, V, W> {
-    fst: T,
-    snd: U,
-    trd: V,
-    fth: W,
+pub struct ArgQuad<T, U, V, W> {
+    pub fst: T,
+    pub snd: U,
+    pub trd: V,
+    pub fth: W,
 }
 
 impl<'lua, T, U, V, W> IntoLua<'lua> for ArgQuad<T, U, V, W>

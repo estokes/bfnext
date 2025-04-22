@@ -37,7 +37,7 @@ use bfprotocols::{
     stats::Stat,
 };
 use bg::Task;
-use chatcmd::run_action_commands;
+use chatcmd::{run_action_commands, run_jtac_commands};
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
 use crossbeam::queue::SegQueue;
@@ -241,6 +241,7 @@ struct Context {
     external_admin_commands: Arc<SegQueue<(AdminCommand, oneshot::Sender<Value>)>>,
     admin_commands: Vec<(admin::Caller, AdminCommand)>,
     action_commands: Vec<(PlayerId, String)>,
+    jtac_commands: Vec<(PlayerId, JtId, String)>,
     to_background: Option<UnboundedSender<bg::Task>>,
     recently_landed: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
     recently_born: FxHashMap<DcsOid<ClassUnit>, DateTime<Utc>>,
@@ -1188,6 +1189,9 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
     }
     if let Err(e) = run_action_commands(ctx, perf, lua) {
         error!("failed to run action commands {e:?}")
+    }
+    if let Err(e) = run_jtac_commands(ctx, lua) {
+        error!("failed to run jtac commands {e:?}")
     }
     ctx.load_state.step();
     record_perf(&mut perf.timed_events, ts);

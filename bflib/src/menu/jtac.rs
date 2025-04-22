@@ -44,7 +44,7 @@ use log::error;
 use smallvec::{smallvec, SmallVec};
 use std::sync::Arc;
 
-fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
+pub fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let jtac = ctx
         .jtac
@@ -91,23 +91,26 @@ fn get_jtac<'a>(jtacs: &'a Jtacs, id: &JtId) -> Result<&'a Jtac> {
         .with_context(|| format_compact!("get jtac {}", id))
 }
 
-fn jtac_toggle_auto_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
+fn jtac_msg_auto_shift(db: &mut Db, jtid: JtId, jtac: &Jtac, ucid: &Ucid) {
+    let (near, name) = change_info(jtac, db, ucid);
+    let msg = format_compact!(
+        "AUTO SHIFT NOW {}\nfor jtac {} near {}\nchanged by {}",
+        jtac.autoshift(),
+        jtid,
+        near,
+        name
+    );
+    db.ephemeral
+        .msgs()
+        .panel_to_side(10, false, jtac.side(), msg);
+}
+
+pub fn jtac_toggle_auto_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
     jtac.toggle_auto_shift(&ctx.db, lua)
         .with_context(|| format_compact!("toggle auto shift {}", arg.snd))?;
-    let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
-    let msg = format_compact!(
-        "AUTO SHIFT NOW {}\nfor jtac {} near {}\nchanged by {}",
-        jtac.autoshift(),
-        arg.snd,
-        near,
-        name
-    );
-    ctx.db
-        .ephemeral
-        .msgs()
-        .panel_to_side(10, false, jtac.side(), msg);
+    jtac_msg_auto_shift(&mut ctx.db, arg.snd, jtac, &arg.fst);
     Ok(())
 }
 
@@ -151,11 +154,8 @@ fn jtac_smoke_target(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     Ok(())
 }
 
-fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
-    let ctx = unsafe { Context::get_mut() };
-    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
-    jtac.shift(&ctx.db, lua).context("shifting jtac target")?;
-    let (near, name) = change_info(jtac, &ctx.db, &arg.fst);
+fn jtac_msg_shift(db: &mut Db, jtid: JtId, jtac: &Jtac, ucid: &Ucid) {
+    let (near, name) = change_info(jtac, db, ucid);
     let target = jtac
         .target()
         .as_ref()
@@ -164,18 +164,24 @@ fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let msg = format_compact!(
         "JTAC SHIFTED NOW TARGETING {}\nauto shift is now disabled\njtac {} near {}\nrequested by {}",
         target,
-        arg.snd,
+        jtid,
         near,
         name
     );
-    ctx.db
-        .ephemeral
+    db.ephemeral
         .msgs()
         .panel_to_side(10, false, jtac.side(), msg);
+}
+
+pub fn jtac_shift(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
+    jtac.shift(&ctx.db, lua).context("shifting jtac target")?;
+    jtac_msg_shift(&mut ctx.db, arg.snd, jtac, &arg.fst);
     Ok(())
 }
 
-fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
+pub fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     match ctx
         .jtac

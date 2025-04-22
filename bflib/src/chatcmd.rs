@@ -2,7 +2,9 @@ use crate::{
     admin::{self, AdminCommand, Caller},
     bg::Task,
     db::{actions::ActionCmd, group::DeployKind, player::RegErr},
+    jtac::JtId,
     lives,
+    menu::{self, ArgQuad, ArgTuple},
     msgq::MsgTyp,
     spawnctx::SpawnCtx,
     Context,
@@ -11,8 +13,8 @@ use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use bfprotocols::{
     cfg::{Action, ActionKind},
     db::group::GroupId,
+    perf::PerfInner,
     stats::Stat,
-    perf::PerfInner
 };
 use chrono::{prelude::*, Duration};
 use compact_str::{format_compact, CompactString};
@@ -25,7 +27,7 @@ use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use log::{error, info};
 use regex::Regex;
-use std::{sync::Arc, sync::OnceLock};
+use std::{mem, sync::Arc, sync::OnceLock};
 
 pub(crate) fn register_success(ctx: &mut Context, id: PlayerId, name: String, side: Side) {
     let msg = String::from(format_compact!(
@@ -423,6 +425,135 @@ fn bind_command(ctx: &mut Context, id: PlayerId, s: &str) {
     }
 }
 
+fn jtac_command(ctx: &mut Context, id: PlayerId, s: &str) {
+    if s.trim() == "help" {
+        ctx.db
+            .ephemeral
+            .msgs()
+            .send(MsgTyp::Chat(Some(id)), "-jtac <id> autoshift");
+        ctx.db
+            .ephemeral
+            .msgs()
+            .send(MsgTyp::Chat(Some(id)), "-jtac <id> shift");
+        ctx.db
+            .ephemeral
+            .msgs()
+            .send(MsgTyp::Chat(Some(id)), "-jtac <id> status");
+        ctx.db
+            .ephemeral
+            .msgs()
+            .send(MsgTyp::Chat(Some(id)), "-jtac <id> arty <id> <n>");
+        ctx.db
+            .ephemeral
+            .msgs()
+            .send(MsgTyp::Chat(Some(id)), "-jtac <id> bomber");
+    } else if let Some((jtid, cmd)) = s.split_once(" ") {
+        if let Ok(jtid) = jtid.parse::<JtId>() {
+            ctx.jtac_commands.push((id, jtid, cmd.into()));
+        } else {
+            ctx.db
+                .ephemeral
+                .msgs()
+                .send(MsgTyp::Chat(Some(id)), "invalid jtac id {jtid}");
+        }
+    } else {
+        ctx.db.ephemeral.msgs().send(
+            MsgTyp::Chat(Some(id)),
+            "expected -jtac <id> <cmd>, see -jtac <help>",
+        );
+    }
+}
+
+fn run_jtac_command(
+    ctx: &mut Context,
+    lua: MizLua,
+    id: PlayerId,
+    jtid: JtId,
+    cmd: String,
+) -> Result<()> {
+    let ucid = ctx
+        .connected
+        .get(&id)
+        .ok_or_else(|| anyhow!("unknown player"))?
+        .ucid;
+    if let Some(_) = cmd.strip_prefix("autoshift") {
+        menu::jtac::jtac_toggle_auto_shift(
+            lua,
+            ArgTuple {
+                fst: ucid,
+                snd: jtid,
+            },
+        )?;
+    } else if let Some(_) = cmd.strip_prefix("shift") {
+        menu::jtac::jtac_shift(
+            lua,
+            ArgTuple {
+                fst: ucid,
+                snd: jtid,
+            },
+        )?;
+    } else if let Some(_) = cmd.strip_prefix("status") {
+        menu::jtac::jtac_status(
+            lua,
+            ArgTuple {
+                fst: Some(ucid),
+                snd: jtid,
+            },
+        )?
+    } else if let Some(arty) = cmd.strip_prefix("arty ") {
+        if let Some((aid, n)) = arty.split_once(" ") {
+            let aid = match aid.parse::<GroupId>() {
+                Ok(id) => id,
+                Err(_) => {
+                    ctx.db
+                        .ephemeral
+                        .msgs()
+                        .send(MsgTyp::Chat(Some(id)), "invalid arty group id {id}");
+                    return Ok(());
+                }
+            };
+            let n = match n.parse::<u8>() {
+                Ok(n) => n,
+                Err(_) => {
+                    ctx.db.ephemeral.msgs().send(
+                        MsgTyp::Chat(Some(id)),
+                        "expected a number of shots between 0 and 255",
+                    );
+                    return Ok(());
+                }
+            };
+            menu::jtac::jtac_artillery_mission(
+                lua,
+                ArgQuad {
+                    fst: jtid,
+                    snd: aid,
+                    trd: n,
+                    fth: ucid,
+                },
+            )?
+        } else {
+            ctx.db
+                .ephemeral
+                .msgs()
+                .send(MsgTyp::Chat(Some(id)), "arty expected <id> and <n>");
+        }
+    } else {
+        ctx.db
+            .ephemeral
+            .msgs()
+            .send(MsgTyp::Chat(Some(id)), "invalid jtac command {s}");
+    }
+    Ok(())
+}
+
+pub(super) fn run_jtac_commands(ctx: &mut Context, lua: MizLua) -> Result<()> {
+    let cmds = mem::take(&mut ctx.jtac_commands);
+    for (id, jtid, cmd) in cmds {
+        run_jtac_command(ctx, lua, id, jtid, cmd)?
+    }
+    Ok(())
+}
+
 fn help_command(ctx: &mut Context, id: PlayerId) {
     let admin = match ctx.connected.get(&id) {
         None => false,
@@ -439,6 +570,7 @@ fn help_command(ctx: &mut Context, id: PlayerId) {
         " -delete <groupid>: delete a group you deployed for a partial refund",
         " -action <name> <args>: perform an action, -action help for a list of actions",
         " -bind <token>: bind your ucid to the specified token (for the web gui)",
+        " -jtac <jtid> <cmd>",
         " -help: show this help message",
     ] {
         ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), cmd)
@@ -487,6 +619,9 @@ pub(super) fn process(
         Ok("".into())
     } else if let Some(s) = msg.strip_prefix("-bind ") {
         bind_command(ctx, id, s);
+        Ok("".into())
+    } else if let Some(s) = msg.strip_prefix("-jtac ") {
+        jtac_command(ctx, id, s);
         Ok("".into())
     } else if msg.starts_with("-help") {
         help_command(ctx, id);

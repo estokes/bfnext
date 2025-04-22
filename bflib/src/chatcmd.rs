@@ -27,6 +27,7 @@ use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use log::{error, info};
 use regex::Regex;
+use smallvec::{smallvec, SmallVec};
 use std::{mem, sync::Arc, sync::OnceLock};
 
 pub(crate) fn register_success(ctx: &mut Context, id: PlayerId, name: String, side: Side) {
@@ -454,7 +455,7 @@ fn jtac_command(ctx: &mut Context, id: PlayerId, s: &str) {
         ctx.db
             .ephemeral
             .msgs()
-            .send(MsgTyp::Chat(Some(id)), " -jtac <id> arty <id> <n>");
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> arty <id|all> <n>");
         ctx.db
             .ephemeral
             .msgs()
@@ -502,14 +503,15 @@ fn run_jtac_command(
         Some(player) => player.side,
         None => error!("no such player {ucid}"),
     };
-    match ctx.jtac.get(&jtid) {
+    let jtac = match ctx.jtac.get(&jtid) {
         Err(_) => error!("no such jtac {jtid}"),
         Ok(jtac) => {
             if jtac.side() != side {
                 error!("you can't give orders to enemy jtacs")
             }
+            jtac
         }
-    }
+    };
     if let Some(_) = cmd.strip_prefix("autoshift") {
         let arg = ArgTuple {
             fst: ucid,
@@ -588,21 +590,29 @@ fn run_jtac_command(
         menu::jtac::jtac_set_code(lua, arg)?
     } else if let Some(arty) = cmd.strip_prefix("arty ") {
         if let Some((aid, n)) = arty.split_once(" ") {
-            let aid = match aid.parse::<GroupId>() {
-                Ok(id) => id,
-                Err(_) => error!("invalid arty group id {id}"),
+            let aids: SmallVec<[GroupId; 8]> = match aid.parse::<GroupId>() {
+                Ok(id) => smallvec![id],
+                Err(_) => {
+                    if aid == "all" {
+                        SmallVec::from_iter(jtac.nearby_artillery().into_iter().copied())
+                    } else {
+                        error!("invalid arty group id {id}")
+                    }
+                }
             };
             let n = match n.parse::<u8>() {
                 Ok(n) => n,
                 Err(_) => error!("expected a number of shots between 0 and 255"),
             };
-            let arg = ArgQuad {
-                fst: jtid,
-                snd: aid,
-                trd: n,
-                fth: ucid,
-            };
-            menu::jtac::jtac_artillery_mission(lua, arg)?
+            for aid in aids {
+                let arg = ArgQuad {
+                    fst: jtid,
+                    snd: aid,
+                    trd: n,
+                    fth: ucid,
+                };
+                menu::jtac::jtac_artillery_mission(lua, arg)?
+            }
         } else {
             error!("arty expected <id> and <n>")
         }

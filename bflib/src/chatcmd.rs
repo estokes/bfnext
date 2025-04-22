@@ -458,7 +458,7 @@ fn jtac_command(ctx: &mut Context, id: PlayerId, s: &str) {
         ctx.db
             .ephemeral
             .msgs()
-            .send(MsgTyp::Chat(Some(id)), " -jtac <id> bomber");
+            .send(MsgTyp::Chat(Some(id)), " -jtac <id> bomber [mission]");
     } else if let Some((jtid, cmd)) = s.split_once(" ") {
         if let Ok(jtid) = jtid.parse::<JtId>() {
             ctx.jtac_commands.push((id, jtid, cmd.into()));

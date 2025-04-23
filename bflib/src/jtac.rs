@@ -35,6 +35,7 @@ use dcso3::{
         ActionTyp, AltType, AttackParams, MissionPoint, PointType, Task, VehicleFormation,
     },
     cvt_err, err,
+    event::Shot,
     group::Group,
     land::Land,
     net::{SlotId, Ucid},
@@ -939,12 +940,13 @@ impl Jtacs {
         self.jtacs.values_mut().flat_map(|jtx| jtx.values_mut())
     }
 
-    pub fn track_shot(&mut self, shooter: DcsOid<ClassUnit>, weapon: &Weapon) -> Result<()> {
+    pub fn track_shot(&mut self, shooter: DcsOid<ClassUnit>, e: &mut Shot) -> Result<()> {
         if let Some(gid) = self.tracking.get(&shooter) {
             if let Some(adj) = self.artillery_adjustment.get_mut(gid) {
                 if adj.tracked.is_none() {
-                    let weapon =
-                        unsafe { mem::transmute::<Weapon<'_>, Weapon<'static>>(weapon.clone()) };
+                    let weapon = e.weapon.clone();
+                    let weapon = mem::replace(&mut e.weapon, weapon);
+                    let weapon = unsafe { mem::transmute::<Weapon<'_>, Weapon<'static>>(weapon) };
                     adj.tracked = Some((weapon, None));
                 }
             }

@@ -77,7 +77,7 @@ use netidx::publisher::Value;
 use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{path::PathBuf, sync::Arc};
+use std::{mem, path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
 #[derive(Debug, Clone)]
@@ -635,8 +635,8 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 }
             }
         }
-        Event::Shot(e) => {
-            if let Err(e) = ctx.jtac.track_shot(e.initiator.object_id()?, &e.weapon) {
+        Event::Shot(mut e) => {
+            if let Err(e) = ctx.jtac.track_shot(e.initiator.object_id()?, &mut e) {
                 error!("failed to track shot {:?}", e)
             }
             if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, e) {

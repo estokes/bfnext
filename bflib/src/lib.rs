@@ -77,7 +77,7 @@ use netidx::publisher::Value;
 use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{mem, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
 #[derive(Debug, Clone)]

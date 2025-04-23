@@ -49,7 +49,7 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::{info, warn};
+use log::{error, info, warn};
 use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -140,7 +140,7 @@ impl ArtilleryAdjustment {
         if let Some((weapon, pos)) = &mut self.tracked {
             if let Ok(true) = weapon.is_exist() {
                 *pos = weapon.as_object()?.get_point()?.0;
-            } else {
+            } else if *pos != Vector3::zeros() {
                 let impact = Vector2::new(pos.x, pos.z);
                 let error = self.target - impact;
                 let mag = error.magnitude();
@@ -158,6 +158,8 @@ impl ArtilleryAdjustment {
                     self.adjust += dir * mag;
                 }
                 return Ok((true, adjust));
+            } else {
+                warn!("could not track shot, weapon deleted immediatly")
             }
         }
         Ok((false, false))
@@ -715,6 +717,7 @@ impl Jtac {
                 };
                 let group = Group::get_by_name(lua, &name)
                     .with_context(|| format_compact!("getting group {}", name))?;
+                adjustment.tracked = None;
                 for id in adjustment.group.drain(..) {
                     tracking.remove(&id);
                 }
@@ -940,10 +943,9 @@ impl Jtacs {
         if let Some(gid) = self.tracking.get(&shooter) {
             if let Some(adj) = self.artillery_adjustment.get_mut(gid) {
                 if adj.tracked.is_none() {
-                    let pos = weapon.as_object()?.get_point()?;
                     let weapon =
                         unsafe { mem::transmute::<Weapon<'_>, Weapon<'static>>(weapon.clone()) };
-                    adj.tracked = Some((weapon, pos.0));
+                    adj.tracked = Some((weapon, Vector3::zeros()));
                 }
             }
         }

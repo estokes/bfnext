@@ -49,7 +49,7 @@ use dcso3::{
 use enumflags2::BitFlags;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
-use log::{error, info, warn};
+use log::{info, warn};
 use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
@@ -132,15 +132,15 @@ pub struct ArtilleryAdjustment {
     adjust: Vector2,
     target: Vector2,
     group: Vec<DcsOid<ClassUnit>>,
-    tracked: Option<(Weapon<'static>, Vector3)>,
+    tracked: Option<(Weapon<'static>, Option<Vector3>)>,
 }
 
 impl ArtilleryAdjustment {
     fn compute_adjustment(&mut self) -> Result<(bool, bool)> {
         if let Some((weapon, pos)) = &mut self.tracked {
             if let Ok(true) = weapon.is_exist() {
-                *pos = weapon.as_object()?.get_point()?.0;
-            } else if *pos != Vector3::zeros() {
+                *pos = Some(weapon.as_object()?.get_point()?.0);
+            } else if let Some(pos) = pos {
                 let impact = Vector2::new(pos.x, pos.z);
                 let error = self.target - impact;
                 let mag = error.magnitude();
@@ -945,7 +945,7 @@ impl Jtacs {
                 if adj.tracked.is_none() {
                     let weapon =
                         unsafe { mem::transmute::<Weapon<'_>, Weapon<'static>>(weapon.clone()) };
-                    adj.tracked = Some((weapon, Vector3::zeros()));
+                    adj.tracked = Some((weapon, None));
                 }
             }
         }

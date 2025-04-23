@@ -12,7 +12,10 @@ FITNESS FOR A PARTICULAR PURPOSE.
 */
 
 use super::{as_tbl, cvt_err, unit::Unit, weapon::Weapon, LuaVec3, Position3, String};
-use crate::{check_implements, simple_enum, static_object::StaticObject, wrapped_table, LuaEnv, MizLua};
+use crate::{
+    check_implements, record_perf, simple_enum, static_object::StaticObject, wrapped_table, LuaEnv,
+    MizLua,
+};
 use anyhow::{anyhow, bail, Result};
 use core::fmt;
 use mlua::{prelude::*, Value};
@@ -140,15 +143,21 @@ impl<'lua> Object<'lua> {
     }
 
     pub fn get_point(&self) -> Result<LuaVec3> {
-        Ok(self.t.call_method("getPoint", ())?)
+        Ok(record_perf!(get_point, self.t.call_method("getPoint", ())?))
     }
 
     pub fn get_position(&self) -> Result<Position3> {
-        Ok(self.t.call_method("getPosition", ())?)
+        Ok(record_perf!(
+            get_position,
+            self.t.call_method("getPosition", ())?
+        ))
     }
 
     pub fn get_velocity(&self) -> Result<LuaVec3> {
-        Ok(self.t.call_method("getVelocity", ())?)
+        Ok(record_perf!(
+            get_velocity,
+            self.t.call_method("getVelocity", ())?
+        ))
     }
 
     pub fn in_air(&self) -> Result<bool> {
@@ -168,7 +177,10 @@ impl<'lua> Object<'lua> {
     }
 
     pub fn as_static(&self) -> Result<StaticObject<'lua>> {
-        Ok(StaticObject::from_lua(Value::Table(self.t.clone()), self.lua)?)
+        Ok(StaticObject::from_lua(
+            Value::Table(self.t.clone()),
+            self.lua,
+        )?)
     }
 }
 

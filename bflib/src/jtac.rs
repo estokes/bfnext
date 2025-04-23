@@ -940,13 +940,11 @@ impl Jtacs {
         self.jtacs.values_mut().flat_map(|jtx| jtx.values_mut())
     }
 
-    pub fn track_shot(&mut self, shooter: DcsOid<ClassUnit>, e: &mut Shot) -> Result<()> {
+    pub fn track_shot(&mut self, shooter: DcsOid<ClassUnit>, e: Shot) -> Result<()> {
         if let Some(gid) = self.tracking.get(&shooter) {
             if let Some(adj) = self.artillery_adjustment.get_mut(gid) {
                 if adj.tracked.is_none() {
-                    let weapon = e.weapon.clone();
-                    let weapon = mem::replace(&mut e.weapon, weapon);
-                    let weapon = unsafe { mem::transmute::<Weapon<'_>, Weapon<'static>>(weapon) };
+                    let weapon = unsafe { mem::transmute::<Weapon<'_>, Weapon<'static>>(e.weapon) };
                     adj.tracked = Some((weapon, None));
                 }
             }

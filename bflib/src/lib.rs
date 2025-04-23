@@ -635,12 +635,12 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 }
             }
         }
-        Event::Shot(mut e) => {
-            if let Err(e) = ctx.jtac.track_shot(e.initiator.object_id()?, &mut e) {
-                error!("failed to track shot {:?}", e)
-            }
-            if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, e) {
+        Event::Shot(e) => {
+            if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, &e) {
                 error!("error processing shot event {:?}", e)
+            }
+            if let Err(e) = ctx.jtac.track_shot(e.initiator.object_id()?, e) {
+                error!("failed to track shot {:?}", e)
             }
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {

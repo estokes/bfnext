@@ -89,7 +89,7 @@ impl ShotDb {
         }
     }
 
-    pub fn shot(&mut self, db: &Db, now: DateTime<Utc>, e: ShotEvent) -> Result<()> {
+    pub fn shot(&mut self, db: &Db, now: DateTime<Utc>, e: &ShotEvent) -> Result<()> {
         let target = ok!(some!(e.weapon.get_target()?).as_unit());
         let target_oid = target.object_id()?;
         if self.dead.contains_key(&target_oid) || self.recently_dead.contains_key(&target_oid) {
@@ -99,7 +99,7 @@ impl ShotDb {
         let target_typ = target.get_type_name()?;
         let target = some!(who(db, target_oid.clone()));
         self.by_target.entry(target_oid).or_default().push(Shot {
-            weapon_name: Some(e.weapon_name),
+            weapon_name: Some(e.weapon_name.clone()),
             weapon: Some(e.weapon.object_id()?),
             shooter,
             target,

@@ -14,14 +14,14 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{ephemeral::DeployableIndex, group::SpawnedGroup, objective::Objective, Db};
+use super::{Db, ephemeral::DeployableIndex, group::SpawnedGroup, objective::Objective};
 use crate::{
     db::group::DeployKind,
     group, maybe, objective,
     spawnctx::{SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use bfprotocols::{
     cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
     db::{
@@ -31,22 +31,21 @@ use bfprotocols::{
     stats::Stat,
 };
 use chrono::prelude::*;
-use compact_str::{format_compact, CompactString};
+use compact_str::{CompactString, format_compact};
 use dcso3::{
-    azumith2d, azumith2d_to, azumith3d, centroid2d,
+    LuaVec2, MizLua, Position3, String, Vector2, azumith2d, azumith2d_to, azumith3d, centroid2d,
     coalition::Side,
     env::miz::MizIndex,
     land::Land,
     net::{SlotId, Ucid},
     radians_to_degrees,
     trigger::Trigger,
-    LuaVec2, MizLua, Position3, String, Vector2,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
 use log::{debug, error};
 use serde_derive::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{fmt, sync::Arc};
 
 #[derive(Debug, Clone, Copy)]
@@ -286,7 +285,7 @@ impl Db {
                 } => (oid, crt),
                 DeployKind::Deployed { .. }
                 | DeployKind::Troop { .. }
-                | DeployKind::Objective
+                | DeployKind::Objective(_)
                 | DeployKind::Action { .. } => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
@@ -572,7 +571,7 @@ impl Db {
                             }
                             DeployKind::Deployed { .. }
                             | DeployKind::Crate { .. }
-                            | DeployKind::Objective
+                            | DeployKind::Objective(_)
                             | DeployKind::Troop { .. }
                             | DeployKind::Action { .. } => (),
                         }
@@ -927,17 +926,19 @@ impl Db {
                 }
             }
         }
-        bail!(reasons
-            .into_iter()
-            .fold(CompactString::new(""), |mut acc, r| {
-                if acc.is_empty() {
-                    acc.push_str(r.as_str());
-                } else {
-                    acc.push('\n');
-                    acc.push_str(r.as_str());
-                }
-                acc
-            }))
+        bail!(
+            reasons
+                .into_iter()
+                .fold(CompactString::new(""), |mut acc, r| {
+                    if acc.is_empty() {
+                        acc.push_str(r.as_str());
+                    } else {
+                        acc.push('\n');
+                        acc.push_str(r.as_str());
+                    }
+                    acc
+                })
+        )
     }
 
     pub fn unload_crate(&mut self, lua: MizLua, idx: &MizIndex, slot: &SlotId) -> Result<Crate> {
@@ -955,7 +956,8 @@ impl Db {
             cargo.crates.push((oid, crate_cfg));
             bail!(
                 "you are going too fast to unload your cargo, speed must be at or below {} km/h, and altitude agl must be at or below {} m",
-                max_sp, max_al
+                max_sp,
+                max_al
             )
         }
         if st.in_air && st.agl > crate_cfg.max_drop_height_agl as f64 {

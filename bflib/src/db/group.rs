@@ -14,13 +14,13 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{ephemeral::SlotInfo, objective::ObjGroupClass, player::SlotAuth, Db, SetS};
+use super::{Db, SetS, ephemeral::SlotInfo, objective::ObjGroupClass, player::SlotAuth};
 use crate::{
-    group, group_by_name, group_health, group_mut,
+    Connected, group, group_by_name, group_health, group_mut, objective,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
-    unit, unit_by_name, unit_mut, Connected,
+    unit, unit_by_name, unit_mut,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     db::objective::ObjectiveId,
@@ -31,9 +31,10 @@ use bfprotocols::{
     stats::Stat,
 };
 use chrono::prelude::*;
-use compact_str::{format_compact, CompactString};
+use compact_str::{CompactString, format_compact};
 use dcso3::{
-    azumith3d, centroid2d, centroid3d, change_heading,
+    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3, azumith3d, centroid2d,
+    centroid3d, change_heading,
     coalition::Side,
     coord::Coord,
     env::miz,
@@ -46,13 +47,12 @@ use dcso3::{
     static_object::{ClassStatic, StaticObject},
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{cmp::max, collections::VecDeque};
 
 #[derive(Debug, Clone)]
@@ -64,7 +64,7 @@ pub enum BirthRes {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
-    Objective,
+    Objective(ObjectiveId),
     Deployed {
         player: Ucid,
         #[serde(default)]
@@ -221,11 +221,18 @@ impl Db {
                 .map(|uid| self.persisted.units[uid].pos),
         );
         let id = match &mut group.origin {
-            DeployKind::Objective => {
-                let msg = format_compact!("{} {gid} objective group", group.name);
-                self.ephemeral
-                    .msgs
-                    .mark_to_side(group.side, group_center, true, msg)
+            DeployKind::Objective(oid) => {
+                let owner = objective!(self, oid)?.owner;
+                if group.side == owner {
+                    let msg = format_compact!("{} {gid} objective group", group.name);
+                    Some(
+                        self.ephemeral
+                            .msgs
+                            .mark_to_side(group.side, group_center, true, msg),
+                    )
+                } else {
+                    None
+                }
             }
             DeployKind::Action {
                 name,
@@ -245,10 +252,10 @@ impl Db {
                         .msgs
                         .mark_to_side(group.side, group_center, true, pos_msg);
                 match destination {
-                    None => pos_mark,
+                    None => Some(pos_mark),
                     Some(dst) => {
                         if !marks.is_empty() {
-                            pos_mark
+                            Some(pos_mark)
                         } else {
                             let dst_msg = format_compact!("{name} {gid} destination");
                             marks.insert(
@@ -256,7 +263,7 @@ impl Db {
                                     .msgs
                                     .mark_to_side(group.side, *dst, true, dst_msg),
                             );
-                            pos_mark
+                            Some(pos_mark)
                         }
                     }
                 }
@@ -264,9 +271,11 @@ impl Db {
             DeployKind::Crate { player, spec, .. } => {
                 let name = self.persisted.players[player].name.clone();
                 let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
-                self.ephemeral
-                    .msgs
-                    .mark_to_side(group.side, group_center, true, msg)
+                Some(
+                    self.ephemeral
+                        .msgs
+                        .mark_to_side(group.side, group_center, true, msg),
+                )
             }
             DeployKind::Deployed {
                 spec,
@@ -285,9 +294,11 @@ impl Db {
                     "{} {gid} deployed by {name}{resp}",
                     spec.path.last().unwrap()
                 );
-                self.ephemeral
-                    .msgs
-                    .mark_to_side(group.side, group_center, true, msg)
+                Some(
+                    self.ephemeral
+                        .msgs
+                        .mark_to_side(group.side, group_center, true, msg),
+                )
             }
             DeployKind::Troop {
                 player,
@@ -304,12 +315,16 @@ impl Db {
                     })
                     .unwrap_or(CompactString::from(""));
                 let msg = format_compact!("{} {gid} deployed by {name}{resp}", spec.name);
-                self.ephemeral
-                    .msgs
-                    .mark_to_side(group.side, group_center, true, msg)
+                Some(
+                    self.ephemeral
+                        .msgs
+                        .mark_to_side(group.side, group_center, true, msg),
+                )
             }
         };
-        self.ephemeral.group_marks.insert(*gid, id);
+        if let Some(id) = id {
+            self.ephemeral.group_marks.insert(*gid, id);
+        }
         Ok(())
     }
 
@@ -325,7 +340,7 @@ impl Db {
             .get_mut_cow(&group.side)
             .map(|m| m.remove_cow(gid));
         match &group.origin {
-            DeployKind::Objective => (),
+            DeployKind::Objective(_) => (),
             DeployKind::Action { marks, .. } => {
                 for id in marks {
                     self.ephemeral.msgs().delete_mark(*id);
@@ -730,7 +745,7 @@ impl Db {
             self.persisted.units_by_name.insert_cow(unit_name, uid);
         }
         match &mut spawned.origin {
-            DeployKind::Objective => (),
+            DeployKind::Objective(_) => (),
             DeployKind::Action { spec, .. } => {
                 self.persisted.actions.insert_cow(gid);
                 if let ActionKind::Drone(_) = &spec.kind {
@@ -955,14 +970,16 @@ impl Db {
                                 let owner = self.persisted.players[player].name.clone();
                                 let ucid = ucid.clone();
                                 let p = -(*p as i32);
-                                let msg = format_compact!("for the death of {gid} which was deployed by {owner} and moved by you");
+                                let msg = format_compact!(
+                                    "for the death of {gid} which was deployed by {owner} and moved by you"
+                                );
                                 self.adjust_points(&ucid, p, &msg)
                             }
                             DeployKind::Troop { .. }
                             | DeployKind::Deployed { .. }
                             | DeployKind::Action { .. }
                             | DeployKind::Crate { .. }
-                            | DeployKind::Objective => (),
+                            | DeployKind::Objective(_) => (),
                         }
                         self.delete_group(&gid)?
                     }

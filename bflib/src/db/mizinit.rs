@@ -16,20 +16,20 @@ for more details.
 
 use std::sync::Arc;
 
-use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db};
+use super::{Db, ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup};
 use crate::{
     bg::Task,
     db::{
+        MapS,
         logistics::Warehouse,
         objective::{Objective, Zone},
-        MapS,
     },
     group,
     landcache::LandCache,
     maybe, objective, objective_mut,
     spawnctx::{SpawnCtx, SpawnLoc},
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{Cfg, Vehicle},
     db::{
@@ -42,13 +42,12 @@ use bfprotocols::{
 use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
-    centroid2d,
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3, centroid2d,
     coalition::Side,
     controller::PointType,
     coord::Coord,
     env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
     land::Land,
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
@@ -206,7 +205,7 @@ impl Db {
                 group_heading: 0.,
             },
             name,
-            DeployKind::Objective,
+            DeployKind::Objective(obj),
             BitFlags::empty(),
         )?;
         objective_mut!(self, obj)?
@@ -459,7 +458,7 @@ impl Db {
                             .units_potentially_close_to_enemies
                             .insert(*uid);
                     }
-                    DeployKind::Objective => {
+                    DeployKind::Objective(_) => {
                         let oid = maybe!(
                             self.persisted.objectives_by_group,
                             unit.group,

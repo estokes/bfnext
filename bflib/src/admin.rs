@@ -15,14 +15,14 @@ for more details.
 */
 
 use crate::{
+    Context,
     bg::Task,
-    db::{group::DeployKind, Db, SetS},
+    db::{Db, SetS, group::DeployKind},
     msgq::MsgTyp,
     return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
-    Context,
 };
-use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
+use anyhow::{Context as AnyhowContext, Result, anyhow, bail};
 use bfprotocols::{
     cfg::Cfg,
     db::{group::GroupId, objective::ObjectiveId},
@@ -32,6 +32,7 @@ use bfprotocols::{
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
+    MizLua, String, Vector2,
     coalition::Side,
     degrees_to_radians,
     net::{Net, PlayerId, Ucid},
@@ -42,7 +43,6 @@ use dcso3::{
     unit::Unit,
     value_to_json,
     world::World,
-    MizLua, String, Vector2,
 };
 use enumflags2::BitFlags;
 use log::warn;
@@ -50,7 +50,7 @@ use mlua::Value;
 use netidx::publisher::Value as NetIdxValue;
 use parking_lot::{Condvar, Mutex};
 use regex::{Regex, RegexBuilder};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{
     mem,
     str::FromStr,
@@ -190,7 +190,7 @@ impl AdminCommand {
             "deslot <player>: force <player> to spectators",
             "remark <obj>: force refresh the markup on objective",
             "reset [winner]: shutdown the server and reset the campaign state",
-            "shutdown: shutdown the server"
+            "shutdown: shutdown the server",
         ]
     }
 }
@@ -779,7 +779,7 @@ fn set_points(ctx: &mut Context, player: &String, amount: i32) -> Result<()> {
 
 fn delete(ctx: &mut Context, id: &GroupId) -> Result<()> {
     match &ctx.db.group(id)?.origin {
-        DeployKind::Objective => bail!("you can't delete objective groups"),
+        DeployKind::Objective(_) => bail!("you can't delete objective groups"),
         DeployKind::Crate { .. }
         | DeployKind::Deployed { .. }
         | DeployKind::Troop { .. }

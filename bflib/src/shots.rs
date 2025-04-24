@@ -15,15 +15,15 @@ for more details.
 */
 
 //! Lets not bicker and argue about oo killed oo
-use crate::db::{group::DeployKind, Db};
+use crate::db::{Db, group::DeployKind};
 use anyhow::Result;
 use bfprotocols::shots::{Dead, Shot, Who};
-use chrono::{prelude::*, Duration};
+use chrono::{Duration, prelude::*};
 use dcso3::{
+    String,
     event::Shot as ShotEvent,
     object::{DcsObject, DcsOid},
     unit::{ClassUnit, Unit},
-    String,
 };
 use fxhash::FxHashMap;
 use std::collections::hash_map::Entry;
@@ -65,7 +65,7 @@ fn who(db: &Db, id: DcsOid<ClassUnit>) -> Option<Who> {
                 DeployKind::Action { player, .. } => *player,
                 DeployKind::Deployed { player, .. } => Some(*player),
                 DeployKind::Troop { player, .. } => Some(*player),
-                DeployKind::Crate { .. } | DeployKind::Objective => None,
+                DeployKind::Crate { .. } | DeployKind::Objective(_) => None,
             }),
         }),
         None => db

@@ -1,13 +1,13 @@
 use super::{ArgPent, ArgQuad, ArgTriple};
 use crate::{
+    Context,
     db::{
         actions::{ActionArgs, ActionCmd, WithObj, WithPos, WithPosAndGroup},
         group::DeployKind,
     },
     spawnctx::SpawnCtx,
-    Context,
 };
-use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use anyhow::{Context as ErrContext, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{Action, ActionKind},
     db::{group::GroupId as DbGid, objective::ObjectiveId},
@@ -15,6 +15,7 @@ use bfprotocols::{
 };
 use compact_str::format_compact;
 use dcso3::{
+    LuaVec3, MizLua, String, Vector2, Vector3,
     coalition::Side,
     env::miz::GroupId,
     mission_commands::{GroupCommandItem, GroupSubMenu, MissionCommands},
@@ -22,7 +23,6 @@ use dcso3::{
     object::DcsObject,
     trigger::MarkId,
     world::World,
-    LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use std::sync::Arc;
@@ -438,7 +438,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                         None
                     }
                 }
-                DeployKind::Crate { .. } | DeployKind::Objective => None,
+                DeployKind::Crate { .. } | DeployKind::Objective(_) => None,
             };
             if let Some(key) = key {
                 let root = mc.add_submenu_for_group(

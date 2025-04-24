@@ -16,16 +16,16 @@ for more details.
 
 use super::{ArgQuad, ArgTriple, ArgTuple};
 use crate::{
+    Context,
     db::{
+        Db,
         actions::{ActionArgs, ActionCmd, WithJtac},
         group::DeployKind,
-        Db,
     },
     jtac::{JtId, Jtac, Jtacs},
     spawnctx::SpawnCtx,
-    Context,
 };
-use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use anyhow::{Context as ErrContext, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{ActionKind, UnitTag, Vehicle},
     db::{group::GroupId as DbGid, objective::ObjectiveId},
@@ -33,15 +33,15 @@ use bfprotocols::{
 };
 use compact_str::format_compact;
 use dcso3::{
+    MizLua, String,
     coalition::Side,
     env::miz::GroupId,
     mission_commands::{GroupCommandItem, GroupSubMenu, MissionCommands},
     net::{SlotId, Ucid},
-    MizLua, String,
 };
 use enumflags2::{BitFlag, BitFlags};
 use log::error;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::sync::Arc;
 
 pub fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
@@ -190,10 +190,12 @@ pub fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) 
         Ok(()) => {
             let jtac = get_jtac(&ctx.jtac, &arg.fst).context("getting jtac")?;
             let (near, name) = change_info(jtac, &ctx.db, &arg.fth);
-            let msg =
-                format_compact!(
+            let msg = format_compact!(
                 "ARTILLERY MISSION STARTED for {}\ndirected by jtac {} near {}\nrequested by {}",
-                arg.snd, arg.fst, near, name
+                arg.snd,
+                arg.fst,
+                near,
+                name
             );
             ctx.db
                 .ephemeral
@@ -487,7 +489,7 @@ pub(super) fn add_menu_for_jtac(
                     Some(player) => format_compact!("{gid}({} {})", spec.name, player.name),
                     None => format_compact!("{gid}({})", spec.name),
                 },
-                DeployKind::Objective | DeployKind::Crate { .. } => format_compact!("{gid}"),
+                DeployKind::Objective(_) | DeployKind::Crate { .. } => format_compact!("{gid}"),
             },
         },
         JtId::Slot(sl) => {

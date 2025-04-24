@@ -15,9 +15,9 @@ for more details.
 */
 
 use super::{
+    Db, Map, MapM, MapS, Set,
     group::{DeployKind, SpawnedUnit},
     logistics::{Inventory, LogiStage, Warehouse},
-    Db, Map, MapM, MapS, Set,
 };
 use crate::{
     group, group_health, group_mut,
@@ -26,7 +26,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use bfprotocols::{
     cfg::{Deployable, DeployableLogistics, UnitTag, VictoryCondition},
     db::{
@@ -35,10 +35,11 @@ use bfprotocols::{
     },
     stats::Stat,
 };
-use chrono::{prelude::*, Duration};
+use chrono::{Duration, prelude::*};
 use compact_str::format_compact;
 use core::f64;
 use dcso3::{
+    LuaVec2, LuaVec3, MizLua, Quad2, String, Vector2, Vector3,
     airbase::Airbase,
     azumith2d_to, centroid2d,
     coalition::Side,
@@ -50,14 +51,13 @@ use dcso3::{
     net::Ucid,
     object::DcsObject,
     warehouse::LiquidType,
-    LuaVec2, LuaVec3, MizLua, Quad2, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, warn};
-use mlua::{prelude::*, Value};
+use mlua::{Value, prelude::*};
 use serde_derive::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{cmp::max, str::FromStr, sync::Arc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -232,11 +232,7 @@ impl Zone {
                 .into_iter()
                 .fold(0., |max, p| {
                     let d = na::distance_squared(&p.0.into(), &(*pos).into());
-                    if d > max {
-                        d
-                    } else {
-                        max
-                    }
+                    if d > max { d } else { max }
                 })
                 .sqrt(),
         }
@@ -515,6 +511,7 @@ impl Db {
         spctx
             .move_farp_pad(idx, side, pad_template.as_str(), pos)
             .context("moving farp pad")?;
+        let oid = ObjectiveId::new();
         // delay the spawn of the other components so the unpacker can
         // get out of the way
         let mut groups: Set<GroupId> = Set::new();
@@ -530,7 +527,7 @@ impl Db {
                 side,
                 location.clone(),
                 &name,
-                DeployKind::Objective,
+                DeployKind::Objective(oid),
                 BitFlags::empty(),
                 Some(now + Duration::seconds(60)),
             ) {
@@ -567,7 +564,7 @@ impl Db {
             Vector3::new(pos.x, alt, pos.y)
         };
         let obj = Objective {
-            id: ObjectiveId::new(),
+            id: oid,
             name: name.clone(),
             groups: MapS::from_iter([(side, groups)]),
             kind: ObjectiveKind::Farp {
@@ -592,7 +589,6 @@ impl Db {
             last_activate: DateTime::<Utc>::default(),
             threat_pos3,
         };
-        let oid = obj.id;
         for (_, groups) in &obj.groups {
             for gid in groups {
                 self.persisted.objectives_by_group.insert_cow(*gid, oid);
@@ -1100,7 +1096,7 @@ impl Db {
                         }
                         DeployKind::Crate { .. }
                         | DeployKind::Deployed { .. }
-                        | DeployKind::Objective
+                        | DeployKind::Objective(_)
                         | DeployKind::Action { .. }
                         | DeployKind::Troop { .. } => (),
                     }
@@ -1108,6 +1104,7 @@ impl Db {
             }
         }
         let mut actually_captured = smallvec![];
+        let mut to_mark: SmallVec<[GroupId; 32]> = smallvec![];
         for (oid, gids) in captured {
             let (side, _, _, _) = gids.first().ok_or_else(|| anyhow!("no guid"))?;
             if gids.iter().all(|(s, _, _, _)| side == s) {
@@ -1122,6 +1119,7 @@ impl Db {
                 obj.owner = new_owner;
                 actually_captured.push((*side, oid));
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
+                    to_mark.push(*gid);
                     for uid in &group!(self, gid)?.units {
                         if !self.ephemeral.object_id_by_uid.contains_key(uid) {
                             unit_mut!(self, uid)?.dead = true;
@@ -1129,6 +1127,9 @@ impl Db {
                     }
                 }
                 for gid in obj.groups.get(&obj.owner.opposite()).unwrap_or(&Set::new()) {
+                    if let Some(id) = self.ephemeral.group_marks.remove(gid) {
+                        self.ephemeral.msgs.delete_mark(id)
+                    }
                     for uid in &group!(self, gid)?.units {
                         if self.ephemeral.object_id_by_uid.contains_key(uid) {
                             self.ephemeral
@@ -1191,6 +1192,14 @@ impl Db {
                     .map(|(oid, _)| *oid)
                     .collect(),
             };
+        }
+        for gid in to_mark {
+            if let Err(e) = self
+                .mark_group(&gid)
+                .with_context(|| format_compact!("marking gid {gid} after capture"))
+            {
+                error!("{e:?}")
+            }
         }
         Ok(actually_captured)
     }

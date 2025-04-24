@@ -14,29 +14,29 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{ephemeral::SlotInfo, group::DeployKind, Db, MapS, SetS};
+use super::{Db, MapS, SetS, ephemeral::SlotInfo, group::DeployKind};
 use crate::{maybe, maybe_mut, objective_mut};
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{LifeType, PointsCfg, UnitTag, Vehicle},
     db::{group::GroupId, objective::ObjectiveId},
     shots::{Dead, Who},
     stats::{self, EnId, Stat},
 };
-use chrono::{prelude::*, Duration};
-use compact_str::{format_compact, CompactString};
+use chrono::{Duration, prelude::*};
+use compact_str::{CompactString, format_compact};
 use dcso3::{
+    MizLua, Position3, String, Vector2, Vector3,
     airbase::Airbase,
     coalition::Side,
     coord::Coord,
     net::{SlotId, Ucid},
     object::{DcsObject, DcsOid},
     unit::{ClassUnit, Unit},
-    MizLua, Position3, String, Vector2, Vector3,
 };
 use log::{debug, error, info, warn};
 use serde_derive::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::cmp::{max, min};
 
 struct VictimInfo {
@@ -228,7 +228,7 @@ impl Db {
                                 origin: _,
                             } => Some(*player),
                             DeployKind::Action { player, .. } => player.clone(),
-                            DeployKind::Crate { .. } | DeployKind::Objective => None,
+                            DeployKind::Crate { .. } | DeployKind::Objective(_) => None,
                         })
                 }
             }

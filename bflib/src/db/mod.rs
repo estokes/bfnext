@@ -17,7 +17,7 @@ for more details.
 extern crate nalgebra as na;
 use self::{group::DeployKind, persisted::Persisted};
 use crate::{bg::Task, db::ephemeral::Ephemeral, jtac::JtId};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bfprotocols::{
     cfg::{
         Action, ActionKind, AwacsCfg, Cfg, Deployable, DeployableEwr, DeployableJtac, DroneCfg,
@@ -29,10 +29,9 @@ use bfprotocols::{
     },
 };
 use dcso3::{
-    centroid3d,
+    Vector3, centroid3d,
     coalition::Side,
     env::miz::{Miz, MizIndex},
-    Vector3,
 };
 use std::{cmp::max, fs::File, path::Path, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
@@ -221,7 +220,9 @@ impl Db {
         self.persisted.ewrs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
             match &group.origin {
-                DeployKind::Crate { .. } | DeployKind::Objective | DeployKind::Troop { .. } => None,
+                DeployKind::Crate { .. } | DeployKind::Objective(_) | DeployKind::Troop { .. } => {
+                    None
+                }
                 DeployKind::Action {
                     spec:
                         Action {
@@ -296,7 +297,7 @@ impl Db {
                     }),
                     DeployKind::Crate { .. }
                     | DeployKind::Action { .. }
-                    | DeployKind::Objective
+                    | DeployKind::Objective(_)
                     | DeployKind::Troop { .. }
                     | DeployKind::Deployed { .. } => None,
                 }

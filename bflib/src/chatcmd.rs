@@ -1,4 +1,5 @@
 use crate::{
+    Context,
     admin::{self, AdminCommand, Caller},
     bg::Task,
     db::{actions::ActionCmd, group::DeployKind, player::RegErr},
@@ -7,27 +8,26 @@ use crate::{
     menu::{self, ArgQuad, ArgTriple, ArgTuple},
     msgq::MsgTyp,
     spawnctx::SpawnCtx,
-    Context,
 };
-use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use anyhow::{Context as ErrContext, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{Action, ActionKind},
     db::group::GroupId,
     perf::PerfInner,
     stats::Stat,
 };
-use chrono::{prelude::*, Duration};
-use compact_str::{format_compact, CompactString};
+use chrono::{Duration, prelude::*};
+use compact_str::{CompactString, format_compact};
 use dcso3::{
+    HooksLua, MizLua, String,
     coalition::Side,
     net::{Net, PlayerId},
-    HooksLua, MizLua, String,
 };
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use log::{error, info};
 use regex::Regex;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{mem, sync::Arc, sync::OnceLock};
 
 pub(crate) fn register_success(ctx: &mut Context, id: PlayerId, name: String, side: Side) {
@@ -67,10 +67,25 @@ fn register_player(ctx: &mut Context, lua: HooksLua, id: PlayerId, msg: String) 
         Err(RegErr::AlreadyOn(side)) => register_already_on(ctx, id, side),
         Err(RegErr::AlreadyRegistered(side_switches, orig_side)) => {
             let msg = String::from(match side_switches {
-                None => format_compact!("You are already on the {:?} team. You may switch sides by typing -switch {:?}.", orig_side, side),
-                Some(0) => format_compact!("You are already on {:?} team, and you may not switch sides.", orig_side),
-                Some(1) => format_compact!("You are already on {:?} team. You may sitch sides 1 time by typing -switch {:?}.", orig_side, side),
-                Some(n) => format_compact!("You are already on {:?} team. You may switch sides {n} times. Type -switch {:?}.", orig_side, side),
+                None => format_compact!(
+                    "You are already on the {:?} team. You may switch sides by typing -switch {:?}.",
+                    orig_side,
+                    side
+                ),
+                Some(0) => format_compact!(
+                    "You are already on {:?} team, and you may not switch sides.",
+                    orig_side
+                ),
+                Some(1) => format_compact!(
+                    "You are already on {:?} team. You may sitch sides 1 time by typing -switch {:?}.",
+                    orig_side,
+                    side
+                ),
+                Some(n) => format_compact!(
+                    "You are already on {:?} team. You may switch sides {n} times. Type -switch {:?}.",
+                    orig_side,
+                    side
+                ),
             });
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
         }
@@ -230,7 +245,7 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
                         reply!("group {id} wasn't deployed by you")
                     }
                     DeployKind::Action { .. } => reply!("can't delete an action group"),
-                    DeployKind::Objective => reply!("can't delete an objective group"),
+                    DeployKind::Objective(_) => reply!("can't delete an objective group"),
                     DeployKind::Crate { .. } => match ctx.db.delete_group(&id) {
                         Err(e) => reply!("could not delete group {id} {e:?}"),
                         Ok(()) => reply!("deleted {id}"),
@@ -283,9 +298,18 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
 fn action_help(ctx: &mut Context, actions: &IndexMap<String, Action, FxBuildHasher>, id: PlayerId) {
     for (name, action) in actions {
         let msg = match &action.kind {
-            ActionKind::Attackers(_) => Some(format_compact!("{name}: <key> | Spawn ai attackers. cost {}", action.cost)),
-            ActionKind::AttackersWaypoint => Some(format_compact!("{name}: <group> <key> | Move ai attackers. cost {}", action.cost)),
-            ActionKind::Move(_) => Some(format_compact!("{name}: <group> <key> | Move a ground unit. cost {}", action.cost)),
+            ActionKind::Attackers(_) => Some(format_compact!(
+                "{name}: <key> | Spawn ai attackers. cost {}",
+                action.cost
+            )),
+            ActionKind::AttackersWaypoint => Some(format_compact!(
+                "{name}: <group> <key> | Move ai attackers. cost {}",
+                action.cost
+            )),
+            ActionKind::Move(_) => Some(format_compact!(
+                "{name}: <group> <key> | Move a ground unit. cost {}",
+                action.cost
+            )),
             ActionKind::Awacs(_) => Some(format_compact!(
                 "{name}: <key> | Spawn an awacs at key, a mark point. cost {}",
                 action.cost
@@ -325,18 +349,22 @@ fn action_help(ctx: &mut Context, actions: &IndexMap<String, Action, FxBuildHash
                 action.cost
             )),
             ActionKind::Nuke(_) => Some(format_compact!(
-                "{name}: <key> | Nuke key, a mark point. cost {}", action.cost
+                "{name}: <key> | Nuke key, a mark point. cost {}",
+                action.cost
             )),
             ActionKind::Paratrooper(d) => Some(format_compact!(
-                "{name}: <key> | Drop {} troops at key, a mark point. cost {}", d.name, action.cost
+                "{name}: <key> | Drop {} troops at key, a mark point. cost {}",
+                d.name,
+                action.cost
             )),
             ActionKind::Tanker(_) => Some(format_compact!(
-                "{name}: <key> | Spawn a tanker at key, a mark point. cost {}", action.cost
+                "{name}: <key> | Spawn a tanker at key, a mark point. cost {}",
+                action.cost
             )),
             ActionKind::TankerWaypoint => Some(format_compact!(
                 "{name}: <group> <key> | Move a tanker to key. Group is the tanker group. cost {}",
                 action.cost
-            ))
+            )),
         };
         if let Some(msg) = msg {
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg)

@@ -1,4 +1,4 @@
-use super::{objective::Objective, Db, MapM};
+use super::{Db, MapM, objective::Objective};
 use crate::{
     admin,
     db::{cargo::Oldest, group::DeployKind},
@@ -8,7 +8,7 @@ use crate::{
     spawnctx::{SpawnCtx, SpawnLoc},
     unit,
 };
-use anyhow::{anyhow, bail, Context, Ok, Result};
+use anyhow::{Context, Ok, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
         Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg, DroneCfg,
@@ -18,9 +18,10 @@ use bfprotocols::{
     perf::PerfInner,
     stats::Stat,
 };
-use chrono::{prelude::*, Duration};
+use chrono::{Duration, prelude::*};
 use compact_str::format_compact;
 use dcso3::{
+    LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3,
     attribute::Attribute,
     centroid2d, change_heading,
     coalition::Side,
@@ -35,13 +36,12 @@ use dcso3::{
     pointing_towards2,
     trigger::{MarkId, Modulation, Trigger},
     world::World,
-    LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
 use log::error;
-use rand::{thread_rng, Rng};
-use smallvec::{smallvec, SmallVec};
+use rand::{Rng, thread_rng};
+use smallvec::{SmallVec, smallvec};
 use std::{cmp::max, f64, vec};
 
 #[derive(Debug, Clone)]
@@ -344,7 +344,17 @@ impl Db {
                 )
                 .context("calling bomber strike")?,
             ActionArgs::Deployable(args) => self
-                .ai_deploy(lua, perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .ai_deploy(
+                    lua,
+                    perf,
+                    spctx,
+                    idx,
+                    side,
+                    ucid.clone(),
+                    name,
+                    cmd.action,
+                    args,
+                )
                 .context("calling ai deployment")?,
             ActionArgs::Fighters(args) => self
                 .ai_fighters(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
@@ -822,7 +832,7 @@ impl Db {
         let max_dist = match &group.origin {
             DeployKind::Deployed { .. } => args.cfg.deployable,
             DeployKind::Troop { .. } => args.cfg.troop,
-            DeployKind::Action { .. } | DeployKind::Crate { .. } | DeployKind::Objective => 0,
+            DeployKind::Action { .. } | DeployKind::Crate { .. } | DeployKind::Objective(_) => 0,
         };
         if max_dist == 0 {
             bail!("you can't move this type of unit")
@@ -847,7 +857,7 @@ impl Db {
                 } if ucid != player => *moved_by = Some((ucid.clone(), penalty)),
                 DeployKind::Action { .. }
                 | DeployKind::Crate { .. }
-                | DeployKind::Objective
+                | DeployKind::Objective(_)
                 | DeployKind::Troop { .. }
                 | DeployKind::Deployed { .. } => (),
             }
@@ -1162,7 +1172,14 @@ impl Db {
                 |db, gid, _pos| db.ai_point_to_point_mission(gid, || Task::ComboTask(vec![])),
             )?)),
             None => {
-                self.deployable_to_point(lua, idx, args.pos, args.cfg.name, side, ucid.unwrap_or_default())?;
+                self.deployable_to_point(
+                    lua,
+                    idx,
+                    args.pos,
+                    args.cfg.name,
+                    side,
+                    ucid.unwrap_or_default(),
+                )?;
                 Ok(None)
             }
         }
@@ -1190,10 +1207,14 @@ impl Db {
                 ),
                 ActionKind::LogisticsRepair(p)
                 | ActionKind::LogisticsTransfer(p)
-                | ActionKind::Paratrooper(DeployableCfg { name: _, plane: Some(p) })
-                | ActionKind::Deployable(DeployableCfg { name: _, plane: Some(p) }) => {
-                    (*src, *tgt, p.altitude, p.altitude_typ.clone(), p.speed)
-                }
+                | ActionKind::Paratrooper(DeployableCfg {
+                    name: _,
+                    plane: Some(p),
+                })
+                | ActionKind::Deployable(DeployableCfg {
+                    name: _,
+                    plane: Some(p),
+                }) => (*src, *tgt, p.altitude, p.altitude_typ.clone(), p.speed),
                 _ => bail!("expected a point to point action"),
             },
             _ => bail!("expected action group with rtb and destination"),
@@ -1540,7 +1561,7 @@ impl Db {
             }
             DeployKind::Crate { .. }
             | DeployKind::Deployed { .. }
-            | DeployKind::Objective
+            | DeployKind::Objective(_)
             | DeployKind::Troop { .. } => bail!("not a race tracker"),
         };
         let responsible = player

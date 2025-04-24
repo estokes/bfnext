@@ -820,7 +820,7 @@
           {
             "name": "SA15 Tor",
             "weight": 1500,
-            "required": 6,
+            "required": 4,
             "pos_unit": null,
             "max_drop_height_agl": 10,
             "max_drop_speed": 50

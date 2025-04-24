@@ -221,7 +221,12 @@ impl Db {
                 .map(|uid| self.persisted.units[uid].pos),
         );
         let id = match &mut group.origin {
-            DeployKind::Objective => None,
+            DeployKind::Objective => {
+                let msg = format_compact!("{} {gid} objective group", group.name);
+                self.ephemeral
+                    .msgs
+                    .mark_to_side(group.side, group_center, true, msg)
+            }
             DeployKind::Action {
                 name,
                 spec: _,
@@ -240,10 +245,10 @@ impl Db {
                         .msgs
                         .mark_to_side(group.side, group_center, true, pos_msg);
                 match destination {
-                    None => Some(pos_mark),
+                    None => pos_mark,
                     Some(dst) => {
                         if !marks.is_empty() {
-                            Some(pos_mark)
+                            pos_mark
                         } else {
                             let dst_msg = format_compact!("{name} {gid} destination");
                             marks.insert(
@@ -251,7 +256,7 @@ impl Db {
                                     .msgs
                                     .mark_to_side(group.side, *dst, true, dst_msg),
                             );
-                            Some(pos_mark)
+                            pos_mark
                         }
                     }
                 }
@@ -259,11 +264,9 @@ impl Db {
             DeployKind::Crate { player, spec, .. } => {
                 let name = self.persisted.players[player].name.clone();
                 let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                self.ephemeral
+                    .msgs
+                    .mark_to_side(group.side, group_center, true, msg)
             }
             DeployKind::Deployed {
                 spec,
@@ -282,11 +285,9 @@ impl Db {
                     "{} {gid} deployed by {name}{resp}",
                     spec.path.last().unwrap()
                 );
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                self.ephemeral
+                    .msgs
+                    .mark_to_side(group.side, group_center, true, msg)
             }
             DeployKind::Troop {
                 player,
@@ -303,16 +304,12 @@ impl Db {
                     })
                     .unwrap_or(CompactString::from(""));
                 let msg = format_compact!("{} {gid} deployed by {name}{resp}", spec.name);
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                self.ephemeral
+                    .msgs
+                    .mark_to_side(group.side, group_center, true, msg)
             }
         };
-        if let Some(id) = id {
-            self.ephemeral.group_marks.insert(*gid, id);
-        }
+        self.ephemeral.group_marks.insert(*gid, id);
         Ok(())
     }
 

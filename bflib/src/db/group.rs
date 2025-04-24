@@ -674,9 +674,11 @@ impl Db {
             | SpawnLoc::AtPosWithComponents { .. }
             | SpawnLoc::AtTrigger { .. } => {
                 if spawned.tags.contains(UnitTag::Boat) {
-                    check_land(&land, &gpos.positions, &gpos.by_type)?
+                    check_land(&land, &gpos.positions, &gpos.by_type)
+                        .with_context(|| format_compact!("placing group {group_name}"))?
                 } else {
-                    check_water(&land, &gpos.positions, &gpos.by_type)?
+                    check_water(&land, &gpos.positions, &gpos.by_type)
+                        .with_context(|| format_compact!("placing group {group_name}"))?
                 }
             }
             SpawnLoc::InAir { .. } => (),

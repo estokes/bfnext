@@ -224,7 +224,11 @@ impl Db {
             DeployKind::Objective(oid) => {
                 let owner = objective!(self, oid)?.owner;
                 if group.side == owner {
-                    let msg = format_compact!("{} {gid} objective group", group.name);
+                    let msg = format_compact!(
+                        "objective group {} of class {:?}",
+                        group.name,
+                        group.class
+                    );
                     Some(
                         self.ephemeral
                             .msgs

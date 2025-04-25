@@ -67,10 +67,7 @@ pub enum DeployKind {
     #[serde(rename = "Objective")]
     ObjectiveDeprecated,
     #[serde(rename = "ObjectiveV2")]
-    Objective {
-        #[serde(default)]
-        origin: ObjectiveId,
-    },
+    Objective { origin: ObjectiveId },
     Deployed {
         player: Ucid,
         #[serde(default)]

@@ -65,7 +65,7 @@ fn who(db: &Db, id: DcsOid<ClassUnit>) -> Option<Who> {
                 DeployKind::Action { player, .. } => *player,
                 DeployKind::Deployed { player, .. } => Some(*player),
                 DeployKind::Troop { player, .. } => Some(*player),
-                DeployKind::Crate { .. } | DeployKind::Objective(_) => None,
+                DeployKind::Crate { .. } | DeployKind::Objective { .. } => None,
             }),
         }),
         None => db

@@ -779,7 +779,7 @@ fn set_points(ctx: &mut Context, player: &String, amount: i32) -> Result<()> {
 
 fn delete(ctx: &mut Context, id: &GroupId) -> Result<()> {
     match &ctx.db.group(id)?.origin {
-        DeployKind::Objective(_) => bail!("you can't delete objective groups"),
+        DeployKind::Objective { .. } => bail!("you can't delete objective groups"),
         DeployKind::Crate { .. }
         | DeployKind::Deployed { .. }
         | DeployKind::Troop { .. }

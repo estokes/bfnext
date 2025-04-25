@@ -438,7 +438,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                         None
                     }
                 }
-                DeployKind::Crate { .. } | DeployKind::Objective(_) => None,
+                DeployKind::Crate { .. } | DeployKind::Objective { .. } => None,
             };
             if let Some(key) = key {
                 let root = mc.add_submenu_for_group(

@@ -285,7 +285,7 @@ impl Db {
                 } => (oid, crt),
                 DeployKind::Deployed { .. }
                 | DeployKind::Troop { .. }
-                | DeployKind::Objective(_)
+                | DeployKind::Objective { .. }
                 | DeployKind::Action { .. } => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
@@ -571,7 +571,7 @@ impl Db {
                             }
                             DeployKind::Deployed { .. }
                             | DeployKind::Crate { .. }
-                            | DeployKind::Objective(_)
+                            | DeployKind::Objective { .. }
                             | DeployKind::Troop { .. }
                             | DeployKind::Action { .. } => (),
                         }

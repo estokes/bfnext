@@ -832,7 +832,9 @@ impl Db {
         let max_dist = match &group.origin {
             DeployKind::Deployed { .. } => args.cfg.deployable,
             DeployKind::Troop { .. } => args.cfg.troop,
-            DeployKind::Action { .. } | DeployKind::Crate { .. } | DeployKind::Objective(_) => 0,
+            DeployKind::Action { .. } | DeployKind::Crate { .. } | DeployKind::Objective { .. } => {
+                0
+            }
         };
         if max_dist == 0 {
             bail!("you can't move this type of unit")
@@ -857,7 +859,7 @@ impl Db {
                 } if ucid != player => *moved_by = Some((ucid.clone(), penalty)),
                 DeployKind::Action { .. }
                 | DeployKind::Crate { .. }
-                | DeployKind::Objective(_)
+                | DeployKind::Objective { .. }
                 | DeployKind::Troop { .. }
                 | DeployKind::Deployed { .. } => (),
             }
@@ -1561,7 +1563,7 @@ impl Db {
             }
             DeployKind::Crate { .. }
             | DeployKind::Deployed { .. }
-            | DeployKind::Objective(_)
+            | DeployKind::Objective { .. }
             | DeployKind::Troop { .. } => bail!("not a race tracker"),
         };
         let responsible = player

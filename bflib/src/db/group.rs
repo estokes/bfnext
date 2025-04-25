@@ -64,7 +64,10 @@ pub enum BirthRes {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
-    Objective(#[serde(default)] Option<ObjectiveId>),
+    Objective {
+        #[serde(default)]
+        origin: Option<ObjectiveId>,
+    },
     Deployed {
         player: Ucid,
         #[serde(default)]
@@ -221,8 +224,8 @@ impl Db {
                 .map(|uid| self.persisted.units[uid].pos),
         );
         let id = match &mut group.origin {
-            DeployKind::Objective(None) => None,
-            DeployKind::Objective(Some(oid)) => {
+            DeployKind::Objective { origin: None } => None,
+            DeployKind::Objective { origin: Some(oid) } => {
                 let owner = objective!(self, oid)?.owner;
                 if group.side == owner {
                     let msg = format_compact!(
@@ -345,7 +348,7 @@ impl Db {
             .get_mut_cow(&group.side)
             .map(|m| m.remove_cow(gid));
         match &group.origin {
-            DeployKind::Objective(_) => (),
+            DeployKind::Objective { .. } => (),
             DeployKind::Action { marks, .. } => {
                 for id in marks {
                     self.ephemeral.msgs().delete_mark(*id);
@@ -750,7 +753,7 @@ impl Db {
             self.persisted.units_by_name.insert_cow(unit_name, uid);
         }
         match &mut spawned.origin {
-            DeployKind::Objective(_) => (),
+            DeployKind::Objective { .. } => (),
             DeployKind::Action { spec, .. } => {
                 self.persisted.actions.insert_cow(gid);
                 if let ActionKind::Drone(_) = &spec.kind {
@@ -984,7 +987,7 @@ impl Db {
                             | DeployKind::Deployed { .. }
                             | DeployKind::Action { .. }
                             | DeployKind::Crate { .. }
-                            | DeployKind::Objective(_) => (),
+                            | DeployKind::Objective { .. } => (),
                         }
                         self.delete_group(&gid)?
                     }

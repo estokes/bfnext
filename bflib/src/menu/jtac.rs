@@ -489,7 +489,7 @@ pub(super) fn add_menu_for_jtac(
                     Some(player) => format_compact!("{gid}({} {})", spec.name, player.name),
                     None => format_compact!("{gid}({})", spec.name),
                 },
-                DeployKind::Objective(_) | DeployKind::Crate { .. } => format_compact!("{gid}"),
+                DeployKind::Objective { .. } | DeployKind::Crate { .. } => format_compact!("{gid}"),
             },
         },
         JtId::Slot(sl) => {

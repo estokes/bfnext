@@ -228,7 +228,7 @@ impl Db {
                                 origin: _,
                             } => Some(*player),
                             DeployKind::Action { player, .. } => player.clone(),
-                            DeployKind::Crate { .. } | DeployKind::Objective(_) => None,
+                            DeployKind::Crate { .. } | DeployKind::Objective { .. } => None,
                         })
                 }
             }

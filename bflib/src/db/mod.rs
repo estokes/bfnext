@@ -220,9 +220,9 @@ impl Db {
         self.persisted.ewrs.into_iter().filter_map(|gid| {
             let group = self.persisted.groups.get(gid)?;
             match &group.origin {
-                DeployKind::Crate { .. } | DeployKind::Objective(_) | DeployKind::Troop { .. } => {
-                    None
-                }
+                DeployKind::Crate { .. }
+                | DeployKind::Objective { .. }
+                | DeployKind::Troop { .. } => None,
                 DeployKind::Action {
                     spec:
                         Action {
@@ -297,7 +297,7 @@ impl Db {
                     }),
                     DeployKind::Crate { .. }
                     | DeployKind::Action { .. }
-                    | DeployKind::Objective(_)
+                    | DeployKind::Objective { .. }
                     | DeployKind::Troop { .. }
                     | DeployKind::Deployed { .. } => None,
                 }

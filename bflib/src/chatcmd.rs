@@ -245,7 +245,7 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
                         reply!("group {id} wasn't deployed by you")
                     }
                     DeployKind::Action { .. } => reply!("can't delete an action group"),
-                    DeployKind::Objective(_) => reply!("can't delete an objective group"),
+                    DeployKind::Objective { .. } => reply!("can't delete an objective group"),
                     DeployKind::Crate { .. } => match ctx.db.delete_group(&id) {
                         Err(e) => reply!("could not delete group {id} {e:?}"),
                         Ok(()) => reply!("deleted {id}"),

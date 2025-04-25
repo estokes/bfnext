@@ -205,7 +205,7 @@ impl Db {
                 group_heading: 0.,
             },
             name,
-            DeployKind::Objective(obj),
+            DeployKind::Objective(Some(obj)),
             BitFlags::empty(),
         )?;
         objective_mut!(self, obj)?

@@ -64,7 +64,7 @@ pub enum BirthRes {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
-    Objective(ObjectiveId),
+    Objective(#[serde(default)] Option<ObjectiveId>),
     Deployed {
         player: Ucid,
         #[serde(default)]
@@ -221,7 +221,8 @@ impl Db {
                 .map(|uid| self.persisted.units[uid].pos),
         );
         let id = match &mut group.origin {
-            DeployKind::Objective(oid) => {
+            DeployKind::Objective(None) => None,
+            DeployKind::Objective(Some(oid)) => {
                 let owner = objective!(self, oid)?.owner;
                 if group.side == owner {
                     let msg = format_compact!(

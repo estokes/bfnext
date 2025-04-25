@@ -527,7 +527,7 @@ impl Db {
                 side,
                 location.clone(),
                 &name,
-                DeployKind::Objective(oid),
+                DeployKind::Objective(Some(oid)),
                 BitFlags::empty(),
                 Some(now + Duration::seconds(60)),
             ) {

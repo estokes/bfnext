@@ -205,7 +205,7 @@ impl Db {
                 group_heading: 0.,
             },
             name,
-            DeployKind::Objective { origin: Some(obj) },
+            DeployKind::Objective { origin: obj },
             BitFlags::empty(),
         )?;
         objective_mut!(self, obj)?
@@ -458,7 +458,7 @@ impl Db {
                             .units_potentially_close_to_enemies
                             .insert(*uid);
                     }
-                    DeployKind::Objective { .. } => {
+                    DeployKind::Objective { .. } | DeployKind::ObjectiveDeprecated => {
                         let oid = maybe!(
                             self.persisted.objectives_by_group,
                             unit.group,

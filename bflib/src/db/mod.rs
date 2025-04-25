@@ -222,6 +222,7 @@ impl Db {
             match &group.origin {
                 DeployKind::Crate { .. }
                 | DeployKind::Objective { .. }
+                | DeployKind::ObjectiveDeprecated
                 | DeployKind::Troop { .. } => None,
                 DeployKind::Action {
                     spec:
@@ -298,6 +299,7 @@ impl Db {
                     DeployKind::Crate { .. }
                     | DeployKind::Action { .. }
                     | DeployKind::Objective { .. }
+                    | DeployKind::ObjectiveDeprecated
                     | DeployKind::Troop { .. }
                     | DeployKind::Deployed { .. } => None,
                 }

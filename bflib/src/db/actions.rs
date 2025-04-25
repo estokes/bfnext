@@ -832,9 +832,10 @@ impl Db {
         let max_dist = match &group.origin {
             DeployKind::Deployed { .. } => args.cfg.deployable,
             DeployKind::Troop { .. } => args.cfg.troop,
-            DeployKind::Action { .. } | DeployKind::Crate { .. } | DeployKind::Objective { .. } => {
-                0
-            }
+            DeployKind::Action { .. }
+            | DeployKind::Crate { .. }
+            | DeployKind::Objective { .. }
+            | DeployKind::ObjectiveDeprecated => 0,
         };
         if max_dist == 0 {
             bail!("you can't move this type of unit")
@@ -860,6 +861,7 @@ impl Db {
                 DeployKind::Action { .. }
                 | DeployKind::Crate { .. }
                 | DeployKind::Objective { .. }
+                | DeployKind::ObjectiveDeprecated
                 | DeployKind::Troop { .. }
                 | DeployKind::Deployed { .. } => (),
             }
@@ -1564,6 +1566,7 @@ impl Db {
             DeployKind::Crate { .. }
             | DeployKind::Deployed { .. }
             | DeployKind::Objective { .. }
+            | DeployKind::ObjectiveDeprecated
             | DeployKind::Troop { .. } => bail!("not a race tracker"),
         };
         let responsible = player

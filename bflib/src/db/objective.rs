@@ -527,7 +527,7 @@ impl Db {
                 side,
                 location.clone(),
                 &name,
-                DeployKind::Objective { origin: Some(oid) },
+                DeployKind::Objective { origin: oid },
                 BitFlags::empty(),
                 Some(now + Duration::seconds(60)),
             ) {
@@ -1097,6 +1097,7 @@ impl Db {
                         DeployKind::Crate { .. }
                         | DeployKind::Deployed { .. }
                         | DeployKind::Objective { .. }
+                        | DeployKind::ObjectiveDeprecated
                         | DeployKind::Action { .. }
                         | DeployKind::Troop { .. } => (),
                     }

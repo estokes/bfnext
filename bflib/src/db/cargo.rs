@@ -286,6 +286,7 @@ impl Db {
                 DeployKind::Deployed { .. }
                 | DeployKind::Troop { .. }
                 | DeployKind::Objective { .. }
+                | DeployKind::ObjectiveDeprecated
                 | DeployKind::Action { .. } => {
                     bail!("group {:?} is listed in crates but isn't a crate", gid)
                 }
@@ -572,6 +573,7 @@ impl Db {
                             DeployKind::Deployed { .. }
                             | DeployKind::Crate { .. }
                             | DeployKind::Objective { .. }
+                            | DeployKind::ObjectiveDeprecated
                             | DeployKind::Troop { .. }
                             | DeployKind::Action { .. } => (),
                         }

@@ -28,7 +28,7 @@ use crate::{
     msgq::MsgQ,
     spawnctx::{Despawn, SpawnCtx, Spawned},
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
         ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
@@ -44,6 +44,7 @@ use bfprotocols::{
 use chrono::prelude::*;
 use compact_str::format_compact;
 use dcso3::{
+    MizLua, Position3, String, Vector2,
     airbase::ClassAirbase,
     centroid2d,
     coalition::Side,
@@ -57,16 +58,15 @@ use dcso3::{
     trigger::MarkId,
     unit::{ClassUnit, Unit},
     warehouse::LiquidType,
-    MizLua, Position3, String, Vector2,
 };
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::{IndexMap, IndexSet};
 use log::{error, info};
 use mlua::prelude::*;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{
     cmp::max,
-    collections::{hash_map::Entry, BTreeMap, VecDeque},
+    collections::{BTreeMap, VecDeque, hash_map::Entry},
     mem,
     sync::Arc,
 };
@@ -463,7 +463,9 @@ impl Ephemeral {
                     miz.get_group_by_name(mizidx, GroupKind::Any, side, name)?
                         .ok_or_else(|| anyhow!("missing farp template {:?} {:?}", side, name))?;
                     if !names.insert(name) {
-                        bail!("deployables with logistics must use unique templates for each part {name} is reused")
+                        bail!(
+                            "deployables with logistics must use unique templates for each part {name} is reused"
+                        )
                     }
                 }
                 for pad in pad_templates {
@@ -471,7 +473,9 @@ impl Ephemeral {
                         bail!("{:?} has a duplicate pad template {pad}", dep)
                     }
                     if !global_pad_templates.insert(pad.clone()) {
-                        bail!("pad template names must be globally unique {pad} is used more than once")
+                        bail!(
+                            "pad template names must be globally unique {pad} is used more than once"
+                        )
                     }
                     let gifo = miz
                         .get_group_by_name(mizidx, GroupKind::Any, side, pad)?
@@ -480,7 +484,9 @@ impl Ephemeral {
                         let unit = unit?;
                         let uname = unit.name()?;
                         if &uname != pad {
-                            bail!("pad template groups and units must be named the same thing {uname} != {pad}")
+                            bail!(
+                                "pad template groups and units must be named the same thing {uname} != {pad}"
+                            )
                         }
                     }
                 }

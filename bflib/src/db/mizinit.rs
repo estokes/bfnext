@@ -18,11 +18,17 @@ use std::sync::Arc;
 
 use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db};
 use crate::{
-    bg::Task, db::{
+    bg::Task,
+    db::{
         logistics::Warehouse,
         objective::{Objective, Zone},
         MapS,
-    }, group, group_mut, landcache::LandCache, objective_mut, spawnctx::{SpawnCtx, SpawnLoc}, unit_mut
+    },
+    group, group_health, group_mut,
+    landcache::LandCache,
+    objective_mut,
+    spawnctx::{SpawnCtx, SpawnLoc},
+    unit, unit_mut,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
@@ -363,7 +369,7 @@ impl Db {
                             DeployKind::ObjectiveDeprecated => {
                                 g.origin = DeployKind::Objective { origin: *oid };
                             }
-                            _ => ()
+                            _ => (),
                         }
                         for uid in &g.units {
                             let unit = unit_mut!(self, uid)?;
@@ -434,6 +440,14 @@ impl Db {
                         let group = group!(self, gid)?;
                         if obj.kind.is_farp() || group.class.is_services() {
                             self.ephemeral.push_spawn(*gid)
+                        }
+                    }
+                }
+                // spawn left behind base defenses
+                if let Some(groups) = obj.groups.get(&obj.owner.opposite()) {
+                    for gid in groups {
+                        if group_health!(self, gid)?.0 > 0 {
+                            self.ephemeral.push_spawn(*gid);
                         }
                     }
                 }

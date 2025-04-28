@@ -18,7 +18,7 @@ use super::{
     group::{SpawnedGroup, SpawnedUnit},
     objective::Objective,
     player::Player,
-    Map, MapM, MapS, Set, SetS, SetM,
+    Map, MapM, MapS, Set, SetM, SetS,
 };
 use bfprotocols::db::{
     group::{GroupId, UnitId},
@@ -57,7 +57,9 @@ pub struct Persisted {
     #[serde(default)]
     pub gid: i64,
     #[serde(default)]
-    pub uid: i64
+    pub uid: i64,
+    #[serde(default)]
+    pub migrated_obj_group_live: bool,
 }
 
 impl Persisted {

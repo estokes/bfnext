@@ -358,14 +358,20 @@ impl Db {
     ) -> Result<()> {
         debug!("init slots");
         // check for objectives using the old pos + radius format and convert them to zone
-        for (_id, obj) in self.persisted.objectives.iter_mut_cow() {
-            if obj.zone == Zone::default() {
-                let pos = obj.pos.unwrap_or_else(Vector2::default);
-                let radius = obj.radius.unwrap_or(0.);
-                obj.zone = Zone::Circle { pos, radius };
-                obj.pos = None;
-                obj.radius = None;
-                self.ephemeral.dirty = true;
+        if !self.persisted.migrated_obj_group_live {
+            self.persisted.migrated_obj_group_live = true;
+            self.ephemeral.dirty();
+            for (_id, obj) in &self.persisted.objectives {
+                for (_, groups) in &obj.groups {
+                    for gid in groups {
+                        for uid in &group!(self, gid)?.units {
+                            let unit = unit_mut!(self, uid)?;
+                            if unit.side != obj.owner {
+                                unit.dead = true;
+                            }
+                        }
+                    }
+                }
             }
         }
         for side in Side::ALL {

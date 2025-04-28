@@ -24,11 +24,11 @@ use crate::{
         objective::{Objective, Zone},
         MapS,
     },
-    group,
+    group, group_health, group_mut,
     landcache::LandCache,
     objective_mut,
     spawnctx::{SpawnCtx, SpawnLoc},
-    unit_mut,
+    unit, unit_mut,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
@@ -357,14 +357,21 @@ impl Db {
         spctx: &SpawnCtx,
     ) -> Result<()> {
         debug!("init slots");
-        // check for objectives using the old pos + radius format and convert them to zone
-        if !self.persisted.migrated_obj_group_live {
-            self.persisted.migrated_obj_group_live = true;
+        // migrate format changes
+        if !self.persisted.migrated_v0 {
+            self.persisted.migrated_v0 = true;
             self.ephemeral.dirty();
-            for (_id, obj) in &self.persisted.objectives {
+            for (oid, obj) in &self.persisted.objectives {
                 for (_, groups) in &obj.groups {
                     for gid in groups {
-                        for uid in &group!(self, gid)?.units {
+                        let g = group_mut!(self, gid)?;
+                        match &g.origin {
+                            DeployKind::ObjectiveDeprecated => {
+                                g.origin = DeployKind::Objective { origin: *oid };
+                            }
+                            _ => (),
+                        }
+                        for uid in &g.units {
                             let unit = unit_mut!(self, uid)?;
                             if unit.side != obj.owner {
                                 unit.dead = true;
@@ -436,6 +443,14 @@ impl Db {
                         }
                     }
                 }
+                // spawn left behind base defenses
+                if let Some(groups) = obj.groups.get(&obj.owner.opposite()) {
+                    for gid in groups {
+                        if group_health!(self, gid)?.0 > 0 {
+                            self.ephemeral.push_spawn(*gid);
+                        }
+                    }
+                }
             }
             Ok(())
         };
@@ -460,23 +475,10 @@ impl Db {
         mark_deployed_and_logistics().context("marking deployed and logistics")?;
         let mut queue_check_close_enemies = || -> Result<()> {
             for (uid, unit) in &self.persisted.units {
-                let group = group!(self, unit.group)?;
-                match group.origin {
-                    DeployKind::Crate { .. } => (),
-                    DeployKind::Deployed { .. }
-                    | DeployKind::Troop { .. }
-                    | DeployKind::Action { .. } => {
-                        self.ephemeral
-                            .units_potentially_close_to_enemies
-                            .insert(*uid);
-                    }
-                    DeployKind::Objective { .. } | DeployKind::ObjectiveDeprecated => {
-                        if !unit.dead {
-                            self.ephemeral
-                                .units_potentially_close_to_enemies
-                                .insert(*uid);
-                        }
-                    }
+                if !unit.dead {
+                    self.ephemeral
+                        .units_potentially_close_to_enemies
+                        .insert(*uid);
                 }
             }
             Ok(())

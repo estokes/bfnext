@@ -991,7 +991,7 @@
         ],
         "template": "DEPT72",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 25,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1005,7 +1005,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 100,
+        "cost": 30,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -1018,7 +1018,7 @@
         ],
         "template": "DEPBMP3",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 50,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1032,7 +1032,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 50,
+        "cost": 25,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -1343,7 +1343,7 @@
         ],
         "template": "DEPBRADLEY",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 50,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1357,7 +1357,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 50,
+        "cost": 25,
         "ewr": null,
         "jtac": {
           "range": 8000
@@ -1370,7 +1370,7 @@
         ],
         "template": "DEPLEOPARD",
         "persist": "Forever",
-        "limit": 8,
+        "limit": 25,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1384,7 +1384,7 @@
         ],
         "repair_crate": null,
         "logistics": null,
-        "cost": 100,
+        "cost": 30,
         "ewr": null,
         "jtac": {
           "range": 8000

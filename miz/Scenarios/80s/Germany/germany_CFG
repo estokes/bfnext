@@ -137,7 +137,7 @@
   "crate_spread": 500,
   "artillery_mission_range": 15000,
   "side_switches": 1,
-  "max_crates": 4,
+  "max_crates": 6,
   "life_types": {
     "MB-339A": "Recon",
     "C-101CC": "Recon",
@@ -984,6 +984,31 @@
         "ewr": null,
         "jtac": null
       },
+	  	{
+        "path": [
+          "Ground Units",
+          "Armor Group"
+        ],
+        "template": "DEPRARMOR",
+        "persist": "Forever",
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Armor Crate",
+            "weight": 1500,
+            "required": 6,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 240,
+        "ewr": null,
+        "jtac": null
+      },
       {
         "path": [
           "Ground Units",
@@ -1333,6 +1358,31 @@
         "repair_crate": null,
         "logistics": null,
         "cost": 25,
+        "ewr": null,
+        "jtac": null
+      },
+	 {
+        "path": [
+          "Ground Units",
+          "Armor Group"
+        ],
+        "template": "DEPBARMOR",
+        "persist": "Forever",
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Armor Crate",
+            "weight": 1500,
+            "required": 6,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 240,
         "ewr": null,
         "jtac": null
       },
@@ -2138,6 +2188,27 @@
       "LightCannon",
       "Driveable"
     ],
+    "BMP-2": [
+      "APC",
+      "MR",
+      "ATGM",
+      "LightCannon",
+      "Driveable"
+    ],
+    "BTR-82A": [
+      "APC",
+      "MR",
+      "ATGM",
+      "LightCannon",
+      "Driveable"
+    ],
+    "Marder": [
+      "APC",
+      "MR",
+      "ATGM",
+      "LightCannon",
+      "Driveable"
+    ],
     "Leopard-2": [
       "Armor",
       "MR",
@@ -2145,7 +2216,35 @@
       "SmallArms",
       "Driveable"
     ],
+	    "leopard-2A4_trs": [
+      "Armor",
+      "MR",
+      "HeavyCannon",
+      "SmallArms",
+      "Driveable"
+    ],
+	"leopard-2A4": [
+      "Armor",
+      "MR",
+      "HeavyCannon",
+      "SmallArms",
+      "Driveable"
+    ],
     "T-72B": [
+      "Armor",
+      "MR",
+      "HeavyCannon",
+      "SmallArms",
+      "Driveable"
+    ],
+    "Chieftain_mk3": [
+      "Armor",
+      "MR",
+      "HeavyCannon",
+      "SmallArms",
+      "Driveable"
+    ],
+    "T-72B3": [
       "Armor",
       "MR",
       "HeavyCannon",

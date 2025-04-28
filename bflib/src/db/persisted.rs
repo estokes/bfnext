@@ -59,7 +59,7 @@ pub struct Persisted {
     #[serde(default)]
     pub uid: i64,
     #[serde(default)]
-    pub migrated_obj_group_live: bool,
+    pub migrated_v0: bool,
 }
 
 impl Persisted {

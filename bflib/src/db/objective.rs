@@ -1124,14 +1124,15 @@ impl Db {
                 obj.owner = new_owner;
                 actually_captured.push((*side, oid));
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
-                    if group_health!(self, gid)?.0 > 0 {
-                        to_mark.push(*gid);
-                    }
+                    to_mark.push(*gid);
                 }
                 for gid in obj.groups.get(&obj.owner.opposite()).unwrap_or(&Set::new()) {
-                    if group_health!(self, gid)?.0 == 0 {
-                        if let Some(id) = self.ephemeral.group_marks.remove(gid) {
-                            self.ephemeral.msgs.delete_mark(id)
+                    if let Some(id) = self.ephemeral.group_marks.remove(gid) {
+                        self.ephemeral.msgs.delete_mark(id)
+                    }
+                    for uid in &group!(self, gid)?.units {
+                        if !unit!(self, uid)?.dead {
+                            self.ephemeral.units_potentially_close_to_enemies.insert(*uid);
                         }
                     }
                 }

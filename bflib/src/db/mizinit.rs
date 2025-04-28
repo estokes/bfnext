@@ -18,17 +18,11 @@ use std::sync::Arc;
 
 use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db};
 use crate::{
-    bg::Task,
-    db::{
+    bg::Task, db::{
         logistics::Warehouse,
         objective::{Objective, Zone},
         MapS,
-    },
-    group,
-    landcache::LandCache,
-    objective_mut,
-    spawnctx::{SpawnCtx, SpawnLoc},
-    unit_mut,
+    }, group, group_mut, landcache::LandCache, objective_mut, spawnctx::{SpawnCtx, SpawnLoc}, unit_mut
 };
 use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
@@ -357,14 +351,21 @@ impl Db {
         spctx: &SpawnCtx,
     ) -> Result<()> {
         debug!("init slots");
-        // check for objectives using the old pos + radius format and convert them to zone
-        if !self.persisted.migrated_obj_group_live {
-            self.persisted.migrated_obj_group_live = true;
+        // migrate format changes
+        if !self.persisted.migrated_v0 {
+            self.persisted.migrated_v0 = true;
             self.ephemeral.dirty();
-            for (_id, obj) in &self.persisted.objectives {
+            for (oid, obj) in &self.persisted.objectives {
                 for (_, groups) in &obj.groups {
                     for gid in groups {
-                        for uid in &group!(self, gid)?.units {
+                        let g = group_mut!(self, gid)?;
+                        match &g.origin {
+                            DeployKind::ObjectiveDeprecated => {
+                                g.origin = DeployKind::Objective { origin: *oid };
+                            }
+                            _ => ()
+                        }
+                        for uid in &g.units {
                             let unit = unit_mut!(self, uid)?;
                             if unit.side != obj.owner {
                                 unit.dead = true;

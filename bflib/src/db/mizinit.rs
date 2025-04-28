@@ -460,23 +460,10 @@ impl Db {
         mark_deployed_and_logistics().context("marking deployed and logistics")?;
         let mut queue_check_close_enemies = || -> Result<()> {
             for (uid, unit) in &self.persisted.units {
-                let group = group!(self, unit.group)?;
-                match group.origin {
-                    DeployKind::Crate { .. } => (),
-                    DeployKind::Deployed { .. }
-                    | DeployKind::Troop { .. }
-                    | DeployKind::Action { .. } => {
-                        self.ephemeral
-                            .units_potentially_close_to_enemies
-                            .insert(*uid);
-                    }
-                    DeployKind::Objective { .. } | DeployKind::ObjectiveDeprecated => {
-                        if !unit.dead {
-                            self.ephemeral
-                                .units_potentially_close_to_enemies
-                                .insert(*uid);
-                        }
-                    }
+                if !unit.dead {
+                    self.ephemeral
+                        .units_potentially_close_to_enemies
+                        .insert(*uid);
                 }
             }
             Ok(())

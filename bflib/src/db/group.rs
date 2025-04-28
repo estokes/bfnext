@@ -852,6 +852,10 @@ impl Db {
                     velocity: unit.airborne_velocity.unwrap_or_default(),
                 },
             });
+            let gid = unit.group;
+            if group_health!(self, gid)?.0 == 1 {
+                self.mark_group(&gid)?
+            }
             return Ok(BirthRes::None);
         }
         let slot = unit.slot()?;
@@ -958,14 +962,23 @@ impl Db {
                 unit.position = unit.spawn_position;
                 self.ephemeral.dirty();
                 let gid = unit.group;
+                let health = group_health!(self, gid)?.0;
                 if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
-                    self.update_objective_status(&oid, now)?
+                    self.update_objective_status(&oid, now)?;
+                    self.ephemeral
+                        .units_potentially_close_to_enemies
+                        .remove(&uid);
+                    if health == 0 {
+                        if let Some(id) = self.ephemeral.group_marks.remove(&gid) {
+                            self.ephemeral.msgs.delete_mark(id);
+                        }
+                    }
                 }
                 if self.persisted.deployed.contains(&gid)
                     || self.persisted.troops.contains(&gid)
                     || self.persisted.crates.contains(&gid)
                 {
-                    if self.group_health(&gid)?.0 == 0 {
+                    if health == 0 {
                         match &group!(self, gid)?.origin {
                             DeployKind::Troop {
                                 player,

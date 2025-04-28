@@ -15,9 +15,9 @@ for more details.
 */
 
 use super::{
-    Db, Map, MapM, MapS, Set,
     group::{DeployKind, SpawnedUnit},
     logistics::{Inventory, LogiStage, Warehouse},
+    Db, Map, MapM, MapS, Set,
 };
 use crate::{
     group, group_health, group_mut,
@@ -26,7 +26,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use bfprotocols::{
     cfg::{Deployable, DeployableLogistics, UnitTag, VictoryCondition},
     db::{
@@ -35,11 +35,10 @@ use bfprotocols::{
     },
     stats::Stat,
 };
-use chrono::{Duration, prelude::*};
+use chrono::{prelude::*, Duration};
 use compact_str::format_compact;
 use core::f64;
 use dcso3::{
-    LuaVec2, LuaVec3, MizLua, Quad2, String, Vector2, Vector3,
     airbase::Airbase,
     azumith2d_to, centroid2d,
     coalition::Side,
@@ -51,13 +50,14 @@ use dcso3::{
     net::Ucid,
     object::DcsObject,
     warehouse::LiquidType,
+    LuaVec2, LuaVec3, MizLua, Quad2, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, warn};
-use mlua::{Value, prelude::*};
+use mlua::{prelude::*, Value};
 use serde_derive::{Deserialize, Serialize};
-use smallvec::{SmallVec, smallvec};
+use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, str::FromStr, sync::Arc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -232,7 +232,11 @@ impl Zone {
                 .into_iter()
                 .fold(0., |max, p| {
                     let d = na::distance_squared(&p.0.into(), &(*pos).into());
-                    if d > max { d } else { max }
+                    if d > max {
+                        d
+                    } else {
+                        max
+                    }
                 })
                 .sqrt(),
         }
@@ -1120,22 +1124,14 @@ impl Db {
                 obj.owner = new_owner;
                 actually_captured.push((*side, oid));
                 for gid in obj.groups.get(&obj.owner).unwrap_or(&Set::new()) {
-                    to_mark.push(*gid);
-                    for uid in &group!(self, gid)?.units {
-                        if !self.ephemeral.object_id_by_uid.contains_key(uid) {
-                            unit_mut!(self, uid)?.dead = true;
-                        }
+                    if group_health!(self, gid)?.0 > 0 {
+                        to_mark.push(*gid);
                     }
                 }
                 for gid in obj.groups.get(&obj.owner.opposite()).unwrap_or(&Set::new()) {
-                    if let Some(id) = self.ephemeral.group_marks.remove(gid) {
-                        self.ephemeral.msgs.delete_mark(id)
-                    }
-                    for uid in &group!(self, gid)?.units {
-                        if self.ephemeral.object_id_by_uid.contains_key(uid) {
-                            self.ephemeral
-                                .units_potentially_close_to_enemies
-                                .insert(*uid);
+                    if group_health!(self, gid)?.0 == 0 {
+                        if let Some(id) = self.ephemeral.group_marks.remove(gid) {
+                            self.ephemeral.msgs.delete_mark(id)
                         }
                     }
                 }

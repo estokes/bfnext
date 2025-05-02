@@ -1637,7 +1637,8 @@
       "SAM",
       "LR",
       "RadarGuided",
-      "ControlUnit"
+      "ControlUnit",
+      "Driveable"
     ],
     "SNR_75V": [
       "SAM",
@@ -1687,7 +1688,8 @@
       "LR",
       "RadarGuided",
       "TrackRadar",
-      "Launcher"
+      "Launcher",
+      "Driveable"      
     ],
     "T-80UD": [
       "Armor",
@@ -1756,7 +1758,8 @@
       "SAM",
       "LR",
       "RadarGuided",
-      "SearchRadar"
+      "SearchRadar",
+      "Driveable"
     ],
     "Su-25T": [
       "Aircraft"
@@ -1905,7 +1908,8 @@
       "MR",
       "RadarGuided",
       "TrackRadar",
-      "SearchRadar"
+      "SearchRadar",
+      "Driveable"
     ],
     "Mi-8MT": [
       "Aircraft",
@@ -1933,7 +1937,8 @@
       "SAM",
       "MR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+      "Driveable"
     ],
     "1L13 EWR": [
       "EWR",

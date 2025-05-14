@@ -1,0 +1,1009 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/eric/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/fixedstr-0.5.5/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-6c3ea77c.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="fixedstr" data-themes="" data-resource-suffix="" data-rustdoc-version="1.86.0 (05f9846f8 2025-03-31)" data-channel="1.86.0" data-search-js="search-581efc7a.js" data-settings-js="settings-6dad6058.js" ><script src="../../static.files/storage-3a5871a4.js"></script><script defer src="../../static.files/src-script-b8d3f215.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-4d63596a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">fixedstr/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! **Library for several alternative string types using const generics.**
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//!  - The size of some types such as [str8] and [zstr]\&lt;8\&gt;
+<a href=#5 id=5 data-nosnippet>5</a>//!    are 8 bytes, compared to 16 bytes for `&amp;str` on 64bit systems,
+<a href=#6 id=6 data-nosnippet>6</a>//!    providing more efficient ways of representing small strings.
+<a href=#7 id=7 data-nosnippet>7</a>//!  -  Most types (except the optional [Flexstr] and [Sharedstr]) can be
+<a href=#8 id=8 data-nosnippet>8</a>//!    copied and stack-allocated.
+<a href=#9 id=9 data-nosnippet>9</a>//!  -  `#![no_std]` is supported by all but the optional [fstr] type.
+<a href=#10 id=10 data-nosnippet>10</a>//!     Features that use the alloc crate can also be optionally excluded.
+<a href=#11 id=11 data-nosnippet>11</a>//!  -  Unicode is supported by all but the optional [cstr] type.
+<a href=#12 id=12 data-nosnippet>12</a>//!  -  Serde serialization is supported by all but the optional [Sharedstr] type.
+<a href=#13 id=13 data-nosnippet>13</a>//!
+<a href=#14 id=14 data-nosnippet>14</a>//!
+<a href=#15 id=15 data-nosnippet>15</a>//! **COMPATIBILITY NOTICES**:
+<a href=#16 id=16 data-nosnippet>16</a>//!
+<a href=#17 id=17 data-nosnippet>17</a>//! &gt; **With Version 0.5.0, the default availability of some
+<a href=#18 id=18 data-nosnippet>18</a>//!   string types have changed.**  The default configuration is minimalized.
+<a href=#19 id=19 data-nosnippet>19</a>//!   The `std`, `flex-str` and `shared-str`
+<a href=#20 id=20 data-nosnippet>20</a>//!   options are no longer enabled by default.  The crate now
+<a href=#21 id=21 data-nosnippet>21</a>//!   supports **`#![no_std]`** by default.  The `std` option only enables the
+<a href=#22 id=22 data-nosnippet>22</a>//!   [fstr] type, which prints warnings to stderr. **However,** unless
+<a href=#23 id=23 data-nosnippet>23</a>//!   you require one of the types [fstr], [Flexstr] or [Sharedstr], your
+<a href=#24 id=24 data-nosnippet>24</a>//!   build configurations most likely will work as before: the builds will just be
+<a href=#25 id=25 data-nosnippet>25</a>//!   smaller.  If `default-features=false` is already part of your
+<a href=#26 id=26 data-nosnippet>26</a>//!   configuration, it should also work as before.
+<a href=#27 id=27 data-nosnippet>27</a>//!
+<a href=#28 id=28 data-nosnippet>28</a>//! &gt; Another change that could potentially affect backwards compatibility is that
+<a href=#29 id=29 data-nosnippet>29</a>//!   zstr's `Index&lt;usize&gt;` and `IndexMut&lt;usize&gt;` traits, which allow
+<a href=#30 id=30 data-nosnippet>30</a>//!   arbitrary modifications to underlying bytes, is now only available
+<a href=#31 id=31 data-nosnippet>31</a>//!   with the optional `experimental` feature.  Previously, they were
+<a href=#32 id=32 data-nosnippet>32</a>//!   available as default features.
+<a href=#33 id=33 data-nosnippet>33</a>//!
+<a href=#34 id=34 data-nosnippet>34</a>//! **Other Important Recent Updates:**
+<a href=#35 id=35 data-nosnippet>35</a>//!
+<a href=#36 id=36 data-nosnippet>36</a>//! &gt;  **Version 0.5.1 introduced the new *`no-alloc`* option**.  In addition to support
+<a href=#37 id=37 data-nosnippet>37</a>//!    for no_std (for all but the fstr type), this option disables compilation of
+<a href=#38 id=38 data-nosnippet>38</a>//!    any features that use the alloc crate.  This may make some no_std implementations
+<a href=#39 id=39 data-nosnippet>39</a>//!    easier. The default build is no longer minimal (see below).
+<a href=#40 id=40 data-nosnippet>40</a>//!
+<a href=#41 id=41 data-nosnippet>41</a>//! &gt;  As of Version 0.4.6, all string types except for `fstr` support
+<a href=#42 id=42 data-nosnippet>42</a>//! **`#![no_std]`**.
+<a href=#43 id=43 data-nosnippet>43</a>//!
+<a href=#44 id=44 data-nosnippet>44</a>//! &gt;  Starting in Version 0.4.2, the underlying representation of the zero-terminated [zstr]
+<a href=#45 id=45 data-nosnippet>45</a>//! type no longer allows non-zero bytes after the first zero.  In particular,
+<a href=#46 id=46 data-nosnippet>46</a>//! the [zstr::from_raw] function now enforces this rule.
+<a href=#47 id=47 data-nosnippet>47</a>//!
+<a href=#48 id=48 data-nosnippet>48</a>//! &gt;  Starting in Version 0.4.0, warnings about
+<a href=#49 id=49 data-nosnippet>49</a>//! capacity being exceeded are only sent to stderr when using the fstr type.
+<a href=#50 id=50 data-nosnippet>50</a>//! For other types, truncation is done silently. Consider using the
+<a href=#51 id=51 data-nosnippet>51</a>//! `try_make` function or the [core::str::FromStr] trait.
+<a href=#52 id=52 data-nosnippet>52</a>//!
+<a href=#53 id=53 data-nosnippet>53</a>//! &lt;hr&gt;
+<a href=#54 id=54 data-nosnippet>54</a>//!
+<a href=#55 id=55 data-nosnippet>55</a>//! **CRATE OVERVIEW**
+<a href=#56 id=56 data-nosnippet>56</a>//!
+<a href=#57 id=57 data-nosnippet>57</a>//! The two string types that are always provided by this crate are **[zstr]** and **[tstr]**.
+<a href=#58 id=58 data-nosnippet>58</a>//! However, [tstr] is not public by default and should be referenced
+<a href=#59 id=59 data-nosnippet>59</a>//! through the type aliases [str4], [str8], [str16], ...  [str256].
+<a href=#60 id=60 data-nosnippet>60</a>//!
+<a href=#61 id=61 data-nosnippet>61</a>//! - A **[zstr]\&lt;N\&gt;** is represented by a `[u8;N]` array underneath
+<a href=#62 id=62 data-nosnippet>62</a>//!   and can hold zero-terminated, utf-8 strings of up to N-1 bytes.
+<a href=#63 id=63 data-nosnippet>63</a>//! Furthermore, no non-zero bytes can follow the first zero. This
+<a href=#64 id=64 data-nosnippet>64</a>//! allows the length of a `zstr&lt;N&gt;` string to be found in O(log N) time.
+<a href=#65 id=65 data-nosnippet>65</a>//!
+<a href=#66 id=66 data-nosnippet>66</a>//! - The types **[str4]** through **[str256]** are aliases for internal types
+<a href=#67 id=67 data-nosnippet>67</a>//! [tstr]\&lt;4\&gt; through [tstr]\&lt;256\&gt; respectively.  These strings are stored
+<a href=#68 id=68 data-nosnippet>68</a>//! in `[u8;N]` arrays with the first byte holding the length of the
+<a href=#69 id=69 data-nosnippet>69</a>//! string.  Each `tstr&lt;N&gt;` can store strings of up to N-1 bytes, with
+<a href=#70 id=70 data-nosnippet>70</a>//! maximum N=256. Because Rust does not currently provide
+<a href=#71 id=71 data-nosnippet>71</a>//! a way to specify conditions (or type casts) on const generics at
+<a href=#72 id=72 data-nosnippet>72</a>//! compile time, the tstr type is not public by
+<a href=#73 id=73 data-nosnippet>73</a>//! default and can only be used through the aliases.  The `pub-tstr` option
+<a href=#74 id=74 data-nosnippet>74</a>//! makes the `tstr` type public but is not recommended: any `tstr&lt;N&gt;` with
+<a href=#75 id=75 data-nosnippet>75</a>//! `N&gt;256` is not valid and will result in erroneous behavior.
+<a href=#76 id=76 data-nosnippet>76</a>//!
+<a href=#77 id=77 data-nosnippet>77</a>//! In addition, the following string types are available as options:
+<a href=#78 id=78 data-nosnippet>78</a>//!
+<a href=#79 id=79 data-nosnippet>79</a>//! - A **[fstr]\&lt;N\&gt;** stores a string of up to N bytes.
+<a href=#80 id=80 data-nosnippet>80</a>//! It's represented by a `[u8;N]` array and a separate usize variable
+<a href=#81 id=81 data-nosnippet>81</a>//! holding the length.  This type is **enabled with either the `std` or
+<a href=#82 id=82 data-nosnippet>82</a>//! `fstr` option** and some functions will print warnings to stderr when
+<a href=#83 id=83 data-nosnippet>83</a>//! capacity is exceeded. This is the only type that does not support
+<a href=#84 id=84 data-nosnippet>84</a>//! `no_std`, but serde is supported.
+<a href=#85 id=85 data-nosnippet>85</a>//! - The type **[cstr]**, which is **made available
+<a href=#86 id=86 data-nosnippet>86</a>//! with the `circular-str` option**, uses a fixed u8 array
+<a href=#87 id=87 data-nosnippet>87</a>//! that is arranged as a circular queue (aka ring buffer).  This allows
+<a href=#88 id=88 data-nosnippet>88</a>//! efficient implementations of pushing/triming characters *in front* of
+<a href=#89 id=89 data-nosnippet>89</a>//! the string without additional memory allocation.  The downside of these
+<a href=#90 id=90 data-nosnippet>90</a>//! strings is that the underlying representation can be non-contiguous as it allows
+<a href=#91 id=91 data-nosnippet>91</a>//! wrap-around.  As a result, there is no efficient way to implement
+<a href=#92 id=92 data-nosnippet>92</a>//! `Deref&lt;str&gt;`.  Additionally, cstr is the only string type of the crate
+<a href=#93 id=93 data-nosnippet>93</a>//! that does not support Unicode. **Only single-byte characters** are
+<a href=#94 id=94 data-nosnippet>94</a>//! currently supported. There is, however, an iterator over all characters
+<a href=#95 id=95 data-nosnippet>95</a>//! and most common traits are implemented.  Serde and no-std are both supported.
+<a href=#96 id=96 data-nosnippet>96</a>//! - The **[Flexstr]\&lt;N\&gt;** type becomes available with the **`flex-str` option**.
+<a href=#97 id=97 data-nosnippet>97</a>//!   This type uses an internal enum that is either a tstr\&lt;N\&gt;
+<a href=#98 id=98 data-nosnippet>98</a>//!   or an owned String (alloc::string::String) in case the length of the string exceeds N-1.
+<a href=#99 id=99 data-nosnippet>99</a>//!   This type is designed for situations where strings only
+<a href=#100 id=100 data-nosnippet>100</a>//!   occasionally exceed the limit of N-1 bytes. This type does not implement
+<a href=#101 id=101 data-nosnippet>101</a>//!   the `Copy` trait.  Serde and no_std are supported.
+<a href=#102 id=102 data-nosnippet>102</a>//! - The **[Sharedstr]\&lt;N\&gt;** type becomes available with the **`shared-str`
+<a href=#103 id=103 data-nosnippet>103</a>//!   option**. This type is similar to a [Flexstr]\&lt;N\&gt; but uses a
+<a href=#104 id=104 data-nosnippet>104</a>//!   `Rc&lt;RefCell&lt;..&gt;&gt;` underneath to allow strings to be shared as well as
+<a href=#105 id=105 data-nosnippet>105</a>//!   mutated.  This type does not implement `Copy` but `Clone` is done
+<a href=#106 id=106 data-nosnippet>106</a>//!   in constant time.  no_std is supported but **not serde**.
+<a href=#107 id=107 data-nosnippet>107</a>//!
+<a href=#108 id=108 data-nosnippet>108</a>//! **SUMMARY OF OPTIONAL FEATURES**
+<a href=#109 id=109 data-nosnippet>109</a>//!
+<a href=#110 id=110 data-nosnippet>110</a>//! - ***serde*** : Serialization was initially contributed
+<a href=#111 id=111 data-nosnippet>111</a>//!   by [wallefan](https://github.com/wallefan) and adopted to other types
+<a href=#112 id=112 data-nosnippet>112</a>//!   (except `Sharedstr`).  This feature enables the Serialize/Deserialize
+<a href=#113 id=113 data-nosnippet>113</a>//!   traits.
+<a href=#114 id=114 data-nosnippet>114</a>//! - ***circular-str***: this feature makes available the **[cstr]** type.
+<a href=#115 id=115 data-nosnippet>115</a>//! - ***flex-str***: this feature makes available the **[Flexstr]** type.  
+<a href=#116 id=116 data-nosnippet>116</a>//! - ***shared-str***: this feature makes available the **[Sharedstr]** type.
+<a href=#117 id=117 data-nosnippet>117</a>//! - ***std***: this feature cancels `no_std` by enabling the **[fstr]** type.
+<a href=#118 id=118 data-nosnippet>118</a>//!   An alias for this feature name is 'fstr'.
+<a href=#119 id=119 data-nosnippet>119</a>//! - ***pub-tstr***: this feature will make the tstr type public. It is not
+<a href=#120 id=120 data-nosnippet>120</a>//!   recommended: use instead the type aliases [str4] - [str256], which are
+<a href=#121 id=121 data-nosnippet>121</a>//!   always available.
+<a href=#122 id=122 data-nosnippet>122</a>//! - **no-alloc**: this *anti-feature* disables any features that requires the alloc (or std)
+<a href=#123 id=123 data-nosnippet>123</a>//!   crate.  It will disable *entirely* the fstr, Flexstr and Sharedstr types: using
+<a href=#124 id=124 data-nosnippet>124</a>//!   `no-alloc` together with `flex-str`, for example, will not enable the Flexstr type.
+<a href=#125 id=125 data-nosnippet>125</a>//!   It also disables the features in [tstr], [zstr] and [cstr] that require the
+<a href=#126 id=126 data-nosnippet>126</a>//!   alloc crate, in particular any use of alloc::string::String.  Using this feature
+<a href=#127 id=127 data-nosnippet>127</a>//!   is *stronger than no_std*.  Note that when compiled with the `all-features` option, this feature will be included, which will exclude other features.
+<a href=#128 id=128 data-nosnippet>128</a>//! - ***experimental***: the meaning of this feature may change.  Currently
+<a href=#129 id=129 data-nosnippet>129</a>//!   it implements custom Indexing traits for the zstr type, including
+<a href=#130 id=130 data-nosnippet>130</a>//!   `IndexMut&lt;usize&gt;`, which allows individual bytes to be changed
+<a href=#131 id=131 data-nosnippet>131</a>//!   arbitrarily.  Experimental features are not part of the documentation.
+<a href=#132 id=132 data-nosnippet>132</a>//!
+<a href=#133 id=133 data-nosnippet>133</a>//! None of these features is provided by default, so specifying
+<a href=#134 id=134 data-nosnippet>134</a>//! `default-features=false` has no effect.
+<a href=#135 id=135 data-nosnippet>135</a>//!
+<a href=#136 id=136 data-nosnippet>136</a>//! **SAMPLE BUILD CONFIGURATIONS**
+<a href=#137 id=137 data-nosnippet>137</a>//!
+<a href=#138 id=138 data-nosnippet>138</a>//! The simplest way to install this create is to **`cargo add fixedstr`** in your
+<a href=#139 id=139 data-nosnippet>139</a>//! crate or add `fixedstr = "0.5"` to your dependencies in Cargo.toml.
+<a href=#140 id=140 data-nosnippet>140</a>//! The default build makes available the [zstr] type and the type aliases
+<a href=#141 id=141 data-nosnippet>141</a>//! [str4] - [str256] for [tstr].  Serde is not available with this build
+<a href=#142 id=142 data-nosnippet>142</a>//! but no_std is supported, substituting some std features with those from the
+<a href=#143 id=143 data-nosnippet>143</a>//! alloc crate.
+<a href=#144 id=144 data-nosnippet>144</a>//!
+<a href=#145 id=145 data-nosnippet>145</a>//! For **the smallest possible build**, do **`cargo add fixedstr --features no-alloc`**
+<a href=#146 id=146 data-nosnippet>146</a>//! in your crate or add the following in Cargo.toml.
+<a href=#147 id=147 data-nosnippet>147</a>//! ```ignore
+<a href=#148 id=148 data-nosnippet>148</a>//!   [dependencies]
+<a href=#149 id=149 data-nosnippet>149</a>//!   fixedstr = {version="0.5", features=["no-alloc"]}
+<a href=#150 id=150 data-nosnippet>150</a>//! ```
+<a href=#151 id=151 data-nosnippet>151</a>//!
+<a href=#152 id=152 data-nosnippet>152</a>//! To further enable serde serialization, add the following instead:
+<a href=#153 id=153 data-nosnippet>153</a>//! ```ignore
+<a href=#154 id=154 data-nosnippet>154</a>//!   [dependencies]
+<a href=#155 id=155 data-nosnippet>155</a>//!   fixedstr = {version="0.5", features=["serde","no-alloc"]}
+<a href=#156 id=156 data-nosnippet>156</a>//! ```
+<a href=#157 id=157 data-nosnippet>157</a>//! and to exclude `cstr` but include all other features (except `no-alloc`):
+<a href=#158 id=158 data-nosnippet>158</a>//! ```ignore
+<a href=#159 id=159 data-nosnippet>159</a>//!   [dependencies]
+<a href=#160 id=160 data-nosnippet>160</a>//!   fixedstr = {version="0.5", features=["std","flex-str","shared-str","serde","pub-tstr","experimental"]}
+<a href=#161 id=161 data-nosnippet>161</a>//! ```
+<a href=#162 id=162 data-nosnippet>162</a>//! &lt;br&gt;
+<a href=#163 id=163 data-nosnippet>163</a>//!
+<a href=#164 id=164 data-nosnippet>164</a>//! **Do not** install this crate with the `--all-features` option unless you
+<a href=#165 id=165 data-nosnippet>165</a>//! understand that it would include `no-alloc`, which will disable several
+<a href=#166 id=166 data-nosnippet>166</a>//! types and other features of the crate.
+<a href=#167 id=167 data-nosnippet>167</a>//!
+<a href=#168 id=168 data-nosnippet>168</a>//!  ## Examples
+<a href=#169 id=169 data-nosnippet>169</a>//!
+<a href=#170 id=170 data-nosnippet>170</a>//!```
+<a href=#171 id=171 data-nosnippet>171</a>//! use fixedstr::*;
+<a href=#172 id=172 data-nosnippet>172</a>//! let a = str8::from("abcdefg"); //creates new string from &amp;str
+<a href=#173 id=173 data-nosnippet>173</a>//! let a1 = a; // copied, not moved
+<a href=#174 id=174 data-nosnippet>174</a>//! let a2:&amp;str = a.to_str();
+<a href=#175 id=175 data-nosnippet>175</a>//! let a3:String = a.to_string();
+<a href=#176 id=176 data-nosnippet>176</a>//! assert_eq!(a.nth_ascii(2), 'c');
+<a href=#177 id=177 data-nosnippet>177</a>//! let ab = a.substr(1,5);  // copies substring to new str8
+<a href=#178 id=178 data-nosnippet>178</a>//! assert_eq!(ab,"bcde");  // can compare with &amp;str
+<a href=#179 id=179 data-nosnippet>179</a>//! assert_eq!(&amp;a[1..4],"bcd"); // implements Index
+<a href=#180 id=180 data-nosnippet>180</a>//! assert!(a&lt;ab);  // implements Ord (and Hash, Debug, Display, other traits)
+<a href=#181 id=181 data-nosnippet>181</a>//! let mut u:zstr&lt;8&gt; = zstr::from("aλb"); //unicode support
+<a href=#182 id=182 data-nosnippet>182</a>//! {assert_eq!(u.nth(1).unwrap(),'λ');} // nth returns Option&lt;char&gt;
+<a href=#183 id=183 data-nosnippet>183</a>//! assert!(u.set(1,'μ'));  // changes a character of the same character class
+<a href=#184 id=184 data-nosnippet>184</a>//! assert!(!u.set(1,'c')); // .set returns false on failure
+<a href=#185 id=185 data-nosnippet>185</a>//! assert!(u.set(2,'c'));
+<a href=#186 id=186 data-nosnippet>186</a>//! assert_eq!(u, "aμc");
+<a href=#187 id=187 data-nosnippet>187</a>//! assert_eq!(u.len(),4);  // length in bytes
+<a href=#188 id=188 data-nosnippet>188</a>//! assert_eq!(u.charlen(),3);  // length in chars
+<a href=#189 id=189 data-nosnippet>189</a>//! let mut ac:str16 = a.resize(); // copies to larger capacity string
+<a href=#190 id=190 data-nosnippet>190</a>//! let remainder:&amp;str = ac.push("hijklmnopqrst");  //appends string, returns left over
+<a href=#191 id=191 data-nosnippet>191</a>//! assert_eq!(ac.len(),15);
+<a href=#192 id=192 data-nosnippet>192</a>//! assert_eq!(remainder, "pqrst");
+<a href=#193 id=193 data-nosnippet>193</a>//! ac.truncate(10); // shortens string in place
+<a href=#194 id=194 data-nosnippet>194</a>//! assert_eq!(&amp;ac,"abcdefghij");
+<a href=#195 id=195 data-nosnippet>195</a>//! let (upper,lower) = (str8::make("ABC"), str8::make("abc"));
+<a href=#196 id=196 data-nosnippet>196</a>//! assert_eq!(upper, lower.to_ascii_upper()); // no owned String needed
+<a href=#197 id=197 data-nosnippet>197</a>//!  
+<a href=#198 id=198 data-nosnippet>198</a>//! let c1 = str8::from("abcdef"); // string concatenation with + for strN types  
+<a href=#199 id=199 data-nosnippet>199</a>//! let c2 = str8::from("xyz123");
+<a href=#200 id=200 data-nosnippet>200</a>//! let c3 = c1 + c2;       
+<a href=#201 id=201 data-nosnippet>201</a>//! assert_eq!(c3,"abcdefxyz123");   
+<a href=#202 id=202 data-nosnippet>202</a>//! assert_eq!(c3.capacity(),15);  // type of c3 is str16
+<a href=#203 id=203 data-nosnippet>203</a>//!
+<a href=#204 id=204 data-nosnippet>204</a>//! let c4 = str_format!(str16,"abc {}{}{}",1,2,3); // impls core::fmt::Write
+<a href=#205 id=205 data-nosnippet>205</a>//! assert_eq!(c4,"abc 123");  // str_format! truncates if capacity exceeded
+<a href=#206 id=206 data-nosnippet>206</a>//! let c5 = try_format!(str8,"abcdef{}","ghijklmn");
+<a href=#207 id=207 data-nosnippet>207</a>//! assert!(c5.is_none());  // try_format! returns None if capacity exceeded
+<a href=#208 id=208 data-nosnippet>208</a>//!
+<a href=#209 id=209 data-nosnippet>209</a>//! #[cfg(feature = "shared-str")]
+<a href=#210 id=210 data-nosnippet>210</a>//! #[cfg(not(feature = "no-alloc"))]
+<a href=#211 id=211 data-nosnippet>211</a>//! {
+<a href=#212 id=212 data-nosnippet>212</a>//!   let mut s:Sharedstr&lt;8&gt; = Sharedstr::from("abcd");
+<a href=#213 id=213 data-nosnippet>213</a>//!   let mut s2 = s.clone(); // O(1) cost
+<a href=#214 id=214 data-nosnippet>214</a>//!   s.push_char('e');
+<a href=#215 id=215 data-nosnippet>215</a>//!   s2.set(0,'A');
+<a href=#216 id=216 data-nosnippet>216</a>//!   assert_eq!(s2, "Abcde");
+<a href=#217 id=217 data-nosnippet>217</a>//!   assert!(s==s2 &amp;&amp; s.ptr_eq(&amp;s2));
+<a href=#218 id=218 data-nosnippet>218</a>//! }
+<a href=#219 id=219 data-nosnippet>219</a>//!
+<a href=#220 id=220 data-nosnippet>220</a>//! #[cfg(feature = "experimental")]
+<a href=#221 id=221 data-nosnippet>221</a>//! {
+<a href=#222 id=222 data-nosnippet>222</a>//!   let mut s = &lt;zstr&lt;8&gt;&gt;::from("abcd");
+<a href=#223 id=223 data-nosnippet>223</a>//!   s[0] = b'A';       // implements IndexMut&lt;usize&gt; (only for zstr)
+<a href=#224 id=224 data-nosnippet>224</a>//!   assert_eq!(&amp;s[0..3],"Abc");
+<a href=#225 id=225 data-nosnippet>225</a>//! }
+<a href=#226 id=226 data-nosnippet>226</a>//! ```
+<a href=#227 id=227 data-nosnippet>227</a>//!
+<a href=#228 id=228 data-nosnippet>228</a></span><span class="comment">// #![doc = document_features::document_features!()]
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a></span><span class="attr">#![allow(unused_variables)]
+<a href=#231 id=231 data-nosnippet>231</a>#![allow(non_snake_case)]
+<a href=#232 id=232 data-nosnippet>232</a>#![allow(non_camel_case_types)]
+<a href=#233 id=233 data-nosnippet>233</a>#![allow(unused_parens)]
+<a href=#234 id=234 data-nosnippet>234</a>#![allow(unused_assignments)]
+<a href=#235 id=235 data-nosnippet>235</a>#![allow(unused_mut)]
+<a href=#236 id=236 data-nosnippet>236</a>#![allow(unused_imports)]
+<a href=#237 id=237 data-nosnippet>237</a>#![allow(dead_code)]
+<a href=#238 id=238 data-nosnippet>238</a>#![no_std]
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a>#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#241 id=241 data-nosnippet>241</a>#[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#242 id=242 data-nosnippet>242</a></span><span class="kw">mod </span>full_fixed;
+<a href=#243 id=243 data-nosnippet>243</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#244 id=244 data-nosnippet>244</a>#[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#245 id=245 data-nosnippet>245</a></span><span class="kw">pub use </span>full_fixed::<span class="kw-2">*</span>;
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a><span class="comment">//#[cfg(feature = "flex-str")]
+<a href=#248 id=248 data-nosnippet>248</a>//mod shared_structs;
+<a href=#249 id=249 data-nosnippet>249</a>
+<a href=#250 id=250 data-nosnippet>250</a></span><span class="attr">#[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#251 id=251 data-nosnippet>251</a>#[cfg(any(feature = <span class="string">"shared-str"</span>, feature = <span class="string">"flex-str"</span>))]
+<a href=#252 id=252 data-nosnippet>252</a></span><span class="kw">mod </span>shared_structs;
+<a href=#253 id=253 data-nosnippet>253</a>
+<a href=#254 id=254 data-nosnippet>254</a><span class="attr">#[cfg(feature = <span class="string">"flex-str"</span>)]
+<a href=#255 id=255 data-nosnippet>255</a>#[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#256 id=256 data-nosnippet>256</a></span><span class="kw">mod </span>flexible_string;
+<a href=#257 id=257 data-nosnippet>257</a><span class="attr">#[cfg(feature = <span class="string">"flex-str"</span>)]
+<a href=#258 id=258 data-nosnippet>258</a>#[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#259 id=259 data-nosnippet>259</a></span><span class="kw">pub use </span>flexible_string::<span class="kw-2">*</span>;
+<a href=#260 id=260 data-nosnippet>260</a>
+<a href=#261 id=261 data-nosnippet>261</a><span class="attr">#[cfg(feature = <span class="string">"shared-str"</span>)]
+<a href=#262 id=262 data-nosnippet>262</a>#[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#263 id=263 data-nosnippet>263</a></span><span class="kw">mod </span>shared_string;
+<a href=#264 id=264 data-nosnippet>264</a><span class="attr">#[cfg(feature = <span class="string">"shared-str"</span>)]
+<a href=#265 id=265 data-nosnippet>265</a>#[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#266 id=266 data-nosnippet>266</a></span><span class="kw">pub use </span>shared_string::<span class="kw-2">*</span>;
+<a href=#267 id=267 data-nosnippet>267</a>
+<a href=#268 id=268 data-nosnippet>268</a><span class="kw">mod </span>zero_terminated;
+<a href=#269 id=269 data-nosnippet>269</a><span class="kw">pub use </span>zero_terminated::<span class="kw-2">*</span>;
+<a href=#270 id=270 data-nosnippet>270</a>
+<a href=#271 id=271 data-nosnippet>271</a><span class="kw">mod </span>tiny_internal;
+<a href=#272 id=272 data-nosnippet>272</a><span class="kw">use </span>tiny_internal::<span class="kw-2">*</span>;
+<a href=#273 id=273 data-nosnippet>273</a><span class="attr">#[cfg(feature = <span class="string">"pub_tstr"</span>)]
+<a href=#274 id=274 data-nosnippet>274</a></span><span class="kw">pub use </span>tiny_internal::<span class="kw-2">*</span>;
+<a href=#275 id=275 data-nosnippet>275</a>
+<a href=#276 id=276 data-nosnippet>276</a><span class="attr">#[cfg(feature = <span class="string">"circular-str"</span>)]
+<a href=#277 id=277 data-nosnippet>277</a></span><span class="kw">mod </span>circular_string;
+<a href=#278 id=278 data-nosnippet>278</a><span class="attr">#[cfg(feature = <span class="string">"circular-str"</span>)]
+<a href=#279 id=279 data-nosnippet>279</a></span><span class="kw">pub use </span>circular_string::<span class="kw-2">*</span>;
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a><span class="comment">/*
+<a href=#282 id=282 data-nosnippet>282</a>#[cfg(feature = "compressed-str")]
+<a href=#283 id=283 data-nosnippet>283</a>#[cfg(not(feature = "no-alloc"))]
+<a href=#284 id=284 data-nosnippet>284</a>mod compressed;
+<a href=#285 id=285 data-nosnippet>285</a>#[cfg(feature = "compressed-str")]
+<a href=#286 id=286 data-nosnippet>286</a>#[cfg(not(feature = "no-alloc"))]
+<a href=#287 id=287 data-nosnippet>287</a>pub use compressed::*;
+<a href=#288 id=288 data-nosnippet>288</a>*/
+<a href=#289 id=289 data-nosnippet>289</a>
+<a href=#290 id=290 data-nosnippet>290</a></span><span class="attr">#[cfg(feature = <span class="string">"serde"</span>)]
+<a href=#291 id=291 data-nosnippet>291</a></span><span class="kw">mod </span>serde_support {
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">use </span>serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+<a href=#294 id=294 data-nosnippet>294</a>    <span class="macro">macro_rules!</span> generate_impl {
+<a href=#295 id=295 data-nosnippet>295</a>        (<span class="macro-nonterminal">$ty</span>: ident, <span class="macro-nonterminal">$visitor</span>: ident) =&gt; {
+<a href=#296 id=296 data-nosnippet>296</a>            <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; Serialize <span class="kw">for </span><span class="macro-nonterminal">$ty</span>&lt;N&gt; {
+<a href=#297 id=297 data-nosnippet>297</a>                <span class="kw">fn </span>serialize&lt;S: Serializer&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, serializer: S) -&gt; <span class="prelude-ty">Result</span>&lt;S::Ok, S::Error&gt; {
+<a href=#298 id=298 data-nosnippet>298</a>                    serializer.serialize_str(<span class="self">self</span>.as_str())
+<a href=#299 id=299 data-nosnippet>299</a>                }
+<a href=#300 id=300 data-nosnippet>300</a>            }
+<a href=#301 id=301 data-nosnippet>301</a>            <span class="kw">impl</span>&lt;<span class="lifetime">'de</span>, <span class="kw">const </span>N: usize&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; <span class="kw">for </span><span class="macro-nonterminal">$ty</span>&lt;N&gt; {
+<a href=#302 id=302 data-nosnippet>302</a>                <span class="kw">fn </span>deserialize&lt;D: Deserializer&lt;<span class="lifetime">'de</span>&gt;&gt;(deserializer: D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, D::Error&gt; {
+<a href=#303 id=303 data-nosnippet>303</a>                    deserializer.deserialize_str(<span class="macro-nonterminal">$visitor</span>)
+<a href=#304 id=304 data-nosnippet>304</a>                }
+<a href=#305 id=305 data-nosnippet>305</a>            }
+<a href=#306 id=306 data-nosnippet>306</a>            <span class="kw">struct </span><span class="macro-nonterminal">$visitor</span>&lt;<span class="kw">const </span>N: usize&gt;;
+<a href=#307 id=307 data-nosnippet>307</a>            <span class="kw">impl</span>&lt;<span class="lifetime">'de</span>, <span class="kw">const </span>N: usize&gt; Visitor&lt;<span class="lifetime">'de</span>&gt; <span class="kw">for </span><span class="macro-nonterminal">$visitor</span>&lt;N&gt; {
+<a href=#308 id=308 data-nosnippet>308</a>                <span class="kw">type </span>Value = <span class="macro-nonterminal">$ty</span>&lt;N&gt;;
+<a href=#309 id=309 data-nosnippet>309</a>                <span class="kw">fn </span>expecting(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>core::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; core::fmt::Result {
+<a href=#310 id=310 data-nosnippet>310</a>                    f.write_str(<span class="string">"a string"</span>)
+<a href=#311 id=311 data-nosnippet>311</a>                }
+<a href=#312 id=312 data-nosnippet>312</a>                <span class="kw">fn </span>visit_str&lt;E: serde::de::Error&gt;(<span class="self">self</span>, s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Value, E&gt; {
+<a href=#313 id=313 data-nosnippet>313</a>                    <span class="macro-nonterminal">$ty::try_make</span>(s).map_err(|<span class="kw">_</span>| E::custom(<span class="string">"string too long"</span>))
+<a href=#314 id=314 data-nosnippet>314</a>                }
+<a href=#315 id=315 data-nosnippet>315</a>            }
+<a href=#316 id=316 data-nosnippet>316</a>        };
+<a href=#317 id=317 data-nosnippet>317</a>    }
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="macro">generate_impl!</span>(zstr, ZstrVisitor);
+<a href=#319 id=319 data-nosnippet>319</a>    <span class="macro">generate_impl!</span>(tstr, TstrVisitor);
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#321 id=321 data-nosnippet>321</a>    #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="macro">generate_impl!</span>(fstr, FstrVisitor);
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="attr">#[cfg(feature = <span class="string">"flex-str"</span>)]
+<a href=#324 id=324 data-nosnippet>324</a>    #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#325 id=325 data-nosnippet>325</a>    </span><span class="macro">generate_impl!</span>(Flexstr, FlexstrVisitor);
+<a href=#326 id=326 data-nosnippet>326</a>
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="attr">#[cfg(feature = <span class="string">"circular-str"</span>)]
+<a href=#328 id=328 data-nosnippet>328</a>    </span><span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; Serialize <span class="kw">for </span>cstr&lt;N&gt; {
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">fn </span>serialize&lt;S: Serializer&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, serializer: S) -&gt; <span class="prelude-ty">Result</span>&lt;S::Ok, S::Error&gt; {
+<a href=#330 id=330 data-nosnippet>330</a>            <span class="kw">let </span>s = <span class="self">self</span>.to_contiguous(); <span class="comment">//self.to_string();
+<a href=#331 id=331 data-nosnippet>331</a>            </span><span class="kw">let </span>(a, <span class="kw">_</span>) = s.to_strs();
+<a href=#332 id=332 data-nosnippet>332</a>            serializer.serialize_str(a)
+<a href=#333 id=333 data-nosnippet>333</a>        }
+<a href=#334 id=334 data-nosnippet>334</a>    } <span class="comment">//serialize
+<a href=#335 id=335 data-nosnippet>335</a>
+<a href=#336 id=336 data-nosnippet>336</a>    </span><span class="attr">#[cfg(feature = <span class="string">"circular-str"</span>)]
+<a href=#337 id=337 data-nosnippet>337</a>    </span><span class="kw">struct </span>CstrVisitor&lt;<span class="kw">const </span>N: usize&gt;;
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="attr">#[cfg(feature = <span class="string">"circular-str"</span>)]
+<a href=#339 id=339 data-nosnippet>339</a>    </span><span class="kw">impl</span>&lt;<span class="lifetime">'de</span>, <span class="kw">const </span>N: usize&gt; Visitor&lt;<span class="lifetime">'de</span>&gt; <span class="kw">for </span>CstrVisitor&lt;N&gt; {
+<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">type </span>Value = cstr&lt;N&gt;;
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">fn </span>expecting(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>core::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; core::fmt::Result {
+<a href=#342 id=342 data-nosnippet>342</a>            f.write_str(<span class="string">"a string"</span>)
+<a href=#343 id=343 data-nosnippet>343</a>        }
+<a href=#344 id=344 data-nosnippet>344</a>        <span class="kw">fn </span>visit_str&lt;E: serde::de::Error&gt;(<span class="self">self</span>, s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::Value, E&gt; {
+<a href=#345 id=345 data-nosnippet>345</a>            cstr::try_make(s).map_err(|<span class="kw">_</span>| E::custom(<span class="string">"string too long"</span>))
+<a href=#346 id=346 data-nosnippet>346</a>        }
+<a href=#347 id=347 data-nosnippet>347</a>    }
+<a href=#348 id=348 data-nosnippet>348</a>
+<a href=#349 id=349 data-nosnippet>349</a>    <span class="attr">#[cfg(feature = <span class="string">"circular-str"</span>)]
+<a href=#350 id=350 data-nosnippet>350</a>    </span><span class="kw">impl</span>&lt;<span class="lifetime">'de</span>, <span class="kw">const </span>N: usize&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; <span class="kw">for </span>cstr&lt;N&gt; {
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">fn </span>deserialize&lt;D: Deserializer&lt;<span class="lifetime">'de</span>&gt;&gt;(deserializer: D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, D::Error&gt; {
+<a href=#352 id=352 data-nosnippet>352</a>            deserializer.deserialize_str(CstrVisitor)
+<a href=#353 id=353 data-nosnippet>353</a>        }
+<a href=#354 id=354 data-nosnippet>354</a>    }
+<a href=#355 id=355 data-nosnippet>355</a>} <span class="comment">//serde
+<a href=#356 id=356 data-nosnippet>356</a>
+<a href=#357 id=357 data-nosnippet>357</a></span><span class="doccomment">/// Types for small strings that use an efficient representation
+<a href=#358 id=358 data-nosnippet>358</a>/// underneath.  Alias for internal type [tstr]\&lt;8\&gt;.
+<a href=#359 id=359 data-nosnippet>359</a>/// A str8 is 8 bytes and can hold string of up to 7 bytes.
+<a href=#360 id=360 data-nosnippet>360</a>/// See documentation for the aliased [tstr] type.
+<a href=#361 id=361 data-nosnippet>361</a>///
+<a href=#362 id=362 data-nosnippet>362</a>/// Example:
+<a href=#363 id=363 data-nosnippet>363</a>/// ```
+<a href=#364 id=364 data-nosnippet>364</a>///  # use fixedstr::str8;
+<a href=#365 id=365 data-nosnippet>365</a>///  let mut s = str8::from("aλc");
+<a href=#366 id=366 data-nosnippet>366</a>///  assert_eq!(s.capacity(),7);
+<a href=#367 id=367 data-nosnippet>367</a>///  assert_eq!(s.push("1234567"), "4567");
+<a href=#368 id=368 data-nosnippet>368</a>///  assert_eq!(s,"aλc123");
+<a href=#369 id=369 data-nosnippet>369</a>///  assert_eq!(s.charlen(), 6);
+<a href=#370 id=370 data-nosnippet>370</a>///  assert_eq!(s.len(), 7);  
+<a href=#371 id=371 data-nosnippet>371</a>/// ```
+<a href=#372 id=372 data-nosnippet>372</a>
+<a href=#373 id=373 data-nosnippet>373</a></span><span class="kw">pub type </span>str8 = tstr&lt;<span class="number">8</span>&gt;;
+<a href=#374 id=374 data-nosnippet>374</a><span class="doccomment">/// A str16 can hold a string of up to 15 bytes. See docs for [fstr] or [zstr].
+<a href=#375 id=375 data-nosnippet>375</a>/// The size of str16 is 16 bytes, which is the same as for &amp;str on 64bit
+<a href=#376 id=376 data-nosnippet>376</a>/// systems.
+<a href=#377 id=377 data-nosnippet>377</a></span><span class="kw">pub type </span>str16 = tstr&lt;<span class="number">16</span>&gt;;
+<a href=#378 id=378 data-nosnippet>378</a><span class="doccomment">/// A str32 can hold a string of up to 31 bytes. See docs for [fstr] or [zstr]
+<a href=#379 id=379 data-nosnippet>379</a></span><span class="kw">pub type </span>str32 = tstr&lt;<span class="number">32</span>&gt;;
+<a href=#380 id=380 data-nosnippet>380</a><span class="doccomment">/// A str64 can hold a string of up to 63 bytes. See docs for [fstr] or [zstr]
+<a href=#381 id=381 data-nosnippet>381</a></span><span class="kw">pub type </span>str64 = tstr&lt;<span class="number">64</span>&gt;;
+<a href=#382 id=382 data-nosnippet>382</a><span class="doccomment">/// A str28 can hold a string of up to 127 bytes. See docs for [fstr] or [zstr]
+<a href=#383 id=383 data-nosnippet>383</a></span><span class="kw">pub type </span>str128 = tstr&lt;<span class="number">128</span>&gt;;
+<a href=#384 id=384 data-nosnippet>384</a>
+<a href=#385 id=385 data-nosnippet>385</a><span class="doccomment">/// Each type strN is represented underneath by a `[u8;N]` with N&lt;=256.
+<a href=#386 id=386 data-nosnippet>386</a>/// The first byte of the array always holds the length of the string.
+<a href=#387 id=387 data-nosnippet>387</a>/// Each such type can hold a string of up to N-1 bytes, with max size=255.
+<a href=#388 id=388 data-nosnippet>388</a>/// These types represent the best combination of [fstr] and [zstr] in
+<a href=#389 id=389 data-nosnippet>389</a>/// terms of speed and memory efficiency.
+<a href=#390 id=390 data-nosnippet>390</a>///&lt;br&gt;
+<a href=#391 id=391 data-nosnippet>391</a>/// In addition, the str4-str128 types implement [core::ops::Add] in a way that
+<a href=#392 id=392 data-nosnippet>392</a>/// two str8 strings will always concatenate to str16, and similarly for
+<a href=#393 id=393 data-nosnippet>393</a>/// all other strN types up to str128.
+<a href=#394 id=394 data-nosnippet>394</a>///```
+<a href=#395 id=395 data-nosnippet>395</a>///  # use fixedstr::*;
+<a href=#396 id=396 data-nosnippet>396</a>///  let c1 = str8::from("abcd");
+<a href=#397 id=397 data-nosnippet>397</a>///  let c2 = str8::from("xyz");
+<a href=#398 id=398 data-nosnippet>398</a>///  let c3 = c1 + c2;
+<a href=#399 id=399 data-nosnippet>399</a>///  assert_eq!(c3,"abcdxyz");
+<a href=#400 id=400 data-nosnippet>400</a>///  assert_eq!(c3.capacity(),15);
+<a href=#401 id=401 data-nosnippet>401</a>///```
+<a href=#402 id=402 data-nosnippet>402</a>
+<a href=#403 id=403 data-nosnippet>403</a></span><span class="kw">pub type </span>str256 = tstr&lt;<span class="number">256</span>&gt;;
+<a href=#404 id=404 data-nosnippet>404</a>
+<a href=#405 id=405 data-nosnippet>405</a><span class="doccomment">/// Alias for internal type `tstr&lt;4&gt;`.
+<a href=#406 id=406 data-nosnippet>406</a>/// &lt;br&gt;Holds strings of up to three single-byte chars, good enough to represent abbreviations
+<a href=#407 id=407 data-nosnippet>407</a>/// such as those for states and airports. Each str&lt;4&gt; is exactly 32 bits.
+<a href=#408 id=408 data-nosnippet>408</a>/// Alias for internal type `tstr&lt;4&gt;`.   See documentation for [tstr].
+<a href=#409 id=409 data-nosnippet>409</a></span><span class="kw">pub type </span>str4 = tstr&lt;<span class="number">4</span>&gt;;
+<a href=#410 id=410 data-nosnippet>410</a><span class="kw">pub type </span>str12 = tstr&lt;<span class="number">12</span>&gt;;
+<a href=#411 id=411 data-nosnippet>411</a><span class="kw">pub type </span>str24 = tstr&lt;<span class="number">24</span>&gt;;
+<a href=#412 id=412 data-nosnippet>412</a><span class="kw">pub type </span>str48 = tstr&lt;<span class="number">48</span>&gt;;
+<a href=#413 id=413 data-nosnippet>413</a><span class="kw">pub type </span>str96 = tstr&lt;<span class="number">96</span>&gt;;
+<a href=#414 id=414 data-nosnippet>414</a><span class="kw">pub type </span>str192 = tstr&lt;<span class="number">192</span>&gt;;
+<a href=#415 id=415 data-nosnippet>415</a>
+<a href=#416 id=416 data-nosnippet>416</a><span class="attr">#[macro_export]
+<a href=#417 id=417 data-nosnippet>417</a></span><span class="doccomment">/// creates a formated string of given type (by implementing [core::fmt::Write]):
+<a href=#418 id=418 data-nosnippet>418</a>/// ```
+<a href=#419 id=419 data-nosnippet>419</a>///    # use fixedstr::*;
+<a href=#420 id=420 data-nosnippet>420</a>///    let s = str_format!(str8,"abc{}{}{}",1,2,3);
+<a href=#421 id=421 data-nosnippet>421</a>///    assert_eq!(s,"abc123");
+<a href=#422 id=422 data-nosnippet>422</a>/// ```
+<a href=#423 id=423 data-nosnippet>423</a>/// will truncate if capacity exceeded, without warning. See [try_format!]
+<a href=#424 id=424 data-nosnippet>424</a>/// for version that does not truncate.
+<a href=#425 id=425 data-nosnippet>425</a></span><span class="macro">macro_rules!</span> str_format {
+<a href=#426 id=426 data-nosnippet>426</a>  (<span class="macro-nonterminal">$ty_size</span>:ty, $(<span class="macro-nonterminal">$args</span>:tt)<span class="kw-2">*</span>) =&gt; {
+<a href=#427 id=427 data-nosnippet>427</a>     {<span class="kw">use </span>core::fmt::Write;
+<a href=#428 id=428 data-nosnippet>428</a>     <span class="kw">let </span><span class="kw-2">mut </span>fstr0 = &lt;<span class="macro-nonterminal">$ty_size</span>&gt;::new();
+<a href=#429 id=429 data-nosnippet>429</a>     <span class="kw">let </span>res=<span class="macro">write!</span>(<span class="kw-2">&amp;mut </span>fstr0, $(<span class="macro-nonterminal">$args</span>)<span class="kw-2">*</span>);
+<a href=#430 id=430 data-nosnippet>430</a>     fstr0}
+<a href=#431 id=431 data-nosnippet>431</a>  };
+<a href=#432 id=432 data-nosnippet>432</a>}
+<a href=#433 id=433 data-nosnippet>433</a>
+<a href=#434 id=434 data-nosnippet>434</a><span class="attr">#[macro_export]
+<a href=#435 id=435 data-nosnippet>435</a></span><span class="doccomment">/// version of [str_format]! that returns an Option of the given type.
+<a href=#436 id=436 data-nosnippet>436</a>/// ```
+<a href=#437 id=437 data-nosnippet>437</a>///   # use fixedstr::*;
+<a href=#438 id=438 data-nosnippet>438</a>///  let s = try_format!(str32,"abcdefg{}","hijklmnop").unwrap();
+<a href=#439 id=439 data-nosnippet>439</a>///  let s2 = try_format!(str8,"abcdefg{}","hijklmnop");
+<a href=#440 id=440 data-nosnippet>440</a>///  assert!(s2.is_none());
+<a href=#441 id=441 data-nosnippet>441</a>/// ```
+<a href=#442 id=442 data-nosnippet>442</a></span><span class="macro">macro_rules!</span> try_format {
+<a href=#443 id=443 data-nosnippet>443</a>  (<span class="macro-nonterminal">$ty_size</span>:ty, $(<span class="macro-nonterminal">$args</span>:tt)<span class="kw-2">*</span>) =&gt; {
+<a href=#444 id=444 data-nosnippet>444</a>     {<span class="kw">use </span>core::fmt::Write;
+<a href=#445 id=445 data-nosnippet>445</a>     <span class="kw">let </span><span class="kw-2">mut </span>fstr0 = &lt;<span class="macro-nonterminal">$ty_size</span>&gt;::new();
+<a href=#446 id=446 data-nosnippet>446</a>     <span class="kw">let </span>result = <span class="macro">write!</span>(<span class="kw-2">&amp;mut </span>fstr0, $(<span class="macro-nonterminal">$args</span>)<span class="kw-2">*</span>);
+<a href=#447 id=447 data-nosnippet>447</a>     <span class="kw">if </span>result.is_ok() {<span class="prelude-val">Some</span>(fstr0)} <span class="kw">else </span>{<span class="prelude-val">None</span>}}
+<a href=#448 id=448 data-nosnippet>448</a>  };
+<a href=#449 id=449 data-nosnippet>449</a>}
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a><span class="comment">/*
+<a href=#452 id=452 data-nosnippet>452</a>//////////// to string trait
+<a href=#453 id=453 data-nosnippet>453</a>pub trait ToTstr&lt;const N: usize&gt; {
+<a href=#454 id=454 data-nosnippet>454</a>  fn to_tstr(&amp;self) -&gt; tstr&lt;N&gt;;
+<a href=#455 id=455 data-nosnippet>455</a>}//tostring trait
+<a href=#456 id=456 data-nosnippet>456</a>*/
+<a href=#457 id=457 data-nosnippet>457</a>
+<a href=#458 id=458 data-nosnippet>458</a></span><span class="attr">#[macro_export]
+<a href=#459 id=459 data-nosnippet>459</a></span><span class="doccomment">/// Macro for converting any expression that implements the Display trait
+<a href=#460 id=460 data-nosnippet>460</a>/// into the specified type, similar to `to_string` but without necessary
+<a href=#461 id=461 data-nosnippet>461</a>/// heap allocation.  Truncation is automatic and silent. Example:
+<a href=#462 id=462 data-nosnippet>462</a>///```
+<a href=#463 id=463 data-nosnippet>463</a>///  # use fixedstr::*;
+<a href=#464 id=464 data-nosnippet>464</a>///  let fs = to_fixedstr!(str8,-0132*2);
+<a href=#465 id=465 data-nosnippet>465</a>///  assert_eq!(&amp;fs,"-264");
+<a href=#466 id=466 data-nosnippet>466</a>///```
+<a href=#467 id=467 data-nosnippet>467</a>/// For version that does not truncate, use [convert_to_str!].
+<a href=#468 id=468 data-nosnippet>468</a></span><span class="macro">macro_rules!</span> to_fixedstr {
+<a href=#469 id=469 data-nosnippet>469</a>    (<span class="macro-nonterminal">$ty_size</span>:ty, <span class="macro-nonterminal">$x</span>:expr) =&gt; {{
+<a href=#470 id=470 data-nosnippet>470</a>        <span class="kw">use </span>core::fmt::Write;
+<a href=#471 id=471 data-nosnippet>471</a>        <span class="kw">let </span><span class="kw-2">mut </span>fstr0 = &lt;<span class="macro-nonterminal">$ty_size</span>&gt;::new();
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">let </span>res = <span class="macro">write!</span>(<span class="kw-2">&amp;mut </span>fstr0, <span class="string">"{}"</span>, <span class="macro-nonterminal">$x</span>);
+<a href=#473 id=473 data-nosnippet>473</a>        fstr0
+<a href=#474 id=474 data-nosnippet>474</a>    }};
+<a href=#475 id=475 data-nosnippet>475</a>}
+<a href=#476 id=476 data-nosnippet>476</a>
+<a href=#477 id=477 data-nosnippet>477</a><span class="attr">#[macro_export]
+<a href=#478 id=478 data-nosnippet>478</a></span><span class="doccomment">/// Version of [to_fixedstr!] that returns None instead of truncating .
+<a href=#479 id=479 data-nosnippet>479</a>///```
+<a href=#480 id=480 data-nosnippet>480</a>///  # use fixedstr::*;
+<a href=#481 id=481 data-nosnippet>481</a>///  let fsopt = convert_to_str!(zstr&lt;16&gt;,0.013128009);
+<a href=#482 id=482 data-nosnippet>482</a>///  assert!(matches!(fsopt.as_deref(),Some("0.013128009")))
+<a href=#483 id=483 data-nosnippet>483</a>///```
+<a href=#484 id=484 data-nosnippet>484</a></span><span class="macro">macro_rules!</span> convert_to_str {
+<a href=#485 id=485 data-nosnippet>485</a>    (<span class="macro-nonterminal">$ty_size</span>:ty, <span class="macro-nonterminal">$x</span>:expr) =&gt; {{
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw">use </span>core::fmt::Write;
+<a href=#487 id=487 data-nosnippet>487</a>        <span class="kw">let </span><span class="kw-2">mut </span>fstr0 = &lt;<span class="macro-nonterminal">$ty_size</span>&gt;::new();
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="kw">let </span>res = <span class="macro">write!</span>(<span class="kw-2">&amp;mut </span>fstr0, <span class="string">"{}"</span>, <span class="macro-nonterminal">$x</span>);
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">if </span>res.is_ok() {
+<a href=#490 id=490 data-nosnippet>490</a>            <span class="prelude-val">Some</span>(fstr0)
+<a href=#491 id=491 data-nosnippet>491</a>        } <span class="kw">else </span>{
+<a href=#492 id=492 data-nosnippet>492</a>            <span class="prelude-val">None
+<a href=#493 id=493 data-nosnippet>493</a>        </span>}
+<a href=#494 id=494 data-nosnippet>494</a>    }};
+<a href=#495 id=495 data-nosnippet>495</a>}
+<a href=#496 id=496 data-nosnippet>496</a>
+<a href=#497 id=497 data-nosnippet>497</a><span class="comment">/////////////////////////////////////////////////////  Testing ...
+<a href=#498 id=498 data-nosnippet>498</a>
+<a href=#499 id=499 data-nosnippet>499</a></span><span class="attr">#[cfg(test)]
+<a href=#500 id=500 data-nosnippet>500</a></span><span class="kw">mod </span>tests {
+<a href=#501 id=501 data-nosnippet>501</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#502 id=502 data-nosnippet>502</a>    <span class="attr">#[test]
+<a href=#503 id=503 data-nosnippet>503</a>    </span><span class="kw">fn </span>testmain() {
+<a href=#504 id=504 data-nosnippet>504</a>        nostdtest();
+<a href=#505 id=505 data-nosnippet>505</a>        ztests();
+<a href=#506 id=506 data-nosnippet>506</a>
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#508 id=508 data-nosnippet>508</a>        #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#509 id=509 data-nosnippet>509</a>        </span>maintest();
+<a href=#510 id=510 data-nosnippet>510</a>        <span class="attr">#[cfg(all(feature = <span class="string">"flex-str"</span>, feature = <span class="string">"std"</span>))]
+<a href=#511 id=511 data-nosnippet>511</a>        #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#512 id=512 data-nosnippet>512</a>        </span>flextest();
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#514 id=514 data-nosnippet>514</a>        #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#515 id=515 data-nosnippet>515</a>        </span>tinytests();
+<a href=#516 id=516 data-nosnippet>516</a>        <span class="attr">#[cfg(all(feature = <span class="string">"std"</span>, feature = <span class="string">"flex-str"</span>))]
+<a href=#517 id=517 data-nosnippet>517</a>        #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#518 id=518 data-nosnippet>518</a>        </span>poppingtest();
+<a href=#519 id=519 data-nosnippet>519</a>        <span class="attr">#[cfg(all(feature = <span class="string">"std"</span>, feature = <span class="string">"shared-str"</span>))]
+<a href=#520 id=520 data-nosnippet>520</a>        #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#521 id=521 data-nosnippet>521</a>        </span>strptrtests();
+<a href=#522 id=522 data-nosnippet>522</a>    } <span class="comment">//testmain
+<a href=#523 id=523 data-nosnippet>523</a>
+<a href=#524 id=524 data-nosnippet>524</a>    </span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#525 id=525 data-nosnippet>525</a>    #[cfg(feature = <span class="string">"shared-str"</span>)]
+<a href=#526 id=526 data-nosnippet>526</a>    #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#527 id=527 data-nosnippet>527</a>    </span><span class="kw">fn </span>strptrtests() {
+<a href=#528 id=528 data-nosnippet>528</a>        <span class="kw">extern crate </span>std;
+<a href=#529 id=529 data-nosnippet>529</a>        <span class="kw">use </span>std::fmt::Write;
+<a href=#530 id=530 data-nosnippet>530</a>        <span class="kw">use </span>std::string::String;
+<a href=#531 id=531 data-nosnippet>531</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = Sharedstr::&lt;<span class="number">8</span>&gt;::from(<span class="string">"abc12"</span>);
+<a href=#532 id=532 data-nosnippet>532</a>        <span class="kw">let </span><span class="kw-2">mut </span>b = a.clone();
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Sharedstr::&lt;<span class="number">8</span>&gt;::from(<span class="string">"abc"</span>);
+<a href=#534 id=534 data-nosnippet>534</a>        c.push_str(<span class="string">"12"</span>);
+<a href=#535 id=535 data-nosnippet>535</a>        <span class="macro">assert!</span>(a == c);
+<a href=#536 id=536 data-nosnippet>536</a>        <span class="macro">assert!</span>(a == <span class="string">"abc12"</span>);
+<a href=#537 id=537 data-nosnippet>537</a>        b.push(<span class="string">'3'</span>);
+<a href=#538 id=538 data-nosnippet>538</a>        <span class="macro">assert!</span>(a == <span class="string">"abc123"</span>);
+<a href=#539 id=539 data-nosnippet>539</a>        <span class="macro">assert!</span>(<span class="string">"abc123" </span>== b);
+<a href=#540 id=540 data-nosnippet>540</a>    } <span class="comment">//strptrtests
+<a href=#541 id=541 data-nosnippet>541</a>
+<a href=#542 id=542 data-nosnippet>542</a>    </span><span class="doccomment">/// test struct
+<a href=#543 id=543 data-nosnippet>543</a>    </span><span class="kw">struct </span>AB(i32, u32);
+<a href=#544 id=544 data-nosnippet>544</a>    <span class="kw">impl </span>core::fmt::Display <span class="kw">for </span>AB {
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>core::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; core::fmt::Result {
+<a href=#546 id=546 data-nosnippet>546</a>            <span class="macro">write!</span>(f, <span class="string">"{},{}"</span>, <span class="self">self</span>.<span class="number">0</span>, <span class="self">self</span>.<span class="number">1</span>)
+<a href=#547 id=547 data-nosnippet>547</a>        }
+<a href=#548 id=548 data-nosnippet>548</a>    }
+<a href=#549 id=549 data-nosnippet>549</a>
+<a href=#550 id=550 data-nosnippet>550</a>    <span class="attr">#[cfg(all(feature = <span class="string">"std"</span>, feature = <span class="string">"flex-str"</span>))]
+<a href=#551 id=551 data-nosnippet>551</a>    #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#552 id=552 data-nosnippet>552</a>    </span><span class="kw">fn </span>poppingtest() {
+<a href=#553 id=553 data-nosnippet>553</a>        <span class="kw">extern crate </span>std;
+<a href=#554 id=554 data-nosnippet>554</a>        <span class="kw">use </span>std::println;
+<a href=#555 id=555 data-nosnippet>555</a>        <span class="kw">let </span><span class="kw-2">mut </span>a = Flexstr::&lt;<span class="number">8</span>&gt;::from(<span class="string">"abcdef"</span>);
+<a href=#556 id=556 data-nosnippet>556</a>        <span class="macro">assert_eq!</span>(a.pop_char().unwrap(), <span class="string">'f'</span>);
+<a href=#557 id=557 data-nosnippet>557</a>        <span class="macro">println!</span>(<span class="string">"a: {}"</span>, <span class="kw-2">&amp;</span>a);
+<a href=#558 id=558 data-nosnippet>558</a>        <span class="kw">let </span>a = flexstr16::from(<span class="string">"abcd"</span>);
+<a href=#559 id=559 data-nosnippet>559</a>        <span class="kw">let </span>c: flexstr16 = <span class="kw-2">&amp;</span>a + <span class="string">"efg"</span>;
+<a href=#560 id=560 data-nosnippet>560</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>c, <span class="string">"abcdefg"</span>);
+<a href=#561 id=561 data-nosnippet>561</a>
+<a href=#562 id=562 data-nosnippet>562</a>        <span class="kw">let </span><span class="kw-2">mut </span>ab = AB(-<span class="number">5</span>, <span class="number">22 </span>+ <span class="number">1</span>);
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="kw">let </span>abfs = <span class="macro">to_fixedstr!</span>(zstr&lt;<span class="number">16</span>&gt;, <span class="kw-2">&amp;</span>ab);
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>abfs, <span class="string">"-5,23"</span>);
+<a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">let </span>abfs2 = <span class="macro">convert_to_str!</span>(zstr&lt;<span class="number">3</span>&gt;, <span class="number">10003</span>);
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="macro">assert!</span>(abfs2.is_none());
+<a href=#567 id=567 data-nosnippet>567</a>    } <span class="comment">//poppingtest
+<a href=#568 id=568 data-nosnippet>568</a>
+<a href=#569 id=569 data-nosnippet>569</a>    </span><span class="kw">fn </span>nostdtest() {
+<a href=#570 id=570 data-nosnippet>570</a>        <span class="kw">let </span>a: str8 = str8::from(<span class="string">"abcdef"</span>); <span class="comment">//a str8 can hold up to 7 bytes
+<a href=#571 id=571 data-nosnippet>571</a>        </span><span class="kw">let </span>a2 = a; <span class="comment">// copied, not moved
+<a href=#572 id=572 data-nosnippet>572</a>        </span><span class="kw">let </span>ab = a.substr(<span class="number">1</span>, <span class="number">5</span>); <span class="comment">// copies substring to new string
+<a href=#573 id=573 data-nosnippet>573</a>        </span><span class="macro">assert_eq!</span>(ab, <span class="string">"bcde"</span>); <span class="comment">// compare for equality with &amp;str
+<a href=#574 id=574 data-nosnippet>574</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>a[..<span class="number">3</span>], <span class="string">"abc"</span>); <span class="comment">// impls Deref&lt;str&gt;
+<a href=#575 id=575 data-nosnippet>575</a>        </span><span class="macro">assert!</span>(a &lt; ab); <span class="comment">// and Ord, Hash, Eq, Debug, Display, other common traits
+<a href=#576 id=576 data-nosnippet>576</a>        </span><span class="kw">let </span>astr: <span class="kw-2">&amp;</span>str = a.to_str(); <span class="comment">// convert to &amp;str
+<a href=#577 id=577 data-nosnippet>577</a>        </span><span class="kw">let </span>azstr: zstr&lt;<span class="number">16</span>&gt; = zstr::from(a); <span class="comment">// so is zstr
+<a href=#578 id=578 data-nosnippet>578</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>a32: str32 = a.resize(); <span class="comment">// same kind of string but with 31-byte capacity
+<a href=#579 id=579 data-nosnippet>579</a>        </span>a32 = <span class="string">"abc" </span>+ a32;
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="kw">let </span><span class="kw-2">mut </span>u = str8::from(<span class="string">"aλb"</span>); <span class="comment">//unicode support
+<a href=#581 id=581 data-nosnippet>581</a>        </span><span class="macro">assert_eq!</span>(u.nth(<span class="number">1</span>), <span class="prelude-val">Some</span>(<span class="string">'λ'</span>)); <span class="comment">// get nth character
+<a href=#582 id=582 data-nosnippet>582</a>        </span><span class="macro">assert_eq!</span>(u.nth_bytechar(<span class="number">3</span>), <span class="string">'b'</span>); <span class="comment">// get nth byte as ascii character
+<a href=#583 id=583 data-nosnippet>583</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">1</span>, <span class="string">'μ'</span>)); <span class="comment">// changes a character of the same character class
+<a href=#584 id=584 data-nosnippet>584</a>        </span><span class="macro">assert!</span>(!u.set(<span class="number">1</span>, <span class="string">'c'</span>)); <span class="comment">// .set returns false on failure
+<a href=#585 id=585 data-nosnippet>585</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">2</span>, <span class="string">'c'</span>));
+<a href=#586 id=586 data-nosnippet>586</a>        <span class="macro">assert_eq!</span>(u, <span class="string">"aμc"</span>);
+<a href=#587 id=587 data-nosnippet>587</a>        <span class="macro">assert_eq!</span>(u.len(), <span class="number">4</span>); <span class="comment">// length in bytes
+<a href=#588 id=588 data-nosnippet>588</a>        </span><span class="macro">assert_eq!</span>(u.charlen(), <span class="number">3</span>); <span class="comment">// length in chars
+<a href=#589 id=589 data-nosnippet>589</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>ac: str16 = a.reallocate().unwrap(); <span class="comment">//copies to larger capacity type
+<a href=#590 id=590 data-nosnippet>590</a>        </span><span class="kw">let </span>remainder = ac.push_str(<span class="string">"ghijklmnopq"</span>); <span class="comment">//append up to capacity, returns remainder
+<a href=#591 id=591 data-nosnippet>591</a>        </span><span class="macro">assert_eq!</span>(ac.len(), <span class="number">15</span>);
+<a href=#592 id=592 data-nosnippet>592</a>        <span class="macro">assert_eq!</span>(remainder, <span class="string">"pq"</span>);
+<a href=#593 id=593 data-nosnippet>593</a>        ac.truncate(<span class="number">9</span>); <span class="comment">// keep first 9 chars
+<a href=#594 id=594 data-nosnippet>594</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>ac, <span class="string">"abcdefghi"</span>);
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw">let </span>(upper, lower) = (str8::make(<span class="string">"ABC"</span>), str8::make(<span class="string">"abc"</span>));
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="macro">assert_eq!</span>(upper, lower.to_ascii_upper()); <span class="comment">// no owned String needed
+<a href=#597 id=597 data-nosnippet>597</a>
+<a href=#598 id=598 data-nosnippet>598</a>        </span><span class="kw">let </span>c1 = str8::from(<span class="string">"abcd"</span>); <span class="comment">// string concatenation with + for strN types
+<a href=#599 id=599 data-nosnippet>599</a>        </span><span class="kw">let </span>c2 = str8::from(<span class="string">"xyz"</span>);
+<a href=#600 id=600 data-nosnippet>600</a>        <span class="macro">assert!</span>(c2.case_insensitive_eq(<span class="string">"XyZ"</span>));
+<a href=#601 id=601 data-nosnippet>601</a>        <span class="kw">let </span>c2b = str16::from(<span class="string">"xYz"</span>);
+<a href=#602 id=602 data-nosnippet>602</a>        <span class="macro">assert!</span>(c2.case_insensitive_eq(<span class="kw-2">&amp;</span>c2b));
+<a href=#603 id=603 data-nosnippet>603</a>        <span class="kw">let </span><span class="kw-2">mut </span>c3 = c1 + c2;
+<a href=#604 id=604 data-nosnippet>604</a>        <span class="macro">assert_eq!</span>(c3, <span class="string">"abcdxyz"</span>);
+<a href=#605 id=605 data-nosnippet>605</a>        <span class="macro">assert_eq!</span>(c3.capacity(), <span class="number">15</span>); <span class="comment">// type of c3 is str16
+<a href=#606 id=606 data-nosnippet>606</a>        </span>c3 = <span class="string">"00" </span>+ c3 + <span class="string">"."</span>; <span class="comment">// cat with &amp;str on left or right
+<a href=#607 id=607 data-nosnippet>607</a>        </span><span class="macro">assert_eq!</span>(c3, <span class="string">"00abcdxyz."</span>);
+<a href=#608 id=608 data-nosnippet>608</a>
+<a href=#609 id=609 data-nosnippet>609</a>        <span class="kw">let </span>c4 = <span class="macro">str_format!</span>(str16, <span class="string">"abc {}{}{}"</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>); <span class="comment">// impls std::fmt::Write
+<a href=#610 id=610 data-nosnippet>610</a>        </span><span class="macro">assert_eq!</span>(c4, <span class="string">"abc 123"</span>); <span class="comment">//str_format! truncates if capacity exceeded
+<a href=#611 id=611 data-nosnippet>611</a>        </span><span class="kw">let </span>c5 = <span class="macro">try_format!</span>(str8, <span class="string">"abcdef{}"</span>, <span class="string">"ghijklmn"</span>);
+<a href=#612 id=612 data-nosnippet>612</a>        <span class="macro">assert!</span>(c5.is_none()); <span class="comment">// try_format! returns None if capacity exceeded
+<a href=#613 id=613 data-nosnippet>613</a>
+<a href=#614 id=614 data-nosnippet>614</a>        </span><span class="kw">let </span>fs = <span class="macro">to_fixedstr!</span>(str8, -<span class="number">0132</span>);
+<a href=#615 id=615 data-nosnippet>615</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>fs, <span class="string">"-132"</span>);
+<a href=#616 id=616 data-nosnippet>616</a>
+<a href=#617 id=617 data-nosnippet>617</a>        <span class="comment">// testing for constants
+<a href=#618 id=618 data-nosnippet>618</a>        </span><span class="kw">const </span>C:str16 = str16::const_make(<span class="string">"abcd"</span>);
+<a href=#619 id=619 data-nosnippet>619</a>        <span class="comment">//const C:zstr&lt;8&gt; = zstr::const_make("abcd");
+<a href=#620 id=620 data-nosnippet>620</a>        </span><span class="kw">let </span>xarray = [<span class="number">0u8</span>;C.len()];
+<a href=#621 id=621 data-nosnippet>621</a>        <span class="macro">assert_eq!</span>(C,<span class="string">"abcd"</span>);
+<a href=#622 id=622 data-nosnippet>622</a>        <span class="macro">assert_eq!</span>(xarray.len(),<span class="number">4</span>);
+<a href=#623 id=623 data-nosnippet>623</a>
+<a href=#624 id=624 data-nosnippet>624</a>        <span class="comment">//cstr tests
+<a href=#625 id=625 data-nosnippet>625</a>        </span><span class="attr">#[cfg(feature = <span class="string">"circular-str"</span>)]
+<a href=#626 id=626 data-nosnippet>626</a>        </span>{
+<a href=#627 id=627 data-nosnippet>627</a>            <span class="kw">use </span><span class="kw">crate</span>::circular_string::<span class="kw-2">*</span>;
+<a href=#628 id=628 data-nosnippet>628</a>            <span class="kw">let </span><span class="kw-2">mut </span>cb = cstr::&lt;<span class="number">16</span>&gt;::make(<span class="string">"abc123"</span>);
+<a href=#629 id=629 data-nosnippet>629</a>            <span class="macro">assert!</span>(cb.is_contiguous());
+<a href=#630 id=630 data-nosnippet>630</a>            cb.push_str(<span class="string">"xyz"</span>);
+<a href=#631 id=631 data-nosnippet>631</a>            cb.push_front(<span class="string">"9876"</span>);
+<a href=#632 id=632 data-nosnippet>632</a>            <span class="macro">assert_eq!</span>(cb.pop_char().unwrap(), <span class="string">'z'</span>);
+<a href=#633 id=633 data-nosnippet>633</a>            <span class="macro">assert_eq!</span>(cb.pop_char_front().unwrap(), <span class="string">'9'</span>);
+<a href=#634 id=634 data-nosnippet>634</a>            cb.push_str_front(<span class="string">"000"</span>);
+<a href=#635 id=635 data-nosnippet>635</a>            <span class="macro">assert_eq!</span>(cb.len(), <span class="number">14</span>);
+<a href=#636 id=636 data-nosnippet>636</a>            <span class="macro">assert!</span>(<span class="kw-2">&amp;</span>cb == <span class="string">"000876abc123xy"</span>);
+<a href=#637 id=637 data-nosnippet>637</a>            cb.truncate_left(<span class="number">10</span>);
+<a href=#638 id=638 data-nosnippet>638</a>            <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>cb, <span class="string">"23xy"</span>);
+<a href=#639 id=639 data-nosnippet>639</a>            cb.push_str(<span class="string">"ijklmno  "</span>);
+<a href=#640 id=640 data-nosnippet>640</a>            cb.push_char_front(<span class="string">' '</span>);
+<a href=#641 id=641 data-nosnippet>641</a>            <span class="macro">assert!</span>(<span class="kw-2">&amp;</span>cb == <span class="string">" 23xyijklmno  "</span>);
+<a href=#642 id=642 data-nosnippet>642</a>            <span class="macro">assert!</span>(!cb.is_contiguous());
+<a href=#643 id=643 data-nosnippet>643</a>            <span class="comment">//  cb.trim_left();
+<a href=#644 id=644 data-nosnippet>644</a>            //  assert!(&amp;cb == "23xyijklmno ");
+<a href=#645 id=645 data-nosnippet>645</a>            //  cb.trim_right();
+<a href=#646 id=646 data-nosnippet>646</a>            </span>cb.trim_whitespaces();
+<a href=#647 id=647 data-nosnippet>647</a>            <span class="macro">assert!</span>(<span class="string">"23xyijklmno" </span>== <span class="kw-2">&amp;</span>cb);
+<a href=#648 id=648 data-nosnippet>648</a>            <span class="macro">assert!</span>(<span class="kw-2">&amp;</span>cb &lt; <span class="string">"4abc"</span>);
+<a href=#649 id=649 data-nosnippet>649</a>
+<a href=#650 id=650 data-nosnippet>650</a>            <span class="kw">let </span><span class="kw-2">mut </span>a = cstr::&lt;<span class="number">8</span>&gt;::make(<span class="string">"12345678"</span>);
+<a href=#651 id=651 data-nosnippet>651</a>            <span class="macro">assert_eq!</span>(a.len(), <span class="number">8</span>);
+<a href=#652 id=652 data-nosnippet>652</a>            a.truncate_front(<span class="number">4</span>);
+<a href=#653 id=653 data-nosnippet>653</a>            <span class="macro">assert_eq!</span>(a.len(), <span class="number">4</span>);
+<a href=#654 id=654 data-nosnippet>654</a>            <span class="macro">assert!</span>(a.is_contiguous());
+<a href=#655 id=655 data-nosnippet>655</a>            <span class="macro">assert!</span>(<span class="kw-2">&amp;</span>a == <span class="string">"5678"</span>);
+<a href=#656 id=656 data-nosnippet>656</a>            a.push_str(<span class="string">"abc"</span>);
+<a href=#657 id=657 data-nosnippet>657</a>            <span class="macro">assert!</span>(<span class="kw-2">&amp;</span>a == <span class="string">"5678abc"</span>);
+<a href=#658 id=658 data-nosnippet>658</a>            <span class="kw">let </span><span class="kw-2">mut </span>findopt = a.find_substr(<span class="string">"8abc"</span>);
+<a href=#659 id=659 data-nosnippet>659</a>            <span class="macro">assert_eq!</span>(findopt.unwrap(), <span class="number">3</span>);
+<a href=#660 id=660 data-nosnippet>660</a>            findopt = a.rfind_substr(<span class="string">"678abc"</span>);
+<a href=#661 id=661 data-nosnippet>661</a>            <span class="macro">assert_eq!</span>(findopt.unwrap(), <span class="number">1</span>);
+<a href=#662 id=662 data-nosnippet>662</a>            <span class="kw">let </span><span class="kw-2">mut </span>rem = a.push_str(<span class="string">"123456"</span>);
+<a href=#663 id=663 data-nosnippet>663</a>            <span class="macro">assert_eq!</span>(rem, <span class="string">"23456"</span>);
+<a href=#664 id=664 data-nosnippet>664</a>            a.truncate_left(<span class="number">4</span>);
+<a href=#665 id=665 data-nosnippet>665</a>            <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>a, <span class="string">"abc1"</span>);
+<a href=#666 id=666 data-nosnippet>666</a>            rem = a.push_front(<span class="string">"qrstuvw"</span>);
+<a href=#667 id=667 data-nosnippet>667</a>            <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>a, <span class="string">"tuvwabc1"</span>);
+<a href=#668 id=668 data-nosnippet>668</a>            <span class="macro">assert_eq!</span>(rem, <span class="string">"qrs"</span>);
+<a href=#669 id=669 data-nosnippet>669</a>            rem = a.push_str(<span class="string">""</span>);
+<a href=#670 id=670 data-nosnippet>670</a>            <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>a, <span class="string">"tuvwabc1"</span>);
+<a href=#671 id=671 data-nosnippet>671</a>            <span class="macro">assert_eq!</span>(rem, <span class="string">""</span>);
+<a href=#672 id=672 data-nosnippet>672</a>            a.truncate(<span class="number">5</span>);
+<a href=#673 id=673 data-nosnippet>673</a>            <span class="kw">let </span><span class="kw-2">mut </span>ba = <span class="string">"123" </span>+ a;
+<a href=#674 id=674 data-nosnippet>674</a>            <span class="macro">assert_eq!</span>(ba, <span class="string">"123tuvwa"</span>);
+<a href=#675 id=675 data-nosnippet>675</a>            ba.truncate_left(<span class="number">4</span>);
+<a href=#676 id=676 data-nosnippet>676</a>            a.truncate_left(<span class="number">1</span>);
+<a href=#677 id=677 data-nosnippet>677</a>            <span class="macro">assert_eq!</span>(a, ba);
+<a href=#678 id=678 data-nosnippet>678</a>
+<a href=#679 id=679 data-nosnippet>679</a>            <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#680 id=680 data-nosnippet>680</a>            </span>{
+<a href=#681 id=681 data-nosnippet>681</a>                <span class="kw">let </span>bb = cstr::&lt;<span class="number">8</span>&gt;::from(<span class="string">"qgg"</span>);
+<a href=#682 id=682 data-nosnippet>682</a>                <span class="kw">extern crate </span>std;
+<a href=#683 id=683 data-nosnippet>683</a>                <span class="kw">use </span>std::collections::HashSet;
+<a href=#684 id=684 data-nosnippet>684</a>                <span class="kw">let </span><span class="kw-2">mut </span>hh = HashSet::new();
+<a href=#685 id=685 data-nosnippet>685</a>                hh.insert(bb);
+<a href=#686 id=686 data-nosnippet>686</a>                <span class="macro">assert!</span>(hh.get(<span class="kw-2">&amp;</span>bb).is_some());
+<a href=#687 id=687 data-nosnippet>687</a>            }
+<a href=#688 id=688 data-nosnippet>688</a>        } <span class="comment">//cstr tests
+<a href=#689 id=689 data-nosnippet>689</a>    </span>} <span class="comment">//nostdtest
+<a href=#690 id=690 data-nosnippet>690</a>
+<a href=#691 id=691 data-nosnippet>691</a>    </span><span class="kw">fn </span>ztests() {
+<a href=#692 id=692 data-nosnippet>692</a>        <span class="kw">let </span>a: zstr&lt;<span class="number">8</span>&gt; = zstr::from(<span class="string">"abcdefg"</span>); <span class="comment">//creates zstr from &amp;str
+<a href=#693 id=693 data-nosnippet>693</a>        </span><span class="kw">let </span>ab = a.substr(<span class="number">1</span>, <span class="number">5</span>); <span class="comment">// copies, not move substring to new string
+<a href=#694 id=694 data-nosnippet>694</a>        </span><span class="macro">assert_eq!</span>(ab, <span class="string">"bcde"</span>); <span class="comment">// can compare equality with &amp;str
+<a href=#695 id=695 data-nosnippet>695</a>        </span><span class="macro">assert!</span>(ab.case_insensitive_eq(<span class="string">"bCdE"</span>));
+<a href=#696 id=696 data-nosnippet>696</a>        <span class="kw">let </span><span class="kw-2">mut </span>u: zstr&lt;<span class="number">8</span>&gt; = zstr::from(<span class="string">"aλb"</span>); <span class="comment">//unicode support
+<a href=#697 id=697 data-nosnippet>697</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">1</span>, <span class="string">'μ'</span>)); <span class="comment">// changes a character of the same character class
+<a href=#698 id=698 data-nosnippet>698</a>        </span><span class="macro">assert!</span>(!u.set(<span class="number">1</span>, <span class="string">'c'</span>)); <span class="comment">// .set returns false on failure
+<a href=#699 id=699 data-nosnippet>699</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">2</span>, <span class="string">'c'</span>));
+<a href=#700 id=700 data-nosnippet>700</a>        <span class="macro">assert_eq!</span>(u, <span class="string">"aμc"</span>);
+<a href=#701 id=701 data-nosnippet>701</a>        <span class="macro">assert_eq!</span>(u.len(), <span class="number">4</span>); <span class="comment">// length in bytes
+<a href=#702 id=702 data-nosnippet>702</a>        </span><span class="macro">assert_eq!</span>(u.charlen(), <span class="number">3</span>); <span class="comment">// length in chars
+<a href=#703 id=703 data-nosnippet>703</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>ac: zstr&lt;<span class="number">16</span>&gt; = a.resize(); <span class="comment">// copies to larger capacity string
+<a href=#704 id=704 data-nosnippet>704</a>        </span><span class="kw">let </span>remainder = ac.push(<span class="string">"hijklmnopqrst"</span>); <span class="comment">//appends string, returns left over
+<a href=#705 id=705 data-nosnippet>705</a>        </span><span class="macro">assert_eq!</span>(ac.len(), <span class="number">15</span>);
+<a href=#706 id=706 data-nosnippet>706</a>        <span class="macro">assert_eq!</span>(remainder, <span class="string">"pqrst"</span>);
+<a href=#707 id=707 data-nosnippet>707</a>        ac.truncate(<span class="number">10</span>);
+<a href=#708 id=708 data-nosnippet>708</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>ac, <span class="string">"abcdefghij"</span>);
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="comment">//println!("ac {}, remainder: {}, len {}", &amp;ac, &amp;remainder, &amp;ac.len());
+<a href=#710 id=710 data-nosnippet>710</a>        </span><span class="macro">assert_eq!</span>(ac.len(), <span class="number">10</span>);
+<a href=#711 id=711 data-nosnippet>711</a>        ac.pop_char();
+<a href=#712 id=712 data-nosnippet>712</a>        ac.pop_char();
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="macro">assert_eq!</span>(ac.len(), <span class="number">8</span>);
+<a href=#714 id=714 data-nosnippet>714</a>        <span class="kw">let </span><span class="kw-2">mut </span>c4 = <span class="macro">str_format!</span>(zstr&lt;<span class="number">16</span>&gt;, <span class="string">"abc {}"</span>, <span class="number">123</span>);
+<a href=#715 id=715 data-nosnippet>715</a>        <span class="macro">assert_eq!</span>(c4, <span class="string">"abc 123"</span>);
+<a href=#716 id=716 data-nosnippet>716</a>        <span class="kw">let </span>rem = c4.push_str(<span class="string">"123456789abcdef"</span>);
+<a href=#717 id=717 data-nosnippet>717</a>        <span class="macro">assert_eq!</span>(c4, <span class="string">"abc 12312345678"</span>);
+<a href=#718 id=718 data-nosnippet>718</a>        <span class="macro">assert_eq!</span>(rem, <span class="string">"9abcdef"</span>);
+<a href=#719 id=719 data-nosnippet>719</a>
+<a href=#720 id=720 data-nosnippet>720</a>        <span class="kw">let </span>b = [<span class="number">65u8</span>, <span class="number">66</span>, <span class="number">67</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">68</span>, <span class="number">0</span>, <span class="number">69</span>, <span class="number">0</span>, <span class="number">70</span>, <span class="number">0</span>, <span class="number">71</span>];
+<a href=#721 id=721 data-nosnippet>721</a>        <span class="kw">let </span><span class="kw-2">mut </span>bz: zstr&lt;<span class="number">16</span>&gt; = zstr::from_raw(<span class="kw-2">&amp;</span>b);
+<a href=#722 id=722 data-nosnippet>722</a>        bz.push(<span class="string">"abcd   \t \n\n"</span>);
+<a href=#723 id=723 data-nosnippet>723</a>        <span class="comment">//println!("bz: {}, len {}", &amp;bz, bz.len());
+<a href=#724 id=724 data-nosnippet>724</a>        </span>bz.right_ascii_trim();
+<a href=#725 id=725 data-nosnippet>725</a>        bz.reverse_bytes();
+<a href=#726 id=726 data-nosnippet>726</a>        bz.make_ascii_lowercase();
+<a href=#727 id=727 data-nosnippet>727</a>        <span class="comment">//println!("bz after trim, reverse: {}, len {}", &amp;bz, bz.len());
+<a href=#728 id=728 data-nosnippet>728</a>    </span>} <span class="comment">//ztr tests
+<a href=#729 id=729 data-nosnippet>729</a>
+<a href=#730 id=730 data-nosnippet>730</a>    </span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#731 id=731 data-nosnippet>731</a>    #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#732 id=732 data-nosnippet>732</a>    </span><span class="kw">fn </span>maintest() {
+<a href=#733 id=733 data-nosnippet>733</a>        <span class="kw">extern crate </span>std;
+<a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">use </span>std::fmt::Write;
+<a href=#735 id=735 data-nosnippet>735</a>        <span class="kw">use </span>std::println;
+<a href=#736 id=736 data-nosnippet>736</a>        <span class="kw">use </span>std::string::String;
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="kw">let </span>s1: fstr&lt;<span class="number">16</span>&gt; = fstr::from(<span class="string">"abc"</span>);
+<a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">let </span><span class="kw-2">mut </span>s2: fstr&lt;<span class="number">8</span>&gt; = fstr::from(<span class="string">"and xyz"</span>);
+<a href=#739 id=739 data-nosnippet>739</a>        <span class="kw">let </span>s2r = s2.push(<span class="string">" and 1234"</span>);
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="macro">println!</span>(<span class="string">"s1,s2,s2r,s2.len: {}, {}, {}, {}"</span>, s1, <span class="kw-2">&amp;</span>s2, <span class="kw-2">&amp;</span>s2r, s2.len());
+<a href=#741 id=741 data-nosnippet>741</a>        <span class="macro">println!</span>(<span class="string">"{}"</span>, <span class="kw-2">&amp;</span>s1 == <span class="string">"abc"</span>);
+<a href=#742 id=742 data-nosnippet>742</a>        <span class="kw">let </span>s3 = s1; <span class="comment">// copied, not moved
+<a href=#743 id=743 data-nosnippet>743</a>        </span><span class="macro">println!</span>(<span class="string">"{}"</span>, <span class="string">"abc" </span>== <span class="kw-2">&amp;</span>s1);
+<a href=#744 id=744 data-nosnippet>744</a>        <span class="macro">println!</span>(<span class="string">"{}, {} "</span>, s1 == s3, s1 == s2.resize());
+<a href=#745 id=745 data-nosnippet>745</a>
+<a href=#746 id=746 data-nosnippet>746</a>        <span class="kw">let </span><span class="kw-2">mut </span>s4: fstr&lt;<span class="number">256</span>&gt; = s3.resize();
+<a href=#747 id=747 data-nosnippet>747</a>        s4.push(<span class="string">"ccccccccccccccccccccccccccccccccccccccccccccccccccccccz"</span>);
+<a href=#748 id=748 data-nosnippet>748</a>        <span class="macro">println!</span>(<span class="string">"{}, length {}"</span>, <span class="kw-2">&amp;</span>s4, s4.len());
+<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">let </span><span class="kw-2">mut </span>s5: fstr&lt;<span class="number">32</span>&gt; = s4.resize();
+<a href=#750 id=750 data-nosnippet>750</a>        <span class="macro">println!</span>(<span class="string">"{}, length {}"</span>, <span class="kw-2">&amp;</span>s5, s5.len());
+<a href=#751 id=751 data-nosnippet>751</a>        <span class="macro">println!</span>(<span class="string">"{:?}, length {}"</span>, <span class="kw-2">&amp;</span>s5[<span class="number">0</span>..<span class="number">10</span>], s5.len());
+<a href=#752 id=752 data-nosnippet>752</a>        <span class="macro">println!</span>(<span class="string">"s2.substr {}"</span>, s2.substr(<span class="number">2</span>, <span class="number">6</span>));
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="macro">println!</span>(<span class="string">"{}"</span>, s2.substr(<span class="number">2</span>, <span class="number">6</span>).len());
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="kw">let </span><span class="kw-2">mut </span>s4: fstr&lt;<span class="number">64</span>&gt; = s1.resize();
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="kw">let </span>owned_string: String = s4.to_string();
+<a href=#756 id=756 data-nosnippet>756</a>        <span class="macro">println!</span>(<span class="string">"owned s4: {}"</span>, <span class="kw-2">&amp;</span>owned_string);
+<a href=#757 id=757 data-nosnippet>757</a>        <span class="kw">let </span>str_slice: <span class="kw-2">&amp;</span>str = s4.to_str();
+<a href=#758 id=758 data-nosnippet>758</a>        <span class="macro">println!</span>(<span class="string">"as &amp;str: {}"</span>, <span class="kw-2">&amp;</span>str_slice[<span class="number">0</span>..<span class="number">2</span>]);
+<a href=#759 id=759 data-nosnippet>759</a>        s4 = s1.resize();
+<a href=#760 id=760 data-nosnippet>760</a>        <span class="kw">let </span>s5 = fstr::&lt;<span class="number">8</span>&gt;::new();
+<a href=#761 id=761 data-nosnippet>761</a>        <span class="kw">let </span>ss5 = s5.as_str();
+<a href=#762 id=762 data-nosnippet>762</a>
+<a href=#763 id=763 data-nosnippet>763</a>        <span class="kw">let </span><span class="kw-2">mut </span>s6 = fstr::&lt;<span class="number">32</span>&gt;::new();
+<a href=#764 id=764 data-nosnippet>764</a>        <span class="kw">let </span>result = <span class="macro">write!</span>(<span class="kw-2">&amp;mut </span>s6, <span class="string">"hello {}, {}, {}"</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>);
+<a href=#765 id=765 data-nosnippet>765</a>        <span class="macro">assert_eq!</span>(s6, <span class="string">"hello 1, 2, 3"</span>);
+<a href=#766 id=766 data-nosnippet>766</a>        <span class="macro">println!</span>(<span class="string">"s6 is {}, result is {:?}"</span>, <span class="kw-2">&amp;</span>s6, <span class="kw-2">&amp;</span>result);
+<a href=#767 id=767 data-nosnippet>767</a>
+<a href=#768 id=768 data-nosnippet>768</a>        <span class="kw">let </span>s7 = <span class="macro">str_format!</span>(fstr&lt;<span class="number">32</span>&gt;, <span class="string">"abc {}, {}"</span>, <span class="number">1</span>, <span class="number">10</span>);
+<a href=#769 id=769 data-nosnippet>769</a>        <span class="macro">println!</span>(<span class="string">"s7 is {}"</span>, <span class="kw-2">&amp;</span>s7);
+<a href=#770 id=770 data-nosnippet>770</a>        <span class="kw">let </span>s8 = <span class="macro">try_format!</span>(fstr&lt;<span class="number">32</span>&gt;, <span class="string">"abcdefg {}, {}"</span>, <span class="number">1</span>, <span class="number">10</span>);
+<a href=#771 id=771 data-nosnippet>771</a>        <span class="macro">println!</span>(<span class="string">"s8 is {}"</span>, <span class="kw-2">&amp;</span>s8.unwrap());
+<a href=#772 id=772 data-nosnippet>772</a>
+<a href=#773 id=773 data-nosnippet>773</a>        <span class="kw">let </span><span class="kw-2">mut </span>f1 = fstr::&lt;<span class="number">16</span>&gt;::from(<span class="string">"abcdefg"</span>);
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">let </span>f2 = f1.to_ascii_uppercase();
+<a href=#775 id=775 data-nosnippet>775</a>        <span class="comment">//f1 = f2; // copy?
+<a href=#776 id=776 data-nosnippet>776</a>
+<a href=#777 id=777 data-nosnippet>777</a>        </span><span class="attr">#[cfg(feature = <span class="string">"experimental"</span>)]
+<a href=#778 id=778 data-nosnippet>778</a>        </span>{
+<a href=#779 id=779 data-nosnippet>779</a>            <span class="kw">let </span><span class="kw-2">mut </span>s = &lt;zstr&lt;<span class="number">8</span>&gt;&gt;::from(<span class="string">"abcd"</span>);
+<a href=#780 id=780 data-nosnippet>780</a>            s[<span class="number">0</span>] = <span class="string">b'A'</span>; <span class="comment">// impls IndexMut for zstr (not for fstr nor strN types)
+<a href=#781 id=781 data-nosnippet>781</a>            </span><span class="macro">assert_eq!</span>(<span class="string">'A'</span>, s.nth_ascii(<span class="number">0</span>));
+<a href=#782 id=782 data-nosnippet>782</a>        }
+<a href=#783 id=783 data-nosnippet>783</a>
+<a href=#784 id=784 data-nosnippet>784</a>        <span class="kw">use </span>std::collections::HashMap;
+<a href=#785 id=785 data-nosnippet>785</a>        <span class="kw">let </span><span class="kw-2">mut </span>hm = HashMap::new();
+<a href=#786 id=786 data-nosnippet>786</a>        hm.insert(str8::from(<span class="string">"abc"</span>), <span class="number">1</span>);
+<a href=#787 id=787 data-nosnippet>787</a>        <span class="macro">assert!</span>(hm.contains_key(<span class="kw-2">&amp;</span>str8::from(<span class="string">"abc"</span>)));
+<a href=#788 id=788 data-nosnippet>788</a>
+<a href=#789 id=789 data-nosnippet>789</a>        <span class="kw">let </span><span class="kw-2">mut </span>a: fstr&lt;<span class="number">8</span>&gt; = fstr::from(<span class="string">"abcdef"</span>);
+<a href=#790 id=790 data-nosnippet>790</a>        <span class="kw">let </span>rem = a.push(<span class="string">"g"</span>);
+<a href=#791 id=791 data-nosnippet>791</a>        <span class="macro">assert!</span>(rem == <span class="string">"" </span>&amp;&amp; <span class="kw-2">&amp;</span>a == <span class="string">"abcdefg"</span>);
+<a href=#792 id=792 data-nosnippet>792</a>
+<a href=#793 id=793 data-nosnippet>793</a>        ftests();
+<a href=#794 id=794 data-nosnippet>794</a>    } <span class="comment">//maintest
+<a href=#795 id=795 data-nosnippet>795</a>
+<a href=#796 id=796 data-nosnippet>796</a>    </span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#797 id=797 data-nosnippet>797</a>    #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#798 id=798 data-nosnippet>798</a>    </span><span class="kw">fn </span>ftests() {
+<a href=#799 id=799 data-nosnippet>799</a>        <span class="kw">extern crate </span>std;
+<a href=#800 id=800 data-nosnippet>800</a>        <span class="kw">use </span>std::{println, string::String, format};
+<a href=#801 id=801 data-nosnippet>801</a>        <span class="kw">let </span>a: fstr&lt;<span class="number">8</span>&gt; = fstr::from(<span class="string">"abcdefg"</span>); <span class="comment">//creates fstr from &amp;str
+<a href=#802 id=802 data-nosnippet>802</a>        </span><span class="kw">let </span>a1: fstr&lt;<span class="number">8</span>&gt; = a; <span class="comment">// copied, not moved
+<a href=#803 id=803 data-nosnippet>803</a>        </span><span class="kw">let </span>a2: <span class="kw-2">&amp;</span>str = a.to_str();
+<a href=#804 id=804 data-nosnippet>804</a>        <span class="kw">let </span>a3: String = a.to_string();
+<a href=#805 id=805 data-nosnippet>805</a>        <span class="macro">assert_eq!</span>(a.nth_ascii(<span class="number">2</span>), <span class="string">'c'</span>);
+<a href=#806 id=806 data-nosnippet>806</a>        <span class="kw">let </span>ab = a.substr(<span class="number">1</span>, <span class="number">5</span>); <span class="comment">// copies substring to new fstr
+<a href=#807 id=807 data-nosnippet>807</a>        </span><span class="macro">assert!</span>(ab == <span class="string">"bcde" </span>&amp;&amp; a1 == a); <span class="comment">// can compare with &amp;str and itself
+<a href=#808 id=808 data-nosnippet>808</a>        </span><span class="macro">assert!</span>(a &lt; ab); <span class="comment">// implements Ord trait (and Hash
+<a href=#809 id=809 data-nosnippet>809</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>u: fstr&lt;<span class="number">8</span>&gt; = fstr::from(<span class="string">"aλb"</span>); <span class="comment">//unicode support
+<a href=#810 id=810 data-nosnippet>810</a>        </span>u.nth(<span class="number">1</span>).map(|x| <span class="macro">assert_eq!</span>(x, <span class="string">'λ'</span>)); <span class="comment">// nth returns Option&lt;char&gt;
+<a href=#811 id=811 data-nosnippet>811</a>                                              //for x in u.nth(1) {assert_eq!(x,'λ');} // nth returns Option&lt;char&gt;
+<a href=#812 id=812 data-nosnippet>812</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">1</span>, <span class="string">'μ'</span>)); <span class="comment">// changes a character of the same character class
+<a href=#813 id=813 data-nosnippet>813</a>        </span><span class="macro">assert!</span>(!u.set(<span class="number">1</span>, <span class="string">'c'</span>)); <span class="comment">// .set returns false on failure
+<a href=#814 id=814 data-nosnippet>814</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">2</span>, <span class="string">'c'</span>));
+<a href=#815 id=815 data-nosnippet>815</a>        <span class="macro">assert_eq!</span>(u, <span class="string">"aμc"</span>);
+<a href=#816 id=816 data-nosnippet>816</a>        <span class="macro">assert_eq!</span>(u.len(), <span class="number">4</span>); <span class="comment">// length in bytes
+<a href=#817 id=817 data-nosnippet>817</a>        </span><span class="macro">assert_eq!</span>(u.charlen(), <span class="number">3</span>); <span class="comment">// length in chars
+<a href=#818 id=818 data-nosnippet>818</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>ac: fstr&lt;<span class="number">16</span>&gt; = a.resize(); <span class="comment">// copies to larger capacity string
+<a href=#819 id=819 data-nosnippet>819</a>        </span><span class="kw">let </span>remainder: <span class="kw-2">&amp;</span>str = ac.push(<span class="string">"hijklmnopqrst"</span>); <span class="comment">//appends string, returns left over
+<a href=#820 id=820 data-nosnippet>820</a>        </span><span class="macro">assert_eq!</span>(ac.len(), <span class="number">16</span>);
+<a href=#821 id=821 data-nosnippet>821</a>        <span class="macro">assert_eq!</span>(remainder, <span class="string">"qrst"</span>);
+<a href=#822 id=822 data-nosnippet>822</a>        ac.truncate(<span class="number">10</span>); <span class="comment">// shortens string in place
+<a href=#823 id=823 data-nosnippet>823</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>ac, <span class="string">"abcdefghij"</span>);
+<a href=#824 id=824 data-nosnippet>824</a>        <span class="macro">println!</span>(<span class="string">"ac {}, remainder: {}"</span>, <span class="kw-2">&amp;</span>ac, <span class="kw-2">&amp;</span>remainder);
+<a href=#825 id=825 data-nosnippet>825</a>
+<a href=#826 id=826 data-nosnippet>826</a>        <span class="macro">assert_eq!</span>(ac.pop_char().unwrap(), <span class="string">'j'</span>);
+<a href=#827 id=827 data-nosnippet>827</a>        <span class="macro">assert_eq!</span>(ac, <span class="string">"abcdefghi"</span>);
+<a href=#828 id=828 data-nosnippet>828</a>
+<a href=#829 id=829 data-nosnippet>829</a>        <span class="kw">let </span>ac2: fstr&lt;<span class="number">16</span>&gt; = fstr::make(<span class="string">"abcd"</span>);
+<a href=#830 id=830 data-nosnippet>830</a>        ac.truncate(<span class="number">4</span>);
+<a href=#831 id=831 data-nosnippet>831</a>        <span class="macro">assert_eq!</span>(ac, ac2);
+<a href=#832 id=832 data-nosnippet>832</a>
+<a href=#833 id=833 data-nosnippet>833</a>        <span class="kw">let </span><span class="kw-2">mut </span>z8 = zstr::&lt;<span class="number">16</span>&gt;::from(<span class="string">"abc12"</span>);
+<a href=#834 id=834 data-nosnippet>834</a>        <span class="kw">let </span>z8o = <span class="macro">str_format!</span>(zstr&lt;<span class="number">16</span>&gt;,<span class="string">"xxx {}3"</span>,z8);
+<a href=#835 id=835 data-nosnippet>835</a>        <span class="macro">assert_eq!</span>(z8o, <span class="string">"xxx abc123"</span>);
+<a href=#836 id=836 data-nosnippet>836</a>        <span class="kw">let </span>zoo = <span class="macro">format!</span>(<span class="string">"xx{}yy"</span>,z8o);
+<a href=#837 id=837 data-nosnippet>837</a>        <span class="macro">assert_eq!</span>(zoo,<span class="string">"xxxxx abc123yy"</span>);
+<a href=#838 id=838 data-nosnippet>838</a>    } <span class="comment">//ftr tests
+<a href=#839 id=839 data-nosnippet>839</a>
+<a href=#840 id=840 data-nosnippet>840</a>    </span><span class="attr">#[cfg(all(feature = <span class="string">"std"</span>, feature = <span class="string">"flex-str"</span>))]
+<a href=#841 id=841 data-nosnippet>841</a>    #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#842 id=842 data-nosnippet>842</a>    </span><span class="kw">fn </span>flextest() {
+<a href=#843 id=843 data-nosnippet>843</a>        <span class="kw">extern crate </span>std;
+<a href=#844 id=844 data-nosnippet>844</a>        <span class="kw">use </span>std::fmt::Write;
+<a href=#845 id=845 data-nosnippet>845</a>        <span class="kw">use </span>std::println;
+<a href=#846 id=846 data-nosnippet>846</a>        <span class="kw">use </span>std::string::String;
+<a href=#847 id=847 data-nosnippet>847</a>        <span class="macro">println!</span>(<span class="string">"starting Flexstr tests..."</span>);
+<a href=#848 id=848 data-nosnippet>848</a>        <span class="kw">let </span><span class="kw-2">mut </span>a: Flexstr&lt;<span class="number">8</span>&gt; = Flexstr::from(<span class="string">"abcdef"</span>);
+<a href=#849 id=849 data-nosnippet>849</a>        a.truncate(<span class="number">5</span>);
+<a href=#850 id=850 data-nosnippet>850</a>        <span class="macro">assert_eq!</span>(a, <span class="string">"abcde"</span>); <span class="comment">// can compare equality with &amp;str
+<a href=#851 id=851 data-nosnippet>851</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>a[..<span class="number">3</span>], <span class="string">"abc"</span>); <span class="comment">// impls Index
+<a href=#852 id=852 data-nosnippet>852</a>        </span><span class="macro">println!</span>(<span class="string">"Flexstr slice: {}"</span>, <span class="kw-2">&amp;</span>a[<span class="number">1</span>..<span class="number">4</span>]);
+<a href=#853 id=853 data-nosnippet>853</a>        <span class="kw">let </span>ab = Flexstr::&lt;<span class="number">8</span>&gt;::from(<span class="string">"bcdefghijklmnop"</span>);
+<a href=#854 id=854 data-nosnippet>854</a>        <span class="macro">assert!</span>(a.is_fixed());
+<a href=#855 id=855 data-nosnippet>855</a>        <span class="macro">assert!</span>(!ab.is_fixed());
+<a href=#856 id=856 data-nosnippet>856</a>        <span class="kw">let </span>a2: str8 = a.get_str().unwrap();
+<a href=#857 id=857 data-nosnippet>857</a>        <span class="macro">assert!</span>(a &lt; ab); <span class="comment">// impls Ord, (and Hash, Debug, Eq, other common traits)
+<a href=#858 id=858 data-nosnippet>858</a>        </span><span class="kw">let </span>astr: <span class="kw-2">&amp;</span>str = a.to_str(); <span class="comment">// convert to &amp;str (zero copy)
+<a href=#859 id=859 data-nosnippet>859</a>        </span><span class="kw">let </span>aowned: String = a.to_string(); <span class="comment">// convert to owned string
+<a href=#860 id=860 data-nosnippet>860</a>                                            //let b = a.take_string();
+<a href=#861 id=861 data-nosnippet>861</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>u = Flexstr::&lt;<span class="number">8</span>&gt;::from(<span class="string">"aλb"</span>); <span class="comment">//unicode support
+<a href=#862 id=862 data-nosnippet>862</a>        </span><span class="macro">assert_eq!</span>(u.nth(<span class="number">1</span>), <span class="prelude-val">Some</span>(<span class="string">'λ'</span>)); <span class="comment">// get nth character
+<a href=#863 id=863 data-nosnippet>863</a>        </span><span class="macro">assert_eq!</span>(u.nth_ascii(<span class="number">3</span>), <span class="string">'b'</span>); <span class="comment">// get nth byte as ascii character
+<a href=#864 id=864 data-nosnippet>864</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">1</span>, <span class="string">'μ'</span>)); <span class="comment">// changes a character of the same character class
+<a href=#865 id=865 data-nosnippet>865</a>        </span><span class="macro">assert!</span>(!u.set(<span class="number">1</span>, <span class="string">'c'</span>)); <span class="comment">// .set returns false on failure
+<a href=#866 id=866 data-nosnippet>866</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">2</span>, <span class="string">'c'</span>));
+<a href=#867 id=867 data-nosnippet>867</a>        <span class="macro">assert_eq!</span>(u, <span class="string">"aμc"</span>);
+<a href=#868 id=868 data-nosnippet>868</a>        <span class="macro">assert_eq!</span>(u.len(), <span class="number">4</span>); <span class="comment">// length in bytes
+<a href=#869 id=869 data-nosnippet>869</a>        </span><span class="macro">assert_eq!</span>(u.charlen(), <span class="number">3</span>); <span class="comment">// length in chars
+<a href=#870 id=870 data-nosnippet>870</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>v: Flexstr&lt;<span class="number">4</span>&gt; = Flexstr::from(<span class="string">"aμcxyz"</span>);
+<a href=#871 id=871 data-nosnippet>871</a>        v.set(<span class="number">1</span>, <span class="string">'λ'</span>);
+<a href=#872 id=872 data-nosnippet>872</a>        <span class="macro">println!</span>(<span class="string">"v: {}"</span>, <span class="kw-2">&amp;</span>v);
+<a href=#873 id=873 data-nosnippet>873</a>
+<a href=#874 id=874 data-nosnippet>874</a>        <span class="kw">let </span><span class="kw-2">mut </span>u2: Flexstr&lt;<span class="number">16</span>&gt; = u.resize();
+<a href=#875 id=875 data-nosnippet>875</a>        u2.push_str(<span class="string">"aaaaaaaa"</span>);
+<a href=#876 id=876 data-nosnippet>876</a>        <span class="macro">println!</span>(<span class="string">"{} len {}"</span>, <span class="kw-2">&amp;</span>u2, u2.len());
+<a href=#877 id=877 data-nosnippet>877</a>        <span class="macro">assert!</span>(u2.is_fixed());
+<a href=#878 id=878 data-nosnippet>878</a>
+<a href=#879 id=879 data-nosnippet>879</a>        <span class="kw">let </span><span class="kw-2">mut </span>s: Flexstr&lt;<span class="number">8</span>&gt; = Flexstr::from(<span class="string">"abcdef"</span>);
+<a href=#880 id=880 data-nosnippet>880</a>        <span class="macro">assert!</span>(s.is_fixed());
+<a href=#881 id=881 data-nosnippet>881</a>        s.push_str(<span class="string">"ghijk"</span>);
+<a href=#882 id=882 data-nosnippet>882</a>        <span class="macro">assert!</span>(s.is_owned());
+<a href=#883 id=883 data-nosnippet>883</a>        s.truncate(<span class="number">7</span>);
+<a href=#884 id=884 data-nosnippet>884</a>        <span class="macro">assert!</span>(s.is_fixed());
+<a href=#885 id=885 data-nosnippet>885</a>        <span class="kw">let </span>ab = Flexstr::&lt;<span class="number">32</span>&gt;::from(<span class="string">"bcdefghijklmnop"</span>);
+<a href=#886 id=886 data-nosnippet>886</a>        <span class="macro">println!</span>(<span class="string">"size of ab: {}"</span>, std::mem::size_of::&lt;Flexstr&lt;<span class="number">32</span>&gt;&gt;());
+<a href=#887 id=887 data-nosnippet>887</a>
+<a href=#888 id=888 data-nosnippet>888</a>        <span class="kw">let </span><span class="kw-2">mut </span>vv = Flexstr::&lt;<span class="number">8</span>&gt;::from(<span class="string">"abcd"</span>);
+<a href=#889 id=889 data-nosnippet>889</a>        vv.push(<span class="string">'e'</span>);
+<a href=#890 id=890 data-nosnippet>890</a>        <span class="comment">//vv.push('λ');
+<a href=#891 id=891 data-nosnippet>891</a>        </span><span class="macro">println!</span>(<span class="string">"vv: {}"</span>, <span class="kw-2">&amp;</span>vv);
+<a href=#892 id=892 data-nosnippet>892</a>
+<a href=#893 id=893 data-nosnippet>893</a>        vv.push_str(<span class="string">"abcdefasdfasdfadfssfs"</span>);
+<a href=#894 id=894 data-nosnippet>894</a>        <span class="kw">let </span>vvs = vv.split_off();
+<a href=#895 id=895 data-nosnippet>895</a>        <span class="macro">println!</span>(<span class="string">"vv: {},  vvs: {}"</span>, <span class="kw-2">&amp;</span>vv, <span class="kw-2">&amp;</span>vvs);
+<a href=#896 id=896 data-nosnippet>896</a>
+<a href=#897 id=897 data-nosnippet>897</a>        <span class="kw">let </span><span class="kw-2">mut </span>fs: Flexstr&lt;<span class="number">4</span>&gt; = Flexstr::from(<span class="string">"abcdefg"</span>);
+<a href=#898 id=898 data-nosnippet>898</a>        <span class="kw">let </span>extras = fs.split_off();
+<a href=#899 id=899 data-nosnippet>899</a>        <span class="macro">assert!</span>(<span class="kw-2">&amp;</span>fs == <span class="string">"abc" </span>&amp;&amp; <span class="kw-2">&amp;</span>extras == <span class="string">"defg" </span>&amp;&amp; fs.is_fixed());
+<a href=#900 id=900 data-nosnippet>900</a>
+<a href=#901 id=901 data-nosnippet>901</a>        <span class="kw">let </span>fss = fs.to_string();
+<a href=#902 id=902 data-nosnippet>902</a>        <span class="macro">assert!</span>(<span class="kw-2">&amp;</span>fss == <span class="string">"abc"</span>);
+<a href=#903 id=903 data-nosnippet>903</a>    } <span class="comment">//flextest
+<a href=#904 id=904 data-nosnippet>904</a>
+<a href=#905 id=905 data-nosnippet>905</a>    </span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#906 id=906 data-nosnippet>906</a>    #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+<a href=#907 id=907 data-nosnippet>907</a>    </span><span class="kw">fn </span>tinytests() {
+<a href=#908 id=908 data-nosnippet>908</a>        <span class="kw">extern crate </span>std;
+<a href=#909 id=909 data-nosnippet>909</a>        <span class="kw">use </span>std::fmt::Write;
+<a href=#910 id=910 data-nosnippet>910</a>        <span class="kw">use </span>std::println;
+<a href=#911 id=911 data-nosnippet>911</a>        <span class="kw">use </span>std::string::String;
+<a href=#912 id=912 data-nosnippet>912</a>        <span class="macro">println!</span>(<span class="string">"starting tstr tests..."</span>);
+<a href=#913 id=913 data-nosnippet>913</a>        <span class="kw">let </span>a: str8 = str8::from(<span class="string">"abcdef"</span>);
+<a href=#914 id=914 data-nosnippet>914</a>        <span class="kw">let </span>a2 = a; <span class="comment">// copied, not moved
+<a href=#915 id=915 data-nosnippet>915</a>        </span><span class="kw">let </span>ab = a.substr(<span class="number">1</span>, <span class="number">5</span>); <span class="comment">// copies, not move substring to new string
+<a href=#916 id=916 data-nosnippet>916</a>        </span><span class="macro">assert_eq!</span>(ab, <span class="string">"bcde"</span>); <span class="comment">// can compare equality with &amp;str
+<a href=#917 id=917 data-nosnippet>917</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>a[..<span class="number">3</span>], <span class="string">"abc"</span>); <span class="comment">// impls Index
+<a href=#918 id=918 data-nosnippet>918</a>        </span><span class="macro">assert_eq!</span>(ab.len(), <span class="number">4</span>);
+<a href=#919 id=919 data-nosnippet>919</a>        <span class="macro">println!</span>(<span class="string">"str8: {}"</span>, <span class="kw-2">&amp;</span>a);
+<a href=#920 id=920 data-nosnippet>920</a>        <span class="macro">assert!</span>(a &lt; ab); <span class="comment">// impls Ord, (and Hash, Debug, Eq, other common traits)
+<a href=#921 id=921 data-nosnippet>921</a>        </span><span class="kw">let </span>astr: <span class="kw-2">&amp;</span>str = a.to_str(); <span class="comment">// convert to &amp;str (zero copy)
+<a href=#922 id=922 data-nosnippet>922</a>        </span><span class="kw">let </span>aowned: String = a.to_string(); <span class="comment">// convert to owned string
+<a href=#923 id=923 data-nosnippet>923</a>        </span><span class="kw">let </span>afstr: fstr&lt;<span class="number">8</span>&gt; = fstr::from(a); <span class="comment">// fstr is another fixedstr crate type
+<a href=#924 id=924 data-nosnippet>924</a>        </span><span class="kw">let </span>azstr: zstr&lt;<span class="number">16</span>&gt; = zstr::from(a); <span class="comment">// so is zstr
+<a href=#925 id=925 data-nosnippet>925</a>        </span><span class="kw">let </span>a32: str32 = a.resize(); <span class="comment">// same type of string with 31-byte capacity
+<a href=#926 id=926 data-nosnippet>926</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>u = str8::from(<span class="string">"aλb"</span>); <span class="comment">//unicode support
+<a href=#927 id=927 data-nosnippet>927</a>        </span><span class="macro">assert_eq!</span>(u.nth(<span class="number">1</span>), <span class="prelude-val">Some</span>(<span class="string">'λ'</span>)); <span class="comment">// get nth character
+<a href=#928 id=928 data-nosnippet>928</a>        </span><span class="macro">assert_eq!</span>(u.nth_ascii(<span class="number">3</span>), <span class="string">'b'</span>); <span class="comment">// get nth byte as ascii character
+<a href=#929 id=929 data-nosnippet>929</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">1</span>, <span class="string">'μ'</span>)); <span class="comment">// changes a character of the same character class
+<a href=#930 id=930 data-nosnippet>930</a>        </span><span class="macro">assert!</span>(!u.set(<span class="number">1</span>, <span class="string">'c'</span>)); <span class="comment">// .set returns false on failure
+<a href=#931 id=931 data-nosnippet>931</a>        </span><span class="macro">assert!</span>(u.set(<span class="number">2</span>, <span class="string">'c'</span>));
+<a href=#932 id=932 data-nosnippet>932</a>        <span class="macro">assert_eq!</span>(u, <span class="string">"aμc"</span>);
+<a href=#933 id=933 data-nosnippet>933</a>        <span class="macro">assert_eq!</span>(u.len(), <span class="number">4</span>); <span class="comment">// length in bytes
+<a href=#934 id=934 data-nosnippet>934</a>        </span><span class="macro">assert_eq!</span>(u.charlen(), <span class="number">3</span>); <span class="comment">// length in chars
+<a href=#935 id=935 data-nosnippet>935</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>ac: str16 = a.reallocate().unwrap(); <span class="comment">//copies to larger capacity type
+<a href=#936 id=936 data-nosnippet>936</a>        </span><span class="kw">let </span>remainder = ac.push(<span class="string">"ghijklmnopq"</span>); <span class="comment">//append up to capacity, returns remainder
+<a href=#937 id=937 data-nosnippet>937</a>        </span><span class="macro">assert_eq!</span>(ac.len(), <span class="number">15</span>);
+<a href=#938 id=938 data-nosnippet>938</a>        <span class="macro">assert_eq!</span>(remainder, <span class="string">"pq"</span>);
+<a href=#939 id=939 data-nosnippet>939</a>        <span class="macro">println!</span>(<span class="string">"ac {}, remainder: {}"</span>, <span class="kw-2">&amp;</span>ac, <span class="kw-2">&amp;</span>remainder);
+<a href=#940 id=940 data-nosnippet>940</a>        ac.truncate(<span class="number">9</span>); <span class="comment">// keep first 9 chars
+<a href=#941 id=941 data-nosnippet>941</a>        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>ac, <span class="string">"abcdefghi"</span>);
+<a href=#942 id=942 data-nosnippet>942</a>        <span class="macro">println!</span>(<span class="string">"ac {}, remainder: {}"</span>, <span class="kw-2">&amp;</span>ac, <span class="kw-2">&amp;</span>remainder);
+<a href=#943 id=943 data-nosnippet>943</a>
+<a href=#944 id=944 data-nosnippet>944</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = str8::from(<span class="string">"aλc"</span>);
+<a href=#945 id=945 data-nosnippet>945</a>        <span class="macro">assert_eq!</span>(s.capacity(), <span class="number">7</span>);
+<a href=#946 id=946 data-nosnippet>946</a>        <span class="macro">assert_eq!</span>(s.push(<span class="string">"1234567"</span>), <span class="string">"4567"</span>);
+<a href=#947 id=947 data-nosnippet>947</a>        <span class="macro">assert_eq!</span>(s, <span class="string">"aλc123"</span>);
+<a href=#948 id=948 data-nosnippet>948</a>        <span class="macro">assert_eq!</span>(s.charlen(), <span class="number">6</span>); <span class="comment">// length in chars
+<a href=#949 id=949 data-nosnippet>949</a>        </span><span class="macro">assert_eq!</span>(s.len(), <span class="number">7</span>); <span class="comment">// length in bytes
+<a href=#950 id=950 data-nosnippet>950</a>
+<a href=#951 id=951 data-nosnippet>951</a>        </span><span class="macro">println!</span>(<span class="string">"size of str8: {}"</span>, std::mem::size_of::&lt;str8&gt;());
+<a href=#952 id=952 data-nosnippet>952</a>        <span class="macro">println!</span>(<span class="string">"size of zstr&lt;8&gt;: {}"</span>, std::mem::size_of::&lt;zstr&lt;<span class="number">8</span>&gt;&gt;());
+<a href=#953 id=953 data-nosnippet>953</a>        <span class="macro">println!</span>(<span class="string">"size of &amp;str: {}"</span>, std::mem::size_of::&lt;<span class="kw-2">&amp;</span>str&gt;());
+<a href=#954 id=954 data-nosnippet>954</a>        <span class="macro">println!</span>(<span class="string">"size of &amp;str8: {}"</span>, std::mem::size_of::&lt;<span class="kw-2">&amp;</span>str8&gt;());
+<a href=#955 id=955 data-nosnippet>955</a>
+<a href=#956 id=956 data-nosnippet>956</a>        <span class="kw">let </span><span class="kw-2">mut </span>toosmall: fstr&lt;<span class="number">8</span>&gt; = fstr::make(<span class="string">"abcdefghijkl"</span>);
+<a href=#957 id=957 data-nosnippet>957</a>        <span class="kw">let </span><span class="kw-2">mut </span>toosmallz: zstr&lt;<span class="number">8</span>&gt; = zstr::make(<span class="string">"abcdefghijkl"</span>);
+<a href=#958 id=958 data-nosnippet>958</a>        <span class="kw">let </span><span class="kw-2">mut </span>toosmallt: str8 = str8::make(<span class="string">"abcdefghijkl"</span>);
+<a href=#959 id=959 data-nosnippet>959</a>        <span class="macro">println!</span>(<span class="string">"toosmall: {}"</span>, toosmall);
+<a href=#960 id=960 data-nosnippet>960</a>        <span class="kw">let </span>waytoosmall: fstr&lt;<span class="number">4</span>&gt; = toosmall.resize();
+<a href=#961 id=961 data-nosnippet>961</a>        <span class="kw">let </span>way2: zstr&lt;<span class="number">4</span>&gt; = toosmallz.resize();
+<a href=#962 id=962 data-nosnippet>962</a>        <span class="kw">let </span><span class="kw-2">mut </span>way3: str16 = str16::make(<span class="string">"abcdefedefsfsdfsd"</span>);
+<a href=#963 id=963 data-nosnippet>963</a>        <span class="kw">let </span>way4: str8 = way3.resize();
+<a href=#964 id=964 data-nosnippet>964</a>        way3 = way4.resize();
+<a href=#965 id=965 data-nosnippet>965</a>        <span class="macro">println!</span>(<span class="string">"way3: {}, length {}"</span>, way3, way3.len());
+<a href=#966 id=966 data-nosnippet>966</a>
+<a href=#967 id=967 data-nosnippet>967</a>        <span class="comment">// converting to other fixedstr crate types
+<a href=#968 id=968 data-nosnippet>968</a>        </span><span class="kw">let </span>b: str8 = str8::from(<span class="string">"abcdefg"</span>);
+<a href=#969 id=969 data-nosnippet>969</a>        <span class="kw">let </span><span class="kw-2">mut </span>b2: fstr&lt;<span class="number">32</span>&gt; = fstr::from(b);
+<a href=#970 id=970 data-nosnippet>970</a>        b2.push(<span class="string">"hijklmnop"</span>);
+<a href=#971 id=971 data-nosnippet>971</a>        <span class="macro">println!</span>(<span class="string">"b2 is {}"</span>, <span class="kw-2">&amp;</span>b2);
+<a href=#972 id=972 data-nosnippet>972</a>        <span class="kw">let </span><span class="kw-2">mut </span>b3: zstr&lt;<span class="number">300</span>&gt; = zstr::from(b);
+<a href=#973 id=973 data-nosnippet>973</a>        b3.push(<span class="string">"hijklmnopqrstuvw"</span>);
+<a href=#974 id=974 data-nosnippet>974</a>        <span class="macro">println!</span>(<span class="string">"b3 is {}"</span>, <span class="kw-2">&amp;</span>b3);
+<a href=#975 id=975 data-nosnippet>975</a>        <span class="kw">let </span><span class="kw-2">mut </span>b4 = str128::from(b2);
+<a href=#976 id=976 data-nosnippet>976</a>        b4.push(<span class="string">"xyz"</span>);
+<a href=#977 id=977 data-nosnippet>977</a>        <span class="macro">println!</span>(<span class="string">"b4 is {}"</span>, <span class="kw-2">&amp;</span>b4);
+<a href=#978 id=978 data-nosnippet>978</a>
+<a href=#979 id=979 data-nosnippet>979</a>        <span class="kw">let </span>(upper, lower) = (str8::make(<span class="string">"ABC"</span>), str8::make(<span class="string">"abc"</span>));
+<a href=#980 id=980 data-nosnippet>980</a>        <span class="macro">assert_eq!</span>(upper, lower.to_ascii_upper());
+<a href=#981 id=981 data-nosnippet>981</a>
+<a href=#982 id=982 data-nosnippet>982</a>        <span class="kw">let </span>c1 = str8::from(<span class="string">"abcdef"</span>);
+<a href=#983 id=983 data-nosnippet>983</a>        <span class="kw">let </span>c2 = str8::from(<span class="string">"xyz123"</span>);
+<a href=#984 id=984 data-nosnippet>984</a>        <span class="kw">let </span>c3 = c1 + c2 + <span class="string">"999"</span>;
+<a href=#985 id=985 data-nosnippet>985</a>        <span class="macro">assert_eq!</span>(c3, <span class="string">"abcdefxyz123999"</span>);
+<a href=#986 id=986 data-nosnippet>986</a>        <span class="macro">assert_eq!</span>(c3.capacity(), <span class="number">15</span>);
+<a href=#987 id=987 data-nosnippet>987</a>        <span class="comment">//println!("c3 is {}, capacity {}",&amp;c3, &amp;c3.capacity());
+<a href=#988 id=988 data-nosnippet>988</a>
+<a href=#989 id=989 data-nosnippet>989</a>        </span><span class="kw">let </span>c4 = <span class="macro">str_format!</span>(str16, <span class="string">"abc {}{}{}"</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>);
+<a href=#990 id=990 data-nosnippet>990</a>        <span class="macro">assert_eq!</span>(c4, <span class="string">"abc 123"</span>);
+<a href=#991 id=991 data-nosnippet>991</a>        <span class="comment">//    let c4 = str_format!(str16,"abc {}",&amp;c1);
+<a href=#992 id=992 data-nosnippet>992</a>        //    println!("c4 is {}",&amp;c4);
+<a href=#993 id=993 data-nosnippet>993</a>        //assert_eq!(c4,"abc abcdef");
+<a href=#994 id=994 data-nosnippet>994</a>        </span><span class="kw">let </span>c5 = <span class="macro">try_format!</span>(str8, <span class="string">"abc {}{}"</span>, <span class="kw-2">&amp;</span>c1, <span class="kw-2">&amp;</span>c2);
+<a href=#995 id=995 data-nosnippet>995</a>        <span class="macro">assert!</span>(c5.is_none());
+<a href=#996 id=996 data-nosnippet>996</a>        <span class="kw">let </span>s = <span class="macro">try_format!</span>(str32, <span class="string">"abcdefg{}"</span>, <span class="string">"hijklmnop"</span>).unwrap();
+<a href=#997 id=997 data-nosnippet>997</a>        <span class="kw">let </span>s2 = <span class="macro">try_format!</span>(str8, <span class="string">"abcdefg{}"</span>, <span class="string">"hijklmnop"</span>);
+<a href=#998 id=998 data-nosnippet>998</a>        <span class="macro">assert!</span>(s2.is_none());
+<a href=#999 id=999 data-nosnippet>999</a>
+<a href=#1000 id=1000 data-nosnippet>1000</a>        <span class="kw">let </span><span class="kw-2">mut </span>c4b = str16::from(<span class="string">"abc 12345"</span>);
+<a href=#1001 id=1001 data-nosnippet>1001</a>        c4b.truncate(<span class="number">7</span>);
+<a href=#1002 id=1002 data-nosnippet>1002</a>        <span class="macro">assert_eq!</span>(c4, c4b);
+<a href=#1003 id=1003 data-nosnippet>1003</a>
+<a href=#1004 id=1004 data-nosnippet>1004</a>        <span class="kw">let </span>zb = ztr8::from(<span class="string">"abc"</span>);
+<a href=#1005 id=1005 data-nosnippet>1005</a>        <span class="kw">let </span><span class="kw-2">mut </span>zc = ztr8::from(<span class="string">"abcde"</span>);
+<a href=#1006 id=1006 data-nosnippet>1006</a>        zc.truncate(<span class="number">3</span>);
+<a href=#1007 id=1007 data-nosnippet>1007</a>        <span class="macro">assert_eq!</span>(zb, zc);
+<a href=#1008 id=1008 data-nosnippet>1008</a>    } <span class="comment">//tiny tests
+<a href=#1009 id=1009 data-nosnippet>1009</a></span>} <span class="comment">//tests mod</span></code></pre></div></section></main></body></html>

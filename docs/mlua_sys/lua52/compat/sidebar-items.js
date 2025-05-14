@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["luaL_getmetafield","luaL_loadbufferenv","luaL_newmetatable","luaL_requiref","luaL_tolstring","lua_dump","lua_getfield","lua_getglobal","lua_geti","lua_gettable","lua_getuservalue","lua_isinteger","lua_pushlstring","lua_rawget","lua_rawgeti","lua_rawgetp","lua_rawseti","lua_resume","lua_rotate","lua_seti","lua_tointeger","lua_tointegerx"]};

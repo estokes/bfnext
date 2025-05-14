@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["luau_compile","luau_compile_","luau_set_compile_constant_boolean","luau_set_compile_constant_nil","luau_set_compile_constant_number","luau_set_compile_constant_string","luau_set_compile_constant_vector"],"struct":["lua_CompileConstant","lua_CompileOptions"],"type":["lua_LibraryMemberConstantCallback","lua_LibraryMemberTypeCallback"]};

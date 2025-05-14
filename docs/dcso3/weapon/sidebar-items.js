@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["WeaponFlag"],"struct":["ClassWeapon","Weapon"]};

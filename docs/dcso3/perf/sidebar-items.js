@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["record_perf"],"struct":["HistStat","HistogramSer","Perf","PerfInner","PerfStat","Snap"]};

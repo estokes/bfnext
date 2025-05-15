@@ -19,7 +19,7 @@
     "jtac": "AlwaysAllowed",
     "ca": "AlwaysAllowed"
   },
-  "name_filter": "^[!-~][!-~ ]*$",
+  "name_filter": "^.*$",
   "shutdown": 5,
   "points": {
     "new_player_join": 100,

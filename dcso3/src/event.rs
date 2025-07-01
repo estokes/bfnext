@@ -11,6 +11,10 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.
 */
 
+use std::marker::PhantomData;
+
+use crate::{object::DcsOid, unit::ClassUnit};
+
 use super::{
     as_tbl, as_tbl_ref, lua_err, object::Object, unit::Unit, weapon::Weapon, world::MarkPanel,
     String, Time, value_to_json
@@ -84,6 +88,24 @@ impl<'lua> FromLua<'lua> for WeaponUse<'lua> {
             target: tbl.raw_get("target")?,
             weapon_name: tbl.raw_get("weapon_name")?,
         })
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LeaveUnit {
+    pub initiator: DcsOid<ClassUnit>
+}
+
+impl<'lua> FromLua<'lua> for LeaveUnit {
+    fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
+        let tbl = as_tbl("LeaveUnit", None, value).map_err(lua_err)?;
+        let tbl: LuaTable = tbl.raw_get("initiator")?;
+        let initiator = DcsOid {
+            id: tbl.raw_get("id_")?,
+            class: "Unit".into(),
+            t: PhantomData,
+        };
+        Ok(Self { initiator })
     }
 }
 
@@ -203,7 +225,7 @@ pub enum Event<'lua> {
     EngineStartup(AtPlace<'lua>),
     EngineShutdown(AtPlace<'lua>),
     PlayerEnterUnit(UnitEvent<'lua>),
-    PlayerLeaveUnit(UnitEvent<'lua>),
+    PlayerLeaveUnit(LeaveUnit),
     PlayerComment,
     ShootingStart(WeaponUse<'lua>),
     ShootingEnd(ShootingEnd<'lua>),
@@ -265,7 +287,7 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> Resul
         18 => Event::EngineStartup(AtPlace::from_lua(value, lua)?),
         19 => Event::EngineShutdown(AtPlace::from_lua(value, lua)?),
         20 => Event::PlayerEnterUnit(UnitEvent::from_lua(value, lua)?),
-        21 => Event::PlayerLeaveUnit(UnitEvent::from_lua(value, lua)?),
+        21 => Event::PlayerLeaveUnit(LeaveUnit::from_lua(value, lua)?),
         22 => Event::PlayerComment,
         23 => Event::ShootingStart(WeaponUse::from_lua(value, lua)?),
         24 => Event::ShootingEnd(ShootingEnd::from_lua(value, lua)?),

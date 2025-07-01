@@ -271,23 +271,23 @@ impl Context {
     unsafe fn get_mut() -> &'static mut Self {
         static mut SELF: Option<Context> = None;
         #[allow(static_mut_refs)]
-        let t = SELF.as_mut();
+        let t = unsafe { SELF.as_mut() };
         match t {
             Some(ctx) => ctx,
             None => {
-                SELF = Some(Context::default());
+                unsafe { SELF = Some(Context::default()) };
                 #[allow(static_mut_refs)]
-                SELF.as_mut().unwrap()
+                unsafe { SELF.as_mut().unwrap() }
             }
         }
     }
 
     unsafe fn _get() -> &'static Context {
-        Context::get_mut()
+        unsafe { Context::get_mut() }
     }
 
     unsafe fn reset() {
-        *Self::get_mut() = Self::default();
+        unsafe { *Self::get_mut() = Self::default(); }
     }
 
     fn do_bg_task(&self, task: bg::Task) {

@@ -875,10 +875,10 @@ impl Db {
         &mut self,
         lua: MizLua,
         now: DateTime<Utc>,
-        id: &DcsOid<ClassUnit>,
+        objid: &DcsOid<ClassUnit>,
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
         let mut dead = vec![];
-        if let Some(uid) = self.ephemeral.uid_by_object_id.get(id) {
+        if let Some(uid) = self.ephemeral.uid_by_object_id.get(objid) {
             let uid = *uid;
             match self.update_unit_positions(lua, now, &[uid]) {
                 Ok(v) => dead = v,
@@ -886,9 +886,48 @@ impl Db {
             }
             self.ephemeral.units_able_to_move.swap_remove(&uid);
         }
-        if let Some(slot) = self.ephemeral.slot_by_object_id.get(&id) {
+        if let Some(slot) = self.ephemeral.slot_by_object_id.get(&objid) {
             if let Some(ucid) = self.ephemeral.player_in_slot(slot) {
-                let ucid = *ucid;
+                let ucid = ucid.clone();
+                let player = maybe_mut!(self.persisted.players, ucid, "player")?;
+                if let Some((_, Some(inst))) = player.current_slot.as_mut() {
+                    let typ = inst.typ.clone();
+                    if let Some(oid) = inst.landed_at_objective {
+                        let mut fix_warehouse = || -> Result<()> {
+                            let obj = objective_mut!(self, oid).context("get objective")?;
+                            let id = maybe!(self.ephemeral.airbase_by_oid, oid, "airbase")?;
+                            let airbase = Airbase::get_instance(lua, &id).context("get airbase")?;
+                            let wh = airbase.get_warehouse().context("get warehouse")?;
+                            let airbase = obj.kind.is_airbase()
+                                || self
+                                    .ephemeral
+                                    .cfg
+                                    .extra_fixed_wing_objectives
+                                    .contains(obj.name());
+                            let mut sync: SmallVec<[String; 4]> = smallvec![typ.0.clone()];
+                            if !airbase && let Ok(unit) = Unit::get_instance(lua, &objid) {
+                                wh.add_item(typ.0.clone(), 1)?;
+                                for ammo in unit.get_ammo().context("get ammo")? {
+                                    let ammo = ammo.context("ammo")?;
+                                    let count = ammo.count().context("ammo count")?;
+                                    let typ = ammo.type_name().context("ammo typ")?;
+                                    sync.push(typ.clone());
+                                    wh.add_item(typ, count).context("add item to warehouse")?;
+                                }
+                            }
+                            for typ in sync {
+                                if let Some(inv) = obj.warehouse.equipment.get_mut_cow(&typ) {
+                                    inv.stored = wh.get_item_count(typ).context("getting item")?;
+                                    self.ephemeral.dirty();
+                                }
+                            }
+                            Ok(())
+                        };
+                        if let Err(e) = fix_warehouse() {
+                            error!("unable to fix warehouse {:?}", e)
+                        }
+                    }
+                }
                 self.player_deslot(&ucid)
             }
         }

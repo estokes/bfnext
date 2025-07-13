@@ -875,11 +875,10 @@ impl Db {
         &mut self,
         lua: MizLua,
         now: DateTime<Utc>,
-        unit: &Unit,
+        objid: &DcsOid<ClassUnit>,
     ) -> Result<Vec<DcsOid<ClassUnit>>> {
-        let name = unit.get_name()?;
         let mut dead = vec![];
-        if let Some(uid) = self.persisted.units_by_name.get(name.as_str()) {
+        if let Some(uid) = self.ephemeral.uid_by_object_id.get(objid) {
             let uid = *uid;
             match self.update_unit_positions(lua, now, &[uid]) {
                 Ok(v) => dead = v,
@@ -887,8 +886,7 @@ impl Db {
             }
             self.ephemeral.units_able_to_move.swap_remove(&uid);
         }
-        let id = unit.object_id()?;
-        if let Some(slot) = self.ephemeral.slot_by_object_id.get(&id) {
+        if let Some(slot) = self.ephemeral.slot_by_object_id.get(&objid) {
             if let Some(ucid) = self.ephemeral.player_in_slot(slot) {
                 let ucid = ucid.clone();
                 let player = maybe_mut!(self.persisted.players, ucid, "player")?;
@@ -907,7 +905,7 @@ impl Db {
                                     .extra_fixed_wing_objectives
                                     .contains(obj.name());
                             let mut sync: SmallVec<[String; 4]> = smallvec![typ.0.clone()];
-                            if !airbase {
+                            if !airbase && let Ok(unit) = Unit::get_instance(lua, &objid) {
                                 wh.add_item(typ.0.clone(), 1)?;
                                 for ammo in unit.get_ammo().context("get ammo")? {
                                     let ammo = ammo.context("ammo")?;

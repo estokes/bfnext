@@ -271,23 +271,23 @@ impl Context {
     unsafe fn get_mut() -> &'static mut Self {
         static mut SELF: Option<Context> = None;
         #[allow(static_mut_refs)]
-        let t = SELF.as_mut();
+        let t = unsafe { SELF.as_mut() };
         match t {
             Some(ctx) => ctx,
             None => {
-                SELF = Some(Context::default());
+                unsafe { SELF = Some(Context::default()) };
                 #[allow(static_mut_refs)]
-                SELF.as_mut().unwrap()
+                unsafe { SELF.as_mut().unwrap() }
             }
         }
     }
 
     unsafe fn _get() -> &'static Context {
-        Context::get_mut()
+        unsafe { Context::get_mut() }
     }
 
     unsafe fn reset() {
-        *Self::get_mut() = Self::default();
+        unsafe { *Self::get_mut() = Self::default(); }
     }
 
     fn do_bg_task(&self, task: bg::Task) {
@@ -595,20 +595,17 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::PlayerLeaveUnit(e) => {
-            if let Some(unit) = e.initiator.and_then(|u| u.as_unit().ok()) {
-                let oid = unit.object_id()?;
-                if let Some(ucid) = ctx.db.player_in_unit(false, &oid) {
-                    if let Some(player) = ctx.db.player(&ucid) {
-                        if let Some((_, Some(inst))) = player.current_slot.as_ref() {
-                            if inst.landed_at_objective.is_none() {
-                                ctx.shots_out.dead(oid, start_ts)
-                            }
+            if let Some(ucid) = ctx.db.player_in_unit(false, &e.initiator) {
+                if let Some(player) = ctx.db.player(&ucid) {
+                    if let Some((_, Some(inst))) = player.current_slot.as_ref() {
+                        if inst.landed_at_objective.is_none() {
+                            ctx.shots_out.dead(e.initiator.clone(), start_ts)
                         }
                     }
                 }
-                if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &unit) {
-                    error!("player left unit failed {:?} {:?}", unit, e)
-                }
+            }
+            if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &e.initiator) {
+                error!("player left unit failed {:?}", e)
             }
         }
         Event::Hit(e) | Event::Kill(e) => {

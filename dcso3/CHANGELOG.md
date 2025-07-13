@@ -1,3 +1,7 @@
+## 0.1.9
+
+- update the PlayerLeaveUnit event to ED's new format
+
 ## 0.1.8
 
 - add new controller options used by the mission editor

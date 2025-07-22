@@ -31,8 +31,7 @@ use crate::{
 use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
-        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
-        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, WarehouseConfig,
+        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg, DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition, WarehouseConfig
     },
     db::{
         group::{GroupId, UnitId},
@@ -692,6 +691,11 @@ impl Ephemeral {
             }
         };
         check_unit_classification()?;
+        if let Some(VictoryCondition::MapOwned { fraction }) = cfg.auto_reset.map(|vc| vc.condition) {
+            if fraction > 1. || fraction < 0. {
+                bail!("auto_reset fraction must be between 0 and 1")
+            }
+        }
         for (side, template) in cfg.crate_template.iter() {
             miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?
                 .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;

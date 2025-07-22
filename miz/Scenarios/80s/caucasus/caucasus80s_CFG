@@ -9,7 +9,7 @@
   },
   "banned": {},
   "auto_reset": {
-    "condition": { "MapOwned": { "fraction": 100.0 } },
+    "condition": { "MapOwned": { "fraction": 0.99 } },
     "delay": 900
   },
   "rules": {

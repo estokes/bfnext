@@ -7,6 +7,10 @@
     "4c27ed606a78717da9d96a49b1aa54db": "REAPER 43 | Fragal"
   },
   "banned": {},
+  "auto_reset": {
+    "condition": { "MapOwned": { "fraction": 0.99 } },
+    "delay": 900
+  },
   "rules": {
     "actions": "AlwaysAllowed",
     "cargo": "AlwaysAllowed",

@@ -1061,9 +1061,9 @@ impl Db {
                     Side::Neutral => (blue, red, neutral + 1., total + 1.),
                 },
             );
-            if blue + neutral / total >= fraction {
+            if ((blue + neutral) / total) >= fraction {
                 self.ephemeral.victory = Some((now, Side::Blue));
-            } else if red + neutral / total >= fraction {
+            } else if ((red + neutral) / total) >= fraction {
                 self.ephemeral.victory = Some((now, Side::Red));
             }
             None

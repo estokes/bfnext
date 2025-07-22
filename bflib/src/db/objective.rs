@@ -760,6 +760,7 @@ impl Db {
                 if obj.owner != unit.side {
                     let air = unit.tags.0.contains(UnitTag::Aircraft)
                         || unit.tags.0.contains(UnitTag::Helicopter);
+                    let unarmed = unit.tags.0.contains(UnitTag::Unarmed);
                     let cull_dist = if air {
                         cull_distance
                     } else {
@@ -768,7 +769,8 @@ impl Db {
                     let dist = na::distance_squared(&obj.zone.pos().into(), &unit.pos.into());
                     if dist <= cull_dist {
                         *spawn = true;
-                        if air {
+                        if unarmed {}
+                        else if air {
                             let threat_dist =
                                 (cfg.threatened_distance[unit.typ.as_str()] as f64).powi(2);
                             if dist <= threat_dist {

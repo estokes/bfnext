@@ -583,6 +583,8 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         if let Some(id) = ctx.connected.id_by_ucid.get(&ucid) {
                             process_slot_rejection(ctx, *id, ucid, rej)
                         }
+                        // just in case destroying the unit didn't work
+                        ctx.db.ephemeral.force_player_to_spectators(&ucid);
                     }
                     Err(e) => {
                         error!("unit born failed {:?} {:?}", unit, e);

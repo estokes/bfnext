@@ -1045,8 +1045,8 @@ impl Db {
                         10,
                         true,
                         format_compact!(
-                            "{side} has won. The server will reset in {}",
-                            delay - elapsed
+                            "{side} has won. The server will reset in {}s",
+                            (delay - elapsed).as_seconds_f64()
                         ),
                     );
                     return None;

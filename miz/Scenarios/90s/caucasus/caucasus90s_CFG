@@ -266,7 +266,7 @@
               "template": "RBOMBER",
               "altitude": 13186,
               "altitude_typ": "BARO",
-              "speed": 827
+              "speed": 527
             }
           }
         },
@@ -284,7 +284,7 @@
               "template": "RTROOPCARRIER",
               "altitude": 1256,
               "altitude_typ": "RADIO",
-              "speed": 267
+              "speed": 76
             }
           }
         },
@@ -312,7 +312,7 @@
             "template": "RATTACKHELI",
             "altitude": 757,
             "altitude_typ": "RADIO",
-            "speed": 275
+            "speed": 82
           }
         },
         "cost": 300,
@@ -329,7 +329,7 @@
               "template": "RCARGOCARRIER",
               "altitude": 1317,
               "altitude_typ": "RADIO",
-              "speed": 253
+              "speed": 82
             }
           }
         },
@@ -345,7 +345,7 @@
             "template": "RCARGOCARRIER",
             "altitude": 1348,
             "altitude_typ": "RADIO",
-            "speed": 249
+            "speed": 75
           }
         },
         "cost": 100,
@@ -360,7 +360,7 @@
             "template": "RCARGOCARRIER",
             "altitude": 1341,
             "altitude_typ": "RADIO",
-            "speed": 276
+            "speed": 76
           }
         },
         "cost": 100,
@@ -380,7 +380,7 @@
               "template": "RDRONE",
               "altitude": 6237,
               "altitude_typ": "BARO",
-              "speed": 223
+              "speed": 92
             }
           }
         },
@@ -407,7 +407,7 @@
             "template": "RFIGHTERS",
             "altitude": 10214,
             "altitude_typ": "BARO",
-            "speed": 1535
+            "speed": 254
           }
         },
         "cost": 200,
@@ -424,9 +424,9 @@
               "kind": "FixedWing",
               "duration": 8,
               "template": "RAWACS",
-              "altitude": 1127,
+              "altitude": 11270,
               "altitude_typ": "BARO",
-              "speed": 217,
+              "speed": 203,
               "freq": 125000000
             }
           }
@@ -467,7 +467,7 @@
               "template": "BBOMBER",
               "altitude": 12975,
               "altitude_typ": "BARO",
-              "speed": 835
+              "speed": 305
             }
           }
         },
@@ -501,7 +501,7 @@
               "template": "BTROOPCARRIER",
               "altitude": 1237,
               "altitude_typ": "RADIO",
-              "speed": 263
+              "speed": 63
             }
           }
         },
@@ -529,7 +529,7 @@
             "template": "BATTACKHELI",
             "altitude": 734,
             "altitude_typ": "RADIO",
-            "speed": 256
+            "speed": 63
           }
         },
         "cost": 300,
@@ -546,7 +546,7 @@
               "template": "BCARGOCARRIER",
               "altitude": 1322,
               "altitude_typ": "RADIO",
-              "speed": 265
+              "speed": 62
             }
           }
         },
@@ -562,7 +562,7 @@
             "template": "BCARGOCARRIER",
             "altitude": 1334,
             "altitude_typ": "RADIO",
-            "speed": 267
+            "speed": 66
           }
         },
         "cost": 100,
@@ -577,7 +577,7 @@
             "template": "BCARGOCARRIER",
             "altitude": 1327,
             "altitude_typ": "RADIO",
-            "speed": 263
+            "speed": 63
           }
         },
         "cost": 100,
@@ -597,7 +597,7 @@
               "template": "BDRONE",
               "altitude": 7251,
               "altitude_typ": "BARO",
-              "speed": 225
+              "speed": 91
             }
           }
         },
@@ -640,7 +640,7 @@
             "template": "BFIGHTERS",
             "altitude": 10146,
             "altitude_typ": "BARO",
-            "speed": 1548
+            "speed": 254
           }
         },
         "cost": 200,
@@ -659,7 +659,7 @@
               "template": "BAWACS",
               "altitude": 11472,
               "altitude_typ": "BARO",
-              "speed": 218,
+              "speed": 205,
               "freq": 264000000
             }
           }
@@ -2582,11 +2582,11 @@
       "RadarGuided",
       "Launcher"
     ],
- "1L13 EWR": [
+    "1L13 EWR": [
       "EWR",
       "Unarmed"
     ],
-   "M-1 Abrams": [
+    "M-1 Abrams": [
       "Armor",
       "MR",
       "HeavyCannon",

@@ -426,7 +426,7 @@
               "template": "RAWACS",
               "altitude": 11270,
               "altitude_typ": "BARO",
-              "speed": 203,
+              "speed": 207,
               "freq": 125000000
             }
           }

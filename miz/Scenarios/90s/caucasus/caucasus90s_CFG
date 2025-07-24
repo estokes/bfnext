@@ -862,7 +862,7 @@
         ],
         "template": "DEPSA11",
         "persist": "Forever",
-        "limit": 3,
+        "limit": 2,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1512,7 +1512,7 @@
         ],
         "template": "DEPSA11G",
         "persist": "Forever",
-        "limit": 3,
+        "limit": 2,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -2188,7 +2188,8 @@
       "SAM",
       "LR",
       "RadarGuided",
-      "ControlUnit"
+      "ControlUnit",
+	  "Driveable"
     ],
     "SNR_75V": [
       "SAM",
@@ -2242,7 +2243,8 @@
       "LR",
       "RadarGuided",
       "TrackRadar",
-      "Launcher"
+      "Launcher",
+	  "Driveable"
     ],
     "T-80UD": [
       "Armor",
@@ -2340,7 +2342,8 @@
       "SAM",
       "LR",
       "RadarGuided",
-      "SearchRadar"
+      "SearchRadar",
+	  "Driveable"
     ],
     "Su-25T": [
       "Aircraft"

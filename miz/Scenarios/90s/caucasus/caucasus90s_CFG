@@ -2783,16 +2783,14 @@
       "MR",
       "RadarGuided",
       "Launcher",
-      "EngagesWeapons",
-      "Driveable"
+      "EngagesWeapons"
     ],
     "NASAMS_LN_B": [
       "SAM",
       "MR",
       "RadarGuided",
       "Launcher",
-      "EngagesWeapons",
-      "Driveable"
+      "EngagesWeapons"
     ],
     "NASAMS_Radar_MPQ64F1": [
       "SAM",

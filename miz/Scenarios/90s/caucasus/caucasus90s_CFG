@@ -2288,7 +2288,8 @@
     ],
     "ZU-23 Emplacement": [
       "AAA",
-      "SR"
+      "SR",
+      "Driveable"
     ],
     "Vulcan": [
       "AAA",
@@ -2327,7 +2328,8 @@
       "SAM",
       "MR",
       "RadarGuided",
-      "SearchRadar"
+      "SearchRadar",
+      "Driveable"
     ],	
     "2B11 mortar": [
       "Infantry",
@@ -2539,7 +2541,8 @@
       "MR",
       "RadarGuided",
       "TrackRadar",
-      "SearchRadar"
+      "SearchRadar",
+      "Driveable"
     ],
     "Mi-8MT": [
       "Aircraft",
@@ -2577,7 +2580,8 @@
       "SAM",
       "MR",
       "RadarGuided",
-      "Launcher"
+      "Launcher",
+      "Driveable"
     ],
     "5p73 s-125 ln": [
       "SAM",
@@ -2779,27 +2783,31 @@
       "MR",
       "RadarGuided",
       "Launcher",
-      "EngagesWeapons"
+      "EngagesWeapons",
+      "Driveable"
     ],
     "NASAMS_LN_B": [
       "SAM",
       "MR",
       "RadarGuided",
       "Launcher",
-      "EngagesWeapons"
+      "EngagesWeapons",
+      "Driveable"
     ],
     "NASAMS_Radar_MPQ64F1": [
       "SAM",
       "MR",
       "RadarGuided",
       "EngagesWeapons",
-      "SearchRadar"
+      "SearchRadar",
+      "Driveable"
     ],
     "NASAMS_Command_Post": [
       "SAM",
       "MR",
       "RadarGuided",
-      "AuxRadarUnit"
+      "AuxRadarUnit",
+      "Driveable"
     ],
     "Patriot ln": [
       "SAM",

@@ -15,9 +15,9 @@ for more details.
 */
 
 use super::{
+    Db, Map, MapM, MapS, Set,
     group::{DeployKind, SpawnedUnit},
     logistics::{Inventory, LogiStage, Warehouse},
-    Db, Map, MapM, MapS, Set,
 };
 use crate::{
     group, group_health, group_mut,
@@ -26,7 +26,7 @@ use crate::{
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use bfprotocols::{
     cfg::{Deployable, DeployableLogistics, UnitTag, VictoryCondition},
     db::{
@@ -35,10 +35,11 @@ use bfprotocols::{
     },
     stats::Stat,
 };
-use chrono::{prelude::*, Duration};
+use chrono::{Duration, prelude::*};
 use compact_str::format_compact;
 use core::f64;
 use dcso3::{
+    LuaVec2, LuaVec3, MizLua, Quad2, String, Vector2, Vector3,
     airbase::Airbase,
     azumith2d_to, centroid2d,
     coalition::Side,
@@ -50,14 +51,13 @@ use dcso3::{
     net::Ucid,
     object::DcsObject,
     warehouse::LiquidType,
-    LuaVec2, LuaVec3, MizLua, Quad2, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{debug, error, warn};
-use mlua::{prelude::*, Value};
+use mlua::{Value, prelude::*};
 use serde_derive::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{cmp::max, str::FromStr, sync::Arc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -232,11 +232,7 @@ impl Zone {
                 .into_iter()
                 .fold(0., |max, p| {
                     let d = na::distance_squared(&p.0.into(), &(*pos).into());
-                    if d > max {
-                        d
-                    } else {
-                        max
-                    }
+                    if d > max { d } else { max }
                 })
                 .sqrt(),
         }
@@ -278,9 +274,9 @@ pub struct Objective {
     pub id: ObjectiveId,
     pub name: String,
     // deprecated, remove after transition
-    pub(super) pos: Option<Vector2>,
+    //pub(super) pos: Option<Vector2>,
     // deprecated, remove after transition
-    pub(super) radius: Option<f64>,
+    //pub(super) radius: Option<f64>,
     pub owner: Side,
     pub(super) kind: ObjectiveKind,
     pub(super) groups: MapS<Side, Set<GroupId>>,
@@ -299,6 +295,8 @@ pub struct Objective {
     pub(super) zone: Zone,
     #[serde(default)]
     pub(super) logistics_detached: bool,
+    #[serde(default)]
+    pub(super) points: i32,
     #[serde(skip)]
     pub(super) spawned: bool,
     #[serde(skip)]
@@ -575,8 +573,6 @@ impl Db {
                 spec: spec.clone(),
                 pad_template: pad_template.clone(),
             },
-            pos: None,
-            radius: None,
             zone: Zone::Circle { pos, radius: 2000. },
             owner: side,
             health: 100,
@@ -588,6 +584,7 @@ impl Db {
             threatened: true,
             warehouse: Warehouse::default(),
             logistics_detached: false,
+            points: 0,
             last_threatened_ts: now,
             last_change_ts: now,
             last_activate: DateTime::<Utc>::default(),
@@ -769,8 +766,8 @@ impl Db {
                     let dist = na::distance_squared(&obj.zone.pos().into(), &unit.pos.into());
                     if dist <= cull_dist {
                         *spawn = true;
-                        if unarmed {}
-                        else if air {
+                        if unarmed {
+                        } else if air {
                             let threat_dist =
                                 (cfg.threatened_distance[unit.typ.as_str()] as f64).powi(2);
                             if dist <= threat_dist {
@@ -1134,7 +1131,9 @@ impl Db {
                     }
                     for uid in &group!(self, gid)?.units {
                         if !unit!(self, uid)?.dead {
-                            self.ephemeral.units_potentially_close_to_enemies.insert(*uid);
+                            self.ephemeral
+                                .units_potentially_close_to_enemies
+                                .insert(*uid);
                         }
                     }
                 }

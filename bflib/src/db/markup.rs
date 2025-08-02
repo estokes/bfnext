@@ -22,9 +22,9 @@ use crate::msgq::MsgQ;
 use bfprotocols::{cfg::Cfg, db::objective::ObjectiveKind};
 use compact_str::format_compact;
 use dcso3::{
+    Color, LuaVec3, Vector3,
     coalition::Side,
     trigger::{ArrowSpec, CircleSpec, LineType, MarkId, QuadSpec, SideFilter, TextSpec},
-    Color, LuaVec3, Vector3,
 };
 use smallvec::SmallVec;
 
@@ -110,12 +110,13 @@ impl ObjectiveMarkup {
             self.supply = obj.supply;
             self.fuel = obj.fuel;
             let v = format_compact!(
-                "{}\nHealth: {}\nLogi: {}\nSupply: {}\nFuel: {}",
+                "{}\nHealth: {}\nLogi: {}\nSupply: {}\nFuel: {}\nPoints: {}",
                 self.name,
                 obj.health,
                 obj.logi,
                 obj.supply,
-                obj.fuel
+                obj.fuel,
+                obj.points
             );
             msgq.set_markup_text(self.label, v.into());
         }

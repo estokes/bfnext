@@ -43,10 +43,10 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashMap;
-use log::{debug, error};
+use log::debug;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
-use std::{fmt, sync::Arc};
+use std::{cmp::max, fmt, sync::Arc};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NearbyCrate<'a> {
@@ -434,6 +434,7 @@ impl Db {
         struct Cifo {
             pos: Vector2,
             group: GroupId,
+            origin: ObjectiveId,
             crate_def: Crate,
         }
         impl<'a> From<NearbyCrate<'a>> for Cifo {
@@ -441,6 +442,7 @@ impl Db {
                 Self {
                     pos: nc.pos,
                     group: nc.group.id,
+                    origin: nc.origin,
                     crate_def: nc.crate_def.clone(),
                 }
             }
@@ -614,14 +616,7 @@ impl Db {
             db.persisted.objectives.into_iter().any(|(oid, obj)| {
                 let mut check = false;
                 for cr in iter() {
-                    match db.persisted.groups.get(&cr.group) {
-                        Some(group) => {
-                            if let DeployKind::Crate { origin, .. } = &group.origin {
-                                check |= oid == origin;
-                            }
-                        }
-                        None => error!("missing group {:?}", cr.group),
-                    }
+                    check |= oid == &cr.origin;
                 }
                 check |= logistics || obj.owner == side;
                 check && (logistics || obj.threatened) && {
@@ -639,14 +634,7 @@ impl Db {
             db.persisted.objectives.into_iter().find_map(|(oid, obj)| {
                 let mut is_origin = false;
                 for cr in iter() {
-                    match db.persisted.groups.get(&cr.group) {
-                        Some(group) => {
-                            if let DeployKind::Crate { origin, .. } = &group.origin {
-                                is_origin |= oid == origin;
-                            }
-                        }
-                        None => error!("missing group {:?}", cr.group),
-                    }
+                    is_origin |= oid == &cr.origin;
                 }
                 if obj.owner == side && !is_origin && obj.zone.contains(centroid) {
                     Some(*oid)
@@ -702,13 +690,17 @@ impl Db {
             side: Side,
             spec: &Deployable,
             dep: &String,
+            origin: ObjectiveId,
             ucid: &Ucid,
-        ) -> Result<()> {
-            if let Some(player) = db.persisted.players.get(ucid) {
-                if spec.cost as i32 > player.points {
+        ) -> Result<ObjectiveId> {
+            if let Some(player) = db.persisted.players.get(ucid)
+                && let Some(obj) = db.persisted.objectives.get(&origin)
+            {
+                let player_points = max(0, player.points);
+                if spec.cost as i32 > player_points + obj.points {
                     bail!(
-                        "you have {} points, this deployable costs {} points to unpack",
-                        player.points,
+                        "there are {} available points, this deployable costs {} points to unpack",
+                        player_points,
                         spec.cost
                     )
                 }
@@ -726,7 +718,7 @@ impl Db {
                     },
                 }
             }
-            Ok(())
+            Ok(origin)
         }
         let st = SlotStats::get(self, lua, slot)?;
         if st.in_air {
@@ -834,9 +826,23 @@ impl Db {
                     }
                 } else {
                     let spctx = SpawnCtx::new(lua)?;
-                    match enforce_deploy_limits(self, st.side, &spec, &dep, &st.ucid) {
+                    let origins = {
+                        let mut oids = have
+                            .values()
+                            .flat_map(|crs| crs.iter())
+                            .map(|cr| cr.origin)
+                            .collect::<SmallVec<[_; 8]>>();
+                        oids.sort();
+                        oids.dedup();
+                        oids
+                    };
+                    let can_deploy = origins.iter().fold(Err(anyhow!("")), |res, oid| match res {
+                        Ok(oid) => Ok(oid),
+                        Err(_) => enforce_deploy_limits(self, st.side, &spec, &dep, *oid, &st.ucid),
+                    });
+                    match can_deploy {
                         Err(e) => reasons.push(format_compact!("{e}")),
-                        Ok(()) => match &spec.logistics {
+                        Ok(from_obj) => match &spec.logistics {
                             Some(parts) => {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
@@ -848,7 +854,12 @@ impl Db {
                                     by: st.ucid,
                                     deployable: dep,
                                 });
-                                self.adjust_points(&st.ucid, -(spec.cost as i32), "for farp spawn");
+                                self.charge_for_item(
+                                    &st.ucid,
+                                    from_obj,
+                                    spec.cost,
+                                    "for farp spawn",
+                                )?;
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name));
                             }
@@ -879,11 +890,12 @@ impl Db {
                                     by: st.ucid,
                                     deployable: dep.clone(),
                                 });
-                                self.adjust_points(
+                                self.charge_for_item(
                                     &st.ucid,
-                                    -(spec.cost as i32),
+                                    from_obj,
+                                    spec.cost,
                                     &format_compact!("for {dep} unpack"),
-                                );
+                                )?;
                                 return Ok(Unpakistan::Unpacked(dep));
                             }
                         },

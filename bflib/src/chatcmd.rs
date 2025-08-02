@@ -26,6 +26,7 @@ use dcso3::{
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use log::{error, info};
+use netidx::utils::Either;
 use regex::Regex;
 use smallvec::{SmallVec, smallvec};
 use std::{mem, sync::Arc, sync::OnceLock};
@@ -207,14 +208,33 @@ fn transfer_command(ctx: &mut Context, id: PlayerId, s: &str) {
     }
     if let Some(ifo) = ctx.connected.get(&id) {
         match s.split_once(" ") {
-            None => reply!("transfer expected amount and player"),
-            Some((amount, player)) => match amount.parse::<u32>() {
+            None => reply!("transfer expected amount and target"),
+            Some((amount, target)) => match amount.parse::<u32>() {
                 Err(e) => reply!("transfer expected a number {e:?}"),
-                Ok(amount) => match admin::get_player_ucid(ctx, player) {
-                    Err(e) => reply!("could not transfer to {player}, {e:?}"),
-                    Ok(ucid) => match ctx.db.transfer_points(&ifo.ucid, &ucid, amount) {
-                        Err(e) => reply!("transfer failed {e:?}"),
-                        Ok(()) => reply!("transfer complete"),
+                Ok(amount) => match target.strip_prefix("objective:") {
+                    Some(objective_name) => match admin::get_airbase(&ctx.db, objective_name) {
+                        Err(e) => reply!("could not transfer to {objective_name}, {e:?}"),
+                        Ok(oid) => {
+                            match ctx
+                                .db
+                                .transfer_points(&ifo.ucid, Either::Right(oid), amount)
+                            {
+                                Err(e) => reply!("transfer failed {e:?}"),
+                                Ok(()) => reply!("transfer complete"),
+                            }
+                        }
+                    },
+                    None => match admin::get_player_ucid(ctx, target) {
+                        Err(e) => reply!("could not transfer to {target}, {e:?}"),
+                        Ok(ucid) => {
+                            match ctx
+                                .db
+                                .transfer_points(&ifo.ucid, Either::Left(&ucid), amount)
+                            {
+                                Err(e) => reply!("transfer failed {e:?}"),
+                                Ok(()) => reply!("transfer complete"),
+                            }
+                        }
                     },
                 },
             },
@@ -672,7 +692,7 @@ fn help_command(ctx: &mut Context, id: PlayerId) {
         " -lives: display your current lives",
         " -time: how long until server restart",
         " -balance: show your points balance",
-        " -transfer <amount> <player>: transfer points to another player",
+        " -transfer <amount> [<player> | objective:<objective>]: transfer points to another player or objective",
         " -delete <groupid>: delete a group you deployed for a partial refund",
         " -action <name> <args>: perform an action, -action help for a list of actions",
         " -bind <token>: bind your ucid to the specified token (for the web gui)",

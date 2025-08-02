@@ -35,6 +35,7 @@ use dcso3::{
     unit::{ClassUnit, Unit},
 };
 use log::{debug, error, info, warn};
+use netidx::utils::Either;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
 use std::cmp::{max, min};
@@ -136,7 +137,12 @@ impl Db {
         self.persisted.players.get_mut_cow(ucid)
     }
 
-    pub fn transfer_points(&mut self, source: &Ucid, target: &Ucid, amount: u32) -> Result<()> {
+    pub fn transfer_points(
+        &mut self,
+        source: &Ucid,
+        target: Either<&Ucid, ObjectiveId>,
+        amount: u32,
+    ) -> Result<()> {
         let sp = self
             .persisted
             .players
@@ -151,29 +157,47 @@ impl Db {
         }
         sp.points -= amount as i32;
         let sp_name = sp.name.clone();
-        match self.persisted.players.get_mut_cow(target) {
-            Some(tp) => {
-                tp.points += amount as i32;
-                let msg = format_compact!(
-                    "{}(+{}) you received points from {}",
-                    tp.points,
-                    amount,
-                    sp_name
-                );
-                self.ephemeral
-                    .panel_to_player(&self.persisted, 10, target, msg);
-                self.ephemeral.stat(Stat::PointsTransfer {
-                    from: *source,
-                    to: *target,
-                    points: amount,
-                });
-                self.ephemeral.dirty();
-                Ok(())
-            }
-            None => {
-                self.persisted.players[source].points += amount as i32;
-                bail!("target player not found")
-            }
+        match target {
+            Either::Left(target) => match self.persisted.players.get_mut_cow(target) {
+                Some(tp) => {
+                    tp.points += amount as i32;
+                    let msg = format_compact!(
+                        "{}(+{}) you received points from {}",
+                        tp.points,
+                        amount,
+                        sp_name
+                    );
+                    self.ephemeral
+                        .panel_to_player(&self.persisted, 10, target, msg);
+                    self.ephemeral.stat(Stat::PointsTransfer {
+                        from: *source,
+                        to: *target,
+                        points: amount,
+                    });
+                    self.ephemeral.dirty();
+                    Ok(())
+                }
+                None => {
+                    self.persisted.players[source].points += amount as i32;
+                    bail!("target player not found")
+                }
+            },
+            Either::Right(target) => match self.persisted.objectives.get_mut_cow(&target) {
+                Some(obj) => {
+                    obj.points += amount as i32;
+                    self.ephemeral.stat(Stat::PointsTransferToObjective {
+                        from: *source,
+                        to: target,
+                        points: amount,
+                    });
+                    self.ephemeral.dirty();
+                    Ok(())
+                }
+                None => {
+                    self.persisted.players[source].points += amount as i32;
+                    bail!("target objective not found")
+                }
+            },
         }
     }
 
@@ -288,6 +312,17 @@ impl Db {
             .get(&slot)
             .and_then(|ucid| self.persisted.players.get_mut_cow(ucid).map(|p| (*ucid, p)))
             .ok_or_else(|| anyhow!("could not find player in slot {:?}", slot))?;
+        let owned_objective = self
+            .persisted
+            .objectives
+            .iter_mut_cow()
+            .find_map(|(oid, obj)| {
+                if obj.owner == player.side && obj.zone.contains(position) {
+                    Some((oid, obj))
+                } else {
+                    None
+                }
+            });
         let life_type = match self.ephemeral.cfg.life_types.get(&sifo.typ) {
             None => bail!("no life type for vehicle {:?}", sifo.typ),
             Some(typ) => *typ,
@@ -298,20 +333,14 @@ impl Db {
         if let Some((_, Some(inst))) = &mut player.current_slot {
             inst.landed_at_objective = None;
         }
-        let is_on_owned_objective = self
-            .persisted
-            .objectives
-            .into_iter()
-            .fold(false, |res, (_, obj)| {
-                res || (obj.owner == player.side && obj.zone.contains(position))
-            });
-        let res = if strict && cost as i32 > player.points {
+        let obj_balance = owned_objective.as_ref().map(|(_, o)| o.points).unwrap_or(0);
+        let res = if strict && cost as i32 > max(0, player.points) + obj_balance {
             return Ok(TakeoffRes::OutOfPoints);
         } else if !self.ephemeral.cfg.limited_lives {
             player.airborne = Some(life_type);
             self.ephemeral.dirty();
             Ok(TakeoffRes::NoLifeTaken)
-        } else if is_on_owned_objective {
+        } else if owned_objective.is_some() {
             // paranoia
             if *player_lives == 0 {
                 return Ok(TakeoffRes::OutOfLives);
@@ -328,12 +357,44 @@ impl Db {
         } else {
             Ok(TakeoffRes::NoLifeTaken)
         };
-        if cost > 0 {
-            self.adjust_points(&ucid, -(cost as i32), cost_msg.as_str());
-            self.ephemeral.dirty();
-        }
+        if cost > 0
+            && let Some(oid) = owned_objective.map(|(id, _)| *id)
+        {
+            self.charge_for_item(&ucid, oid, cost, cost_msg.as_str())?
+        };
         self.ephemeral.stat(Stat::Takeoff { id: ucid });
         res
+    }
+
+    pub fn charge_for_item(
+        &mut self,
+        ucid: &Ucid,
+        oid: ObjectiveId,
+        cost: u32,
+        msg: &str,
+    ) -> Result<()> {
+        let player_balance = self
+            .player(ucid)
+            .ok_or_else(|| anyhow!("no such player {ucid}"))?
+            .points;
+        let adj = match self.persisted.objectives.get_mut_cow(&oid) {
+            None => -(cost as i32),
+            Some(obj) => {
+                if player_balance <= 0 {
+                    obj.points -= cost as i32;
+                    0
+                } else if player_balance < cost as i32 {
+                    let cost = cost as i32 - player_balance;
+                    obj.points -= cost;
+                    -player_balance
+                } else {
+                    -(cost as i32)
+                }
+            }
+        };
+        self.adjust_points(&ucid, adj, msg);
+        self.ephemeral.dirty();
+        Ok(())
     }
 
     pub fn land(&mut self, slot: SlotId, position: Vector2, unit: &Unit) -> Option<LifeType> {
@@ -362,19 +423,19 @@ impl Db {
             Some(l) => l,
             None => return None,
         };
-        let on_owned_objective = self
+        let owned_objective = self
             .persisted
             .objectives
-            .into_iter()
+            .iter_mut_cow()
             .find_map(|(oid, obj)| {
                 if obj.owner == player.side && obj.zone.contains(position) {
-                    Some(*oid)
+                    Some((*oid, obj))
                 } else {
                     None
                 }
             });
         self.ephemeral.stat(Stat::Land { id: ucid });
-        if let Some(oid) = on_owned_objective {
+        if let Some((oid, obj)) = owned_objective {
             *player_lives += 1;
             player.airborne = None;
             if *player_lives >= self.ephemeral.cfg.default_lives[&life_type].0 {
@@ -391,7 +452,11 @@ impl Db {
                 let provisional_points = player.provisional_points;
                 player.provisional_points = 0;
                 if cost > 0 {
-                    self.adjust_points(&ucid, cost as i32, cost_msg.as_str());
+                    if points.points_return_to_objective {
+                        obj.points += cost as i32
+                    } else {
+                        self.adjust_points(&ucid, cost as i32, cost_msg.as_str());
+                    }
                 }
                 if is_provisional && provisional_points > 0 {
                     self.adjust_points(
@@ -553,12 +618,13 @@ impl Db {
             };
         }
         if let Some(points) = self.ephemeral.cfg.points.as_ref() {
-            let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0);
-            if cost > 0 && player.points < cost as i32 {
+            let cost = *points.airframe_cost.get(&sifo.typ).unwrap_or(&0) as i32;
+            let balance = player.points + objective.points;
+            if cost > 0 && balance < cost {
                 return SlotAuth::NoPoints {
-                    cost,
+                    cost: cost as u32,
                     vehicle: sifo.typ.clone(),
-                    balance: player.points,
+                    balance,
                 };
             }
         }

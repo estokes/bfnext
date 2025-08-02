@@ -16,13 +16,13 @@ for more details.
 
 use std::sync::Arc;
 
-use super::{ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup, Db};
+use super::{Db, ephemeral::SlotInfo, group::DeployKind, objective::ObjGroup};
 use crate::{
     bg::Task,
     db::{
+        MapS,
         logistics::Warehouse,
         objective::{Objective, Zone},
-        MapS,
     },
     group, group_health, group_mut,
     landcache::LandCache,
@@ -30,7 +30,7 @@ use crate::{
     spawnctx::{SpawnCtx, SpawnLoc},
     unit, unit_mut,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{Cfg, Vehicle},
     db::{
@@ -43,13 +43,12 @@ use bfprotocols::{
 use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
-    centroid2d,
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3, centroid2d,
     coalition::Side,
     controller::PointType,
     coord::Coord,
     env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
     land::Land,
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
@@ -133,8 +132,6 @@ impl Db {
             spawned: false,
             enabled: false,
             threatened: false,
-            pos: None,
-            radius: None,
             zone,
             name: name.clone(),
             kind,
@@ -147,6 +144,7 @@ impl Db {
             last_change_ts: Utc::now(),
             last_threatened_ts: Utc::now(),
             warehouse: Warehouse::default(),
+            points: 0,
             logistics_detached,
             last_activate: DateTime::<Utc>::default(),
             // initialized by load

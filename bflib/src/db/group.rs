@@ -62,6 +62,10 @@ pub enum BirthRes {
     DynamicSlotDenied(Ucid, SlotAuth),
 }
 
+fn default_cost_fraction() -> f32 {
+    1.
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum DeployKind {
     #[serde(rename = "Objective")]
@@ -73,7 +77,7 @@ pub enum DeployKind {
         #[serde(default)]
         moved_by: Option<(Ucid, u32)>,
         spec: Deployable,
-        #[serde(default)]
+        #[serde(default = "default_cost_fraction")]
         cost_fraction: f32,
         #[serde(default)]
         origin: Option<ObjectiveId>,
@@ -84,7 +88,7 @@ pub enum DeployKind {
         #[serde(default)]
         moved_by: Option<(Ucid, u32)>,
         spec: Troop,
-        #[serde(default)]
+        #[serde(default = "default_cost_fraction")]
         cost_fraction: f32,
     },
     Crate {

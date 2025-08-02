@@ -1786,7 +1786,6 @@ impl Default for Cfg {
                 weapon_cost: FxHashMap::default(),
                 strict: false,
                 periodic_point_gain: (0, 0),
-                points_return_to_objective: false,
             }),
             warehouse: Some(WarehouseConfig {
                 hub_max: 25,

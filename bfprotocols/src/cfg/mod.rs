@@ -489,11 +489,6 @@ pub struct PointsCfg {
     /// interval must be positive. The default is (0, 0)
     #[serde(default)]
     pub periodic_point_gain: (i32, u32),
-    /// If this is true then points returned by pilots on landing or by deleting
-    /// deployables return to the objective they land at instead of their
-    /// personal balance
-    #[serde(default)]
-    pub points_return_to_objective: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

@@ -86,6 +86,7 @@ pub struct InstancedPlayer {
     pub landed_at_objective: Option<ObjectiveId>,
     pub stopped_at_objective: bool,
     pub moved: Option<DateTime<Utc>>,
+    pub cost_fraction: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,12 +245,15 @@ impl Db {
                                 player,
                                 spec: _,
                                 moved_by: _,
+                                cost_fraction: _,
+                                origin: _,
                             } => Some(player.clone()),
                             DeployKind::Troop {
                                 player,
                                 spec: _,
                                 moved_by: _,
                                 origin: _,
+                                cost_fraction: _,
                             } => Some(*player),
                             DeployKind::Action { player, .. } => player.clone(),
                             DeployKind::Crate { .. }
@@ -360,41 +364,59 @@ impl Db {
         if cost > 0
             && let Some(oid) = owned_objective.map(|(id, _)| *id)
         {
-            self.charge_for_item(&ucid, oid, cost, cost_msg.as_str())?
+            let frac = self.charge_for_item(&ucid, oid, cost, cost_msg.as_str());
+            let player = &mut self.persisted.players[&ucid];
+            match &mut player.current_slot {
+                Some((_, Some(inst))) => inst.cost_fraction = frac,
+                _ => (),
+            }
         };
         self.ephemeral.stat(Stat::Takeoff { id: ucid });
         res
     }
 
-    pub fn charge_for_item(
+    pub fn charge_for_item(&mut self, ucid: &Ucid, oid: ObjectiveId, cost: u32, msg: &str) -> f32 {
+        match self.player(ucid) {
+            None => 1.,
+            Some(player) => {
+                let player_balance = player.points;
+                let (adj, frac) = match self.persisted.objectives.get_mut_cow(&oid) {
+                    None => (-(cost as i32), 1.),
+                    Some(obj) => {
+                        if player_balance <= 0 {
+                            obj.points -= cost as i32;
+                            (0, 0.)
+                        } else if player_balance < cost as i32 {
+                            let frac = cost as f32 / player_balance as f32;
+                            let cost = cost as i32 - player_balance;
+                            obj.points -= cost;
+                            (-player_balance, frac)
+                        } else {
+                            (-(cost as i32), 1.)
+                        }
+                    }
+                };
+                self.adjust_points(&ucid, adj, msg);
+                self.ephemeral.dirty();
+                frac
+            }
+        }
+    }
+
+    pub fn refund_points(
         &mut self,
         ucid: &Ucid,
         oid: ObjectiveId,
         cost: u32,
+        frac: f32,
         msg: &str,
-    ) -> Result<()> {
-        let player_balance = self
-            .player(ucid)
-            .ok_or_else(|| anyhow!("no such player {ucid}"))?
-            .points;
-        let adj = match self.persisted.objectives.get_mut_cow(&oid) {
-            None => -(cost as i32),
-            Some(obj) => {
-                if player_balance <= 0 {
-                    obj.points -= cost as i32;
-                    0
-                } else if player_balance < cost as i32 {
-                    let cost = cost as i32 - player_balance;
-                    obj.points -= cost;
-                    -player_balance
-                } else {
-                    -(cost as i32)
-                }
-            }
-        };
-        self.adjust_points(&ucid, adj, msg);
-        self.ephemeral.dirty();
-        Ok(())
+    ) {
+        if let Some(obj) = self.persisted.objectives.get_mut_cow(&oid) {
+            let cost = (cost as f32 * (1. - frac)).round() as i32;
+            obj.points += cost;
+        }
+        let cost = (cost as f32 * frac).round() as i32;
+        self.adjust_points(ucid, cost, msg);
     }
 
     pub fn land(&mut self, slot: SlotId, position: Vector2, unit: &Unit) -> Option<LifeType> {
@@ -423,28 +445,26 @@ impl Db {
             Some(l) => l,
             None => return None,
         };
-        let owned_objective = self
-            .persisted
-            .objectives
-            .iter_mut_cow()
-            .find_map(|(oid, obj)| {
-                if obj.owner == player.side && obj.zone.contains(position) {
-                    Some((*oid, obj))
-                } else {
-                    None
-                }
-            });
+        let owned_objective = self.persisted.objectives.into_iter().find_map(|(oid, o)| {
+            if o.owner == player.side && o.zone.contains(position) {
+                Some(*oid)
+            } else {
+                None
+            }
+        });
         self.ephemeral.stat(Stat::Land { id: ucid });
-        if let Some((oid, obj)) = owned_objective {
+        if let Some(oid) = owned_objective {
             *player_lives += 1;
             player.airborne = None;
             if *player_lives >= self.ephemeral.cfg.default_lives[&life_type].0 {
                 player.lives.remove_cow(&life_type);
             }
+            let mut frac = 1.;
             if let Some((_, Some(inst))) = &mut player.current_slot {
                 inst.position.p.x = position.x;
                 inst.position.p.z = position.y;
                 inst.landed_at_objective = Some(oid);
+                frac = inst.cost_fraction;
             }
             let lives = player.lives.clone();
             if let Some(points) = self.ephemeral.cfg.points.as_ref() {
@@ -452,11 +472,7 @@ impl Db {
                 let provisional_points = player.provisional_points;
                 player.provisional_points = 0;
                 if cost > 0 {
-                    if points.points_return_to_objective {
-                        obj.points += cost as i32
-                    } else {
-                        self.adjust_points(&ucid, cost as i32, cost_msg.as_str());
-                    }
+                    self.refund_points(&ucid, oid, cost, frac, cost_msg.as_str());
                 }
                 if is_provisional && provisional_points > 0 {
                     self.adjust_points(
@@ -929,6 +945,7 @@ impl Db {
                 landed_at_objective,
                 stopped_at_objective: true,
                 moved: None,
+                cost_fraction: 1.,
             }),
         ));
         player.changing_slots = false;

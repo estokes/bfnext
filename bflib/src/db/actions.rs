@@ -1804,6 +1804,8 @@ impl Db {
             player: ucid,
             moved_by: None,
             spec: spec.clone(),
+            cost_fraction: 1.,
+            origin: None,
         };
         let gid = self.add_and_queue_group(
             &spctx,
@@ -1852,6 +1854,7 @@ impl Db {
             moved_by: None,
             spec: troop_cfg.clone(),
             origin: Some(origin),
+            cost_fraction: 1.,
         };
         let spctx = SpawnCtx::new(lua)?;
         let (n, oldest) = self.number_troops_deployed(side, troop_cfg.name.as_str())?;

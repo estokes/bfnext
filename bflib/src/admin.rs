@@ -429,6 +429,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: Option<PlayerId>, key: String
                         moved_by: None,
                         spec: spec.clone(),
                         origin: None,
+                        cost_fraction: 1.,
                     };
                     ctx.db
                         .add_and_queue_group(
@@ -467,6 +468,8 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: Option<PlayerId>, key: String
                                 player: ucid,
                                 moved_by: None,
                                 spec: spec.clone(),
+                                origin: None,
+                                cost_fraction: 1.,
                             };
                             ctx.db
                                 .add_and_queue_group(

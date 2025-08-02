@@ -90,9 +90,17 @@ impl fmt::Display for Unpakistan {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InternalTroop {
+    pub player: Ucid,
+    pub origin: Option<ObjectiveId>,
+    pub cost_fraction: f32,
+    pub troop: Troop,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cargo {
-    pub troops: SmallVec<[(Ucid, Option<ObjectiveId>, Troop); 1]>,
+    pub troops: SmallVec<[InternalTroop; 2]>,
     pub crates: SmallVec<[(ObjectiveId, Crate); 1]>,
 }
 
@@ -116,7 +124,7 @@ impl Cargo {
             .fold(0, |acc, (_, cr)| acc + cr.weight as i64);
         self.troops
             .iter()
-            .fold(cr, |acc, (_, _, tr)| acc + tr.weight as i64)
+            .fold(cr, |acc, it| acc + it.troop.weight as i64)
     }
 }
 
@@ -859,7 +867,7 @@ impl Db {
                                     from_obj,
                                     spec.cost,
                                     "for farp spawn",
-                                )?;
+                                );
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name));
                             }
@@ -871,6 +879,8 @@ impl Db {
                                     player: st.ucid.clone(),
                                     moved_by: None,
                                     spec: spec.clone(),
+                                    cost_fraction: 1.,
+                                    origin: Some(from_obj),
                                 };
                                 let gid = self.add_and_queue_group(
                                     &spctx,
@@ -890,12 +900,17 @@ impl Db {
                                     by: st.ucid,
                                     deployable: dep.clone(),
                                 });
-                                self.charge_for_item(
+                                let frac = self.charge_for_item(
                                     &st.ucid,
                                     from_obj,
                                     spec.cost,
                                     &format_compact!("for {dep} unpack"),
-                                )?;
+                                );
+                                if let DeployKind::Deployed { cost_fraction, .. } =
+                                    &mut self.persisted.groups[&gid].origin
+                                {
+                                    *cost_fraction = frac;
+                                }
                                 return Ok(Unpakistan::Unpacked(dep));
                             }
                         },
@@ -1113,18 +1128,22 @@ impl Db {
         {
             bail!("you already have a full load onboard")
         }
-        cargo
-            .troops
-            .push((ucid.clone(), Some(origin), troop_cfg.clone()));
-        Trigger::singleton(lua)?
-            .action()?
-            .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;
-        self.charge_for_item(
+        let cost_fraction = self.charge_for_item(
             &ucid,
             origin,
             troop_cfg.cost,
             &format_compact!("for {name} troop"),
-        )?;
+        );
+        let cargo = self.ephemeral.cargo.entry(slot.clone()).or_default();
+        cargo.troops.push(InternalTroop {
+            player: ucid,
+            origin: Some(origin),
+            cost_fraction,
+            troop: troop_cfg.clone(),
+        });
+        Trigger::singleton(lua)?
+            .action()?
+            .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;
         Ok((troop_cfg, origin))
     }
 
@@ -1163,23 +1182,23 @@ impl Db {
             Ok(_) | Err(_) => (),
         }
         let cargo = self.ephemeral.cargo.get(slot).unwrap();
-        let (_, _, troop_cfg) = cargo.troops.last().unwrap();
-        let (n, oldest) = self.number_troops_deployed(side, troop_cfg.name.as_str())?;
-        let to_delete = if n < troop_cfg.limit as usize {
+        let it = cargo.troops.last().unwrap();
+        let (n, oldest) = self.number_troops_deployed(side, it.troop.name.as_str())?;
+        let to_delete = if n < it.troop.limit as usize {
             None
         } else {
-            match troop_cfg.limit_enforce {
+            match it.troop.limit_enforce {
                 LimitEnforceTyp::DeleteOldest => oldest,
                 LimitEnforceTyp::DenyCrate => {
                     bail!(
                         "the maximum number of {} troops are already deployed",
-                        troop_cfg.name
+                        it.troop.name
                     )
                 }
             }
         };
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
-        let (ucid, origin, troop_cfg) = cargo.troops.pop().unwrap();
+        let it = cargo.troops.pop().unwrap();
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
@@ -1189,10 +1208,11 @@ impl Db {
             group_heading: azumith3d(pos.x.0),
         };
         let dk = DeployKind::Troop {
-            player: ucid.clone(),
+            player: it.player,
             moved_by: None,
-            spec: troop_cfg.clone(),
-            origin,
+            spec: it.troop.clone(),
+            origin: it.origin,
+            cost_fraction: it.cost_fraction,
         };
         let spctx = SpawnCtx::new(lua)?;
         if let Some(gid) = to_delete {
@@ -1203,7 +1223,7 @@ impl Db {
             idx,
             side,
             spawnpos,
-            &*troop_cfg.template,
+            &*it.troop.template,
             dk,
             BitFlags::empty(),
             None,
@@ -1211,18 +1231,13 @@ impl Db {
             Ok(gid) => {
                 self.ephemeral.stat(Stat::DeployTroop {
                     gid,
-                    troop: troop_cfg.name.clone(),
-                    by: ucid,
+                    troop: it.troop.name.clone(),
+                    by: it.player,
                 });
-                Ok((troop_cfg, gid, oid))
+                Ok((it.troop, gid, oid))
             }
             Err(e) => {
-                self.ephemeral
-                    .cargo
-                    .get_mut(slot)
-                    .unwrap()
-                    .troops
-                    .push((ucid, origin, troop_cfg));
+                self.ephemeral.cargo.get_mut(slot).unwrap().troops.push(it);
                 Err(e)
             }
         }
@@ -1249,19 +1264,30 @@ impl Db {
             bail!("you are not close enough to friendly logistics to return troops")
         }
         let cargo = self.ephemeral.cargo.get_mut(slot).unwrap();
-        let (ucid, _, troop_cfg) = cargo.troops.pop().unwrap();
+        let it = cargo.troops.pop().unwrap();
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight())?;
-        self.adjust_points(&ucid, troop_cfg.cost as i32, "for troop return");
-        Ok(troop_cfg)
+        match it.origin {
+            None => self.adjust_points(&it.player, it.troop.cost as i32, "for troop return"),
+            Some(oid) => {
+                self.refund_points(
+                    &it.player,
+                    oid,
+                    it.troop.cost,
+                    it.cost_fraction,
+                    "for troop return",
+                );
+            }
+        }
+        Ok(it.troop)
     }
 
     pub fn extract_troops(&mut self, lua: MizLua, slot: &SlotId) -> Result<Troop> {
         let (cargo_capacity, side, unit_name) = self.unit_cargo_cfg(slot)?;
         let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
         let point = Vector2::new(pos.p.x, pos.p.z);
-        let (gid, ucid, origin, troop_cfg) = {
+        let (gid, it) = {
             let max_dist = (self.ephemeral.cfg.crate_load_distance as f64).powi(2);
             self.persisted
                 .troops
@@ -1273,6 +1299,7 @@ impl Db {
                         player,
                         origin,
                         moved_by: _,
+                        cost_fraction,
                     } = &g.origin
                     {
                         if g.side == side {
@@ -1284,7 +1311,15 @@ impl Db {
                                     na::distance_squared(&u.pos.into(), &point.into()) <= max_dist
                                 });
                             if in_range {
-                                return Some((gid, *player, *origin, spec.clone()));
+                                return Some((
+                                    gid,
+                                    InternalTroop {
+                                        player: *player,
+                                        origin: *origin,
+                                        cost_fraction: *cost_fraction,
+                                        troop: spec.clone(),
+                                    },
+                                ));
                             }
                         }
                     }
@@ -1298,7 +1333,8 @@ impl Db {
         {
             bail!("you already have a full load onboard")
         }
-        cargo.troops.push((ucid, origin, troop_cfg.clone()));
+        let troop_cfg = it.troop.clone();
+        cargo.troops.push(it);
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;

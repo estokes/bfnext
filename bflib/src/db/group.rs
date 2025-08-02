@@ -14,13 +14,13 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{ephemeral::SlotInfo, objective::ObjGroupClass, player::SlotAuth, Db, SetS};
+use super::{Db, SetS, ephemeral::SlotInfo, objective::ObjGroupClass, player::SlotAuth};
 use crate::{
-    group, group_by_name, group_health, group_mut, objective,
+    Connected, group, group_by_name, group_health, group_mut, objective,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
-    unit, unit_by_name, unit_mut, Connected,
+    unit, unit_by_name, unit_mut,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     db::objective::ObjectiveId,
@@ -31,9 +31,10 @@ use bfprotocols::{
     stats::Stat,
 };
 use chrono::prelude::*;
-use compact_str::{format_compact, CompactString};
+use compact_str::{CompactString, format_compact};
 use dcso3::{
-    azumith3d, centroid2d, centroid3d, change_heading,
+    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3, azumith3d, centroid2d,
+    centroid3d, change_heading,
     coalition::Side,
     coord::Coord,
     env::miz,
@@ -46,13 +47,12 @@ use dcso3::{
     static_object::{ClassStatic, StaticObject},
     trigger::MarkId,
     unit::{ClassUnit, Unit},
-    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::{cmp::max, collections::VecDeque};
 
 #[derive(Debug, Clone)]
@@ -73,6 +73,10 @@ pub enum DeployKind {
         #[serde(default)]
         moved_by: Option<(Ucid, u32)>,
         spec: Deployable,
+        #[serde(default)]
+        cost_fraction: f32,
+        #[serde(default)]
+        origin: Option<ObjectiveId>,
     },
     Troop {
         player: Ucid,
@@ -80,6 +84,8 @@ pub enum DeployKind {
         #[serde(default)]
         moved_by: Option<(Ucid, u32)>,
         spec: Troop,
+        #[serde(default)]
+        cost_fraction: f32,
     },
     Crate {
         origin: ObjectiveId,
@@ -291,6 +297,8 @@ impl Db {
                 spec,
                 player,
                 moved_by,
+                cost_fraction: _,
+                origin: _,
             } => {
                 let name = self.persisted.players[player].name.clone();
                 let resp = moved_by
@@ -315,6 +323,7 @@ impl Db {
                 spec,
                 moved_by,
                 origin: _,
+                cost_fraction: _,
             } => {
                 let name = self.persisted.players[player].name.clone();
                 let resp = moved_by

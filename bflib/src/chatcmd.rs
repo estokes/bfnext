@@ -276,39 +276,69 @@ fn delete_command(ctx: &mut Context, id: PlayerId, s: &str) {
                         player,
                         spec,
                         moved_by: _,
+                        cost_fraction,
+                        origin,
                     } => {
                         let player = player.clone();
                         let points = (spec.cost as f32 / 2.).ceil() as i32;
+                        let cost_fraction = *cost_fraction;
+                        let origin = *origin;
                         match ctx.db.delete_group(&id) {
                             Err(e) => reply!("could not delete group {id} {e:?}"),
-                            Ok(()) => {
-                                ctx.db.adjust_points(
-                                    &player,
-                                    points,
-                                    &format_compact!("reclaimed {id}"),
-                                );
-                                reply!("deleted {id}")
-                            }
+                            Ok(()) => match origin {
+                                None => {
+                                    ctx.db.adjust_points(
+                                        &player,
+                                        points,
+                                        &format_compact!("reclaimed {id}"),
+                                    );
+                                    reply!("deleted {id}")
+                                }
+                                Some(oid) => {
+                                    ctx.db.refund_points(
+                                        &player,
+                                        oid,
+                                        points as u32,
+                                        cost_fraction,
+                                        &format_compact!("reclaimed {id}"),
+                                    );
+                                }
+                            },
                         }
                     }
                     DeployKind::Troop {
                         player,
                         spec,
                         moved_by: _,
-                        origin: _,
+                        origin,
+                        cost_fraction,
                     } => {
                         let player = player.clone();
                         let points = (spec.cost as f32 / 2.).ceil() as i32;
+                        let cost_fraction = *cost_fraction;
+                        let origin = *origin;
                         match ctx.db.delete_group(&id) {
                             Err(e) => reply!("could not delete group {id} {e:?}"),
-                            Ok(()) => {
-                                ctx.db.adjust_points(
-                                    &player,
-                                    points,
-                                    &format_compact!("reclaimed {id}"),
-                                );
-                                reply!("deleted {id}")
-                            }
+                            Ok(()) => match origin {
+                                None => {
+                                    ctx.db.adjust_points(
+                                        &player,
+                                        points,
+                                        &format_compact!("reclaimed {id}"),
+                                    );
+                                    reply!("deleted {id}")
+                                }
+                                Some(oid) => {
+                                    ctx.db.refund_points(
+                                        &player,
+                                        oid,
+                                        points as u32,
+                                        cost_fraction,
+                                        &format_compact!("reclaimed {id}"),
+                                    );
+                                    reply!("deleted {id}")
+                                }
+                            },
                         }
                     }
                 },

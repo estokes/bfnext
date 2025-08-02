@@ -387,7 +387,7 @@ impl Db {
                             obj.points -= cost as i32;
                             (0, 0.)
                         } else if player_balance < cost as i32 {
-                            let frac = cost as f32 / player_balance as f32;
+                            let frac = player_balance as f32 / cost as f32;
                             let cost = cost as i32 - player_balance;
                             obj.points -= cost;
                             (-player_balance, frac)

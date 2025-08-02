@@ -20,7 +20,7 @@ use super::{
 };
 use crate::msgq::MsgQ;
 use bfprotocols::{cfg::Cfg, db::objective::ObjectiveKind};
-use compact_str::format_compact;
+use compact_str::{format_compact, CompactString};
 use dcso3::{
     Color, LuaVec3, Vector3,
     coalition::Side,
@@ -50,6 +50,18 @@ fn text_color(side: Side, a: f32) -> Color {
         Side::Blue => Color::blue(a),
         Side::Neutral => Color::white(a),
     }
+}
+
+fn objective_label(name: &str, obj: &Objective) -> CompactString {
+format_compact!(
+                    "{}\nHealth: {}\nLogi: {}\nSupply: {}\nFuel: {}\nPoints: {}",
+                    name,
+                    obj.health,
+                    obj.logi,
+                    obj.supply,
+                    obj.fuel,
+                    obj.points
+                )
 }
 
 impl ObjectiveMarkup {
@@ -109,16 +121,7 @@ impl ObjectiveMarkup {
             self.logi = obj.logi;
             self.supply = obj.supply;
             self.fuel = obj.fuel;
-            let v = format_compact!(
-                "{}\nHealth: {}\nLogi: {}\nSupply: {}\nFuel: {}\nPoints: {}",
-                self.name,
-                obj.health,
-                obj.logi,
-                obj.supply,
-                obj.fuel,
-                obj.points
-            );
-            msgq.set_markup_text(self.label, v.into());
+            msgq.set_markup_text(self.label, objective_label(&self.name, obj).into());
         }
     }
 
@@ -256,14 +259,7 @@ impl ObjectiveMarkup {
                 fill_color: Color::black(0.),
                 font_size: 10,
                 read_only: true,
-                text: format_compact!(
-                    "{}\nHealth: {}\nLogi: {}\nSupply: {}\nFuel: {}",
-                    t.name,
-                    obj.health,
-                    obj.logi,
-                    obj.supply,
-                    obj.fuel
-                )
+                text: objective_label(&t.name, obj) 
                 .into(),
             },
         );

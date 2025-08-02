@@ -296,7 +296,7 @@ pub struct Objective {
     #[serde(default)]
     pub(super) logistics_detached: bool,
     #[serde(default)]
-    pub(super) points: i32,
+    pub points: i32,
     #[serde(skip)]
     pub(super) spawned: bool,
     #[serde(skip)]

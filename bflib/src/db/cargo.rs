@@ -1094,11 +1094,14 @@ impl Db {
             .cloned()
             .ok_or_else(|| anyhow!("can't find player in slot {slot:?}"))?;
         if self.ephemeral.cfg.points.is_some() {
-            if let Some(player) = self.persisted.players.get(&ucid) {
-                if troop_cfg.cost > 0 && player.points < troop_cfg.cost as i32 {
+            if let Some(player) = self.persisted.players.get(&ucid)
+                && let Some(obj) = self.persisted.objectives.get(&origin)
+            {
+                let points = max(0, player.points) + obj.points;
+                if troop_cfg.cost > 0 && points < troop_cfg.cost as i32 {
                     bail!(
-                        "you have {} points, this troop costs {} points",
-                        player.points,
+                        "there are {} points available, this troop costs {} points",
+                        points,
                         troop_cfg.cost
                     )
                 }
@@ -1116,11 +1119,12 @@ impl Db {
         Trigger::singleton(lua)?
             .action()?
             .set_unit_internal_cargo(unit_name, cargo.weight() as i64)?;
-        self.adjust_points(
+        self.charge_for_item(
             &ucid,
-            -(troop_cfg.cost as i32),
+            origin,
+            troop_cfg.cost,
             &format_compact!("for {name} troop"),
-        );
+        )?;
         Ok((troop_cfg, origin))
     }
 

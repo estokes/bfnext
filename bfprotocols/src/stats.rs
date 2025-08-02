@@ -206,6 +206,11 @@ pub enum Stat {
         to: Ucid,
         points: u32,
     },
+    PointsTransferToObjective {
+        from: Ucid,
+        to: ObjectiveId,
+        points: u32,
+    },
     Bind {
         id: Ucid,
         token: String,

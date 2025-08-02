@@ -14,20 +14,20 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{player_name, slot_for_group, ArgTuple};
+use super::{ArgTuple, player_name, slot_for_group};
 use crate::{
-    db::cargo::{Cargo, Oldest, SlotStats},
     Context,
+    db::cargo::{Cargo, Oldest, SlotStats},
 };
-use anyhow::{anyhow, Context as ErrContext, Result};
+use anyhow::{Context as ErrContext, Result, anyhow};
 use bfprotocols::cfg::{Cfg, LimitEnforceTyp};
-use compact_str::{format_compact, CompactString, ToCompactString};
+use compact_str::{CompactString, ToCompactString, format_compact};
 use dcso3::{
+    MizLua, String,
     coalition::Side,
     env::miz::GroupId,
     mission_commands::{GroupSubMenu, MissionCommands},
     net::SlotId,
-    MizLua, String,
 };
 use fxhash::FxHashMap;
 use std::collections::hash_map::Entry;
@@ -159,13 +159,13 @@ pub(crate) fn list_cargo_for_slot(ctx: &mut Context, slot: &SlotId) -> Result<()
         ));
         total += cr.weight
     }
-    for (_, _, tr) in &cargo.troops {
+    for it in &cargo.troops {
         msg.push_str(&format_compact!(
             "{} troop weighing {} kg\n",
-            tr.name,
-            tr.weight
+            it.troop.name,
+            it.troop.weight
         ));
-        total += tr.weight
+        total += it.troop.weight
     }
     if total > 0 {
         msg.push_str("----------------------------\n");

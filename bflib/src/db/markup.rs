@@ -20,11 +20,11 @@ use super::{
 };
 use crate::msgq::MsgQ;
 use bfprotocols::{cfg::Cfg, db::objective::ObjectiveKind};
-use compact_str::format_compact;
+use compact_str::{CompactString, format_compact};
 use dcso3::{
+    Color, LuaVec3, Vector3,
     coalition::Side,
     trigger::{ArrowSpec, CircleSpec, LineType, MarkId, QuadSpec, SideFilter, TextSpec},
-    Color, LuaVec3, Vector3,
 };
 use smallvec::SmallVec;
 
@@ -36,6 +36,7 @@ pub(super) struct ObjectiveMarkup {
     logi: u8,
     supply: u8,
     fuel: u8,
+    points: i32,
     name: String,
     owner_ring: MarkId,
     capturable_ring: MarkId,
@@ -52,6 +53,18 @@ fn text_color(side: Side, a: f32) -> Color {
     }
 }
 
+fn objective_label(name: &str, obj: &Objective) -> CompactString {
+    format_compact!(
+        "{}\nHealth: {}\nLogi: {}\nSupply: {}\nFuel: {}\nPoints: {}",
+        name,
+        obj.health,
+        obj.logi,
+        obj.supply,
+        obj.fuel,
+        obj.points
+    )
+}
+
 impl ObjectiveMarkup {
     pub(super) fn remove(self, msgq: &mut MsgQ) {
         let ObjectiveMarkup {
@@ -61,6 +74,7 @@ impl ObjectiveMarkup {
             logi: _,
             supply: _,
             fuel: _,
+            points: _,
             name: _,
             owner_ring,
             capturable_ring,
@@ -98,6 +112,7 @@ impl ObjectiveMarkup {
             || self.logi != obj.logi
             || self.supply != obj.supply
             || self.fuel != obj.fuel
+            || self.points != obj.points
         {
             if self.logi != obj.logi {
                 msgq.set_markup_color(
@@ -109,15 +124,8 @@ impl ObjectiveMarkup {
             self.logi = obj.logi;
             self.supply = obj.supply;
             self.fuel = obj.fuel;
-            let v = format_compact!(
-                "{}\nHealth: {}\nLogi: {}\nSupply: {}\nFuel: {}",
-                self.name,
-                obj.health,
-                obj.logi,
-                obj.supply,
-                obj.fuel
-            );
-            msgq.set_markup_text(self.label, v.into());
+            self.points = obj.points;
+            msgq.set_markup_text(self.label, objective_label(&self.name, obj).into());
         }
     }
 
@@ -255,15 +263,7 @@ impl ObjectiveMarkup {
                 fill_color: Color::black(0.),
                 font_size: 10,
                 read_only: true,
-                text: format_compact!(
-                    "{}\nHealth: {}\nLogi: {}\nSupply: {}\nFuel: {}",
-                    t.name,
-                    obj.health,
-                    obj.logi,
-                    obj.supply,
-                    obj.fuel
-                )
-                .into(),
+                text: objective_label(&t.name, obj).into(),
             },
         );
         match obj.kind {

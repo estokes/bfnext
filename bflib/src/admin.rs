@@ -19,7 +19,7 @@ use crate::{
     bg::Task,
     db::{Db, SetS, group::DeployKind},
     msgq::MsgTyp,
-    return_lives,
+    objective_mut, return_lives,
     spawnctx::{SpawnCtx, SpawnLoc},
 };
 use anyhow::{Context as AnyhowContext, Result, anyhow, bail};
@@ -429,6 +429,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: Option<PlayerId>, key: String
                         moved_by: None,
                         spec: spec.clone(),
                         origin: None,
+                        cost_fraction: 1.,
                     };
                     ctx.db
                         .add_and_queue_group(
@@ -467,6 +468,8 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: Option<PlayerId>, key: String
                                 player: ucid,
                                 moved_by: None,
                                 spec: spec.clone(),
+                                origin: None,
+                                cost_fraction: 1.,
                             };
                             ctx.db
                                 .add_and_queue_group(
@@ -767,14 +770,25 @@ fn balance(ctx: &Context, player: &String) -> Result<i32> {
 }
 
 fn set_points(ctx: &mut Context, player: &String, amount: i32) -> Result<()> {
-    let ucid = get_player_ucid(ctx, player)?;
-    let player = ctx
-        .db
-        .player_mut(&ucid)
-        .ok_or_else(|| anyhow!("no such player {player}"))?;
-    player.points = amount;
-    ctx.db.ephemeral.dirty();
-    Ok(())
+    match player.strip_prefix("objective:") {
+        None => {
+            let ucid = get_player_ucid(ctx, player)?;
+            let player = ctx
+                .db
+                .player_mut(&ucid)
+                .ok_or_else(|| anyhow!("no such player {player}"))?;
+            player.points = amount;
+            ctx.db.ephemeral.dirty();
+            Ok(())
+        }
+        Some(target) => {
+            let oid = get_airbase(&ctx.db, target)?;
+            let obj = objective_mut!(&mut ctx.db, oid)?;
+            obj.points = amount;
+            ctx.db.ephemeral.dirty();
+            Ok(())
+        }
+    }
 }
 
 fn delete(ctx: &mut Context, id: &GroupId) -> Result<()> {

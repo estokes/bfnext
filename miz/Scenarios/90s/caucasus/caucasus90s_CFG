@@ -134,6 +134,8 @@
     "B-1B": 36000,
     "A-50": 0,
     "MQ-9 Reaper": 0,
+    "RQ-1A Predator": 0,
+	"WingLoong-I": 0,
     "E-3A": 0,
     "IL-78M": 0,
     "Tu-160": 36000,
@@ -400,6 +402,27 @@
         "penalty": 1,
         "limit": null
       },
+	  "dronesmall": {
+        "kind": {
+          "Drone": {
+            "jtac": {
+              "range": 12000,
+              "nolos": true
+            },
+            "plane": {
+              "kind": "FixedWing",
+              "duration": 12,
+              "template": "RDRONE2",
+              "altitude": 5324,
+              "altitude_typ": "BARO",
+              "speed": 62
+            }
+          }
+        },
+        "cost": 50,
+        "penalty": 25,
+        "limit": null
+      },	  
       "fighters": {
         "kind": {
           "Fighters": {
@@ -604,6 +627,27 @@
         },
         "cost": 100,
         "penalty": 50,
+        "limit": null
+      },
+      "dronesmall": {
+        "kind": {
+          "Drone": {
+            "jtac": {
+              "range": 12000,
+              "nolos": true
+            },
+            "plane": {
+              "kind": "FixedWing",
+              "duration": 12,
+              "template": "BDRONE2",
+              "altitude": 5476,
+              "altitude_typ": "BARO",
+              "speed": 68
+            }
+          }
+        },
+        "cost": 50,
+        "penalty": 25,
         "limit": null
       },
       "boom-tanker": {
@@ -1258,6 +1302,31 @@
           "range": 1400
         }
       },
+      {
+        "path": [
+          "Ground Units",
+          "MLRS 9A52 Smerch"
+        ],
+        "template": "DEPSMERCH",
+        "persist": "Forever",
+        "limit": 4,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Smerch Crate",
+            "weight": 1500,
+            "required": 4,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 150,
+        "ewr": null,
+        "jtac": null
+      },
 	  {
         "path": [
           "Ground Units",
@@ -1908,6 +1977,31 @@
           "range": 1400
         }
       },      
+      {
+        "path": [
+          "Ground Units",
+          "MLRS M270"
+        ],
+        "template": "DEPMLRS",
+        "persist": "Forever",
+        "limit": 4,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "MLRS Crate",
+            "weight": 1500,
+            "required": 4,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 150,
+        "ewr": null,
+        "jtac": null
+      }, 
 	  {
         "path": [
           "Ground Units",
@@ -2981,7 +3075,7 @@
       "SmallArms",
       "Driveable"
     ],
-    "Uragan_BM-27": [
+    "Smerch": [
       "Artillery",
 	  "Launcher",
       "Driveable"
@@ -3003,6 +3097,12 @@
       "Link16"
     ],
     "MQ-9 Reaper": [
+      "Aircraft"
+    ],
+    "RQ-1A Predator": [
+      "Aircraft"
+    ],	
+    "WingLoong-I": [
       "Aircraft"
     ],
     "E-3A": [

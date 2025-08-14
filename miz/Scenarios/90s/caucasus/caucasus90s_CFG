@@ -4,7 +4,7 @@
     "69d60e1a0fe1c86bc3e81792458dba61": "<64>Cookie",
 	"9b2be86d1cc2d247e872807f2dee5669": "Baron 1-1 | Quigon",
     "c67cf1bb193dd406d0b29c2cb444b189": "REAPER 61 | dIce",
-    "4344dbefeef94662d129cba1a8596c3a": "Scallion 2 | Robo76",	
+    "4344dbefeef94662d129cba1a8596c3a": "Scallion 2 | Robo76",
     "4c27ed606a78717da9d96a49b1aa54db": "REAPER 43 | Fragal"
   },
   "banned": {},
@@ -86,6 +86,7 @@
     "J-11A": 36000,
     "MiG-29S": 21600,
     "L-39C": 9000,
+    "F4U-1D": 9000,
     "F-14A-135-GR": 36000,
     "TF-51D": 0,
     "MiG-21Bis": 14400,
@@ -97,22 +98,22 @@
     "Mi-26": 9000,
     "CH-47D": 9000,
 	"CH-47Fbl1": 9000,
-    "Ka-50_3": 14400,	
+    "Ka-50_3": 14400,
     "F-15C": 36000,
     "Ka-50": 14400,
     "FA-18C_hornet": 36000,
     "A-10C": 21600,
     "SA342M": 9000,
     "A-10A": 21600,
-    "A-4E-C": 21600,	
+    "A-4E-C": 21600,
     "AJS37": 36000,
     "Mirage-F1CE": 14400,
     "Su-27": 21600,
     "Su-33": 36000,
-	"Su-30": 36000,	    
-	"Su-30MKM": 36000,	
-    "Su-30SM": 36000,	
-    "Su-30MKA": 36000,	
+	"Su-30": 36000,
+	"Su-30MKM": 36000,
+    "Su-30SM": 36000,
+    "Su-30MKA": 36000,
     "Su-30MKI": 36000,
     "F-14B": 36000,
     "Su-25T": 21600,
@@ -178,8 +179,8 @@
     "Su-33": "Standard",
     "OH58D": "Attack",
     "Su-27": "Standard",
-    "Su-30": "Standard",	
-    "Su-30SM": "Standard",	
+    "Su-30": "Standard",
+    "Su-30SM": "Standard",
     "F-14B": "Standard",
     "Su-25T": "Attack",
     "A-10C_2": "Attack",
@@ -422,7 +423,7 @@
         "cost": 50,
         "penalty": 25,
         "limit": null
-      },	  
+      },
       "fighters": {
         "kind": {
           "Fighters": {
@@ -744,7 +745,7 @@
     "Mi-8MT": {
       "troop_slots": 3,
       "crate_slots": 3,
-      "total_slots": 3 
+      "total_slots": 3
     },
     "CH-47Fbl1": {
       "troop_slots": 4,
@@ -1195,7 +1196,7 @@
         "jtac": {
           "range": 1000
         }
-      },      
+      },
 	  {
         "path": [
           "Ground Units",
@@ -1843,7 +1844,7 @@
         "jtac": {
           "range": 500
         }
-      },	  
+      },
       {
         "path": [
           "Ground Units",
@@ -1976,7 +1977,7 @@
         "jtac": {
           "range": 1400
         }
-      },      
+      },
       {
         "path": [
           "Ground Units",
@@ -2001,7 +2002,7 @@
         "cost": 150,
         "ewr": null,
         "jtac": null
-      }, 
+      },
 	  {
         "path": [
           "Ground Units",
@@ -2370,7 +2371,7 @@
     ],
     "A-4E-C": [
       "Aircraft"
-    ],	
+    ],
     "T-55": [
       "Armor",
       "MR",
@@ -2425,7 +2426,7 @@
       "RadarGuided",
       "SearchRadar",
       "Driveable"
-    ],	
+    ],
     "2B11 mortar": [
       "Infantry",
       "LR",
@@ -2670,7 +2671,7 @@
     ],
 	"ZIL-131 KUNG": [
       "Unarmed"
-    ],	
+    ],
     "Kub 2P25 ln": [
       "SAM",
       "MR",
@@ -2833,7 +2834,7 @@
       "LR",
       "RadarGuided",
       "TrackRadar"
-    ],	
+    ],
     "S-300PS 40B6M tr": [
       "SAM",
       "LR",
@@ -2938,7 +2939,7 @@
     ],
     "Su-30SM": [
       "Aircraft"
-    ],	
+    ],
     "Hawk tr": [
       "SAM",
       "LR",
@@ -2988,7 +2989,7 @@
     "UH-60A": [
       "Aircraft",
       "Helicopter"
-    ],	
+    ],
 	"CH-47D": [
       "Aircraft",
       "Helicopter"
@@ -3101,7 +3102,7 @@
     ],
     "RQ-1A Predator": [
       "Aircraft"
-    ],	
+    ],
     "WingLoong-I": [
       "Aircraft"
     ],

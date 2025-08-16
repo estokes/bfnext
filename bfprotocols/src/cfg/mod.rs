@@ -425,6 +425,9 @@ pub struct WarehouseConfig {
     /// The name of the warehouse that is the source of supply every
     /// restart
     pub supply_source: FxHashMap<Side, String>,
+    /// Airframes that do not play nice with the warehouse that are exempt from the
+    /// warehouse check
+    pub exempt_airframes: FxHashSet<String>,
 }
 
 impl WarehouseConfig {

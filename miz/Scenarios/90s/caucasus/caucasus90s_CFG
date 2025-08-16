@@ -50,6 +50,7 @@
     "airbase_max": 2,
     "tick": 10,
     "ticks_per_delivery": 24,
+    "exempt_airframes": ["Su-30SM"],
     "supply_transfer_crate": {
       "Red": {
         "name": "Supply Transfer",

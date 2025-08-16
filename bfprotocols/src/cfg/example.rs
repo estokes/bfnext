@@ -1798,6 +1798,7 @@ impl Default for Cfg {
                     (Side::Blue, "BINVENTORY".into()),
                     (Side::Red, "RINVENTORY".into()),
                 ]),
+                exempt_airframes: FxHashSet::from_iter(["Su-30SM".into()]),
             }),
             logistics_exclusion: 10000,
             unit_cull_distance: 37040, // 20 nm

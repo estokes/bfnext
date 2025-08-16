@@ -615,9 +615,16 @@ impl Db {
         let life_type = self.ephemeral.cfg.life_types[&sifo.typ];
         macro_rules! yes {
             () => {
-                match objective.warehouse.equipment.get(sifo.typ.as_str()) {
-                    Some(inv) if inv.stored > 0 => (),
-                    Some(_) | None => break SlotAuth::VehicleNotAvailable(sifo.typ.clone()),
+                if let Some(whcfg) = self.ephemeral.cfg.warehouse.as_ref() {
+                    let typ = sifo.typ.as_str();
+                    if !whcfg.exempt_airframes.contains(typ) {
+                        match objective.warehouse.equipment.get(typ) {
+                            Some(inv) if inv.stored > 0 => (),
+                            Some(_) | None => {
+                                break SlotAuth::VehicleNotAvailable(sifo.typ.clone());
+                            }
+                        }
+                    }
                 }
                 player.changing_slots = false;
                 player.jtac_or_spectators = false;

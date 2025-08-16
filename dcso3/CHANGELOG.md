@@ -1,6 +1,7 @@
 ## 0.1.9
 
 - update the PlayerLeaveUnit event to ED's new format
+- fix warnings for rust 1.89
 
 ## 0.1.8
 

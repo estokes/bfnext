@@ -64,7 +64,7 @@ string_enum!(Skill, u8, [
 #[derive(Debug, Clone)]
 pub struct Property {
     pub key: String,
-    pub value: String
+    pub value: String,
 }
 
 impl<'lua> FromLua<'lua> for Property {
@@ -72,7 +72,7 @@ impl<'lua> FromLua<'lua> for Property {
         let tbl = LuaTable::from_lua(value, lua)?;
         Ok(Self {
             key: tbl.raw_get("key")?,
-            value: tbl.raw_get("value")?
+            value: tbl.raw_get("value")?,
         })
     }
 }
@@ -129,7 +129,7 @@ wrapped_table!(Task, None);
 wrapped_table!(Route, None);
 
 impl<'lua> Route<'lua> {
-    pub fn points(&self) -> Result<Sequence<'lua, MissionPoint>> {
+    pub fn points(&self) -> Result<Sequence<'lua, MissionPoint<'_>>> {
         Ok(self.t.raw_get("points")?)
     }
 
@@ -244,11 +244,11 @@ impl<'lua> Group<'lua> {
         Ok(self.raw_set("groupId", id)?)
     }
 
-    pub fn tasks(&self) -> Result<Sequence<'lua, Task>> {
+    pub fn tasks(&self) -> Result<Sequence<'lua, Task<'_>>> {
         Ok(self.raw_get("tasks")?)
     }
 
-    pub fn route(&self) -> Result<Route> {
+    pub fn route(&self) -> Result<Route<'_>> {
         Ok(self.raw_get("route")?)
     }
 
@@ -549,7 +549,7 @@ impl<'lua> Miz<'lua> {
         }
     }
 
-    pub fn ground_control(&self) -> Result<GroundControl> {
+    pub fn ground_control(&self) -> Result<GroundControl<'_>> {
         Ok(self.raw_get("groundControl")?)
     }
 

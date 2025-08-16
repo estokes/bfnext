@@ -28,8 +28,8 @@ mod spawnctx;
 
 extern crate nalgebra as na;
 use crate::db::player::SlotAuth;
-use admin::{run_admin_commands, AdminCommand, AdminResult};
-use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
+use admin::{AdminCommand, AdminResult, run_admin_commands};
+use anyhow::{Context as AnyhowContext, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{Cfg, LifeType},
     db::objective::ObjectiveId,
@@ -38,20 +38,20 @@ use bfprotocols::{
 };
 use bg::Task;
 use chatcmd::{run_action_commands, run_jtac_commands};
-use chrono::{prelude::*, Duration};
-use compact_str::{format_compact, CompactString};
+use chrono::{Duration, prelude::*};
+use compact_str::{CompactString, format_compact};
 use crossbeam::queue::SegQueue;
 use db::{
+    Db,
     group::BirthRes,
     player::{RegErr, TakeoffRes},
-    Db,
 };
 use dcso3::{
+    HooksLua, LuaEnv, MizLua, String,
     coalition::Side,
     env::{
-        self,
+        self, Env,
         miz::{Miz, UnitId},
-        Env,
     },
     event::Event,
     hooks::UserHooks,
@@ -63,7 +63,6 @@ use dcso3::{
     trigger::Trigger,
     unit::{ClassUnit, Unit},
     world::{HandlerId, MarkPanel, World},
-    HooksLua, LuaEnv, MizLua, String,
 };
 use ewr::Ewr;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -75,7 +74,7 @@ use mlua::prelude::*;
 use msgq::MsgTyp;
 use netidx::publisher::Value;
 use shots::ShotDb;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use spawnctx::SpawnCtx;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
@@ -277,7 +276,9 @@ impl Context {
             None => {
                 unsafe { SELF = Some(Context::default()) };
                 #[allow(static_mut_refs)]
-                unsafe { SELF.as_mut().unwrap() }
+                unsafe {
+                    SELF.as_mut().unwrap()
+                }
             }
         }
     }
@@ -287,7 +288,9 @@ impl Context {
     }
 
     unsafe fn reset() {
-        unsafe { *Self::get_mut() = Self::default(); }
+        unsafe {
+            *Self::get_mut() = Self::default();
+        }
     }
 
     fn do_bg_task(&self, task: bg::Task) {
@@ -355,7 +358,7 @@ fn on_player_try_connect(
             Some(until) if until >= &Utc::now() => {
                 return Ok(Some(
                     format_compact!("you are banned until {}", until).into(),
-                ))
+                ));
             }
             Some(_) => {
                 let path = ctx.miz_state_path.clone();
@@ -482,11 +485,17 @@ fn try_occupy_slot(
                     try_occupy_slot(ctx, lua, id, ifo, side, slot)
                 }
                 Err(RegErr::AlreadyRegistered(_, _)) => {
-                    warn!("{:?} try_occupy_slot says NotRegistered but register_player says AlreadyRegistered", ifo.ucid);
+                    warn!(
+                        "{:?} try_occupy_slot says NotRegistered but register_player says AlreadyRegistered",
+                        ifo.ucid
+                    );
                     Ok(false)
                 }
                 Err(RegErr::AlreadyOn(_)) => {
-                    warn!("{:?} try_occupy_slot says NotRegistered but register_player says AlreadyOn", ifo.ucid);
+                    warn!(
+                        "{:?} try_occupy_slot says NotRegistered but register_player says AlreadyOn",
+                        ifo.ucid
+                    );
                     Ok(false)
                 }
             }
@@ -638,9 +647,6 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, &e) {
                 error!("error processing shot event {:?}", e)
             }
-            if let Err(e) = ctx.jtac.track_shot(e.initiator.object_id()?, e) {
-                error!("failed to track shot {:?}", e)
-            }
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Some(unit) = e.initiator.as_ref().and_then(|u| u.as_unit().ok()) {
@@ -682,7 +688,9 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         }
                         Ok(TakeoffRes::OutOfLives | TakeoffRes::OutOfPoints) => {
                             if let Err(e) = unit.destroy() {
-                                error!("failed to destroy unit that took off without lives or points {e:?}")
+                                error!(
+                                    "failed to destroy unit that took off without lives or points {e:?}"
+                                )
                             }
                         }
                     }
@@ -1328,9 +1336,6 @@ fn on_simulation_frame(_: HooksLua) -> Result<()> {
             ctx.last_frame = Some(now);
         }
     }
-    if let Err(e) = ctx.jtac.update_shots(&mut ctx.db) {
-        error!("failed to update shots {e:?}")
-    }
     Ok(())
 }
 
@@ -1379,7 +1384,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
 }
 
 #[mlua::lua_module]
-fn bflib(lua: &Lua) -> LuaResult<LuaTable> {
+fn bflib(lua: &Lua) -> LuaResult<LuaTable<'_>> {
     unsafe { Context::get_mut() }
         .init_async_bg(lua.inner())
         .map_err(dcso3::lua_err)?;

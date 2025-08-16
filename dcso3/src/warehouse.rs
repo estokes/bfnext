@@ -300,7 +300,7 @@ impl<'lua> Warehouse<'lua> {
         Ok(self.t.call_method("getInventory", filter)?)
     }
 
-    pub fn get_owner(&self) -> Result<Airbase> {
+    pub fn get_owner(&self) -> Result<Airbase<'_>> {
         Ok(self.t.call_method("getOwner", ())?)
     }
 

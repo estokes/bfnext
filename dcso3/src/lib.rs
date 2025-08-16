@@ -457,7 +457,7 @@ impl<'lua> LuaEnv<'lua> for MizLua<'lua> {
     }
 }
 
-pub fn create_root_module<H, M>(lua: &Lua, init_hooks: H, init_miz: M) -> LuaResult<LuaTable>
+pub fn create_root_module<H, M>(lua: &Lua, init_hooks: H, init_miz: M) -> LuaResult<LuaTable<'_>>
 where
     H: Fn(HooksLua) -> Result<()> + 'static,
     M: Fn(MizLua) -> Result<()> + 'static,

@@ -14,11 +14,12 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use bfprotocols::perf::PerfInner;
 use chrono::Utc;
 use compact_str::format_compact;
 use dcso3::{
+    DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
     coalition::{Coalition, Side, Static},
     env::miz::{self, GroupInfo, GroupKind, Miz, MizIndex, TriggerZone},
     group::{ClassGroup, Group, GroupCategory},
@@ -26,7 +27,6 @@ use dcso3::{
     object::{DcsObject, DcsOid, ObjectCategory},
     perf::record_perf,
     world::{SearchVolume, World},
-    DeepClone, LuaEnv, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use fxhash::FxHashMap;
 use log::info;
@@ -137,19 +137,19 @@ impl<'lua> SpawnCtx<'lua> {
     }
 
     /// get at template that you pinky promise not to modify
-    pub fn get_template_ref(
-        &self,
+    pub fn get_template_ref<'a>(
+        &'a self,
         idx: &MizIndex,
         kind: GroupKind,
         side: Side,
         template_name: &str,
-    ) -> Result<GroupInfo> {
+    ) -> Result<GroupInfo<'a>> {
         self.miz
             .get_group_by_name(idx, kind, side, template_name)?
             .ok_or_else(|| anyhow!("no such template {template_name}"))
     }
 
-    pub fn get_trigger_zone(&self, idx: &MizIndex, name: &str) -> Result<TriggerZone> {
+    pub fn get_trigger_zone<'a>(&'a self, idx: &MizIndex, name: &str) -> Result<TriggerZone<'a>> {
         Ok(self
             .miz
             .get_trigger_zone(idx, name)?

@@ -453,7 +453,7 @@ impl<'lua> Net<'lua> {
         Ok(self.t.call_function("get_server_id", ())?)
     }
 
-    pub fn get_player_info(&self, id: PlayerId) -> Result<PlayerInfo> {
+    pub fn get_player_info(&self, id: PlayerId) -> Result<PlayerInfo<'_>> {
         Ok(self.t.call_function("get_player_info", id)?)
     }
 

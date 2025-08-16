@@ -15,10 +15,10 @@ for more details.
 */
 
 use crate::{
-    db::{group::SpawnedUnit, player::InstancedPlayer, Db, JtDesc},
+    db::{Db, JtDesc, group::SpawnedUnit, player::InstancedPlayer},
     landcache::LandCache,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{UnitTag, UnitTags, Vehicle},
     db::{
@@ -27,15 +27,15 @@ use bfprotocols::{
     },
     stats::{DetectionSource, EnId, Stat},
 };
-use chrono::{prelude::*, Duration};
-use compact_str::{format_compact, CompactString};
+use chrono::{Duration, prelude::*};
+use compact_str::{CompactString, format_compact};
 use dcso3::{
+    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
     coalition::Side,
     controller::{
         ActionTyp, AltType, AttackParams, MissionPoint, PointType, Task, VehicleFormation,
     },
     cvt_err, err,
-    event::Shot,
     group::Group,
     land::Land,
     net::{SlotId, Ucid},
@@ -45,17 +45,16 @@ use dcso3::{
     trigger::{MarkId, SmokeColor, Trigger},
     unit::{ClassUnit, Unit},
     weapon::Weapon,
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{info, warn};
-use mlua::{prelude::LuaResult, FromLua, IntoLua, Lua, Table, Value};
-use rand::{thread_rng, Rng};
+use mlua::{FromLua, IntoLua, Lua, Table, Value, prelude::LuaResult};
+use rand::{Rng, thread_rng};
 use serde::{Deserialize, Serialize};
-use smallvec::{smallvec, SmallVec};
-use std::{collections::hash_map::Entry, fmt, mem, str::FromStr};
+use smallvec::{SmallVec, smallvec};
+use std::{collections::hash_map::Entry, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
@@ -134,37 +133,6 @@ pub struct ArtilleryAdjustment {
     target: Vector2,
     group: Vec<DcsOid<ClassUnit>>,
     tracked: Option<(Weapon<'static>, Option<Vector3>)>,
-}
-
-impl ArtilleryAdjustment {
-    fn compute_adjustment(&mut self) -> Result<(bool, bool)> {
-        if let Some((weapon, pos)) = &mut self.tracked {
-            if let Ok(true) = weapon.is_exist() {
-                *pos = Some(weapon.as_object()?.get_point()?.0);
-            } else if let Some(pos) = pos {
-                let impact = Vector2::new(pos.x, pos.z);
-                let error = self.target - impact;
-                let mag = error.magnitude();
-                let mag = if mag > 100. {
-                    mag
-                } else if mag > 50. {
-                    mag * 0.5
-                } else {
-                    mag * 0.25
-                };
-                let dir = error.normalize();
-                self.tracked = None;
-                let adjust = mag > 5.;
-                if adjust {
-                    self.adjust += dir * mag;
-                }
-                return Ok((true, adjust));
-            } else {
-                warn!("could not track shot, weapon deleted immediatly")
-            }
-        }
-        Ok((false, false))
-    }
 }
 
 type LocByCode = FxHashMap<Side, FxHashMap<ObjectiveId, FxHashMap<u16, FxHashSet<JtId>>>>;
@@ -675,7 +643,6 @@ impl Jtac {
         &mut self,
         db: &Db,
         lua: MizLua,
-        tracking: &mut FxHashMap<DcsOid<ClassUnit>, GroupId>,
         adjustment: &mut ArtilleryAdjustment,
         gid: &GroupId,
         n: u8,
@@ -719,13 +686,9 @@ impl Jtac {
                 let group = Group::get_by_name(lua, &name)
                     .with_context(|| format_compact!("getting group {}", name))?;
                 adjustment.tracked = None;
-                for id in adjustment.group.drain(..) {
-                    tracking.remove(&id);
-                }
                 for unit in group.get_units()? {
                     let unit = unit?;
                     let id = unit.object_id()?;
-                    tracking.insert(id.clone(), *gid);
                     adjustment.group.push(id);
                 }
                 let con = group.get_controller().context("getting controller")?;
@@ -911,7 +874,6 @@ pub struct Jtacs {
     jtacs: FxHashMap<Side, FxHashMap<JtId, Jtac>>,
     detected: FxHashMap<Side, FxHashMap<EnId, Detected>>,
     artillery_adjustment: FxHashMap<GroupId, ArtilleryAdjustment>,
-    tracking: FxHashMap<DcsOid<ClassUnit>, GroupId>,
     code_by_location: LocByCode,
     menu_dirty: FxHashMap<Side, FxHashSet<ObjectiveId>>,
 }
@@ -940,40 +902,6 @@ impl Jtacs {
         self.jtacs.values_mut().flat_map(|jtx| jtx.values_mut())
     }
 
-    pub fn track_shot(&mut self, shooter: DcsOid<ClassUnit>, e: Shot) -> Result<()> {
-        if let Some(gid) = self.tracking.get(&shooter) {
-            if let Some(adj) = self.artillery_adjustment.get_mut(gid) {
-                if adj.tracked.is_none() {
-                    let weapon = unsafe { mem::transmute::<Weapon<'_>, Weapon<'static>>(e.weapon) };
-                    adj.tracked = Some((weapon, None));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn update_shots(&mut self, db: &mut Db) -> Result<()> {
-        for (gid, adj) in self.artillery_adjustment.iter_mut() {
-            if let Ok((true, adjusted)) = adj.compute_adjustment() {
-                for id in adj.group.drain(..) {
-                    self.tracking.remove(&id);
-                }
-                if adjusted {
-                    if let Ok(arty) = db.group(gid) {
-                        let side = arty.side;
-                        db.ephemeral.msgs().panel_to_side(
-                            10,
-                            false,
-                            side,
-                            format!("Artillery solution adjusted for {gid}"),
-                        )
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
     pub fn artillery_mission(
         &mut self,
         db: &Db,
@@ -996,7 +924,7 @@ impl Jtacs {
                 group: vec![],
                 tracked: None,
             });
-        jtac.artillery_mission(db, lua, &mut self.tracking, adjustment, &shooter, n)
+        jtac.artillery_mission(db, lua, adjustment, &shooter, n)
     }
 
     /// set part of the laser code, defined by the scale of the passed in number. For example,
@@ -1021,7 +949,12 @@ impl Jtacs {
         })
     }
 
-    pub fn contacts_near_point(&self, side: Side, point: Vector2, dist: f64) -> ContactsIter {
+    pub fn contacts_near_point<'a>(
+        &'a self,
+        side: Side,
+        point: Vector2,
+        dist: f64,
+    ) -> ContactsIter<'a> {
         let dist = dist.powi(2);
         let contacts = self
             .jtacs()

@@ -427,6 +427,7 @@ pub struct WarehouseConfig {
     pub supply_source: FxHashMap<Side, String>,
     /// Airframes that do not play nice with the warehouse that are exempt from the
     /// warehouse check
+    #[serde(default)]
     pub exempt_airframes: FxHashSet<String>,
 }
 

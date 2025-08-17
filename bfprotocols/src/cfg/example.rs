@@ -1800,6 +1800,7 @@ impl Default for Cfg {
                 ]),
                 exempt_airframes: FxHashSet::from_iter(["Su-30SM".into()]),
             }),
+            weapon_target_exclusions: FxHashSet::default(),
             logistics_exclusion: 10000,
             unit_cull_distance: 37040, // 20 nm
             ground_vehicle_cull_distance: 10000,

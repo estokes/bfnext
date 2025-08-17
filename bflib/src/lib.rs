@@ -647,6 +647,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, &e) {
                 error!("error processing shot event {:?}", e)
             }
+            ()
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Some(unit) = e.initiator.as_ref().and_then(|u| u.as_unit().ok()) {

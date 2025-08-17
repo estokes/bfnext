@@ -92,6 +92,9 @@ impl ShotDb {
     }
 
     pub fn shot(&mut self, db: &Db, now: DateTime<Utc>, e: &ShotEvent) -> Result<()> {
+        if db.ephemeral.cfg.weapon_target_exclusions.contains(&e.weapon_name) {
+            return Ok(())
+        }
         let target = ok!(some!(e.weapon.get_target()?).as_unit());
         let target_oid = target.object_id()?;
         if self.dead.contains_key(&target_oid) || self.recently_dead.contains_key(&target_oid) {

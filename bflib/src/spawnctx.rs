@@ -232,6 +232,7 @@ impl<'lua> SpawnCtx<'lua> {
         }
     }
 
+    /*
     pub fn remove_junk(&self, point: Vector2, radius: f64) -> Result<()> {
         let alt = Land::singleton(self.lua)?.get_height(LuaVec2(point))?;
         let point = LuaVec3(Vector3::new(point.x, alt, point.y));
@@ -239,6 +240,7 @@ impl<'lua> SpawnCtx<'lua> {
         World::singleton(self.lua)?.remove_junk(vol)?;
         Ok(())
     }
+    */
 
     #[allow(dead_code)]
     pub fn remove_scenery(&self, point: Vector2, radius: f64) -> Result<()> {

@@ -881,10 +881,12 @@ impl Ephemeral {
                 .iter()
                 .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
                 .fold(0., |acc, d| if d > acc { d } else { acc });
+            /* 
             let radius = radius.sqrt();
             spctx.remove_junk(point, radius * 1.10).with_context(|| {
                 format_compact!("removing junk before spawn of {}", group.template_name)
             })?;
+            */
             let spawned = spctx
                 .spawn(template)
                 .with_context(|| format_compact!("spawning template {}", group.template_name))?;

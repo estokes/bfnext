@@ -726,6 +726,12 @@ impl Jtac {
                         expend: None,
                         group_attack: Some(true),
                         weapon_type: None,
+                        attack_qty_limit: None,
+                        altitude_enabled: None,
+                        direction_enabled: None,
+                        point: None,
+                        x: None,
+                        y: None,
                     },
                 };
                 let task = Task::Mission {

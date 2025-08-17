@@ -51,15 +51,22 @@ use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value, prelude::LuaResult};
+use netidx_archive::logfile::AlreadyCompressed;
 use rand::{Rng, thread_rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
-use std::{collections::hash_map::Entry, fmt, str::FromStr};
+use std::{collections::{hash_map::Entry, HashMap}, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
     Group(GroupId),
     Slot(SlotId),
+}
+
+#[derive(Debug, Clone)]
+pub struct ALCM {
+    unit: SpawnedUnit,
+    ammo: i64,
 }
 
 impl FromStr for JtId {
@@ -236,6 +243,7 @@ pub struct Jtac {
     gid: JtId,
     side: Side,
     contacts: IndexMap<EnId, Contact>,
+    alcm: HashMap<UnitId, ALCM>,
     filter: BitFlags<UnitTag>,
     location: JtacLocation,
     priority: Vec<UnitTags>,
@@ -261,6 +269,7 @@ impl Jtac {
         Self {
             gid,
             side,
+            alcm: HashMap::new(),
             contacts: IndexMap::default(),
             filter: BitFlags::default(),
             priority,
@@ -1215,7 +1224,14 @@ impl Jtacs {
         } else {
             pos.y += 10.
         };
+
+
         for (unit, _) in db.instanced_units() {
+            
+            if unit.tags.contains(UnitTag::ALCM) && unit.side == jtac.side {
+                if jtac.alcm
+            };
+
             let id = EnId::Unit(unit.id);
             macro_rules! lost {
                 () => {{

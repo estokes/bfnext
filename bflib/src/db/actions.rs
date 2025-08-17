@@ -70,7 +70,7 @@ pub enum ActionArgs {
     Awacs(WithPos<AwacsCfg>),
     Bomber(WithJtac<BomberCfg>),
     CruiseMissileSpawn(WithPos<AiPlaneCfg>),
-    CruiseMissile(WithPosAndGroup<()>, i64),
+    CruiseMissile(WithJtac<BomberCfg>, i64),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
     Attackers(WithPos<AiPlaneCfg>),
@@ -187,7 +187,7 @@ impl ActionArgs {
                 Ok(Self::CruiseMissileSpawn(pos(db, lua, side, c, s)?))
             }
             ActionKind::CruiseMissile(c, q) => {
-                Ok(Self::CruiseMissile(pos_group(db, lua, side, (), s)?, q))
+                Ok(Self::CruiseMissile(jtac(c, s)?, q))
             }
             ActionKind::CruiseMissileWaypoint => Ok(Self::CruiseMissileWaypoint(pos_group(
                 db,
@@ -354,6 +354,7 @@ impl Db {
                 .cruise_missile_attack(
                     spctx,
                     idx,
+                    jtacs,
                     side,
                     ucid.clone(),
                     name,
@@ -1073,27 +1074,35 @@ impl Db {
             .cruise_missile_mission(side, ucid, pos, args)
             .context("generating CruiseMissile mission")?;
         self.set_ai_mission(spctx, gid, mission)
-            .context("setting ai mission");
+            .context("setting ai mission")?;
         Ok(Some(gid))
     }
 
     fn cruise_missile_attack<'lua>(
         &mut self,
         spctx: &SpawnCtx,
-        _idx: &MizIndex,
+        idx: &MizIndex,
+        jtacs: &Jtacs,
         side: Side,
         ucid: Option<Ucid>,
         _name: String,
         _action: Action,
-        args: WithPosAndGroup<()>,
+        args: WithJtac<BomberCfg>,
         quantity: i64,
         cost: u32,
     ) -> Result<Option<GroupId>> {
-        let attack_pos = &args.pos;
-        let mut quantity = quantity;
+        let jt = jtacs.get(&args.jtac)?;
+        let tgt = jt
+            .target()
+            .as_ref()
+            .map(|t| Vector2::new(t.pos.x, t.pos.z))
+            .unwrap_or(jt.location().pos);
+        let targets = jtacs.contacts_near_point(side, tgt, 15_000.).enumerate();
+
+        let mut quantity = &args.cfg.power;
 
         let aircraft = self.unit(
-            self.group(&args.group)?
+            self.group()?
                 .units
                 .into_iter()
                 .next()
@@ -2315,7 +2324,7 @@ impl Db {
                             }
                         }
                         if destination.is_none() {
-                            if let Some(target) = *rtb {
+                            if let Some(_) = *rtb {
                                 if true {
                                     to_delete.push(*gid);
                                 }

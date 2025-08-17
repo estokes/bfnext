@@ -21,21 +21,9 @@ use bfprotocols::{
 use chrono::{Duration, prelude::*};
 use compact_str::format_compact;
 use dcso3::{
-    LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3,
-    attribute::Attribute,
-    centroid2d, change_heading,
-    coalition::Side,
-    controller::{
-        ActionTyp, AiOption, AlarmState, AltType, Command, GroundOption, MissionPoint,
-        OrbitPattern, PointType, Task, TurnMethod, VehicleFormation,
-    },
-    env::miz::MizIndex,
-    group::Group,
-    land::Land,
-    net::Ucid,
-    pointing_towards2,
-    trigger::{MarkId, Modulation, Trigger},
-    world::World,
+    attribute::Attribute, centroid2d, change_heading, coalition::Side, controller::{
+        ActionTyp, AiOption, AlarmState, AltType, AttackParams, Command, GroundOption, MissionPoint, OrbitPattern, PointType, Task, TurnMethod, VehicleFormation, WeaponExpend
+    }, env::miz::MizIndex, group::Group, land::Land, net::Ucid, object::DcsObject, pointing_towards2, trigger::{MarkId, Modulation, Trigger}, world::World, LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
@@ -81,6 +69,8 @@ pub enum ActionArgs {
     Tanker(WithPos<AiPlaneCfg>),
     Awacs(WithPos<AwacsCfg>),
     Bomber(WithJtac<BomberCfg>),
+    CruiseMissileSpawn(WithPos<AiPlaneCfg>),
+    CruiseMissile(WithPosAndGroup<()>, i64),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
     Attackers(WithPos<AiPlaneCfg>),
@@ -90,6 +80,7 @@ pub enum ActionArgs {
     Nuke(WithPos<NukeCfg>),
     TankerWaypoint(WithPosAndGroup<()>),
     AwacsWaypoint(WithPosAndGroup<()>),
+    CruiseMissileWaypoint(WithPosAndGroup<()>),
     Paratrooper(WithPos<DeployableCfg>),
     Deployable(WithPos<DeployableCfg>),
     LogisticsRepair(WithObj<AiPlaneCfg>),
@@ -173,12 +164,12 @@ impl ActionArgs {
             ActionKind::Awacs(c) => Ok(Self::Awacs(pos(db, lua, side, c, s)?)),
             ActionKind::Fighters(c) => Ok(Self::Fighters(pos(db, lua, side, c, s)?)),
             ActionKind::FighersWaypoint => {
-                Ok(Self::FightersWaypoint(pos_group(db, lua, side, (), s)?))
-            }
+                        Ok(Self::FightersWaypoint(pos_group(db, lua, side, (), s)?))
+                    }
             ActionKind::Attackers(c) => Ok(Self::Attackers(pos(db, lua, side, c, s)?)),
             ActionKind::AttackersWaypoint => {
-                Ok(Self::AttackersWaypoint(pos_group(db, lua, side, (), s)?))
-            }
+                        Ok(Self::AttackersWaypoint(pos_group(db, lua, side, (), s)?))
+                    }
             ActionKind::Drone(c) => Ok(Self::Drone(pos(db, lua, side, c, s)?)),
             ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(db, lua, side, (), s)?)),
             ActionKind::Nuke(c) => Ok(Self::Nuke(pos(db, lua, side, c, s)?)),
@@ -188,10 +179,23 @@ impl ActionArgs {
             ActionKind::LogisticsTransfer(c) => Ok(Self::LogisticsTransfer(from_to(db, c, s)?)),
             ActionKind::AwacsWaypoint => Ok(Self::AwacsWaypoint(pos_group(db, lua, side, (), s)?)),
             ActionKind::TankerWaypoint => {
-                Ok(Self::TankerWaypoint(pos_group(db, lua, side, (), s)?))
-            }
+                        Ok(Self::TankerWaypoint(pos_group(db, lua, side, (), s)?))
+                    }
             ActionKind::Bomber(c) => Ok(Self::Bomber(jtac(c, s)?)),
             ActionKind::Move(c) => Ok(Self::Move(pos_group(db, lua, side, c, s)?)),
+            ActionKind::CruiseMissileSpawn(c) => {
+                Ok(Self::CruiseMissileSpawn(pos(db, lua, side, c, s)?))
+            }
+            ActionKind::CruiseMissile(c, q) => {
+                Ok(Self::CruiseMissile(pos_group(db, lua, side, (), s)?, q))
+            }
+            ActionKind::CruiseMissileWaypoint => Ok(Self::CruiseMissileWaypoint(pos_group(
+                db,
+                lua,
+                side,
+                (),
+                s,
+            )?)),
         }
     }
 }
@@ -343,6 +347,25 @@ impl Db {
                     args,
                 )
                 .context("calling bomber strike")?,
+            ActionArgs::CruiseMissileWaypoint(args) => self
+                .move_cruise_missile(spctx, side, ucid.clone(), args)
+                .context("moving tanker")?,
+            ActionArgs::CruiseMissile(args, quantity) => self
+                .cruise_missile_attack(
+                    spctx,
+                    idx,
+                    side,
+                    ucid.clone(),
+                    name,
+                    cmd.action,
+                    args,
+                    quantity,
+                    cost,
+                )
+                .context("starting cruise missile strike")?,
+            ActionArgs::CruiseMissileSpawn(args) => self
+                .cruise_missile(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
+                .context("calling cruise missile bomber")?,
             ActionArgs::Deployable(args) => self
                 .ai_deploy(
                     lua,
@@ -1035,6 +1058,185 @@ impl Db {
         )?))
     }
 
+
+    fn move_cruise_missile<'lua>(
+        &mut self,
+        spctx: &SpawnCtx<'lua>,
+        side: Side,
+        ucid: Option<Ucid>,
+        args: WithPosAndGroup<()>,
+    ) -> Result<Option<GroupId>> {
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
+        let mission = self
+            .cruise_missile_mission(side, ucid, pos, args)
+            .context("generating CruiseMissile mission")?;
+        self.set_ai_mission(spctx, gid, mission)
+            .context("setting ai mission");
+        Ok(Some(gid))
+    }
+
+    fn cruise_missile_attack<'lua>(
+        &mut self,
+        spctx: &SpawnCtx,
+        _idx: &MizIndex,
+        side: Side,
+        ucid: Option<Ucid>,
+        _name: String,
+        _action: Action,
+        args: WithPosAndGroup<()>,
+        quantity: i64,
+        cost: u32,
+    ) -> Result<Option<GroupId>> {
+        let attack_pos = &args.pos;
+        let mut quantity = quantity;
+
+        let aircraft = self.unit(
+            self.group(&args.group)?
+                .units
+                .into_iter()
+                .next()
+                .ok_or(anyhow!("no unit!"))?,
+        )?;
+        let id = self
+            .ephemeral
+            .get_object_id_by_uid(&aircraft.id)
+            .ok_or(anyhow!("no object with id"))?;
+        let unit = dcso3::unit::Unit::get_instance(spctx.lua(), id).context("getting unit")?;
+
+        let ammo_state = unit
+            .get_ammo()?
+            .into_iter()
+            .next()
+            .ok_or(anyhow!("no weapon!"))??
+            .count()? as i64;
+
+        if ammo_state <= 0 {
+            unit.destroy()?;
+            bail!("{} out of ammo, RTBing.", &args.group)
+        };
+
+        if ammo_state < quantity {
+            quantity = ammo_state
+        };
+
+        let mut main_task = vec![];
+
+        let lcd = [
+            (4, WeaponExpend::Four),
+            (2, WeaponExpend::Two),
+            (1, WeaponExpend::One),
+        ];
+        for d in lcd {
+            if quantity == d.0 {
+                let attack_params = AttackParams {
+                    weapon_type: Some(2097152),
+                    expend: Some(d.1),
+                    direction: Some(0.),
+                    altitude: Some(8000.),
+                    attack_qty_limit: None,
+                    attack_qty: Some(d.0),
+                    group_attack: Some(false),
+                    altitude_enabled: Some(false),
+                    direction_enabled: Some(false),
+                    point: Some(LuaVec2::new(attack_pos.x, attack_pos.y)),
+                    x: Some(attack_pos.x),
+                    y: Some(attack_pos.y),
+                };
+
+                if let Some(ucid) = ucid.as_ref() {
+                    let player = self.player(ucid).ok_or(anyhow!("no player for {ucid}"))?;
+                    let cost = (cost as i32) * (quantity as i32 - 1);
+                    if player.points >= cost {
+                        self.adjust_points(ucid, -cost, &format!("cruise missile expenditure"))
+                    } else {
+                        bail!("not enough points to fulfill request")
+                    }
+                }
+
+                let task = Task::Bombing {
+                    point: LuaVec2::new(attack_pos.x, attack_pos.y),
+                    params: attack_params,
+                };
+
+                main_task.push(task);
+                break;
+            }
+        }
+
+        let pos = self
+            .unit(
+                self.group(&args.group)?
+                    .units
+                    .into_iter()
+                    .next()
+                    .ok_or(anyhow!("cant find unit"))?,
+            )?
+            .pos;
+        let spawn_pos = pos.clone();
+        let m = self.ai_loiter_point_mission(
+            side,
+            ucid,
+            WithPosAndGroup {
+                cfg: args.cfg,
+                pos: pos,
+                group: args.group,
+            },
+            OrbitPattern::Circle,
+            spawn_pos,
+            |k| match k {
+                ActionKind::CruiseMissileSpawn(_) => true,
+                _ => false,
+            },
+            move || Task::ComboTask(vec![]),
+            move || main_task.clone(),
+        )?;
+
+        self.set_ai_mission(spctx, args.group, m)?;
+
+        Ok(Some(args.group))
+    }
+
+    fn cruise_missile(
+        &mut self,
+        perf: &mut PerfInner,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        side: Side,
+        ucid: Option<Ucid>,
+        name: String,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<Option<GroupId>> {
+        let gid = self.add_and_spawn_ai_air(
+            perf,
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &args,
+            None,
+            BitFlags::empty(),
+            move |db, gid, pos| {
+                db.cruise_missile_mission(
+                    side,
+                    ucid,
+                    pos,
+                    WithPosAndGroup {
+                        cfg: (),
+                        pos: args.pos,
+                        group: gid,
+                    },
+                )
+            },
+        )?;
+        Ok(Some(gid))
+    }
+
     fn paratroops(
         &mut self,
         perf: &mut PerfInner,
@@ -1510,57 +1712,60 @@ impl Db {
                 }
                 match &mut spec.kind {
                     ActionKind::Awacs(AwacsCfg { plane: a, .. })
-                    | ActionKind::Tanker(a)
-                    | ActionKind::Drone(DroneCfg { plane: a, .. })
-                    | ActionKind::Fighters(a)
-                    | ActionKind::Attackers(a) => {
-                        match loc {
-                            SpawnLoc::InAir { pos: oldpos, .. } => {
-                                let dir = *oldpos - args.pos;
-                                let step = dir.magnitude() / 4.;
-                                let dir = dir.normalize();
-                                let (old_dist, _) = racetrack_dist_and_heading(
-                                    &self.persisted.objectives,
-                                    *oldpos,
-                                    enemy,
-                                );
-                                for i in 1..4 {
-                                    let pos = *oldpos + dir * (step * i as f64);
-                                    let (dist, _) = racetrack_dist_and_heading(
-                                        &self.persisted.objectives,
-                                        pos,
-                                        enemy,
-                                    );
-                                    if old_dist < dist && dist - old_dist >= 500. {
-                                        *player = ucid.clone();
+                                    | ActionKind::Tanker(a)
+                                    | ActionKind::Drone(DroneCfg { plane: a, .. })
+                                    | ActionKind::CruiseMissileSpawn(a)
+                                    | ActionKind::Fighters(a)
+                                    | ActionKind::Attackers(a) => {
+                                        match loc {
+                                            SpawnLoc::InAir { pos: oldpos, .. } => {
+                                                let dir = *oldpos - args.pos;
+                                                let step = dir.magnitude() / 4.;
+                                                let dir = dir.normalize();
+                                                let (old_dist, _) = racetrack_dist_and_heading(
+                                                    &self.persisted.objectives,
+                                                    *oldpos,
+                                                    enemy,
+                                                );
+                                                for i in 1..4 {
+                                                    let pos = *oldpos + dir * (step * i as f64);
+                                                    let (dist, _) = racetrack_dist_and_heading(
+                                                        &self.persisted.objectives,
+                                                        pos,
+                                                        enemy,
+                                                    );
+                                                    if old_dist < dist && dist - old_dist >= 500. {
+                                                        *player = ucid.clone();
+                                                    }
+                                                }
+                                                *oldpos = args.pos;
+                                                for id in marks.drain() {
+                                                    self.ephemeral.msgs().delete_mark(id)
+                                                }
+                                            }
+                                            SpawnLoc::AtPos { .. }
+                                            | SpawnLoc::AtPosWithCenter { .. }
+                                            | SpawnLoc::AtPosWithComponents { .. }
+                                            | SpawnLoc::AtTrigger { .. } => {
+                                                bail!("race tracker not spawning in air")
+                                            }
+                                        }
+                                        (a.altitude, a.altitude_typ.clone(), a.speed, marks, player)
                                     }
-                                }
-                                *oldpos = args.pos;
-                                for id in marks.drain() {
-                                    self.ephemeral.msgs().delete_mark(id)
-                                }
-                            }
-                            SpawnLoc::AtPos { .. }
-                            | SpawnLoc::AtPosWithCenter { .. }
-                            | SpawnLoc::AtPosWithComponents { .. }
-                            | SpawnLoc::AtTrigger { .. } => {
-                                bail!("race tracker not spawning in air")
-                            }
-                        }
-                        (a.altitude, a.altitude_typ.clone(), a.speed, marks, player)
-                    }
                     ActionKind::AttackersWaypoint
-                    | ActionKind::AwacsWaypoint
-                    | ActionKind::DroneWaypoint
-                    | ActionKind::TankerWaypoint
-                    | ActionKind::FighersWaypoint
-                    | ActionKind::Move(_)
-                    | ActionKind::Deployable(_)
-                    | ActionKind::Paratrooper(_)
-                    | ActionKind::Bomber(_)
-                    | ActionKind::Nuke(_)
-                    | ActionKind::LogisticsRepair(_)
-                    | ActionKind::LogisticsTransfer(_) => bail!("not a race tracker"),
+                                    | ActionKind::AwacsWaypoint
+                                    | ActionKind::DroneWaypoint
+                                    | ActionKind::CruiseMissileWaypoint
+                                    | ActionKind::TankerWaypoint
+                                    | ActionKind::FighersWaypoint
+                                    | ActionKind::Move(_)
+                                    | ActionKind::Deployable(_)
+                                    | ActionKind::Paratrooper(_)
+                                    | ActionKind::CruiseMissile(_, _)
+                                    | ActionKind::Bomber(_)
+                                    | ActionKind::Nuke(_)
+                                    | ActionKind::LogisticsRepair(_)
+                                    | ActionKind::LogisticsTransfer(_) => bail!("not a race tracker"),
                 }
             }
             DeployKind::Crate { .. }
@@ -1674,6 +1879,35 @@ impl Db {
             }
             OrbitPattern::Custom(x) => bail!("invalid orbit pattern {x}"),
         }
+    }
+
+    fn cruise_missile_mission<'lua>(
+        &mut self,
+        side: Side,
+        ucid: Option<Ucid>,
+        spawn_pos: Vector2,
+        args: WithPosAndGroup<()>,
+    ) -> Result<Vec<MissionPoint<'lua>>> {
+        let group = group!(self, args.group)?;
+        let init_task = Task::ComboTask(vec![]);
+        let main_task = if group.tags.contains(UnitTag::Link16) {
+            vec![Task::WrappedCommand(Command::SetUnlimitedFuel(true))]
+        } else {
+            vec![Task::WrappedCommand(Command::SetUnlimitedFuel(true))]
+        };
+        self.ai_loiter_point_mission(
+            side,
+            ucid,
+            args,
+            OrbitPattern::Circle,
+            spawn_pos,
+            |k| match k {
+                ActionKind::CruiseMissileSpawn(_) => true,
+                _ => false,
+            },
+            move || init_task.clone(),
+            move || main_task.clone(),
+        )
     }
 
     fn set_ai_mission<'lua>(
@@ -1937,139 +2171,156 @@ impl Db {
             {
                 match &spec.kind {
                     ActionKind::Awacs(AwacsCfg { plane: ai, .. })
-                    | ActionKind::Fighters(ai)
-                    | ActionKind::Attackers(ai)
-                    | ActionKind::Drone(DroneCfg { plane: ai, .. })
-                    | ActionKind::Tanker(ai) => {
-                        if let Some(d) = ai.duration {
-                            if now - *time > Duration::hours(d as i64) {
-                                to_delete.push(*gid);
-                            }
-                        }
-                    }
+                                    | ActionKind::Fighters(ai)
+                                    | ActionKind::Attackers(ai)
+                                    | ActionKind::CruiseMissileSpawn(ai)
+                                    | ActionKind::Drone(DroneCfg { plane: ai, .. })
+                                    | ActionKind::Tanker(ai) => {
+                                        if let Some(d) = ai.duration {
+                                            if now - *time > Duration::hours(d as i64) {
+                                                to_delete.push(*gid);
+                                            }
+                                        }
+                                    }
                     ActionKind::Bomber(b) => {
+                                        if let Some(target) = *destination {
+                                            if at_dest!(group, target, 10_000.) {
+                                                destination.take();
+                                                to_bomb.push((b.clone(), target, group.side));
+                                            }
+                                        }
+                                        if destination.is_none() {
+                                            if let Some(target) = *rtb {
+                                                if at_dest!(group, target, 10_000.) {
+                                                    to_delete.push(*gid);
+                                                }
+                                            }
+                                        }
+                                    }
+                    ActionKind::LogisticsRepair(_) => {
+                                        if let Some(target) = *destination {
+                                            if at_dest!(group, target, 800.) {
+                                                destination.take();
+                                                to_repair.push((target, *player, group.side));
+                                                to_delete.push(group.id);
+                                            }
+                                        }
+                                    }
+                    ActionKind::LogisticsTransfer(_) => {
+                                        if let Some(target) = *destination {
+                                            if at_dest!(group, target, 800.) {
+                                                destination.take();
+                                                if let Some(rtb) = *rtb {
+                                                    to_transfer.push((rtb, target, *player, group.side));
+                                                    to_delete.push(group.id);
+                                                }
+                                            }
+                                        }
+                                    }
+                    ActionKind::Paratrooper(t) => {
+                                        if let Some(target) = *destination {
+                                            if at_dest!(group, target, 800.) {
+                                                destination.take();
+                                                let ucid = player
+                                                    .ok_or_else(|| anyhow!("paratroop missions require a ucid"))?;
+                                                let origin = (*origin).ok_or_else(|| {
+                                                    anyhow!("objective origin is required for paratroops")
+                                                })?;
+                                                to_paratroop.push((
+                                                    target,
+                                                    t.name.clone(),
+                                                    group.side,
+                                                    ucid,
+                                                    origin,
+                                                ));
+                                            }
+                                        }
+                                        if destination.is_none() {
+                                            if let Some(target) = *rtb {
+                                                if at_dest!(group, target, 800.) {
+                                                    to_delete.push(*gid);
+                                                }
+                                            }
+                                        }
+                                    }
+                    ActionKind::Deployable(d) => {
+                                        if let Some(target) = *destination {
+                                            if at_dest!(group, target, 800.) {
+                                                destination.take();
+                                                let ucid = player.as_ref().map(|u| u.clone()).ok_or_else(|| {
+                                                    anyhow!("deployables missions require a ucid")
+                                                })?;
+                                                to_deploy.push((target, d.name.clone(), group.side, ucid));
+                                            }
+                                        }
+                                        if destination.is_none() {
+                                            if let Some(target) = *rtb {
+                                                if at_dest!(group, target, 800.) {
+                                                    to_delete.push(*gid);
+                                                }
+                                            }
+                                        }
+                                    }
+                    ActionKind::Move(_) => {
+                                        self.ephemeral.groups_with_move_missions.retain(|gid, dst| {
+                                            match self.persisted.groups.get(gid) {
+                                                None => false,
+                                                Some(group) => {
+                                                    let pos = centroid2d(
+                                                        group
+                                                            .units
+                                                            .into_iter()
+                                                            .filter_map(|uid| self.persisted.units.get(uid))
+                                                            .map(|u| u.pos),
+                                                    );
+                                                    if (pos - *dst).magnitude() > 100. {
+                                                        true
+                                                    } else {
+                                                        for uid in &group.units {
+                                                            match self.persisted.units.get(uid) {
+                                                                None => {
+                                                                    self.ephemeral
+                                                                        .units_able_to_move
+                                                                        .swap_remove(uid);
+                                                                }
+                                                                Some(unit) => {
+                                                                    if !unit.tags.contains(UnitTag::Driveable) {
+                                                                        self.ephemeral
+                                                                            .units_able_to_move
+                                                                            .swap_remove(uid);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        false
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    }
+                    ActionKind::AwacsWaypoint
+                                    | ActionKind::FighersWaypoint
+                                    | ActionKind::AttackersWaypoint
+                                    | ActionKind::CruiseMissileWaypoint
+                                    | ActionKind::TankerWaypoint
+                                    | ActionKind::DroneWaypoint
+                                    | ActionKind::Nuke(_) => {
+                                        bail!("should not be a group")
+                                    }
+                    ActionKind::CruiseMissile(b, _) => {
                         if let Some(target) = *destination {
-                            if at_dest!(group, target, 10_000.) {
+                            if true {
                                 destination.take();
                                 to_bomb.push((b.clone(), target, group.side));
                             }
                         }
                         if destination.is_none() {
                             if let Some(target) = *rtb {
-                                if at_dest!(group, target, 10_000.) {
+                                if true {
                                     to_delete.push(*gid);
                                 }
                             }
                         }
-                    }
-                    ActionKind::LogisticsRepair(_) => {
-                        if let Some(target) = *destination {
-                            if at_dest!(group, target, 800.) {
-                                destination.take();
-                                to_repair.push((target, *player, group.side));
-                                to_delete.push(group.id);
-                            }
-                        }
-                    }
-                    ActionKind::LogisticsTransfer(_) => {
-                        if let Some(target) = *destination {
-                            if at_dest!(group, target, 800.) {
-                                destination.take();
-                                if let Some(rtb) = *rtb {
-                                    to_transfer.push((rtb, target, *player, group.side));
-                                    to_delete.push(group.id);
-                                }
-                            }
-                        }
-                    }
-                    ActionKind::Paratrooper(t) => {
-                        if let Some(target) = *destination {
-                            if at_dest!(group, target, 800.) {
-                                destination.take();
-                                let ucid = player
-                                    .ok_or_else(|| anyhow!("paratroop missions require a ucid"))?;
-                                let origin = (*origin).ok_or_else(|| {
-                                    anyhow!("objective origin is required for paratroops")
-                                })?;
-                                to_paratroop.push((
-                                    target,
-                                    t.name.clone(),
-                                    group.side,
-                                    ucid,
-                                    origin,
-                                ));
-                            }
-                        }
-                        if destination.is_none() {
-                            if let Some(target) = *rtb {
-                                if at_dest!(group, target, 800.) {
-                                    to_delete.push(*gid);
-                                }
-                            }
-                        }
-                    }
-                    ActionKind::Deployable(d) => {
-                        if let Some(target) = *destination {
-                            if at_dest!(group, target, 800.) {
-                                destination.take();
-                                let ucid = player.as_ref().map(|u| u.clone()).ok_or_else(|| {
-                                    anyhow!("deployables missions require a ucid")
-                                })?;
-                                to_deploy.push((target, d.name.clone(), group.side, ucid));
-                            }
-                        }
-                        if destination.is_none() {
-                            if let Some(target) = *rtb {
-                                if at_dest!(group, target, 800.) {
-                                    to_delete.push(*gid);
-                                }
-                            }
-                        }
-                    }
-                    ActionKind::Move(_) => {
-                        self.ephemeral.groups_with_move_missions.retain(|gid, dst| {
-                            match self.persisted.groups.get(gid) {
-                                None => false,
-                                Some(group) => {
-                                    let pos = centroid2d(
-                                        group
-                                            .units
-                                            .into_iter()
-                                            .filter_map(|uid| self.persisted.units.get(uid))
-                                            .map(|u| u.pos),
-                                    );
-                                    if (pos - *dst).magnitude() > 100. {
-                                        true
-                                    } else {
-                                        for uid in &group.units {
-                                            match self.persisted.units.get(uid) {
-                                                None => {
-                                                    self.ephemeral
-                                                        .units_able_to_move
-                                                        .swap_remove(uid);
-                                                }
-                                                Some(unit) => {
-                                                    if !unit.tags.contains(UnitTag::Driveable) {
-                                                        self.ephemeral
-                                                            .units_able_to_move
-                                                            .swap_remove(uid);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        false
-                                    }
-                                }
-                            }
-                        });
-                    }
-                    ActionKind::AwacsWaypoint
-                    | ActionKind::FighersWaypoint
-                    | ActionKind::AttackersWaypoint
-                    | ActionKind::TankerWaypoint
-                    | ActionKind::DroneWaypoint
-                    | ActionKind::Nuke(_) => {
-                        bail!("should not be a group")
                     }
                 }
             }

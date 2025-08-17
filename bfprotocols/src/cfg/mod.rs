@@ -165,6 +165,7 @@ pub enum UnitTag {
     AWACS,
     Link16,
     Boat,
+    ALCM,
 }
 
 #[derive(
@@ -567,6 +568,9 @@ pub enum ActionKind {
     Bomber(BomberCfg),
     Fighters(AiPlaneCfg),
     Attackers(AiPlaneCfg),
+    CruiseMissileSpawn(AiPlaneCfg),
+    CruiseMissile(BomberCfg, i64),
+    CruiseMissileWaypoint,
     Drone(DroneCfg),
     Nuke(NukeCfg),
     FighersWaypoint,

@@ -371,6 +371,18 @@ fn action_help(ctx: &mut Context, actions: &IndexMap<String, Action, FxBuildHash
                 action.cost
             )),
             ActionKind::Bomber(_) => None,
+            ActionKind::CruiseMissileSpawn(_) => Some(format_compact!(
+                "{name}: <key> | Spawn a cruise missile bomber at key, a mark point. cost {}",
+                action.cost
+            )),
+            ActionKind::CruiseMissile(_,_) => Some(format_compact!(
+                "{name}: <key> | Commence a cruise missile strike at key, a mark point. cost {}",
+                action.cost
+            )),
+            ActionKind::CruiseMissileWaypoint => Some(format_compact!(
+                "{name}: <group> <key> | Move a cruise missile bomber to key, a mark point. Group is the bomber group. cost {}",
+                action.cost
+            )),
             ActionKind::Deployable(d) => Some(format_compact!(
                 "{name}: <key> | Ai deploy a {} at key a mark point. cost {}",
                 d.name,

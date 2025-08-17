@@ -101,8 +101,14 @@ pub struct AttackParams {
     pub expend: Option<WeaponExpend>,
     pub direction: Option<f64>, // in radians
     pub altitude: Option<f64>,
+    pub attack_qty_limit: Option<i64>,
+    pub altitude_enabled: Option<bool>,
+    pub direction_enabled: Option<bool>,
+    pub point: Option<LuaVec2>,
     pub attack_qty: Option<i64>,
     pub group_attack: Option<bool>,
+    pub x: Option<f64>,
+    pub y: Option<f64>,
 }
 
 impl<'lua> FromLua<'lua> for AttackParams {
@@ -127,6 +133,37 @@ impl<'lua> FromLua<'lua> for AttackParams {
                 None
             },
             group_attack: tbl.raw_get("groupAttack")?,
+
+            attack_qty_limit: if tbl.raw_get("attack_qty_limit")? {
+                tbl.raw_get("attack_qty_limit")?
+            } else {
+                None
+            },
+            altitude_enabled: if tbl.raw_get("altitude_enabled")? {
+                tbl.raw_get("altitude_enabled")?
+            } else {
+                None
+            },
+            direction_enabled: if tbl.raw_get("direction_enabled")? {
+                tbl.raw_get("direction_enabled")?
+            } else {
+                None
+            },
+            point: if tbl.raw_get("point")? {
+                tbl.raw_get("point")?
+            } else {
+                None
+            },
+            x: if tbl.raw_get("x")? {
+                tbl.raw_get("x")?
+            } else {
+                None
+            },
+            y: if tbl.raw_get("y")? {
+                tbl.raw_get("y")?
+            } else {
+                None
+            },
         })
     }
 }

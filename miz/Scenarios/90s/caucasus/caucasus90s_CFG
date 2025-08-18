@@ -155,9 +155,9 @@
   "life_types": {
     "MB-339A": "Recon",
     "C-101CC": "Recon",
-    "MiG-29A": "Standard",
+    "MiG-29A": "Intercept",
     "J-11A": "Standard",
-    "MiG-29S": "Standard",
+    "MiG-29S": "Intercept",
     "L-39C": "Recon",
     "F4U-1D": "Recon",
     "F-14A-135-GR": "Standard",

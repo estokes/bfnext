@@ -402,7 +402,7 @@
           }
         },
         "cost": 20,
-        "penalty": 1,
+        "penalty": 10,
         "limit": null
       },
 	  "dronesmall": {

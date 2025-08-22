@@ -879,6 +879,7 @@ impl Ephemeral {
         } else {
             let point = centroid2d(points.iter().map(|p| *p));
             template.group.set_pos(point)?;
+            /* 
             let radius = points
                 .iter()
                 .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))

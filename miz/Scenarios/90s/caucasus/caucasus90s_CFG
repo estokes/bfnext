@@ -159,9 +159,9 @@
   "life_types": {
     "MB-339A": "Recon",
     "C-101CC": "Recon",
-    "MiG-29A": "Standard",
+    "MiG-29A": "Intercept",
     "J-11A": "Standard",
-    "MiG-29S": "Standard",
+    "MiG-29S": "Intercept",
     "L-39C": "Recon",
     "F4U-1D": "Recon",
     "F-14A-135-GR": "Standard",
@@ -402,11 +402,11 @@
         "kind": {
           "Move": {
             "troop": 2500,
-            "deployable": 20000
+            "deployable": 10000
           }
         },
-        "cost": 15,
-        "penalty": 1,
+        "cost": 20,
+        "penalty": 10,
         "limit": null
       },
 	  "dronesmall": {
@@ -1410,40 +1410,6 @@
           "range": 500000
         },
         "jtac": null
-      },
-      {
-        "path": [
-          "FARP"
-        ],
-        "template": "RDEPFARP",
-        "persist": "Forever",
-        "limit": 4,
-        "limit_enforce": "DeleteOldest",
-        "crates": [
-          {
-            "name": "FARP Crate",
-            "weight": 1500,
-            "required": 4,
-            "pos_unit": null,
-            "max_drop_height_agl": 10,
-            "max_drop_speed": 50
-          }
-        ],
-        "repair_crate": null,
-        "logistics": {
-          "pad_templates": [
-            "DEPRFARPPAD0",
-            "DEPRFARPPAD1",
-            "DEPRFARPPAD2",
-            "DEPRFARPPAD3"
-          ],
-          "ammo_template": "DEPRFARPAMMO",
-          "fuel_template": "DEPRFARPFUEL",
-          "barracks_template": "DEPRFARPTENT"
-        },
-        "cost": 150,
-        "ewr": null,
-        "jtac": null
       }
     ],
     "Blue": [
@@ -2084,40 +2050,6 @@
         "ewr": {
           "range": 500000
         },
-        "jtac": null
-      },
-      {
-        "path": [
-          "FARP"
-        ],
-        "template": "BDEPFARP",
-        "persist": "Forever",
-        "limit": 4,
-        "limit_enforce": "DeleteOldest",
-        "crates": [
-          {
-            "name": "FARP Crate",
-            "weight": 1500,
-            "required": 4,
-            "pos_unit": null,
-            "max_drop_height_agl": 10,
-            "max_drop_speed": 50
-          }
-        ],
-        "repair_crate": null,
-        "logistics": {
-          "pad_templates": [
-            "DEPBFARPPAD0",
-            "DEPBFARPPAD1",
-            "DEPBFARPPAD2",
-            "DEPBFARPPAD3"
-          ],
-          "ammo_template": "DEPBFARPAMMO",
-          "fuel_template": "DEPBFARPFUEL",
-          "barracks_template": "DEPBFARPTENT"
-        },
-        "cost": 150,
-        "ewr": null,
         "jtac": null
       }
     ]

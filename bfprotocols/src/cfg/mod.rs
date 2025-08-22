@@ -427,6 +427,7 @@ pub struct WarehouseConfig {
     pub supply_source: FxHashMap<Side, String>,
     /// Airframes that do not play nice with the warehouse that are exempt from the
     /// warehouse check
+    #[serde(default)]
     pub exempt_airframes: FxHashSet<String>,
 }
 
@@ -705,6 +706,9 @@ pub struct Cfg {
     /// how many points are various actions worth (if any)
     #[serde(default)]
     pub points: Option<PointsCfg>,
+    /// do not attempt to get the target of any weapon in this list
+    #[serde(default)]
+    pub weapon_target_exclusions: FxHashSet<String>,
     /// how often a base will repair if it has full logistics (Seconds)
     pub repair_time: u32,
     /// The base repair crate

@@ -31,7 +31,8 @@ use crate::{
 use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
-        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg, DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition, WarehouseConfig
+        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition, WarehouseConfig,
     },
     db::{
         group::{GroupId, UnitId},
@@ -691,7 +692,8 @@ impl Ephemeral {
             }
         };
         check_unit_classification()?;
-        if let Some(VictoryCondition::MapOwned { fraction }) = cfg.auto_reset.map(|vc| vc.condition) {
+        if let Some(VictoryCondition::MapOwned { fraction }) = cfg.auto_reset.map(|vc| vc.condition)
+        {
             if fraction > 1. || fraction < 0. {
                 bail!("auto_reset fraction must be between 0 and 1")
             }
@@ -881,10 +883,12 @@ impl Ephemeral {
                 .iter()
                 .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
                 .fold(0., |acc, d| if d > acc { d } else { acc });
+            /*
             let radius = radius.sqrt();
             spctx.remove_junk(point, radius * 1.10).with_context(|| {
                 format_compact!("removing junk before spawn of {}", group.template_name)
             })?;
+            */
             let spawned = spctx
                 .spawn(template)
                 .with_context(|| format_compact!("spawning template {}", group.template_name))?;

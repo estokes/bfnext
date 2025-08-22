@@ -322,7 +322,7 @@
             "template": "RATTACKHELI",
             "altitude": 757,
             "altitude_typ": "RADIO",
-            "speed": 82
+            "speed": 80
           }
         },
         "cost": 300,
@@ -532,7 +532,7 @@
               "template": "BTROOPCARRIER",
               "altitude": 1237,
               "altitude_typ": "RADIO",
-              "speed": 63
+              "speed": 75
             }
           }
         },
@@ -560,7 +560,7 @@
             "template": "BATTACKHELI",
             "altitude": 734,
             "altitude_typ": "RADIO",
-            "speed": 63
+            "speed": 69
           }
         },
         "cost": 300,
@@ -577,7 +577,7 @@
               "template": "BCARGOCARRIER",
               "altitude": 1322,
               "altitude_typ": "RADIO",
-              "speed": 62
+              "speed": 79
             }
           }
         },
@@ -593,7 +593,7 @@
             "template": "BCARGOCARRIER",
             "altitude": 1334,
             "altitude_typ": "RADIO",
-            "speed": 66
+            "speed": 78
           }
         },
         "cost": 100,
@@ -608,7 +608,7 @@
             "template": "BCARGOCARRIER",
             "altitude": 1327,
             "altitude_typ": "RADIO",
-            "speed": 63
+            "speed": 78
           }
         },
         "cost": 100,
@@ -2164,9 +2164,8 @@
     "MosquitoFBMkVI": [
       "Aircraft"
     ],
-    "ATZ-10": [
-      "Logistics",
-      "Unarmed"
+    "AJS37": [
+      "Aircraft"
     ],
     "J-11A": [
       "Aircraft"
@@ -2174,20 +2173,166 @@
     "F-4E-45MC": [
       "Aircraft"
     ],
-    "TV tower": [
-      "Unarmed"
+    "F-14A-135-GR": [
+      "Aircraft"
     ],
-    "C-101CC": [
+    "F-14B": [
+      "Aircraft"
+    ],    
+	"C-101CC": [
       "Aircraft"
     ],
     "AV8BNA": [
       "Aircraft"
     ],
+    "A-10A": [
+      "Aircraft"
+    ],
+    "A-4E-C": [
+      "Aircraft"
+    ],
+    "A-10C_2": [
+      "Aircraft"
+    ],
+    "A-10C": [
+      "Aircraft"
+    ],
+    "F-5E-3": [
+      "Aircraft"
+    ],
+	"F-5E": [
+      "Aircraft"
+    ],
+    "F-15C": [
+      "Aircraft"
+    ],
+    "F-15ESE": [
+      "Aircraft"
+    ],
+    "F-16C_50": [
+      "Aircraft"
+    ],
+    "B-1B": [
+      "Aircraft"
+    ],
+    "A-50": [
+      "Aircraft",
+      "AWACS",
+      "Link16"
+    ],
+    "E-3A": [
+      "Aircraft",
+      "AWACS",
+      "Link16"
+    ],
+    "MQ-9 Reaper": [
+      "Aircraft"
+    ],
+    "RQ-1A Predator": [
+      "Aircraft"
+    ],
+    "WingLoong-I": [
+      "Aircraft"
+    ],
+    "IL-78M": [
+      "Aircraft"
+    ],
+    "Tu-160": [
+      "Aircraft"
+    ],
+    "KC130": [
+      "Aircraft"
+    ],
+    "KC-135": [
+      "Aircraft"
+    ],
+    "FA-18C_hornet": [
+      "Aircraft"
+    ],
     "L-39C": [
       "Aircraft"
     ],
-    "F-14A-135-GR": [
+    "L-39ZA": [
       "Aircraft"
+    ],
+    "MiG-29A": [
+      "Aircraft"
+    ],
+    "MiG-21Bis": [
+      "Aircraft"
+    ],    
+    "Mirage-F1EE": [
+      "Aircraft"
+    ],
+    "M-2000C": [
+      "Aircraft"
+    ],
+    "JF-17": [
+      "Aircraft"
+    ],
+    "Su-25": [
+      "Aircraft"
+    ],
+    "Su-25T": [
+      "Aircraft"
+    ],
+	"Su-27": [
+      "Aircraft"
+    ],
+    "Su-30": [
+      "Aircraft"
+    ],
+    "Su-30SM": [
+      "Aircraft"
+    ],
+    "Su-33": [
+      "Aircraft"
+    ],
+    "MB-339A": [
+      "Aircraft"
+    ],
+    "TF-51D": [
+      "Aircraft"
+    ],
+    "AH-64D_BLK_II": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "OH58D": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "SA342M": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "SA342L": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "Mi-24P": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "Ka-50": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "Ka-50_3": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "Mi-8MT": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "Mi-26": [
+      "Aircraft",
+      "Helicopter"
+    ],
+    "CH-47Fbl1": [
+      "Aircraft",
+      "Helicopter"
     ],
     "Hawk sr": [
       "SAM",
@@ -2231,9 +2376,6 @@
       "RadarGuided",
       "TrackRadar"
     ],
-    "M-2000C": [
-      "Aircraft"
-    ],
     "Tor 9A331": [
       "SAM",
       "MR",
@@ -2244,22 +2386,6 @@
       "Launcher",
       "Driveable"
     ],
-    ".Ammunition depot": [
-      "Logistics",
-      "Unarmed"
-    ],
-    "Ka-50_3": [
-      "Aircraft",
-      "Helicopter"
-    ],
-    "OH58D": [
-      "Aircraft",
-      "Helicopter"
-    ],
-    "FARP Ammo Dump Coating": [
-      "Logistics",
-      "Unarmed"
-    ],
     "M6 Linebacker": [
       "SAM",
       "APC",
@@ -2268,9 +2394,6 @@
       "Launcher",
       "LightCannon",
       "Driveable"
-    ],
-    "TF-51D": [
-      "Aircraft"
     ],
     "SA-11 Buk LN 9A310M1": [
       "SAM",
@@ -2304,21 +2427,12 @@
       "SmallArms",
       "Driveable"
     ],
-    "A-10A": [
-      "Aircraft"
-    ],
-    "A-4E-C": [
-      "Aircraft"
-    ],
     "T-55": [
       "Armor",
       "MR",
       "HeavyCannon",
       "SmallArms",
       "Driveable"
-    ],
-    "AJS37": [
-      "Aircraft"
     ],
     "ZU-23 Emplacement": [
       "AAA",
@@ -2380,17 +2494,6 @@
       "RadarGuided",
       "SearchRadar",
 	  "Driveable"
-    ],
-    "Su-25T": [
-      "Aircraft"
-    ],
-    "M978 HEMTT Tanker": [
-      "Logistics",
-      "Unarmed"
-    ],
-    "AH-64D_BLK_II": [
-      "Aircraft",
-      "Helicopter"
     ],
     "55G6 EWR": [
       "EWR",
@@ -2487,24 +2590,9 @@
       "AAA",
       "SR"
     ],
-    "Ural-375": [
-      "Logistics",
-      "Unarmed",
-      "Driveable"
-    ],
-    "Mi-24P": [
-      "Aircraft",
-      "Helicopter"
-    ],
     "GeneratorF": [
       "Logistics",
       "Unarmed"
-    ],
-    "Su-25": [
-      "Aircraft"
-    ],
-    "MB-339A": [
-      "Aircraft"
     ],
     "BMP-1": [
       "APC",
@@ -2528,6 +2616,14 @@
       "Logistics",
       "Unarmed"
     ],
+    "FARP Ammo Dump Coating": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "FARP Fuel Depot": [
+      "Logistics",
+      "Unarmed"
+    ],
     "ZSU-23-4 Shilka": [
       "AAA",
       "MR",
@@ -2539,12 +2635,6 @@
       "Infantry",
       "ControlUnit",
       "Unarmed"
-    ],
-    "MiG-29A": [
-      "Aircraft"
-    ],
-    "MiG-21Bis": [
-      "Aircraft"
     ],
     "tt_ZU-23": [
       "AAA",
@@ -2567,9 +2657,6 @@
       "SmallArms",
       "Driveable"
     ],
-    "F-16C_50": [
-      "Aircraft"
-    ],
     "Kub 1S91 str": [
       "SAM",
       "MR",
@@ -2578,28 +2665,12 @@
       "SearchRadar",
       "Driveable"
     ],
-    "Mi-8MT": [
-      "Aircraft",
-      "Helicopter"
-    ],
-    "Mi-26": [
-      "Aircraft",
-      "Helicopter"
-    ],
-    "CH-47Fbl1": [
-      "Aircraft",
-      "Helicopter"
-    ],
     "SA-18 Igla-S manpad": [
       "SAM",
       "SR",
       "IRGuided",
       "Launcher",
       "Driveable"
-    ],
-    "Ural-4320-31": [
-      "Logistics",
-      "Unarmed"
     ],
     "Ural-375 PBU": [
       "Unarmed"
@@ -2608,6 +2679,9 @@
       "Unarmed"
     ],
 	"ZIL-131 KUNG": [
+      "Unarmed"
+    ],
+	"ATZ-60_Maz": [
       "Unarmed"
     ],
     "Kub 2P25 ln": [
@@ -2648,17 +2722,73 @@
       "SmallArms",
       "Driveable"
     ],
+    "TV tower": [
+      "Unarmed"
+    ],
+    "ATZ-10": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "M978 HEMTT Tanker": [
+      "Logistics",
+      "Unarmed"
+    ],
     "M 818": [
       "Logistics",
       "Unarmed",
       "Driveable"
     ],
+    "Ural-375": [
+      "Logistics",
+      "Unarmed",
+      "Driveable"
+    ],
+    "Ural-4320-31": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "KAMAZ Truck": [
+      "Logistics",
+      "Unarmed"
+    ],
+	"Hummer": [
+      "Logistics",
+      "Unarmed"
+    ],
+    "UAZ-469": [
+      "Logistics",
+      "Unarmed"
+    ],
+    ".Ammunition depot": [
+      "Logistics",
+      "Unarmed"
+    ],	
     "outpost": [
       "Logistics",
       "SR",
       "SmallArms"
     ],
-	  "Bunker": [
+    "Sandbox": [
+      "Logistics",
+      "SR",
+      "SmallArms"
+    ],
+    "houseA_arm": [
+      "Logistics",
+      "SR",
+      "SmallArms"
+    ],
+    "house1arm": [
+      "Logistics",
+      "SR",
+      "SmallArms"
+    ],
+    "house2arm": [
+      "Logistics",
+      "SR",
+      "SmallArms"
+    ],
+	"Bunker": [
       "Logistics",
       "Unarmed"
     ],
@@ -2680,10 +2810,6 @@
       "ATGM",
       "LightCannon",
       "Driveable"
-    ],
-    "Ka-50": [
-      "Aircraft",
-      "Helicopter"
     ],
     "SA-18 Igla comm": [
       "SAM",
@@ -2862,22 +2988,6 @@
       "Launcher",
       "EngagesWeapons"
     ],
-    "F-15C": [
-      "Aircraft"
-    ],
-    "SA342M": [
-      "Aircraft",
-      "Helicopter"
-    ],
-    "Su-27": [
-      "Aircraft"
-    ],
-    "Su-30": [
-      "Aircraft"
-    ],
-    "Su-30SM": [
-      "Aircraft"
-    ],
     "Hawk tr": [
       "SAM",
       "LR",
@@ -2893,13 +3003,6 @@
       "Infantry",
       "SR",
       "SmallArms"
-    ],
-    "SA342L": [
-      "Aircraft",
-      "Helicopter"
-    ],
-    "Su-33": [
-      "Aircraft"
     ],
     "Invisible FARP": [
       "Logistics",
@@ -2932,31 +3035,6 @@
       "Aircraft",
       "Helicopter"
     ],
-    "FARP Fuel Depot": [
-      "Logistics",
-      "Unarmed"
-    ],
-    "A-10C_2": [
-      "Aircraft"
-    ],
-    "A-10C": [
-      "Aircraft"
-    ],
-    "F-14B": [
-      "Aircraft"
-    ],
-    "FA-18C_hornet": [
-      "Aircraft"
-    ],
-    "L-39ZA": [
-      "Aircraft"
-    ],
-    "F-5E-3": [
-      "Aircraft"
-    ],
-	"F-5E": [
-      "Aircraft"
-    ],
     "HL_ZU-23": [
       "AAA",
       "SR",
@@ -2981,9 +3059,6 @@
       "RadarGuided",
       "AuxRadarUnit"
     ],
-    "JF-17": [
-      "Aircraft"
-    ],
     "BMP-3": [
       "APC",
       "MR",
@@ -3005,9 +3080,6 @@
       "SmallArms",
       "Driveable"
     ],
-    "Mirage-F1EE": [
-      "Aircraft"
-    ],
     "SAU Msta": [
       "Armor",
       "Artillery",
@@ -3023,43 +3095,6 @@
       "Artillery",
 	  "Launcher",
       "Driveable"
-    ],
-    "F-15ESE": [
-      "Aircraft"
-    ],
-    "B-1B": [
-      "Aircraft"
-    ],
-    "A-50": [
-      "Aircraft",
-      "AWACS",
-      "Link16"
-    ],
-    "MQ-9 Reaper": [
-      "Aircraft"
-    ],
-    "RQ-1A Predator": [
-      "Aircraft"
-    ],
-    "WingLoong-I": [
-      "Aircraft"
-    ],
-    "E-3A": [
-      "Aircraft",
-      "AWACS",
-      "Link16"
-    ],
-    "IL-78M": [
-      "Aircraft"
-    ],
-    "Tu-160": [
-      "Aircraft"
-    ],
-    "KC130": [
-      "Aircraft"
-    ],
-    "KC-135": [
-      "Aircraft"
     ]
   },
   "airborne_jtacs": {

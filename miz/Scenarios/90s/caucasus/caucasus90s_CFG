@@ -783,15 +783,15 @@
       {
         "path": [
           "Radar SAMs",
-          "SA-15 Tor"
+          "SA-15B Tor M2"
         ],
-        "template": "DEPSA15",
+        "template": "DEPSA15M2",
         "persist": "Forever",
         "limit": 6,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
-            "name": "SA15 Tor",
+            "name": "SA15B Tor M2",
             "weight": 1500,
             "required": 2,
             "pos_unit": null,
@@ -2386,6 +2386,16 @@
       "Launcher",
       "Driveable"
     ],
+    "CHAP_TorM2": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "EngagesWeapons",
+      "TrackRadar",
+      "SearchRadar",
+      "Launcher",
+      "Driveable"
+    ],	
     "M6 Linebacker": [
       "SAM",
       "APC",

@@ -153,7 +153,7 @@
   "threatened_cooldown": 300,
   "crate_load_distance": 50,
   "crate_spread": 500,
-  "artillery_mission_range": 15000,
+  "artillery_mission_range": 70000,
   "side_switches": 1,
   "max_crates": 6,
   "life_types": {

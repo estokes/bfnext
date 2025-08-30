@@ -783,33 +783,6 @@
       {
         "path": [
           "Radar SAMs",
-          "SA-15B Tor M2"
-        ],
-        "template": "DEPSA15M2",
-        "persist": "Forever",
-        "limit": 6,
-        "limit_enforce": "DeleteOldest",
-        "crates": [
-          {
-            "name": "SA15B Tor M2",
-            "weight": 1500,
-            "required": 2,
-            "pos_unit": null,
-            "max_drop_height_agl": 10,
-            "max_drop_speed": 50
-          }
-        ],
-        "repair_crate": null,
-        "logistics": null,
-        "cost": 60,
-        "ewr": {
-          "range": 30000
-        },
-        "jtac": null
-      },
-      {
-        "path": [
-          "Radar SAMs",
           "SA-6 Kub"
         ],
         "template": "DEPSA6",
@@ -843,9 +816,36 @@
           "max_drop_speed": 50
         },
         "logistics": null,
-        "cost": 80,
+        "cost": 70,
         "ewr": {
           "range": 40000
+        },
+        "jtac": null
+      },
+      {
+        "path": [
+          "Radar SAMs",
+          "SA-15B Tor M2"
+        ],
+        "template": "DEPSA15M2",
+        "persist": "Forever",
+        "limit": 4,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "SA15B Tor M2",
+            "weight": 1500,
+            "required": 3,
+            "pos_unit": null,
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          }
+        ],
+        "repair_crate": null,
+        "logistics": null,
+        "cost": 80,
+        "ewr": {
+          "range": 30000
         },
         "jtac": null
       },
@@ -1046,7 +1046,7 @@
             "name": "KS-19 Cannons",
             "weight": 1500,
             "required": 2,
-            "pos_unit": "Kub 2P25 ln",
+            "pos_unit": "KS-19",
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
           },
@@ -1054,7 +1054,7 @@
             "name": "KS-19 Track Radar",
             "weight": 1500,
             "required": 1,
-            "pos_unit": "Kub 1S91 str",
+            "pos_unit": "SON_9",
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
           }
@@ -1391,7 +1391,7 @@
         ],
         "template": "DEP1L13",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 6,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1420,7 +1420,7 @@
         ],
         "template": "DEPROLAND",
         "persist": "Forever",
-        "limit": 6,
+        "limit": 5,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1454,7 +1454,7 @@
             "name": "NASAMS Launchers",
             "weight": 1500,
             "required": 1,
-            "pos_unit": "NASAMS_LN_B",
+            "pos_unit": "NASAMS_LN_C",
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
           },
@@ -1475,14 +1475,7 @@
             "max_drop_speed": 50
           }
         ],
-        "repair_crate": {
-          "name": "NASAMS Repair/Rearm",
-          "weight": 1500,
-          "required": 1,
-          "pos_unit": null,
-          "max_drop_height_agl": 10,
-          "max_drop_speed": 50
-        },
+        "repair_crate": null,
         "logistics": null,
         "cost": 70,
         "ewr": {
@@ -1737,7 +1730,7 @@
             "name": "KS-19 Cannons",
             "weight": 1500,
             "required": 2,
-            "pos_unit": "Kub 2P25 ln",
+            "pos_unit": "KS-19",
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
           },
@@ -1745,7 +1738,7 @@
             "name": "KS-19 Track Radar",
             "weight": 1500,
             "required": 1,
-            "pos_unit": "Kub 1S91 str",
+            "pos_unit": "SON_9",
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
           }
@@ -2032,7 +2025,7 @@
         ],
         "template": "DEPFPS117",
         "persist": "Forever",
-        "limit": 10,
+        "limit": 6,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -2383,8 +2376,7 @@
       "EngagesWeapons",
       "TrackRadar",
       "SearchRadar",
-      "Launcher",
-      "Driveable"
+      "Launcher"
     ],
     "CHAP_TorM2": [
       "SAM",
@@ -2393,8 +2385,7 @@
       "EngagesWeapons",
       "TrackRadar",
       "SearchRadar",
-      "Launcher",
-      "Driveable"
+      "Launcher"
     ],	
     "M6 Linebacker": [
       "SAM",
@@ -2403,6 +2394,14 @@
       "IRGuided",
       "Launcher",
       "LightCannon",
+      "Driveable"
+    ],
+    "M48 Chaparral": [
+      "SAM",
+      "APC",
+      "SR",
+      "IRGuided",
+      "Launcher",
       "Driveable"
     ],
     "SA-11 Buk LN 9A310M1": [
@@ -2967,15 +2966,13 @@
       "MR",
       "RadarGuided",
       "EngagesWeapons",
-      "SearchRadar",
-      "Driveable"
+      "SearchRadar"
     ],
     "NASAMS_Command_Post": [
       "SAM",
       "MR",
       "RadarGuided",
-      "AuxRadarUnit",
-      "Driveable"
+      "AuxRadarUnit"
     ],
     "Patriot ln": [
       "SAM",

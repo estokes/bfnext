@@ -208,7 +208,7 @@
   },
   "default_lives": {
     "Standard": [
-      3,
+      4,
       21600
     ],
     "Logistics": [
@@ -216,7 +216,7 @@
       21600
     ],
     "Recon": [
-      6,
+      5,
       21600
     ],
     "Intercept": [

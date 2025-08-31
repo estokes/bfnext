@@ -1397,7 +1397,7 @@
           {
             "name": "1L13 Crate",
             "weight": 1500,
-            "required": 1,
+            "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 20,
             "max_drop_speed": 350
@@ -2031,7 +2031,7 @@
           {
             "name": "FPS-117 Crate",
             "weight": 1500,
-            "required": 1,
+            "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 10,
             "max_drop_speed": 50

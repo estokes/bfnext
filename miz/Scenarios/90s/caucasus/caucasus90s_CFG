@@ -1045,7 +1045,7 @@
           {
             "name": "KS-19 Cannons",
             "weight": 1500,
-            "required": 2,
+            "required": 3,
             "pos_unit": "KS-19",
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
@@ -1729,7 +1729,7 @@
           {
             "name": "KS-19 Cannons",
             "weight": 1500,
-            "required": 2,
+            "required": 3,
             "pos_unit": "KS-19",
             "max_drop_height_agl": 10,
             "max_drop_speed": 50

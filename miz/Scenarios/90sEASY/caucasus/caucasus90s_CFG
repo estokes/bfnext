@@ -154,7 +154,7 @@
   "crate_load_distance": 50,
   "crate_spread": 500,
   "artillery_mission_range": 70000,
-  "side_switches": 1,
+  "side_switches": 3,
   "max_crates": 6,
   "life_types": {
     "MB-339A": "Recon",
@@ -208,23 +208,23 @@
   },
   "default_lives": {
     "Standard": [
-      4,
+      8,
       21600
     ],
     "Logistics": [
-      5,
+      10,
       21600
     ],
     "Recon": [
-      5,
+      10,
       21600
     ],
     "Intercept": [
-      4,
+      8,
       21600
     ],
     "Attack": [
-      4,
+      8,
       21600
     ]
   },
@@ -1397,7 +1397,7 @@
           {
             "name": "1L13 Crate",
             "weight": 1500,
-            "required": 2,
+            "required": 1,
             "pos_unit": null,
             "max_drop_height_agl": 20,
             "max_drop_speed": 350
@@ -2031,7 +2031,7 @@
           {
             "name": "FPS-117 Crate",
             "weight": 1500,
-            "required": 2,
+            "required": 1,
             "pos_unit": null,
             "max_drop_height_agl": 10,
             "max_drop_speed": 50

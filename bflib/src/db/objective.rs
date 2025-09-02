@@ -488,26 +488,42 @@ impl Db {
         let location = {
             let mut points: SmallVec<[Vector2; 16]> = smallvec![];
             let core = spctx.get_template_ref(idx, GroupKind::Any, side, &spec.template)?;
-            let ammo = spctx.get_template_ref(idx, GroupKind::Any, side, &ammo_template)?;
-            let fuel = spctx.get_template_ref(idx, GroupKind::Any, side, &fuel_template)?;
-            let barracks = spctx.get_template_ref(idx, GroupKind::Any, side, &barracks_template)?;
-            for unit in core
-                .group
-                .units()?
-                .into_iter()
-                .chain(ammo.group.units()?.into_iter())
-                .chain(fuel.group.units()?.into_iter())
-                .chain(barracks.group.units()?.into_iter())
-            {
-                let unit = unit?;
-                points.push(unit.pos()?)
+            let ammo = ammo_template
+                .as_ref()
+                .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
+                .transpose()?;
+            let fuel = fuel_template
+                .as_ref()
+                .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
+                .transpose()?;
+            let barracks = barracks_template
+                .as_ref()
+                .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
+                .transpose()?;
+            macro_rules! acc_points {
+                ($group:expr) => {
+                    if let Some(g) = $group.as_ref() {
+                        for unit in g.group.units()? {
+                            let unit = unit?;
+                            points.push(unit.pos()?);
+                        }
+                    }
+                };
             }
+            acc_points!(Some(core));
+            acc_points!(ammo);
+            acc_points!(fuel);
+            acc_points!(barracks);
             let center = centroid2d(points);
             SpawnLoc::AtPosWithCenter { pos, center }
         };
+        let dep_name = spec
+            .path
+            .last()
+            .ok_or_else(|| anyhow!("deployable has no name"))?;
         let pad_template = self
             .ephemeral
-            .take_pad_template(side)
+            .take_pad_template(side, dep_name)
             .ok_or_else(|| anyhow!("not enough farp pads available to build this farp"))?;
         // move the pad to the new location
         spctx
@@ -518,30 +534,32 @@ impl Db {
         // get out of the way
         let mut groups: Set<GroupId> = Set::new();
         for name in [
-            &spec.template,
+            &Some(spec.template.clone()),
             &ammo_template,
             &fuel_template,
             &barracks_template,
         ] {
-            let gid = match self.add_and_queue_group(
-                spctx,
-                idx,
-                side,
-                location.clone(),
-                &name,
-                DeployKind::Objective { origin: oid },
-                BitFlags::empty(),
-                Some(now + Duration::seconds(60)),
-            ) {
-                Ok(gid) => gid,
-                Err(e) => {
-                    for gid in &groups {
-                        let _ = self.delete_group(gid);
+            if let Some(name) = name {
+                let gid = match self.add_and_queue_group(
+                    spctx,
+                    idx,
+                    side,
+                    location.clone(),
+                    &name,
+                    DeployKind::Objective { origin: oid },
+                    BitFlags::empty(),
+                    Some(now + Duration::seconds(60)),
+                ) {
+                    Ok(gid) => gid,
+                    Err(e) => {
+                        for gid in &groups {
+                            let _ = self.delete_group(gid);
+                        }
+                        return Err(e);
                     }
-                    return Err(e);
-                }
-            };
-            groups.insert_cow(gid);
+                };
+                groups.insert_cow(gid);
+            }
         }
         let name = {
             let get_utm_zone = || -> Result<String> {

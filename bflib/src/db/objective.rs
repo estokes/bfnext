@@ -28,7 +28,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use bfprotocols::{
-    cfg::{Deployable, DeployableLogistics, UnitTag, VictoryCondition},
+    cfg::{Deployable, DeployableLogistics, UnitTag, Vehicle, VictoryCondition},
     db::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
@@ -525,14 +525,30 @@ impl Db {
             .ephemeral
             .take_pad_template(side, dep_name)
             .ok_or_else(|| anyhow!("not enough farp pads available to build this farp"))?;
-        // move the pad to the new location
-        spctx
-            .move_farp_pad(idx, side, pad_template.as_str(), pos)
-            .context("moving farp pad")?;
         let oid = ObjectiveId::new();
+        let mut groups: Set<GroupId> = Set::new();
+        // if the pad template is a boat then add it to units/groups so that it
+        // will be handled properly when it is born
+        if let Ok(gifo) = spctx.get_template_ref(idx, GroupKind::Any, side, &pad_template)
+            && let Ok(units) = gifo.group.units()
+            && let Ok(unit) = units.first()
+            && let Ok(typ) = unit.typ()
+            && let Some(tags) = self.ephemeral.cfg.unit_classification.get(&Vehicle(typ))
+            && tags.contains(UnitTag::Boat)
+        {
+            let gid = self.add_group(
+                spctx,
+                idx,
+                side,
+                location.clone(),
+                &pad_template,
+                DeployKind::Objective { origin: oid },
+                BitFlags::empty(),
+            )?;
+            groups.insert_cow(gid);
+        }
         // delay the spawn of the other components so the unpacker can
         // get out of the way
-        let mut groups: Set<GroupId> = Set::new();
         for name in [
             &Some(spec.template.clone()),
             &ammo_template,
@@ -625,6 +641,10 @@ impl Db {
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.persisted.farps.insert_cow(oid);
+        // move the pad to the new location
+        spctx
+            .move_farp_pad(idx, side, pad_template.as_str(), pos)
+            .context("moving farp pad")?;
         let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
             .with_context(|| format_compact!("getting airbase {pad_template}"))?;
         airbase.set_coalition(side)?;

@@ -174,7 +174,7 @@ impl<'lua> SpawnCtx<'lua> {
                 .context("getting pad units")?
                 .get(1)
                 .context("getting pad unit")?;
-            //            pad_unit.set_pos(pos).context("setting pad pos")?;
+            pad_unit.set_pos(pos).context("setting pad pos")?;
             drop(pad_unit);
             pad
         };

@@ -51,22 +51,15 @@ use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
 use indexmap::IndexMap;
 use log::{info, warn};
 use mlua::{FromLua, IntoLua, Lua, Table, Value, prelude::LuaResult};
-use netidx_archive::logfile::AlreadyCompressed;
 use rand::{Rng, thread_rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
-use std::{collections::{hash_map::Entry, HashMap}, fmt, str::FromStr};
+use std::{collections::{hash_map::Entry}, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
     Group(GroupId),
     Slot(SlotId),
-}
-
-#[derive(Debug, Clone)]
-pub struct ALCM {
-    unit: SpawnedUnit,
-    ammo: i64,
 }
 
 impl FromStr for JtId {
@@ -243,7 +236,6 @@ pub struct Jtac {
     gid: JtId,
     side: Side,
     contacts: IndexMap<EnId, Contact>,
-    alcm: HashMap<UnitId, ALCM>,
     filter: BitFlags<UnitTag>,
     location: JtacLocation,
     priority: Vec<UnitTags>,
@@ -253,6 +245,7 @@ pub struct Jtac {
     code: u16,
     last_smoke: DateTime<Utc>,
     nearby_artillery: SmallVec<[GroupId; 8]>,
+    nearby_alcm: SmallVec<[GroupId; 8]>,
     menu_dirty: bool,
     air: bool,
 }
@@ -269,7 +262,6 @@ impl Jtac {
         Self {
             gid,
             side,
-            alcm: HashMap::new(),
             contacts: IndexMap::default(),
             filter: BitFlags::default(),
             priority,
@@ -280,6 +272,7 @@ impl Jtac {
             code: 1688,
             last_smoke: DateTime::<Utc>::default(),
             nearby_artillery: smallvec![],
+            nearby_alcm: smallvec![],
             menu_dirty: false,
             air,
         }
@@ -397,6 +390,16 @@ impl Jtac {
                 write!(msg, "{gid}")?;
             }
         }
+        write!(msg, "]\n")?;
+                write!(msg, "available ALCM: [")?;
+        let len = self.nearby_alcm.len();
+        for (i, gid) in self.nearby_alcm.iter().enumerate() {
+            if i < len - 1 {
+                write!(msg, "{gid},")?;
+            } else {
+                write!(msg, "{gid}")?;
+            }
+        }
         write!(msg, "]")?;
         Ok(msg)
     }
@@ -456,6 +459,8 @@ impl Jtac {
             Some(target) if target.id == id => {
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.nearby_alcm =
+                    db.alcm_near_point(self.side, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
                 Ok(false)
             }
@@ -519,6 +524,8 @@ impl Jtac {
                 });
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.nearby_alcm =
+                    db.alcm_near_point(self.side, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
@@ -707,6 +714,60 @@ impl Jtac {
         Ok(())
     }
 
+    pub fn alcm_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        gid: &GroupId,
+        n: u8,
+    ) -> Result<()> {
+        match self.target.as_mut() {
+            None => bail!("no target"),
+            Some(target) => {
+                let name = db.group(gid)?.name.clone();
+                let apos = db.group_center(gid)?;
+                let pos = Vector2::new(target.pos.x, target.pos.z);
+                let task = Task::FireAtPoint {
+                    point: LuaVec2(pos),
+                    radius: None,
+                    expend_qty: Some(n as i64),
+                    weapon_type: None,
+                    altitude: Some(0.),
+                    altitude_type: Some(AltType::RADIO),
+                };
+                let task = Task::Mission {
+                    airborne: Some(false),
+                    route: vec![MissionPoint {
+                        action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2(apos),
+                        alt: 0.,
+                        alt_typ: Some(AltType::RADIO),
+                        speed: 0.,
+                        speed_locked: None,
+                        eta: None,
+                        eta_locked: None,
+                        name: None,
+                        task: Box::new(task),
+                    }],
+                };
+                let group = Group::get_by_name(lua, &name)
+                    .with_context(|| format_compact!("getting group {}", name))?;
+                for unit in group.get_units()? {
+                    let unit = unit?;
+                    let _id = unit.object_id()?;
+                }
+                let con = group.get_controller().context("getting controller")?;
+                con.set_task(task)?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn relay_target(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
         match self.target.as_mut() {
             None => bail!("no target"),
@@ -876,6 +937,10 @@ impl Jtac {
     pub fn nearby_artillery(&self) -> &[GroupId] {
         &self.nearby_artillery
     }
+
+        pub fn nearby_alcm(&self) -> &[GroupId] {
+        &self.nearby_alcm
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -940,6 +1005,23 @@ impl Jtacs {
                 tracked: None,
             });
         jtac.artillery_mission(db, lua, adjustment, &shooter, n)
+    }
+
+    pub fn alcm_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        jtid: &JtId,
+        shooter: &GroupId,
+        n: u8,
+    ) -> Result<()> {
+        let jtac = self
+            .jtacs
+            .iter_mut()
+            .find_map(|(_, jtx)| jtx.get_mut(&jtid))
+            .ok_or_else(|| anyhow!("no such jtac"))?;
+
+        jtac.alcm_mission(db, lua, &shooter, n)
     }
 
     /// set part of the laser code, defined by the scale of the passed in number. For example,
@@ -1227,10 +1309,6 @@ impl Jtacs {
 
 
         for (unit, _) in db.instanced_units() {
-            
-            if unit.tags.contains(UnitTag::ALCM) && unit.side == jtac.side {
-                if jtac.alcm
-            };
 
             let id = EnId::Unit(unit.id);
             macro_rules! lost {

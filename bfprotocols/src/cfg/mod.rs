@@ -165,6 +165,7 @@ pub enum UnitTag {
     AWACS,
     Link16,
     Boat,
+    NavalSpawnPoint,
 }
 
 #[derive(

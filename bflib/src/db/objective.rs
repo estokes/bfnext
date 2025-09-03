@@ -536,6 +536,7 @@ impl Db {
             && let Some(tags) = self.ephemeral.cfg.unit_classification.get(&Vehicle(typ))
             && tags.contains(UnitTag::Boat)
         {
+            log::info!("adding naval spawn point {pad_template}");
             let gid = self.add_group(
                 spctx,
                 idx,
@@ -543,7 +544,7 @@ impl Db {
                 location.clone(),
                 &pad_template,
                 DeployKind::Objective { origin: oid },
-                BitFlags::empty(),
+                UnitTag::NavalSpawnPoint.into(),
             )?;
             groups.insert_cow(gid);
         }

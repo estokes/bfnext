@@ -679,7 +679,14 @@ impl Db {
         let mut gpos = compute_unit_positions(&spctx, idx, location.clone(), &template.group)?;
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
-        let group_name = String::from(format_compact!("{}-{}", template_name, gid));
+        // naval spawn points need to be pre created in the miz, so they must be
+        // spawned with the same name as the pre created group so that they move
+        // to their destination.
+        let group_name = if extra_tags.contains(UnitTag::NavalSpawnPoint) {
+            template_name.clone()
+        } else {
+            String::from(format_compact!("{}-{}", template_name, gid))
+        };
         let mut spawned = SpawnedGroup {
             id: gid,
             name: group_name.clone(),
@@ -730,7 +737,11 @@ impl Db {
                 .ok_or_else(|| anyhow!("unit type not classified {typ}"))?;
             let tags = UnitTags(tags.0 | extra_tags);
             let template_name = unit.name()?;
-            let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
+            let unit_name = if extra_tags.contains(UnitTag::NavalSpawnPoint) {
+                template_name.clone()
+            } else {
+                String::from(format_compact!("{}-{}", group_name, uid))
+            };
             let pos = match gpos.by_type.get_mut(&typ) {
                 None => gpos.positions.pop_front().unwrap(),
                 Some(positions) => positions.pop_front().unwrap(),

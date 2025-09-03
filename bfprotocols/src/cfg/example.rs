@@ -1079,6 +1079,7 @@ fn default_unit_classification() -> FxHashMap<Vehicle, UnitTags> {
             ("FARP Tent".into(), Logistics | Unarmed),
             ("Invisible FARP".into(), Logistics | Unarmed | Invincible),
             ("M-109".into(), Armor | Artillery | Driveable),
+            ("Tu-160".into(), Aircraft | ALCM),
             ("SAU Msta".into(), Armor | Artillery | SmallArms | Driveable),
             ("1L13 EWR".into(), EWR | Unarmed),
             ("FPS-117".into(), EWR | Unarmed),

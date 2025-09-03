@@ -455,13 +455,17 @@ impl Jtac {
         let id = *id;
         let pos = ct.pos;
         let prev_arty = self.nearby_artillery.clone();
+        let prev_alcm = self.nearby_alcm.clone();
         match &self.target {
             Some(target) if target.id == id => {
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.menu_dirty |= prev_arty != self.nearby_artillery;
+
                 self.nearby_alcm =
                     db.alcm_near_point(self.side, Vector2::new(pos.x, pos.z));
-                self.menu_dirty |= prev_arty != self.nearby_artillery;
+                self.menu_dirty |= prev_alcm != self.nearby_alcm;
+
                 Ok(false)
             }
             Some(_) | None => {
@@ -527,6 +531,7 @@ impl Jtac {
                 self.nearby_alcm =
                     db.alcm_near_point(self.side, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
+                self.menu_dirty |= prev_alcm != self.nearby_alcm;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }

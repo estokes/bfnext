@@ -109,7 +109,6 @@ fn do_pos_action(
         | ActionKind::LogisticsRepair(_)
         | ActionKind::Move(_)
         | ActionKind::TankerWaypoint
-        | ActionKind::CruiseMissile(_, _)
         | ActionKind::CruiseMissileWaypoint
         | ActionKind::AwacsWaypoint
         | ActionKind::FighersWaypoint
@@ -229,7 +228,6 @@ fn do_pos_group_action(
         ActionKind::Attackers(_)
         | ActionKind::Awacs(_)
         | ActionKind::Deployable(_)
-        | ActionKind::CruiseMissile(_, _)
         | ActionKind::CruiseMissileSpawn(_)
         | ActionKind::Drone(_)
         | ActionKind::Fighters(_)
@@ -304,7 +302,6 @@ fn do_objective_action(
         | ActionKind::AttackersWaypoint
         | ActionKind::Attackers(_)
         | ActionKind::Awacs(_)
-        | ActionKind::CruiseMissile(_, _)
         | ActionKind::CruiseMissileSpawn(_)
         | ActionKind::Deployable(_)
         | ActionKind::Drone(_)
@@ -537,7 +534,6 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             ActionKind::Attackers(_)
             | ActionKind::Awacs(_)
             | ActionKind::Deployable(_)
-            | ActionKind::CruiseMissile(_, _)
             | ActionKind::CruiseMissileSpawn(_)            
             | ActionKind::Drone(_)
             | ActionKind::Fighters(_)

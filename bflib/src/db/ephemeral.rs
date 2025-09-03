@@ -746,10 +746,6 @@ impl Ephemeral {
                         plane: AiPlaneCfg { template, .. },
                         ..
                     })
-                    | ActionKind::CruiseMissile(BomberCfg {
-                        plane: AiPlaneCfg { template, .. },
-                        ..
-                    },_)
                     | ActionKind::CruiseMissileSpawn(AiPlaneCfg { template, .. })
                     | ActionKind::Tanker(AiPlaneCfg { template, .. })
                     | ActionKind::Drone(DroneCfg {

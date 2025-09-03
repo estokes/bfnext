@@ -22,8 +22,8 @@ use chrono::{Duration, prelude::*};
 use compact_str::format_compact;
 use dcso3::{
     attribute::Attribute, centroid2d, change_heading, coalition::Side, controller::{
-        ActionTyp, AiOption, AlarmState, AltType, AttackParams, Command, GroundOption, MissionPoint, OrbitPattern, PointType, Task, TurnMethod, VehicleFormation, WeaponExpend
-    }, env::miz::MizIndex, group::Group, land::Land, net::Ucid, object::DcsObject, pointing_towards2, trigger::{MarkId, Modulation, Trigger}, world::World, LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3
+        ActionTyp, AiOption, AlarmState, AltType, Command, GroundOption, MissionPoint, OrbitPattern, PointType, Task, TurnMethod, VehicleFormation
+    }, env::miz::MizIndex, group::Group, land::Land, net::Ucid, pointing_towards2, trigger::{MarkId, Modulation, Trigger}, world::World, LuaVec2, LuaVec3, MizLua, String, Time, Vector2, Vector3
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
@@ -70,7 +70,6 @@ pub enum ActionArgs {
     Awacs(WithPos<AwacsCfg>),
     Bomber(WithJtac<BomberCfg>),
     CruiseMissileSpawn(WithPos<AiPlaneCfg>),
-    CruiseMissile(WithJtac<BomberCfg>, i64),
     Fighters(WithPos<AiPlaneCfg>),
     FightersWaypoint(WithPosAndGroup<()>),
     Attackers(WithPos<AiPlaneCfg>),
@@ -185,9 +184,6 @@ impl ActionArgs {
             ActionKind::Move(c) => Ok(Self::Move(pos_group(db, lua, side, c, s)?)),
             ActionKind::CruiseMissileSpawn(c) => {
                 Ok(Self::CruiseMissileSpawn(pos(db, lua, side, c, s)?))
-            }
-            ActionKind::CruiseMissile(c, q) => {
-                Ok(Self::CruiseMissile(jtac(c, s)?, q))
             }
             ActionKind::CruiseMissileWaypoint => Ok(Self::CruiseMissileWaypoint(pos_group(
                 db,
@@ -350,20 +346,6 @@ impl Db {
             ActionArgs::CruiseMissileWaypoint(args) => self
                 .move_cruise_missile(spctx, side, ucid.clone(), args)
                 .context("moving tanker")?,
-            ActionArgs::CruiseMissile(args, quantity) => self
-                .cruise_missile_attack(
-                    spctx,
-                    idx,
-                    jtacs,
-                    side,
-                    ucid.clone(),
-                    name,
-                    cmd.action,
-                    args,
-                    quantity,
-                    cost,
-                )
-                .context("starting cruise missile strike")?,
             ActionArgs::CruiseMissileSpawn(args) => self
                 .cruise_missile(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling cruise missile bomber")?,
@@ -1059,7 +1041,6 @@ impl Db {
         )?))
     }
 
-
     fn move_cruise_missile<'lua>(
         &mut self,
         spctx: &SpawnCtx<'lua>,
@@ -1076,135 +1057,6 @@ impl Db {
         self.set_ai_mission(spctx, gid, mission)
             .context("setting ai mission")?;
         Ok(Some(gid))
-    }
-
-    fn cruise_missile_attack<'lua>(
-        &mut self,
-        spctx: &SpawnCtx,
-        idx: &MizIndex,
-        jtacs: &Jtacs,
-        side: Side,
-        ucid: Option<Ucid>,
-        _name: String,
-        _action: Action,
-        args: WithJtac<BomberCfg>,
-        quantity: i64,
-        cost: u32,
-    ) -> Result<Option<GroupId>> {
-        let jt = jtacs.get(&args.jtac)?;
-        let tgt = jt
-            .target()
-            .as_ref()
-            .map(|t| Vector2::new(t.pos.x, t.pos.z))
-            .unwrap_or(jt.location().pos);
-        let targets = jtacs.contacts_near_point(side, tgt, 15_000.).enumerate();
-
-        let mut quantity = &args.cfg.power;
-
-        let aircraft = self.unit(
-            self.group()?
-                .units
-                .into_iter()
-                .next()
-                .ok_or(anyhow!("no unit!"))?,
-        )?;
-        let id = self
-            .ephemeral
-            .get_object_id_by_uid(&aircraft.id)
-            .ok_or(anyhow!("no object with id"))?;
-        let unit = dcso3::unit::Unit::get_instance(spctx.lua(), id).context("getting unit")?;
-
-        let ammo_state = unit
-            .get_ammo()?
-            .into_iter()
-            .next()
-            .ok_or(anyhow!("no weapon!"))??
-            .count()? as i64;
-
-        if ammo_state <= 0 {
-            unit.destroy()?;
-            bail!("{} out of ammo, RTBing.", &args.group)
-        };
-
-        if ammo_state < quantity {
-            quantity = ammo_state
-        };
-
-        let mut main_task = vec![];
-
-        let lcd = [
-            (4, WeaponExpend::Four),
-            (2, WeaponExpend::Two),
-            (1, WeaponExpend::One),
-        ];
-        for d in lcd {
-            if quantity == d.0 {
-                let attack_params = AttackParams {
-                    weapon_type: Some(2097152),
-                    expend: Some(d.1),
-                    direction: Some(0.),
-                    altitude: Some(8000.),
-                    attack_qty_limit: None,
-                    attack_qty: Some(d.0),
-                    group_attack: Some(false),
-                    altitude_enabled: Some(false),
-                    direction_enabled: Some(false),
-                    point: Some(LuaVec2::new(attack_pos.x, attack_pos.y)),
-                    x: Some(attack_pos.x),
-                    y: Some(attack_pos.y),
-                };
-
-                if let Some(ucid) = ucid.as_ref() {
-                    let player = self.player(ucid).ok_or(anyhow!("no player for {ucid}"))?;
-                    let cost = (cost as i32) * (quantity as i32 - 1);
-                    if player.points >= cost {
-                        self.adjust_points(ucid, -cost, &format!("cruise missile expenditure"))
-                    } else {
-                        bail!("not enough points to fulfill request")
-                    }
-                }
-
-                let task = Task::Bombing {
-                    point: LuaVec2::new(attack_pos.x, attack_pos.y),
-                    params: attack_params,
-                };
-
-                main_task.push(task);
-                break;
-            }
-        }
-
-        let pos = self
-            .unit(
-                self.group(&args.group)?
-                    .units
-                    .into_iter()
-                    .next()
-                    .ok_or(anyhow!("cant find unit"))?,
-            )?
-            .pos;
-        let spawn_pos = pos.clone();
-        let m = self.ai_loiter_point_mission(
-            side,
-            ucid,
-            WithPosAndGroup {
-                cfg: args.cfg,
-                pos: pos,
-                group: args.group,
-            },
-            OrbitPattern::Circle,
-            spawn_pos,
-            |k| match k {
-                ActionKind::CruiseMissileSpawn(_) => true,
-                _ => false,
-            },
-            move || Task::ComboTask(vec![]),
-            move || main_task.clone(),
-        )?;
-
-        self.set_ai_mission(spctx, args.group, m)?;
-
-        Ok(Some(args.group))
     }
 
     fn cruise_missile(
@@ -1770,7 +1622,6 @@ impl Db {
                                     | ActionKind::Move(_)
                                     | ActionKind::Deployable(_)
                                     | ActionKind::Paratrooper(_)
-                                    | ActionKind::CruiseMissile(_, _)
                                     | ActionKind::Bomber(_)
                                     | ActionKind::Nuke(_)
                                     | ActionKind::LogisticsRepair(_)
@@ -2316,21 +2167,6 @@ impl Db {
                                     | ActionKind::Nuke(_) => {
                                         bail!("should not be a group")
                                     }
-                    ActionKind::CruiseMissile(b, _) => {
-                        if let Some(target) = *destination {
-                            if true {
-                                destination.take();
-                                to_bomb.push((b.clone(), target, group.side));
-                            }
-                        }
-                        if destination.is_none() {
-                            if let Some(_) = *rtb {
-                                if true {
-                                    to_delete.push(*gid);
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }

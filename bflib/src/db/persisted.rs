@@ -39,7 +39,6 @@ pub struct Persisted {
     pub crates: SetM<GroupId>,
     pub troops: SetM<GroupId>,
     pub jtacs: SetM<GroupId>,
-    pub alcm: SetM<GroupId>,
     pub ewrs: SetS<GroupId>,
     #[serde(default)]
     pub actions: SetS<GroupId>,

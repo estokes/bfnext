@@ -397,6 +397,10 @@ impl MsgQ {
         self.0[2].push_back(Cmd::Send(Msg::SetMarkupEnd { id, pos }))
     }
 
+    pub fn len(&self) -> usize {
+        self.0.iter().fold(0, |acc, q| acc + q.len())
+    }
+
     pub fn process(&mut self, max_rate: usize, net: &Net, act: &Action) {
         for _ in 0..max_rate {
             let cmd = match self.0[0].pop_front() {

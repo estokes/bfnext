@@ -274,6 +274,10 @@ impl Ephemeral {
         }
     }
 
+    pub fn spawnq_len(&self) -> usize {
+        self.spawnq.len()
+    }
+
     pub fn process_spawn_queue(
         &mut self,
         perf: &mut PerfInner,

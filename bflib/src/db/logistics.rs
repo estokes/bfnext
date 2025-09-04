@@ -386,6 +386,7 @@ impl Db {
                 .for_each(|airbase| {
                     let airbase = airbase.context("getting airbase")?;
                     let name = airbase.as_object()?.get_name()?;
+                    log::info!("setting up airbase {name}");
                     if !airbase.is_exist()? {
                         return Ok(()); // can happen when farps get recycled
                     }
@@ -419,7 +420,10 @@ impl Db {
                             })?;
                             return Ok(());
                         }
-                        None => return Ok(())
+                        None => {
+                            log::info!("airbase {name} has no objective");
+                            return Ok(())
+                        }
                     };
                     match self.ephemeral.airbase_by_oid.entry(oid) {
                         Entry::Vacant(e) => {

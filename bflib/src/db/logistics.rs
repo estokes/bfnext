@@ -427,16 +427,6 @@ impl Db {
                             bail!("multiple airbases inside the trigger zone of {}", obj.name)
                         }
                     }
-                    let production = match self.ephemeral.production_by_side.get(&obj.owner) {
-                        Some(p) => p,
-                        None => return Ok(()),
-                    };
-                    map.for_each(|name, _| {
-                        if !production.equipment.contains_key(&name) {
-                            w.set_item(name, 0).context("zeroing item")?
-                        }
-                        Ok(())
-                    })?;
                     Ok(())
                 })
         };

@@ -425,6 +425,7 @@ impl Db {
                 obj.threat_pos3 = Vector3::new(pos.x, alt, pos.y);
                 if let ObjectiveKind::Farp {
                     spec: _,
+                    mobile: _,
                     pad_template,
                 } = &obj.kind
                 {

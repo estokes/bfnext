@@ -31,7 +31,8 @@ use crate::{
 use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
-        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg, DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition, WarehouseConfig
+        ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
+        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition, WarehouseConfig,
     },
     db::{
         group::{GroupId, UnitId},
@@ -66,7 +67,7 @@ use smallvec::{SmallVec, smallvec};
 use std::{
     cmp::max,
     collections::{BTreeMap, VecDeque, hash_map::Entry},
-    mem,
+    iter, mem,
     sync::Arc,
 };
 use tokio::sync::mpsc::UnboundedSender;
@@ -88,7 +89,7 @@ pub(super) struct DeployableIndex {
     pub(super) deployables_by_repair: FxHashMap<String, String>,
     pub(super) crates_by_name: FxHashMap<String, Crate>,
     pub(super) squads_by_name: FxHashMap<String, Troop>,
-    pub(super) pad_templates: FxHashSet<String>,
+    pub(super) pad_templates: FxHashMap<String, FxHashSet<String>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -213,9 +214,14 @@ impl Ephemeral {
         );
     }
 
-    pub fn update_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {
+    pub fn update_objective_markup(
+        &mut self,
+        persisted: &Persisted,
+        obj: &Objective,
+        moved: &[ObjectiveId],
+    ) {
         match self.objective_markup.entry(obj.id) {
-            Entry::Occupied(mut e) => e.get_mut().update(&mut self.msgs, obj),
+            Entry::Occupied(mut e) => e.get_mut().update(persisted, &mut self.msgs, obj, moved),
             Entry::Vacant(e) => {
                 e.insert(ObjectiveMarkup::new(
                     &self.cfg,
@@ -320,11 +326,13 @@ impl Ephemeral {
         Ok(())
     }
 
-    pub fn take_pad_template(&mut self, side: Side) -> Option<String> {
+    pub fn take_pad_template(&mut self, side: Side, name: &String) -> Option<String> {
         self.deployable_idx.get(&side).and_then(|idx| {
-            for pad in &idx.pad_templates {
-                if self.used_pad_templates.insert(pad.clone()) {
-                    return Some(pad.clone());
+            if let Some(templates) = idx.pad_templates.get(name) {
+                for pad in templates {
+                    if self.used_pad_templates.insert(pad.clone()) {
+                        return Some(pad.clone());
+                    }
                 }
             }
             None
@@ -450,14 +458,11 @@ impl Ephemeral {
             }) = &dep.logistics
             {
                 let mut names = FxHashSet::default();
-                for name in [
-                    &dep.template,
-                    ammo_template,
-                    fuel_template,
-                    barracks_template,
-                ]
-                .into_iter()
-                .chain(pad_templates.iter())
+                for name in iter::once(&dep.template)
+                    .chain(ammo_template.iter())
+                    .chain(fuel_template.iter())
+                    .chain(barracks_template.iter())
+                    .chain(pad_templates.iter())
                 {
                     miz.get_group_by_name(mizidx, GroupKind::Any, side, name)?
                         .ok_or_else(|| anyhow!("missing farp template {:?} {:?}", side, name))?;
@@ -468,7 +473,12 @@ impl Ephemeral {
                     }
                 }
                 for pad in pad_templates {
-                    if !idx.pad_templates.insert(pad.clone()) {
+                    if !idx
+                        .pad_templates
+                        .entry(name.clone())
+                        .or_default()
+                        .insert(pad.clone())
+                    {
                         bail!("{:?} has a duplicate pad template {pad}", dep)
                     }
                     if !global_pad_templates.insert(pad.clone()) {
@@ -691,7 +701,8 @@ impl Ephemeral {
             }
         };
         check_unit_classification()?;
-        if let Some(VictoryCondition::MapOwned { fraction }) = cfg.auto_reset.map(|vc| vc.condition) {
+        if let Some(VictoryCondition::MapOwned { fraction }) = cfg.auto_reset.map(|vc| vc.condition)
+        {
             if fraction > 1. || fraction < 0. {
                 bail!("auto_reset fraction must be between 0 and 1")
             }
@@ -879,16 +890,6 @@ impl Ephemeral {
         } else {
             let point = centroid2d(points.iter().map(|p| *p));
             template.group.set_pos(point)?;
-            /* 
-            let radius = points
-                .iter()
-                .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
-                .fold(0., |acc, d| if d > acc { d } else { acc });
-            let radius = radius.sqrt();
-            spctx.remove_junk(point, radius * 1.10).with_context(|| {
-                format_compact!("removing junk before spawn of {}", group.template_name)
-            })?;
-            */
             let spawned = spctx
                 .spawn(template)
                 .with_context(|| format_compact!("spawning template {}", group.template_name))?;

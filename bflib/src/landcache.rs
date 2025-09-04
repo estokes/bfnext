@@ -90,7 +90,7 @@ impl LandCache {
         let ans = match self.h.entry((t0, t1)) {
             Entry::Occupied(mut e) => {
                 let ent = e.get_mut();
-                if ent.visible || ent.hits < 20 {
+                if ent.visible || ent.hits < 10 {
                     self.stats.hits += 1;
                     ent.hits += 1;
                     Ok(ent.visible)

@@ -733,10 +733,10 @@ impl Jtac {
                     let ammo = match first {
                         Ok(ammo) => ammo.count()?,
                         Err(e) =>                            
-                            bail!{e},
+                            bail!{"ALCM Abort: {gid} is out of missiles"},
                     };
                     if ammo < n as u32 {                    
-                        bail!("ALCM group {gid} has only {ammo} missiles remaining, requested {n}");
+                        bail!("ALCM Abort: {gid} has only {ammo} missiles remaining, cannot launch {n}.");
                     }
                 }
 

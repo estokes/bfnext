@@ -1812,7 +1812,7 @@ impl Default for Cfg {
             crate_load_distance: 50,
             crate_spread: 250,
             artillery_mission_range: 15000,
-            alcm_mission_range: 400000,
+            alcm_mission_range: 600000,
             lock_sides: true,
             side_switches: Some(1),
             max_crates: Some(4),

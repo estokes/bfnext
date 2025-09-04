@@ -15,8 +15,8 @@ for more details.
 */
 
 use crate::{
-    db::{Db, JtDesc, group::SpawnedUnit, player::InstancedPlayer},
-    landcache::LandCache,
+    db::{group::SpawnedUnit, player::InstancedPlayer, Db, JtDesc},
+    landcache::LandCache, msgq::MsgQ,
 };
 use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
@@ -31,8 +31,8 @@ use chrono::{Duration, prelude::*};
 use compact_str::{CompactString, format_compact};
 use dcso3::{
     coalition::Side, controller::{
-        ActionTyp, AltType, AttackParams, MissionPoint, PointType, Task, TurnMethod, VehicleFormation, WeaponExpend
-    }, cvt_err, err, group::Group, land::Land, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, radians_to_degrees, simple_enum, spot::{ClassSpot, Spot}, trigger::{MarkId, SmokeColor, Trigger}, unit::{ClassUnit, Unit}, weapon::Weapon, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3
+        ActionTyp, AltType, AttackParams, MissionPoint, OrbitPattern, PointType, Task, TurnMethod, VehicleFormation, WeaponExpend
+    }, cvt_err, err, group::Group, land::Land, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, radians_to_degrees, simple_enum, spot::{ClassSpot, Spot}, trigger::{MarkId, SmokeColor, Trigger}, unit::{Ammo, ClassUnit, Unit}, weapon::Weapon, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3
 };
 use enumflags2::BitFlags;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -720,12 +720,31 @@ impl Jtac {
                 let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
                 let pos = Vector2::new(target.pos.x, target.pos.z);
+                let expend = match n {
+                    1 => WeaponExpend::One,
+                    2 => WeaponExpend::Two,
+                    4 => WeaponExpend::Four,
+                    12 => WeaponExpend::All,
+                    _ => bail!("invalid expend {n}"),
+                };
+
+                for i in db.group(gid)?.units.into_iter() {
+                    let first = Unit::get_by_name(lua, &db.unit(i)?.name)?.get_ammo()?.first();
+                    let ammo = match first {
+                        Ok(ammo) => ammo.count()?,
+                        Err(e) =>                            
+                            bail!{e},
+                    };
+                    if ammo < n as u32 {                    
+                        bail!("ALCM group {gid} has only {ammo} missiles remaining, requested {n}");
+                    }
+                }
 
                 let attack_params = AttackParams {
                     altitude: Some(9000.),
-                    attack_qty: Some(n as i64),
+                    attack_qty: Some(1),
                     direction: None,
-                    expend: Some(WeaponExpend::Four),
+                    expend: Some(expend),
                     group_attack: Some(false),
                     weapon_type: Some(2097152),
                     attack_qty_limit: None,
@@ -746,7 +765,7 @@ impl Jtac {
                         helipad: None,
                         time_re_fu_ar: None,
                         link_unit: None,
-                        pos: LuaVec2(pos),
+                        pos: LuaVec2(apos),
                         alt: 9000.,
                         alt_typ: Some(AltType::BARO),
                         speed: 1000.,
@@ -755,6 +774,28 @@ impl Jtac {
                         eta_locked: None,
                         name: None,
                         task: Box::new(task),
+                    }, MissionPoint {
+                        action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2(apos), // Same position as first point
+                        alt: 9000.,
+                        alt_typ: Some(AltType::BARO),
+                        speed: 1000.,
+                        speed_locked: None,
+                        eta: None,
+                        eta_locked: None,
+                        name: None,
+                        task: Box::new(Task::Orbit {
+                            pattern: OrbitPattern::Circle,
+                            speed: Some(750.0),
+                            altitude: Some(9000.0),
+                            point2: Some(LuaVec2(apos)),
+                            point: Some(LuaVec2(apos)),
+                        }),
                     }],
                 };
                 let group = Group::get_by_name(lua, &name)

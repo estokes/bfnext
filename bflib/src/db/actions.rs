@@ -14,7 +14,10 @@ use bfprotocols::{
         Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg,
         DeployableKind, DroneCfg, LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
-    db::{group::GroupId, objective::ObjectiveId},
+    db::{
+        group::GroupId,
+        objective::{ObjectiveId, ObjectiveKind},
+    },
     perf::PerfInner,
     stats::Stat,
 };
@@ -291,6 +294,13 @@ impl Db {
                     let group = group!(self, a.group)?;
                     let step = match &group.origin {
                         DeployKind::Deployed { .. } => a.cfg.deployable,
+                        DeployKind::Objective { origin } => {
+                            let obj = objective!(self, origin)?;
+                            match obj.kind {
+                                ObjectiveKind::Farp { mobile: true, .. } => a.cfg.deployable,
+                                _ => bail!("can't move this unit type"),
+                            }
+                        }
                         DeployKind::Troop { .. } => a.cfg.troop,
                         _ => bail!("can't move this unit type"),
                     };

@@ -11,8 +11,8 @@ use crate::{
 use anyhow::{Context, Ok, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
-        Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg, DroneCfg,
-        LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
+        Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg,
+        DeployableKind, DroneCfg, LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
     db::{group::GroupId, objective::ObjectiveId},
     perf::PerfInner,
@@ -1800,29 +1800,42 @@ impl Db {
             offset_direction: Vector2::new(1., 0.),
             group_heading: 0.,
         };
-        let origin = DeployKind::Deployed {
-            player: ucid,
-            moved_by: None,
-            spec: spec.clone(),
-            cost_fraction: 1.,
-            origin: None,
-        };
-        let gid = self.add_and_queue_group(
-            &spctx,
-            idx,
-            side,
-            spawnloc,
-            &*spec.template,
-            origin,
-            BitFlags::empty(),
-            None,
-        )?;
-        self.ephemeral.stat(Stat::DeployGroup {
-            gid,
-            deployable: dep,
-            by: ucid,
-        });
-        Ok(())
+        match &spec.kind {
+            DeployableKind::Objective(parts) => {
+                let oid = self.add_farp(lua, &spctx, idx, side, pos, &spec, parts)?;
+                self.ephemeral.stat(Stat::DeployFarp {
+                    by: ucid,
+                    oid,
+                    deployable: spec.path.last().unwrap().clone(),
+                });
+                Ok(())
+            }
+            DeployableKind::Group { template } => {
+                let origin = DeployKind::Deployed {
+                    player: ucid,
+                    moved_by: None,
+                    spec: spec.clone(),
+                    cost_fraction: 1.,
+                    origin: None,
+                };
+                let gid = self.add_and_queue_group(
+                    &spctx,
+                    idx,
+                    side,
+                    spawnloc,
+                    template,
+                    origin,
+                    BitFlags::empty(),
+                    None,
+                )?;
+                self.ephemeral.stat(Stat::DeployGroup {
+                    gid,
+                    deployable: dep,
+                    by: ucid,
+                });
+                Ok(())
+            }
+        }
     }
 
     fn paratroops_to_point(

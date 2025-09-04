@@ -24,7 +24,7 @@ use crate::{
 };
 use anyhow::{Context as AnyhowContext, Result, anyhow, bail};
 use bfprotocols::{
-    cfg::Cfg,
+    cfg::{Cfg, DeployableKind},
     db::{group::GroupId, objective::ObjectiveId},
     perf::Perf,
     stats::Stat,
@@ -457,13 +457,13 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: Option<PlayerId>, key: String
                         .find(|dp| dp.path.ends_with(&[String::from(name)]))
                         .ok_or_else(|| anyhow!("no deployable called {name} on {side}"))?
                         .clone();
-                    match &spec.logistics {
-                        Some(parts) => {
+                    match &spec.kind {
+                        DeployableKind::Objective(parts) => {
                             ctx.db
                                 .add_farp(lua, &spctx, &ctx.idx, side, pos, &spec, parts)
                                 .context("adding farp")?;
                         }
-                        None => {
+                        DeployableKind::Group { template } => {
                             let origin = DeployKind::Deployed {
                                 player: ucid,
                                 moved_by: None,
@@ -477,7 +477,7 @@ fn admin_spawn(ctx: &mut Context, lua: MizLua, id: Option<PlayerId>, key: String
                                     &ctx.idx,
                                     side,
                                     loc,
-                                    &spec.template,
+                                    &template,
                                     origin,
                                     BitFlags::empty(),
                                     None,

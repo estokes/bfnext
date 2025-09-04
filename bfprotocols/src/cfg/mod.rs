@@ -311,8 +311,10 @@ pub struct Crate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DeployableLogistics {
+pub struct DeployableObjective {
     pub pad_templates: Vec<String>,
+    #[serde(default)]
+    pub defenses_template: Option<String>,
     #[serde(default)]
     pub ammo_template: Option<String>,
     #[serde(default)]
@@ -341,12 +343,34 @@ pub struct DeployableJtac {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DeployableKind {
+    Group { template: String },
+    Objective(DeployableObjective),
+}
+
+impl DeployableKind {
+    pub fn is_group(&self) -> bool {
+        match self {
+            Self::Group { .. } => true,
+            Self::Objective(_) => false,
+        }
+    }
+
+    pub fn is_objective(&self) -> bool {
+        match self {
+            Self::Objective(_) => true,
+            Self::Group { .. } => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Deployable {
     /// The full menu path of the deployable in the menu
     pub path: Vec<String>,
-    /// The template used to spawn the deployable
-    pub template: String,
+    /// The type of deployable
+    pub kind: DeployableKind,
     /// How the deployable should persist across restarts
     pub persist: PersistTyp,
     /// How many instances are allowed at the same time
@@ -361,8 +385,6 @@ pub struct Deployable {
     /// How much does the damaged deployable cost to repair
     #[serde(default)]
     pub repair_cost: u32,
-    /// Does this deployable provide logistics services
-    pub logistics: Option<DeployableLogistics>,
     /// How many points does this deployable cost (if any)
     #[serde(default)]
     pub cost: u32,

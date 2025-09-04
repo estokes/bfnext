@@ -28,7 +28,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use bfprotocols::{
-    cfg::{Deployable, DeployableLogistics, UnitTag, Vehicle, VictoryCondition},
+    cfg::{Deployable, DeployableObjective, UnitTag, Vehicle, VictoryCondition},
     db::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
@@ -472,19 +472,23 @@ impl Db {
         side: Side,
         pos: Vector2,
         spec: &Deployable,
-        parts: &DeployableLogistics,
+        parts: &DeployableObjective,
     ) -> Result<ObjectiveId> {
         let now = Utc::now();
         let land = Land::singleton(spctx.lua())?;
-        let DeployableLogistics {
+        let DeployableObjective {
             pad_templates: _,
+            defenses_template,
             ammo_template,
             fuel_template,
             barracks_template,
         } = parts;
         let location = {
             let mut points: SmallVec<[Vector2; 16]> = smallvec![];
-            let core = spctx.get_template_ref(idx, GroupKind::Any, side, &spec.template)?;
+            let defenses = defenses_template
+                .as_ref()
+                .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
+                .transpose()?;
             let ammo = ammo_template
                 .as_ref()
                 .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
@@ -507,7 +511,7 @@ impl Db {
                     }
                 };
             }
-            acc_points!(Some(core));
+            acc_points!(defenses);
             acc_points!(ammo);
             acc_points!(fuel);
             acc_points!(barracks);
@@ -548,7 +552,7 @@ impl Db {
         // delay the spawn of the other components so the unpacker can
         // get out of the way
         for name in [
-            &Some(spec.template.clone()),
+            &defenses_template,
             &ammo_template,
             &fuel_template,
             &barracks_template,

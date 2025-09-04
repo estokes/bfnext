@@ -32,7 +32,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
         ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
-        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition, WarehouseConfig,
+        DeployableKind, DeployableObjective, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition,
+        WarehouseConfig,
     },
     db::{
         group::{GroupId, UnitId},
@@ -67,7 +68,7 @@ use smallvec::{SmallVec, smallvec};
 use std::{
     cmp::max,
     collections::{BTreeMap, VecDeque, hash_map::Entry},
-    iter, mem,
+    mem,
     sync::Arc,
 };
 use tokio::sync::mpsc::UnboundedSender;
@@ -398,8 +399,10 @@ impl Ephemeral {
             };
         }
         for dep in deployables.iter() {
-            miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
-                .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
+            if let DeployableKind::Group { template } = &dep.kind {
+                miz.get_group_by_name(mizidx, GroupKind::Any, side, template)?
+                    .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
+            }
             if !points && dep.cost > 0 {
                 bail!(
                     "the points system is disabled, but {:?} costs points",
@@ -455,15 +458,17 @@ impl Ephemeral {
                     Entry::Vacant(e) => e.insert(c.clone()),
                 };
             }
-            if let Some(DeployableLogistics {
+            if let DeployableKind::Objective(DeployableObjective {
                 pad_templates,
+                defenses_template,
                 ammo_template,
                 fuel_template,
                 barracks_template,
-            }) = &dep.logistics
+            }) = &dep.kind
             {
                 let mut names = FxHashSet::default();
-                for name in iter::once(&dep.template)
+                for name in defenses_template
+                    .iter()
                     .chain(ammo_template.iter())
                     .chain(fuel_template.iter())
                     .chain(barracks_template.iter())

@@ -284,6 +284,21 @@ impl Db {
                     .ok_or_else(|| anyhow!("missing deployable"))?;
                 dp.cost + cmd.action.cost
             }
+            ActionKind::Move(_) => match &cmd.args {
+                ActionArgs::Move(a) => {
+                    let pos = self.group_center(&a.group)?;
+                    let dist = na::distance(&pos.into(), &a.pos.into());
+                    let group = group!(self, a.group)?;
+                    let step = match &group.origin {
+                        DeployKind::Deployed { .. } => a.cfg.deployable,
+                        DeployKind::Troop { .. } => a.cfg.troop,
+                        _ => bail!("can't move this unit type"),
+                    };
+                    let steps = dist / (step as f64);
+                    steps as u32 * cmd.action.cost
+                }
+                _ => cmd.action.cost,
+            },
             _ => cmd.action.cost,
         };
         if let Some(ucid) = ucid.as_ref() {
@@ -828,21 +843,6 @@ impl Db {
         let group = group_mut!(self, args.group)?;
         if group.side != side {
             bail!("can't move an enemy unit")
-        }
-        let max_dist = match &group.origin {
-            DeployKind::Deployed { .. } => args.cfg.deployable,
-            DeployKind::Troop { .. } => args.cfg.troop,
-            DeployKind::Action { .. }
-            | DeployKind::Crate { .. }
-            | DeployKind::Objective { .. }
-            | DeployKind::ObjectiveDeprecated => 0,
-        };
-        if max_dist == 0 {
-            bail!("you can't move this type of unit")
-        }
-        let max_dist2 = (max_dist as f64).powi(2);
-        if na::distance_squared(&pos.into(), &args.pos.into()) > max_dist2 {
-            bail!("You can move this type of unit at most {max_dist}M at a time")
         }
         self.ephemeral
             .groups_with_move_missions

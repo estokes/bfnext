@@ -593,9 +593,9 @@ pub struct NukeCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoveCfg {
-    /// max distance for troop moves in meters
+    /// max distance for troop moves in meters per unit cost
     pub troop: u32,
-    /// max distance for deployable moves in meters
+    /// max distance for deployable moves in meters per unit cost
     pub deployable: u32,
 }
 

@@ -240,7 +240,8 @@ impl Db {
                 Ok(obj) => {
                     if group.side == obj.owner {
                         let msg = format_compact!(
-                            "objective group {} of class {:?}",
+                            "objective group id {} name {} of class {:?}",
+                            group.id,
                             group.name,
                             group.class
                         );

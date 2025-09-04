@@ -520,7 +520,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             ActionKind::Bomber(_) | ActionKind::LogisticsTransfer(_) => (),
             ActionKind::AttackersWaypoint
             | ActionKind::AwacsWaypoint
-            | ActionKind::CruiseMissileWaypoint            
+            | ActionKind::CruiseMissileWaypoint
             | ActionKind::FighersWaypoint
             | ActionKind::TankerWaypoint
             | ActionKind::DroneWaypoint => {
@@ -534,7 +534,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             ActionKind::Attackers(_)
             | ActionKind::Awacs(_)
             | ActionKind::Deployable(_)
-            | ActionKind::CruiseMissileSpawn(_)            
+            | ActionKind::CruiseMissileSpawn(_)
             | ActionKind::Drone(_)
             | ActionKind::Fighters(_)
             | ActionKind::Tanker(_)

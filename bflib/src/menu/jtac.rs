@@ -271,7 +271,6 @@ fn jtac_relay_target(lua: MizLua, arg: ArgTriple<JtId, DbGid, Ucid>) -> Result<(
     Ok(())
 }
 
-
 fn jtac_clear_filter(lua: MizLua, arg: ArgTuple<Ucid, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let jtac = get_jtac_mut(&mut ctx.jtac, &arg.snd)?;
@@ -499,7 +498,6 @@ fn add_alcm_menu_for_jtac(
     }
     Ok(())
 }
-
 
 pub fn call_bomber(lua: MizLua, arg: ArgTriple<JtId, Ucid, String>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };

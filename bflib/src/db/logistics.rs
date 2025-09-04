@@ -385,6 +385,7 @@ impl Db {
                 .context("getting airbases")?
                 .for_each(|airbase| {
                     let airbase = airbase.context("getting airbase")?;
+                    let name = airbase.as_object()?.get_name()?;
                     if !airbase.is_exist()? {
                         return Ok(()); // can happen when farps get recycled
                     }
@@ -408,7 +409,7 @@ impl Db {
                                 .context("setting airbase owner")?;
                             (*oid, obj)
                         }
-                        None => {
+                        None if !self.ephemeral.global_pad_templates.contains(&name) => {
                             airbase
                                 .set_coalition(Side::Neutral)
                                 .context("setting airbase owner neutral")?;
@@ -418,6 +419,7 @@ impl Db {
                             })?;
                             return Ok(());
                         }
+                        None => return Ok(())
                     };
                     match self.ephemeral.airbase_by_oid.entry(oid) {
                         Entry::Vacant(e) => {

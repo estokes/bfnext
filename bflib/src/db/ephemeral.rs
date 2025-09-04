@@ -124,6 +124,7 @@ pub struct Ephemeral {
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
     pub(super) slot_info: FxHashMap<SlotId, SlotInfo>,
     used_pad_templates: FxHashSet<String>,
+    pub(super) global_pad_templates: FxHashSet<String>,
     force_to_spectators: BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>>,
     pub(super) units_able_to_move: IndexSet<UnitId, FxBuildHasher>,
     pub(super) groups_with_move_missions: FxHashMap<GroupId, Vector2>,
@@ -162,6 +163,7 @@ impl Default for Ephemeral {
             airbase_by_oid: FxHashMap::default(),
             slot_info: FxHashMap::default(),
             used_pad_templates: FxHashSet::default(),
+            global_pad_templates: FxHashSet::default(),
             force_to_spectators: BTreeMap::default(),
             units_able_to_move: IndexSet::default(),
             groups_with_move_missions: FxHashMap::default(),
@@ -369,7 +371,6 @@ impl Ephemeral {
 
     fn index_deployables_for_side(
         &mut self,
-        global_pad_templates: &mut FxHashSet<String>,
         miz: &Miz,
         mizidx: &MizIndex,
         side: Side,
@@ -481,7 +482,7 @@ impl Ephemeral {
                     {
                         bail!("{:?} has a duplicate pad template {pad}", dep)
                     }
-                    if !global_pad_templates.insert(pad.clone()) {
+                    if !self.global_pad_templates.insert(pad.clone()) {
                         bail!(
                             "pad template names must be globally unique {pad} is used more than once"
                         )
@@ -711,12 +712,10 @@ impl Ephemeral {
             miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?
                 .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
         }
-        let mut global_pad_templates = FxHashSet::default();
         let points = cfg.points.is_some();
         for (side, deployables) in cfg.deployables.iter() {
             let repair_crate = maybe!(cfg.repair_crate, side, "side repair crate")?.clone();
             self.index_deployables_for_side(
-                &mut global_pad_templates,
                 miz,
                 mizidx,
                 *side,

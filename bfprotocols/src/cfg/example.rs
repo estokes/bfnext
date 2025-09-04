@@ -178,6 +178,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: Some(DeployableEwr { range: 30000 }),
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA 11 Buk".into()],
@@ -225,6 +227,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: Some(DeployableEwr { range: 60000 }),
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA15 Tor".into()],
@@ -247,6 +251,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: Some(DeployableEwr { range: 20000 }),
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "SA8 Osa".into()],
@@ -269,6 +275,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["AAA".into(), "ZU23 Emplacement".into()],
@@ -291,6 +299,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Shilka".into()],
@@ -313,6 +323,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Tunguska".into()],
@@ -335,6 +347,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "SA13 Strela".into()],
@@ -357,6 +371,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "SPH 2S19 Msta 152MM".into()],
@@ -379,6 +395,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "T72".into()],
@@ -404,6 +422,8 @@ fn default_red_deployables() -> Vec<Deployable> {
                 range: 8000,
                 nolos: false,
             }),
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "BMP3".into()],
@@ -429,6 +449,8 @@ fn default_red_deployables() -> Vec<Deployable> {
                 range: 8000,
                 nolos: false,
             }),
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "Ammo Truck".into()],
@@ -451,6 +473,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["EWRs".into(), "1L13".into()],
@@ -473,6 +497,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: Some(DeployableEwr { range: 500000 }),
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -504,6 +530,8 @@ fn default_red_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
     ]
 }
@@ -531,6 +559,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: Some(DeployableEwr { range: 20000 }),
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Radar SAMs".into(), "Hawk System".into()],
@@ -586,6 +616,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: Some(DeployableEwr { range: 60000 }),
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Avenger".into()],
@@ -608,6 +640,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["IR SAMs".into(), "Linebacker".into()],
@@ -630,6 +664,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Flakpanzergepard".into()],
@@ -652,6 +688,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["AAA".into(), "Vulkan".into()],
@@ -674,6 +712,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "Firtina 155MM".into()],
@@ -696,6 +736,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "M2A2 Bradley".into()],
@@ -721,6 +763,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 range: 8000,
                 nolos: false,
             }),
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "2A6M Leopard".into()],
@@ -746,6 +790,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
                 range: 8000,
                 nolos: false,
             }),
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["Ground Units".into(), "Ammo Truck".into()],
@@ -768,6 +814,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["EWRs".into(), "AN/FPS-117".into()],
@@ -790,6 +838,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: Some(DeployableEwr { range: 500000 }),
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
         Deployable {
             path: vec!["FARP".into()],
@@ -821,6 +871,8 @@ fn default_blue_deployables() -> Vec<Deployable> {
             repair_cost: 0,
             ewr: None,
             jtac: None,
+            deprecated_logistics: None,
+            deprecated_template: None,
         },
     ]
 }

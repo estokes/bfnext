@@ -364,12 +364,19 @@ impl DeployableKind {
     }
 }
 
+fn default_deployable_kind() -> DeployableKind {
+    DeployableKind::Group {
+        template: "".into(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Deployable {
     /// The full menu path of the deployable in the menu
     pub path: Vec<String>,
     /// The type of deployable
+    #[serde(default = "default_deployable_kind")]
     pub kind: DeployableKind,
     /// How the deployable should persist across restarts
     pub persist: PersistTyp,
@@ -392,6 +399,12 @@ pub struct Deployable {
     pub ewr: Option<DeployableEwr>,
     /// Is this unit a jtac
     pub jtac: Option<DeployableJtac>,
+    #[serde(default)]
+    #[serde(rename = "template")]
+    pub deprecated_template: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "logistics")]
+    pub deprecated_logistics: Option<DeployableObjective>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -857,6 +870,23 @@ impl Cfg {
             .map_err(|e| anyhow!("failed to decode cfg file {:?}, {:?}", path, e))?;
         for (_, actions) in &mut cfg.actions {
             actions.sort_by(|name0, _, name1, _| name0.cmp(name1));
+        }
+        // translate deployables to the new format
+        let mut has_deprecated = false;
+        for (_, deps) in cfg.deployables.iter_mut() {
+            for dep in deps.iter_mut() {
+                if let Some(mut parts) = dep.deprecated_logistics.take() {
+                    parts.defenses_template = dep.deprecated_template.take();
+                    dep.kind = DeployableKind::Objective(parts);
+                    has_deprecated = true;
+                } else if let Some(template) = dep.deprecated_template.take() {
+                    dep.kind = DeployableKind::Group { template };
+                    has_deprecated = true;
+                }
+            }
+        }
+        if has_deprecated {
+            fs::write(path, serde_json::to_string_pretty(&cfg)?)?
         }
         Ok(cfg)
     }

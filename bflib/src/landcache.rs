@@ -1,8 +1,8 @@
 use anyhow::Result;
 use core::fmt;
-use dcso3::{land::Land, LuaVec3, Vector3};
+use dcso3::{LuaVec3, Vector3, land::Land};
 use fxhash::FxBuildHasher;
-use indexmap::{map::Entry, IndexMap};
+use indexmap::{IndexMap, map::Entry};
 use std::{cmp::max, hash::Hash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -89,10 +89,17 @@ impl LandCache {
         let t1 = Tile::new(d, p1);
         let ans = match self.h.entry((t0, t1)) {
             Entry::Occupied(mut e) => {
-                self.stats.hits += 1;
                 let ent = e.get_mut();
-                ent.hits = u32::saturating_add(ent.hits, 1);
-                Ok(ent.visible)
+                if ent.visible || ent.hits < 20 {
+                    self.stats.hits += 1;
+                    ent.hits += 1;
+                    Ok(ent.visible)
+                } else {
+                    let visible = land.is_visible(LuaVec3(p0), LuaVec3(p1))?;
+                    ent.visible |= visible;
+                    ent.hits = 0;
+                    Ok(visible)
+                }
             }
             Entry::Vacant(e) => {
                 let visible = land.is_visible(LuaVec3(p0), LuaVec3(p1))?;

@@ -166,6 +166,7 @@ pub enum UnitTag {
     Link16,
     Boat,
     ALCM,
+    NavalSpawnPoint,
 }
 
 #[derive(
@@ -313,9 +314,12 @@ pub struct Crate {
 #[serde(deny_unknown_fields)]
 pub struct DeployableLogistics {
     pub pad_templates: Vec<String>,
-    pub ammo_template: String,
-    pub fuel_template: String,
-    pub barracks_template: String,
+    #[serde(default)]
+    pub ammo_template: Option<String>,
+    #[serde(default)]
+    pub fuel_template: Option<String>,
+    #[serde(default)]
+    pub barracks_template: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

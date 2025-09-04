@@ -704,7 +704,7 @@ fn run_jtac_command(
         } else {
             error!("arty expected <id> and <n>")
         }
-    }  else if let Some(alcm) = cmd.strip_prefix("alcm ") {
+    } else if let Some(alcm) = cmd.strip_prefix("alcm ") {
         if let Some((aid, n)) = alcm.split_once(" ") {
             let aids: SmallVec<[GroupId; 8]> = match aid.parse::<GroupId>() {
                 Ok(id) => smallvec![id],

@@ -214,9 +214,14 @@ impl Ephemeral {
         );
     }
 
-    pub fn update_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {
+    pub fn update_objective_markup(
+        &mut self,
+        persisted: &Persisted,
+        obj: &Objective,
+        moved: &[ObjectiveId],
+    ) {
         match self.objective_markup.entry(obj.id) {
-            Entry::Occupied(mut e) => e.get_mut().update(&mut self.msgs, obj),
+            Entry::Occupied(mut e) => e.get_mut().update(persisted, &mut self.msgs, obj, moved),
             Entry::Vacant(e) => {
                 e.insert(ObjectiveMarkup::new(
                     &self.cfg,

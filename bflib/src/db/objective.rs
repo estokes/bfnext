@@ -273,10 +273,6 @@ impl Zone {
 pub struct Objective {
     pub id: ObjectiveId,
     pub name: String,
-    // deprecated, remove after transition
-    //pub(super) pos: Option<Vector2>,
-    // deprecated, remove after transition
-    //pub(super) radius: Option<f64>,
     pub owner: Side,
     pub(super) kind: ObjectiveKind,
     pub(super) groups: MapS<Side, Set<GroupId>>,
@@ -454,6 +450,7 @@ impl Db {
             .retain(|_, si| &si.objective != oid);
         if let ObjectiveKind::Farp {
             spec: _,
+            mobile: _,
             pad_template,
         } = obj.kind
         {
@@ -606,6 +603,7 @@ impl Db {
             groups: MapS::from_iter([(side, groups)]),
             kind: ObjectiveKind::Farp {
                 spec: spec.clone(),
+                mobile: true,
                 pad_template: pad_template.clone(),
             },
             zone: Zone::Circle { pos, radius: 2000. },
@@ -1244,8 +1242,33 @@ impl Db {
     }
 
     pub fn update_objectives_markup(&mut self) -> Result<()> {
+        let mut pos_update: SmallVec<[(ObjectiveId, String); 8]> = smallvec![];
+        for (id, obj) in &self.persisted.objectives {
+            if let ObjectiveKind::Farp {
+                mobile: true,
+                pad_template,
+                ..
+            } = &obj.kind
+                && let Zone::Circle { .. } = &obj.zone
+            {
+                pos_update.push((*id, pad_template.clone()))
+            }
+        }
+        let mut moved: SmallVec<[ObjectiveId; 8]> = smallvec![];
+        for (oid, pad) in pos_update {
+            let obj = objective_mut!(self, oid)?;
+            if let Some(uid) = self.persisted.units_by_name.get(&pad)
+                && let Some(unit) = self.persisted.units.get(uid)
+                && let Zone::Circle { pos, .. } = &mut obj.zone
+                && pos != &unit.pos
+            {
+                *pos = unit.pos;
+                moved.push(oid)
+            }
+        }
         for (_, obj) in &self.persisted.objectives {
-            self.ephemeral.update_objective_markup(&self.persisted, obj)
+            self.ephemeral
+                .update_objective_markup(&self.persisted, obj, &moved)
         }
         Ok(())
     }

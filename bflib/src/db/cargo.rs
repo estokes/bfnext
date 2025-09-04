@@ -382,6 +382,7 @@ impl Db {
             if let ObjectiveKind::Farp {
                 spec,
                 pad_template: _,
+                mobile: _,
             } = &obj.kind
             {
                 if let Some(d_name) = spec.path.last() {

@@ -155,6 +155,7 @@ impl ObjectiveMarkup {
             let v3 = LuaVec3(Vector3::new(pos.x, 0., pos.y));
             msgq.set_markup_pos_start(self.owner_ring, v3);
             msgq.set_markup_pos_start(self.capturable_ring, v3);
+            msgq.set_markup_pos_start(self.threatened_ring, v3);
             msgq.set_markup_pos_start(
                 self.label,
                 LuaVec3(Vector3::new(pos.x + 1500., 1., pos.y + 1500.)),
@@ -166,8 +167,8 @@ impl ObjectiveMarkup {
             {
                 let dst = &persisted.objectives[oid];
                 let (spos, dpos) = arrow_coords(obj, dst);
-                msgq.set_markup_pos_start(*id, LuaVec3(Vector3::new(spos.x, 0., spos.y)));
-                msgq.set_markup_pos_end(*id, LuaVec3(Vector3::new(dpos.x, 0., dpos.y)));
+                msgq.set_markup_pos_start(*id, LuaVec3(Vector3::new(dpos.x, 0., dpos.y)));
+                msgq.set_markup_pos_end(*id, LuaVec3(Vector3::new(spos.x, 0., spos.y)));
             }
         }
     }

@@ -458,11 +458,13 @@ impl Db {
                 .map(|d| d.sqrt())
                 .unwrap_or(0.)
         }
+        #[derive(Debug)]
         struct UnitPosition {
             heading: f64,
             position: Vector2,
             altitude: Option<f64>,
         }
+        #[derive(Debug)]
         struct GroupPosition {
             positions: VecDeque<UnitPosition>,
             by_type: FxHashMap<String, VecDeque<UnitPosition>>,
@@ -694,7 +696,11 @@ impl Db {
             side,
             kind,
             origin,
-            class: ObjGroupClass::from(template_name.as_str()),
+            class: if extra_tags.contains(UnitTag::NavalSpawnPoint) {
+                ObjGroupClass::Logi
+            } else {
+                ObjGroupClass::from(template_name.as_str())
+            },
             units: SetS::new(),
             tags: UnitTags(BitFlags::empty()),
         };
@@ -715,7 +721,11 @@ impl Db {
             | SpawnLoc::AtPosWithCenter { .. }
             | SpawnLoc::AtPosWithComponents { .. }
             | SpawnLoc::AtTrigger { .. } => {
-                if spawned.tags.contains(UnitTag::Boat) {
+                if let Some(tmpl) = self.ephemeral.cfg.crate_template.get(&side)
+                    && &template_name == tmpl
+                {
+                    () // it's ok to spawn crates on ships
+                } else if spawned.tags.contains(UnitTag::Boat) {
                     check_land(&land, &gpos.positions, &gpos.by_type)
                         .with_context(|| format_compact!("placing group {group_name}"))?
                 } else {

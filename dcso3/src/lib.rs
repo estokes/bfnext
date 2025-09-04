@@ -1356,14 +1356,22 @@ pub fn centroid2d(points: impl IntoIterator<Item = Vector2>) -> Vector2 {
     let (n, sum) = points
         .into_iter()
         .fold((0, Vector2::new(0., 0.)), |(n, c), p| (n + 1, c + p));
-    sum / (n as f64)
+    if n == 0 {
+        sum
+    } else {
+        sum / (n as f64)
+    }
 }
 
 pub fn centroid3d(points: impl IntoIterator<Item = Vector3>) -> Vector3 {
     let (n, sum) = points
         .into_iter()
         .fold((0, Vector3::new(0., 0., 0.)), |(n, c), p| (n + 1, c + p));
-    sum / (n as f64)
+    if n == 0 {
+        sum
+    } else {
+        sum / (n as f64)
+    }
 }
 
 /// Rotate a collection of points in 2d space around their center

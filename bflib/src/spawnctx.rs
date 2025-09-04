@@ -168,6 +168,7 @@ impl<'lua> SpawnCtx<'lua> {
                 .get_template(idx, GroupKind::Any, side, &pad_template)
                 .context("getting the pad")?;
             pad.group.set("hidden", false)?;
+            pad.group.set("lateActivation", false)?;
             let pad_unit = pad
                 .group
                 .units()

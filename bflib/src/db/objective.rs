@@ -515,8 +515,12 @@ impl Db {
             acc_points!(ammo);
             acc_points!(fuel);
             acc_points!(barracks);
-            let center = centroid2d(points);
-            SpawnLoc::AtPosWithCenter { pos, center }
+            if points.is_empty() {
+                SpawnLoc::AtPosWithCenter { pos, center: pos }
+            } else {
+                let center = centroid2d(points);
+                SpawnLoc::AtPosWithCenter { pos, center }
+            }
         };
         let dep_name = spec
             .path
@@ -530,6 +534,7 @@ impl Db {
         let mut groups: Set<GroupId> = Set::new();
         // if the pad template is a boat then add it to units/groups so that it
         // will be handled properly when it is born
+        let mut mobile = false;
         if let Ok(gifo) = spctx.get_template_ref(idx, GroupKind::Any, side, &pad_template)
             && let Ok(units) = gifo.group.units()
             && let Ok(unit) = units.first()
@@ -538,7 +543,7 @@ impl Db {
             && tags.contains(UnitTag::Boat)
         {
             log::info!("adding naval spawn point {pad_template}");
-            let gid = self.add_group(
+            match self.add_group(
                 spctx,
                 idx,
                 side,
@@ -546,8 +551,16 @@ impl Db {
                 &pad_template,
                 DeployKind::Objective { origin: oid },
                 UnitTag::NavalSpawnPoint.into(),
-            )?;
-            groups.insert_cow(gid);
+            ) {
+                Ok(gid) => {
+                    mobile = true;
+                    groups.insert_cow(gid);
+                }
+                Err(e) => {
+                    self.ephemeral.return_pad_template(&pad_template);
+                    return Err(e);
+                }
+            }
         }
         // delay the spawn of the other components so the unpacker can
         // get out of the way
@@ -607,7 +620,7 @@ impl Db {
             groups: MapS::from_iter([(side, groups)]),
             kind: ObjectiveKind::Farp {
                 spec: spec.clone(),
-                mobile: true,
+                mobile,
                 pad_template: pad_template.clone(),
             },
             zone: Zone::Circle { pos, radius: 2000. },

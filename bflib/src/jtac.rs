@@ -30,21 +30,9 @@ use bfprotocols::{
 use chrono::{Duration, prelude::*};
 use compact_str::{CompactString, format_compact};
 use dcso3::{
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
-    coalition::Side,
-    controller::{
-        ActionTyp, AltType, AttackParams, MissionPoint, PointType, Task, VehicleFormation,
-    },
-    cvt_err, err,
-    group::Group,
-    land::Land,
-    net::{SlotId, Ucid},
-    object::{DcsObject, DcsOid},
-    radians_to_degrees, simple_enum,
-    spot::{ClassSpot, Spot},
-    trigger::{MarkId, SmokeColor, Trigger},
-    unit::{ClassUnit, Unit},
-    weapon::Weapon,
+    coalition::Side, controller::{
+        ActionTyp, AltType, AttackParams, MissionPoint, PointType, Task, TurnMethod, VehicleFormation, WeaponExpend
+    }, cvt_err, err, group::Group, land::Land, net::{SlotId, Ucid}, object::{DcsObject, DcsOid}, radians_to_degrees, simple_enum, spot::{ClassSpot, Spot}, trigger::{MarkId, SmokeColor, Trigger}, unit::{ClassUnit, Unit}, weapon::Weapon, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3
 };
 use enumflags2::BitFlags;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -732,27 +720,36 @@ impl Jtac {
                 let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
                 let pos = Vector2::new(target.pos.x, target.pos.z);
-                let task = Task::FireAtPoint {
-                    point: LuaVec2(pos),
-                    radius: None,
-                    expend_qty: Some(n as i64),
-                    weapon_type: None,
-                    altitude: Some(0.),
-                    altitude_type: Some(AltType::RADIO),
+
+                let attack_params = AttackParams {
+                    altitude: Some(9000.),
+                    attack_qty: Some(n as i64),
+                    direction: None,
+                    expend: Some(WeaponExpend::Four),
+                    group_attack: Some(false),
+                    weapon_type: Some(2097152),
+                    attack_qty_limit: None,
+                    altitude_enabled: Some(false),
+                    direction_enabled: Some(false),
+                    point: None,
+                    x: Some(target.pos.x),
+                    y: Some(target.pos.z),
                 };
+
+                let task = Task::Bombing { point: dcso3::LuaVec2(pos), params: attack_params };
                 let task = Task::Mission {
-                    airborne: Some(false),
+                    airborne: Some(true),
                     route: vec![MissionPoint {
-                        action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
+                        action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
                         typ: PointType::TurningPoint,
                         airdrome_id: None,
                         helipad: None,
                         time_re_fu_ar: None,
                         link_unit: None,
-                        pos: LuaVec2(apos),
-                        alt: 0.,
-                        alt_typ: Some(AltType::RADIO),
-                        speed: 0.,
+                        pos: LuaVec2(pos),
+                        alt: 9000.,
+                        alt_typ: Some(AltType::BARO),
+                        speed: 1000.,
                         speed_locked: None,
                         eta: None,
                         eta_locked: None,
@@ -767,6 +764,7 @@ impl Jtac {
                     let _id = unit.object_id()?;
                 }
                 let con = group.get_controller().context("getting controller")?;
+                con.set_task(task.clone())?;
                 con.set_task(task)?;
             }
         }

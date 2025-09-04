@@ -1095,6 +1095,7 @@ impl Db {
                 )
             },
         )?;
+        self.persisted.deployed.insert_cow(gid);
         Ok(Some(gid))
     }
 

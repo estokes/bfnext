@@ -35,16 +35,14 @@ use compact_str::format_compact;
 use dcso3::{
     MizLua, String,
     coalition::Side,
-    controller::WeaponExpend,
     env::miz::GroupId,
     mission_commands::{GroupCommandItem, GroupSubMenu, MissionCommands},
     net::{SlotId, Ucid},
-    unit::Unit,
 };
 use enumflags2::{BitFlag, BitFlags};
 use log::error;
 use smallvec::{SmallVec, smallvec};
-use std::{cmp::min_by, sync::Arc};
+use std::sync::Arc;
 
 pub fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
@@ -214,11 +212,7 @@ pub fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) 
     Ok(())
 }
 
-<<<<<<< HEAD
 pub fn jtac_alcm_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, Vec<u8>, Ucid>) -> Result<()> {
-=======
-pub fn jtac_alcm_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, (u8, u8), Ucid>) -> Result<()> {
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
     let ctx = unsafe { Context::get_mut() };
     match ctx
         .jtac
@@ -438,30 +432,18 @@ fn add_alcm_menu_for_jtac(
     alcm: &[DbGid],
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-<<<<<<< HEAD
-=======
-    let ctx = unsafe { Context::get_mut() };
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
 
     let root = mc.add_submenu_for_group(mizgid, "ALCM".into(), Some(root.clone()))?;
     for gid in alcm {
         let root =
             mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
 
         let quarter =
             mc.add_submenu_for_group(mizgid, "Fire Quarter".into(), Some(root.clone()))?;
         let half = mc.add_submenu_for_group(mizgid, "Fire Half".into(), Some(root.clone()))?;
         let all = mc.add_submenu_for_group(mizgid, "Fire All".into(), Some(root.clone()))?;
 
-<<<<<<< HEAD
         for (submenu, n) in vec![(quarter, 1), (half, 2), (all, 4)] {
-=======
-        for (submenu, n) in vec![(quarter, 1), (half, 2), (all, 3)] {
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
             mc.add_command_for_group(
                 mizgid,
                 "Fire One per target".into(),
@@ -470,11 +452,7 @@ fn add_alcm_menu_for_jtac(
                 ArgQuad {
                     fst: jtac,
                     snd: *gid,
-<<<<<<< HEAD
                     trd: vec![n, 1],
-=======
-                    trd: (u8, u8),
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
                     fth: ucid,
                 },
             )?;
@@ -486,11 +464,7 @@ fn add_alcm_menu_for_jtac(
                 ArgQuad {
                     fst: jtac,
                     snd: *gid,
-<<<<<<< HEAD
                     trd: vec![n, 2],
-=======
-                    trd: 2,
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
                     fth: ucid,
                 },
             )?;
@@ -502,79 +476,11 @@ fn add_alcm_menu_for_jtac(
                 ArgQuad {
                     fst: jtac,
                     snd: *gid,
-<<<<<<< HEAD
                     trd: vec![n, 4],
-=======
-                    trd: 3,
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
                     fth: ucid,
                 },
             )?;
         }
-<<<<<<< HEAD
-=======
-        mc.add_command_for_group(
-            mizgid,
-            "Relay Target".into(),
-            Some(root.clone()),
-            jtac_relay_target,
-            ArgTriple {
-                fst: jtac,
-                snd: *gid,
-                trd: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "Fire One".into(),
-            Some(root.clone()),
-            jtac_alcm_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 1,
-                fth: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "Fire Two".into(),
-            Some(root.clone()),
-            jtac_alcm_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 2,
-                fth: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "Fire Four".into(),
-            Some(root.clone()),
-            jtac_alcm_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 4,
-                fth: ucid,
-            },
-        )?;
-        mc.add_command_for_group(
-            mizgid,
-            "Fire Everything".into(),
-            Some(root.clone()),
-            jtac_alcm_mission,
-            ArgQuad {
-                fst: jtac,
-                snd: *gid,
-                trd: 0,
-                fth: ucid,
-            },
-        )?;
->>>>>>> cad4f9c3 (woops)
-=======
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
     }
 
     Ok(())

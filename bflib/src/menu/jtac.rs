@@ -35,16 +35,14 @@ use compact_str::format_compact;
 use dcso3::{
     MizLua, String,
     coalition::Side,
-    controller::WeaponExpend,
     env::miz::GroupId,
     mission_commands::{GroupCommandItem, GroupSubMenu, MissionCommands},
     net::{SlotId, Ucid},
-    unit::Unit,
 };
 use enumflags2::{BitFlag, BitFlags};
 use log::error;
 use smallvec::{SmallVec, smallvec};
-use std::{cmp::min_by, sync::Arc};
+use std::sync::Arc;
 
 pub fn jtac_status(_: MizLua, arg: ArgTuple<Option<Ucid>, JtId>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
@@ -214,7 +212,7 @@ pub fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) 
     Ok(())
 }
 
-pub fn jtac_alcm_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, (u8, u8), Ucid>) -> Result<()> {
+pub fn jtac_alcm_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, Vec<u8>, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     match ctx
         .jtac
@@ -434,7 +432,6 @@ fn add_alcm_menu_for_jtac(
     alcm: &[DbGid],
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
-    let ctx = unsafe { Context::get_mut() };
 
     let root = mc.add_submenu_for_group(mizgid, "ALCM".into(), Some(root.clone()))?;
     for gid in alcm {
@@ -446,7 +443,7 @@ fn add_alcm_menu_for_jtac(
         let half = mc.add_submenu_for_group(mizgid, "Fire Half".into(), Some(root.clone()))?;
         let all = mc.add_submenu_for_group(mizgid, "Fire All".into(), Some(root.clone()))?;
 
-        for (submenu, n) in vec![(quarter, 1), (half, 2), (all, 3)] {
+        for (submenu, n) in vec![(quarter, 1), (half, 2), (all, 4)] {
             mc.add_command_for_group(
                 mizgid,
                 "Fire One per target".into(),
@@ -455,7 +452,7 @@ fn add_alcm_menu_for_jtac(
                 ArgQuad {
                     fst: jtac,
                     snd: *gid,
-                    trd: (u8, u8),
+                    trd: vec![n, 1],
                     fth: ucid,
                 },
             )?;
@@ -467,7 +464,7 @@ fn add_alcm_menu_for_jtac(
                 ArgQuad {
                     fst: jtac,
                     snd: *gid,
-                    trd: 2,
+                    trd: vec![n, 2],
                     fth: ucid,
                 },
             )?;
@@ -479,7 +476,7 @@ fn add_alcm_menu_for_jtac(
                 ArgQuad {
                     fst: jtac,
                     snd: *gid,
-                    trd: 3,
+                    trd: vec![n, 4],
                     fth: ucid,
                 },
             )?;

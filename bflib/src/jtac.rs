@@ -55,7 +55,7 @@ use mlua::{FromLua, IntoLua, Lua, Table, Value, prelude::LuaResult};
 use rand::{Rng, thread_rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
-use std::{collections::hash_map::Entry, f32::consts::E, fmt, str::FromStr};
+use std::{collections::hash_map::Entry, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
@@ -718,9 +718,15 @@ impl Jtac {
         Ok(())
     }
 
-    pub fn alcm_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId, n: (u8, u8)) -> Result<()> {
-        let magazine_expend = n.0;
-        let per_target = n.1;
+    pub fn alcm_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        gid: &GroupId,
+        mut n: Vec<u8>,
+    ) -> Result<()> {
+        let per_target = n.pop().unwrap();
+        let magazine_expend = n.pop().unwrap();
 
         match self.target.as_mut() {
             None => bail!("no target"),
@@ -728,12 +734,20 @@ impl Jtac {
                 let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
                 let expend = match magazine_expend {
+                    1 => WeaponExpend::Quarter,
+                    2 => WeaponExpend::Half,
+                    4 => WeaponExpend::All,
+                    _ => bail!("invalid expend {0}", magazine_expend),
+                };
+
+                let per = match per_target {
                     1 => WeaponExpend::One,
                     2 => WeaponExpend::Two,
                     4 => WeaponExpend::Four,
-                    _ => bail!("invalid expend {0}", magazine_expend),
+                    _ => bail!("invalid per target {0}", per_target),
                 };
-                let mut ammo = {
+
+                let mut allocated_ammo = {
                     let mut ammo = 0;
                     for i in db.group(gid)?.units.into_iter() {
                         let first = Unit::get_by_name(lua, &db.unit(i)?.name)?
@@ -767,8 +781,8 @@ impl Jtac {
                 let mut fire_task_vec: Vec<Task> = vec![];
 
                 for (_, target) in &self.contacts {
-                    if ammo >= n {
-                        ammo -= n;
+                    if allocated_ammo >= per_target {
+                        allocated_ammo -= per_target;
                     } else {
                         break;
                     }
@@ -777,7 +791,7 @@ impl Jtac {
                         altitude: Some(9000.),
                         attack_qty: Some(1),
                         direction: None,
-                        expend: Some(expend.clone()),
+                        expend: Some(per.clone()),
                         group_attack: Some(false),
                         weapon_type: Some(2097152), // hard coded, change later?
                         attack_qty_limit: None,
@@ -1104,7 +1118,7 @@ impl Jtacs {
         lua: MizLua,
         jtid: &JtId,
         shooter: &GroupId,
-        n: (u8, u8),
+        n: Vec<u8>,
     ) -> Result<()> {
         let jtac = self
             .jtacs

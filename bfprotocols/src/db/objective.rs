@@ -12,6 +12,8 @@ pub enum ObjectiveKind {
     Farp {
         spec: Deployable,
         pad_template: String,
+        #[serde(default)]
+        mobile: bool,
     },
 }
 

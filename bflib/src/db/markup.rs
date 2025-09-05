@@ -19,14 +19,17 @@ use super::{
     persisted::Persisted,
 };
 use crate::msgq::MsgQ;
-use bfprotocols::{cfg::Cfg, db::objective::ObjectiveKind};
+use bfprotocols::{
+    cfg::Cfg,
+    db::objective::{ObjectiveId, ObjectiveKind},
+};
 use compact_str::{CompactString, format_compact};
 use dcso3::{
-    Color, LuaVec3, Vector3,
+    Color, LuaVec3, Vector2, Vector3,
     coalition::Side,
     trigger::{ArrowSpec, CircleSpec, LineType, MarkId, QuadSpec, SideFilter, TextSpec},
 };
-use smallvec::SmallVec;
+use fxhash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct ObjectiveMarkup {
@@ -42,7 +45,8 @@ pub(super) struct ObjectiveMarkup {
     capturable_ring: MarkId,
     threatened_ring: MarkId,
     label: MarkId,
-    supply_connections: SmallVec<[MarkId; 8]>,
+    pos: Vector2,
+    supply_connections: FxHashMap<ObjectiveId, MarkId>,
 }
 
 fn text_color(side: Side, a: f32) -> Color {
@@ -65,6 +69,16 @@ fn objective_label(name: &str, obj: &Objective) -> CompactString {
     )
 }
 
+fn arrow_coords(obj: &Objective, dst: &Objective) -> (Vector2, Vector2) {
+    let pos = obj.zone.pos();
+    let dpos = dst.zone.pos();
+    let dir = (dpos - pos).normalize();
+    let spos = pos + dir * obj.zone.radius() * 1.1;
+    let rdir = (pos - dpos).normalize();
+    let dpos = dpos + rdir * dst.zone.radius() * 1.1;
+    (spos, dpos)
+}
+
 impl ObjectiveMarkup {
     pub(super) fn remove(self, msgq: &mut MsgQ) {
         let ObjectiveMarkup {
@@ -76,6 +90,7 @@ impl ObjectiveMarkup {
             fuel: _,
             points: _,
             name: _,
+            pos: _,
             owner_ring,
             capturable_ring,
             threatened_ring,
@@ -86,18 +101,24 @@ impl ObjectiveMarkup {
         msgq.delete_mark(threatened_ring);
         msgq.delete_mark(capturable_ring);
         msgq.delete_mark(label);
-        for id in supply_connections {
+        for (_, id) in supply_connections {
             msgq.delete_mark(id)
         }
     }
 
-    pub(super) fn update(&mut self, msgq: &mut MsgQ, obj: &Objective) {
+    pub(super) fn update(
+        &mut self,
+        persisted: &Persisted,
+        msgq: &mut MsgQ,
+        obj: &Objective,
+        moved: &[ObjectiveId],
+    ) {
         if obj.owner != self.side {
             let text_color = |a| text_color(obj.owner, a);
             self.side = obj.owner;
             msgq.set_markup_color(self.label, text_color(0.75));
             msgq.set_markup_color(self.owner_ring, text_color(1.));
-            for id in self.supply_connections.drain(..) {
+            for (_, id) in self.supply_connections.drain() {
                 msgq.delete_mark(id);
             }
         }
@@ -127,6 +148,29 @@ impl ObjectiveMarkup {
             self.points = obj.points;
             msgq.set_markup_text(self.label, objective_label(&self.name, obj).into());
         }
+        if let Zone::Circle { pos, .. } = obj.zone
+            && self.pos != pos
+        {
+            self.pos = pos;
+            let v3 = LuaVec3(Vector3::new(pos.x, 0., pos.y));
+            msgq.set_markup_pos_start(self.owner_ring, v3);
+            msgq.set_markup_pos_start(self.capturable_ring, v3);
+            msgq.set_markup_pos_start(self.threatened_ring, v3);
+            msgq.set_markup_pos_start(
+                self.label,
+                LuaVec3(Vector3::new(pos.x + 1500., 1., pos.y + 1500.)),
+            );
+        }
+        for oid in moved {
+            if obj.warehouse.destination.contains(oid)
+                && let Some(id) = self.supply_connections.get(oid)
+            {
+                let dst = &persisted.objectives[oid];
+                let (spos, dpos) = arrow_coords(obj, dst);
+                msgq.set_markup_pos_start(*id, LuaVec3(Vector3::new(dpos.x, 0., dpos.y)));
+                msgq.set_markup_pos_end(*id, LuaVec3(Vector3::new(spos.x, 0., spos.y)));
+            }
+        }
     }
 
     pub(super) fn new(cfg: &Cfg, msgq: &mut MsgQ, obj: &Objective, persisted: &Persisted) -> Self {
@@ -145,8 +189,8 @@ impl ObjectiveMarkup {
         t.supply = obj.supply;
         t.fuel = obj.fuel;
         t.name = format_compact!("{} {}", obj.name, obj.kind.name()).into();
-        let opos = obj.zone.pos();
-        let pos3 = Vector3::new(opos.x, 0., opos.y);
+        t.pos = obj.zone.pos();
+        let pos3 = Vector3::new(t.pos.x, 0., t.pos.y);
         macro_rules! threat_circle {
             ($radius:expr) => {
                 msgq.circle_to_all(
@@ -269,15 +313,10 @@ impl ObjectiveMarkup {
         match obj.kind {
             ObjectiveKind::Airbase | ObjectiveKind::Farp { .. } | ObjectiveKind::Fob => (),
             ObjectiveKind::Logistics => {
-                let pos = obj.zone.pos();
                 for oid in &obj.warehouse.destination {
                     let id = MarkId::new();
                     let dobj = &persisted.objectives[oid];
-                    let dpos = dobj.zone.pos();
-                    let dir = (dpos - pos).normalize();
-                    let spos = pos + dir * obj.zone.radius() * 1.1;
-                    let rdir = (pos - dpos).normalize();
-                    let dpos = dpos + rdir * dobj.zone.radius() * 1.1;
+                    let (spos, dpos) = arrow_coords(obj, dobj);
                     msgq.arrow_to(
                         if dobj.is_farp() {
                             dobj.owner.into()
@@ -295,7 +334,7 @@ impl ObjectiveMarkup {
                         },
                         None,
                     );
-                    t.supply_connections.push(id);
+                    t.supply_connections.insert(*oid, id);
                 }
             }
         }

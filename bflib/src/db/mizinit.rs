@@ -43,12 +43,7 @@ use bfprotocols::{
 use chrono::prelude::*;
 use compact_str::CompactString;
 use dcso3::{
-    LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3, centroid2d,
-    coalition::Side,
-    controller::PointType,
-    coord::Coord,
-    env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp},
-    land::Land,
+    centroid2d, coalition::Side, controller::PointType, coord::Coord, env::miz::{Group, Miz, MizIndex, Skill, TriggerZone, TriggerZoneTyp}, land::Land, net::Net, trigger::Trigger, LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3
 };
 use enumflags2::BitFlags;
 use fxhash::FxHashSet;
@@ -348,6 +343,7 @@ impl Db {
 
     pub fn respawn_after_load(
         &mut self,
+        lua: MizLua,
         perf: &mut PerfInner,
         idx: &MizIndex,
         miz: &Miz,
@@ -425,12 +421,19 @@ impl Db {
                 obj.threat_pos3 = Vector3::new(pos.x, alt, pos.y);
                 if let ObjectiveKind::Farp {
                     spec: _,
+                    mobile: _,
                     pad_template,
                 } = &obj.kind
                 {
-                    spctx
-                        .move_farp_pad(idx, obj.owner, &pad_template, pos)
-                        .context("moving farp pad")?;
+                    if let Some(uid) = self.persisted.units_by_name.get(pad_template)
+                        && let Some(unit) = self.persisted.units.get(uid)
+                    {
+                        self.ephemeral.push_spawn(unit.group);
+                    } else {
+                        spctx
+                            .move_farp_pad(idx, obj.owner, &pad_template, pos)
+                            .context("moving farp pad")?;
+                    }
                     self.ephemeral.set_pad_template_used(pad_template.clone());
                 }
                 if let Some(groups) = obj.groups.get(&obj.owner) {
@@ -453,6 +456,10 @@ impl Db {
             Ok(())
         };
         spawn_deployed_and_logistics().context("spawning deployed and logistics")?;
+        // spawn everything before setting up warehouses, so that ship warehouses will also be set up correctly
+        while self.ephemeral.spawnq_len() > 0 {
+            self.ephemeral.process_spawn_queue(perf, &self.persisted, Utc::now(), idx, spctx)?
+        }
         self.setup_warehouses_after_load(spctx.lua())
             .context("setting up warehouses")?;
         let mut mark_deployed_and_logistics = || -> Result<()> {
@@ -471,6 +478,12 @@ impl Db {
             Ok(())
         };
         mark_deployed_and_logistics().context("marking deployed and logistics")?;
+        let net = Net::singleton(lua)?;
+        let act = Trigger::singleton(lua)?.action()?;
+        // spawn all the markup
+        while self.ephemeral.msgs.len() > 0 {
+            self.ephemeral.msgs.process(100, &net, &act);
+        }
         let mut queue_check_close_enemies = || -> Result<()> {
             for (uid, unit) in &self.persisted.units {
                 if !unit.dead {

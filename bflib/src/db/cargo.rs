@@ -23,7 +23,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow, bail};
 use bfprotocols::{
-    cfg::{CargoConfig, Crate, Deployable, LimitEnforceTyp, Troop, Vehicle},
+    cfg::{CargoConfig, Crate, Deployable, DeployableKind, LimitEnforceTyp, Troop, Vehicle},
     db::{
         group::GroupId,
         objective::{ObjectiveId, ObjectiveKind},
@@ -382,6 +382,7 @@ impl Db {
             if let ObjectiveKind::Farp {
                 spec,
                 pad_template: _,
+                mobile: _,
             } = &obj.kind
             {
                 if let Some(d_name) = spec.path.last() {
@@ -823,11 +824,11 @@ impl Db {
                 let spec = maybe!(didx.deployables_by_name, dep, "deployable")?.clone();
                 let centroid = centroid2d(have.values().flat_map(|c| c.iter()).map(|c| c.pos));
                 let too_close =
-                    too_close(self, st.side, centroid, spec.logistics.is_some(), || {
+                    too_close(self, st.side, centroid, spec.kind.is_objective(), || {
                         have.values().flat_map(|c| c.iter())
                     });
                 if too_close {
-                    if spec.logistics.is_none() {
+                    if spec.kind.is_group() {
                         reasons.push("can't unpack that here while enemies are close".into());
                     } else {
                         reasons.push("can't unpack that here".into())
@@ -850,8 +851,8 @@ impl Db {
                     });
                     match can_deploy {
                         Err(e) => reasons.push(format_compact!("{e}")),
-                        Ok(from_obj) => match &spec.logistics {
-                            Some(parts) => {
+                        Ok(from_obj) => match &spec.kind {
+                            DeployableKind::Objective(parts) => {
                                 for cr in have.values().flat_map(|c| c.iter()) {
                                     self.delete_group(&cr.group)?
                                 }
@@ -871,7 +872,7 @@ impl Db {
                                 let name = objective!(self, oid)?.name.clone();
                                 return Ok(Unpakistan::UnpackedFarp(name));
                             }
-                            None => {
+                            DeployableKind::Group { template } => {
                                 let pos = self.ephemeral.slot_instance_pos(lua, slot)?;
                                 let spawnloc =
                                     compute_positions(self, &have, centroid, azumith3d(pos.x.0))?;
@@ -887,7 +888,7 @@ impl Db {
                                     idx,
                                     st.side,
                                     spawnloc,
-                                    &*spec.template,
+                                    template,
                                     origin,
                                     BitFlags::empty(),
                                     None,

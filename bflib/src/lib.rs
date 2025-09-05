@@ -314,7 +314,7 @@ impl Context {
         let spctx = SpawnCtx::new(lua)?;
         let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
         self.db
-            .respawn_after_load(perf, &self.idx, miz, &mut self.landcache, &spctx)
+            .respawn_after_load(lua, perf, &self.idx, miz, &mut self.landcache, &spctx)
     }
 
     fn log_perf(&mut self, now: DateTime<Utc>) {

@@ -32,7 +32,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
         ActionKind, AiPlaneCfg, AwacsCfg, BomberCfg, Cfg, Crate, Deployable, DeployableCfg,
-        DeployableLogistics, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition, WarehouseConfig,
+        DeployableKind, DeployableObjective, DroneCfg, Troop, UnitTag, Vehicle, VictoryCondition,
+        WarehouseConfig,
     },
     db::{
         group::{GroupId, UnitId},
@@ -89,7 +90,7 @@ pub(super) struct DeployableIndex {
     pub(super) deployables_by_repair: FxHashMap<String, String>,
     pub(super) crates_by_name: FxHashMap<String, Crate>,
     pub(super) squads_by_name: FxHashMap<String, Troop>,
-    pub(super) pad_templates: FxHashSet<String>,
+    pub(super) pad_templates: FxHashMap<String, FxHashSet<String>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -124,6 +125,7 @@ pub struct Ephemeral {
     pub(super) airbase_by_oid: FxHashMap<ObjectiveId, DcsOid<ClassAirbase>>,
     pub(super) slot_info: FxHashMap<SlotId, SlotInfo>,
     used_pad_templates: FxHashSet<String>,
+    pub(super) global_pad_templates: FxHashSet<String>,
     force_to_spectators: BTreeMap<DateTime<Utc>, SmallVec<[Ucid; 1]>>,
     pub(super) units_able_to_move: IndexSet<UnitId, FxBuildHasher>,
     pub(super) groups_with_move_missions: FxHashMap<GroupId, Vector2>,
@@ -162,6 +164,7 @@ impl Default for Ephemeral {
             airbase_by_oid: FxHashMap::default(),
             slot_info: FxHashMap::default(),
             used_pad_templates: FxHashSet::default(),
+            global_pad_templates: FxHashSet::default(),
             force_to_spectators: BTreeMap::default(),
             units_able_to_move: IndexSet::default(),
             groups_with_move_missions: FxHashMap::default(),
@@ -214,9 +217,14 @@ impl Ephemeral {
         );
     }
 
-    pub fn update_objective_markup(&mut self, persisted: &Persisted, obj: &Objective) {
+    pub fn update_objective_markup(
+        &mut self,
+        persisted: &Persisted,
+        obj: &Objective,
+        moved: &[ObjectiveId],
+    ) {
         match self.objective_markup.entry(obj.id) {
-            Entry::Occupied(mut e) => e.get_mut().update(&mut self.msgs, obj),
+            Entry::Occupied(mut e) => e.get_mut().update(persisted, &mut self.msgs, obj, moved),
             Entry::Vacant(e) => {
                 e.insert(ObjectiveMarkup::new(
                     &self.cfg,
@@ -265,6 +273,10 @@ impl Ephemeral {
         if !queued_despawn && !self.spawnq.contains(&gid) {
             self.spawnq.push_back(gid)
         }
+    }
+
+    pub fn spawnq_len(&self) -> usize {
+        self.spawnq.len()
     }
 
     pub fn process_spawn_queue(
@@ -321,11 +333,13 @@ impl Ephemeral {
         Ok(())
     }
 
-    pub fn take_pad_template(&mut self, side: Side) -> Option<String> {
+    pub fn take_pad_template(&mut self, side: Side, name: &String) -> Option<String> {
         self.deployable_idx.get(&side).and_then(|idx| {
-            for pad in &idx.pad_templates {
-                if self.used_pad_templates.insert(pad.clone()) {
-                    return Some(pad.clone());
+            if let Some(templates) = idx.pad_templates.get(name) {
+                for pad in templates {
+                    if self.used_pad_templates.insert(pad.clone()) {
+                        return Some(pad.clone());
+                    }
                 }
             }
             None
@@ -362,7 +376,6 @@ impl Ephemeral {
 
     fn index_deployables_for_side(
         &mut self,
-        global_pad_templates: &mut FxHashSet<String>,
         miz: &Miz,
         mizidx: &MizIndex,
         side: Side,
@@ -386,8 +399,10 @@ impl Ephemeral {
             };
         }
         for dep in deployables.iter() {
-            miz.get_group_by_name(mizidx, GroupKind::Any, side, &dep.template)?
-                .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
+            if let DeployableKind::Group { template } = &dep.kind {
+                miz.get_group_by_name(mizidx, GroupKind::Any, side, template)?
+                    .ok_or_else(|| anyhow!("missing deployable template {:?} {:?}", side, dep))?;
+            }
             if !points && dep.cost > 0 {
                 bail!(
                     "the points system is disabled, but {:?} costs points",
@@ -443,22 +458,21 @@ impl Ephemeral {
                     Entry::Vacant(e) => e.insert(c.clone()),
                 };
             }
-            if let Some(DeployableLogistics {
+            if let DeployableKind::Objective(DeployableObjective {
                 pad_templates,
+                defenses_template,
                 ammo_template,
                 fuel_template,
                 barracks_template,
-            }) = &dep.logistics
+            }) = &dep.kind
             {
                 let mut names = FxHashSet::default();
-                for name in [
-                    &dep.template,
-                    ammo_template,
-                    fuel_template,
-                    barracks_template,
-                ]
-                .into_iter()
-                .chain(pad_templates.iter())
+                for name in defenses_template
+                    .iter()
+                    .chain(ammo_template.iter())
+                    .chain(fuel_template.iter())
+                    .chain(barracks_template.iter())
+                    .chain(pad_templates.iter())
                 {
                     miz.get_group_by_name(mizidx, GroupKind::Any, side, name)?
                         .ok_or_else(|| anyhow!("missing farp template {:?} {:?}", side, name))?;
@@ -469,10 +483,15 @@ impl Ephemeral {
                     }
                 }
                 for pad in pad_templates {
-                    if !idx.pad_templates.insert(pad.clone()) {
+                    if !idx
+                        .pad_templates
+                        .entry(name.clone())
+                        .or_default()
+                        .insert(pad.clone())
+                    {
                         bail!("{:?} has a duplicate pad template {pad}", dep)
                     }
-                    if !global_pad_templates.insert(pad.clone()) {
+                    if !self.global_pad_templates.insert(pad.clone()) {
                         bail!(
                             "pad template names must be globally unique {pad} is used more than once"
                         )
@@ -702,12 +721,10 @@ impl Ephemeral {
             miz.get_group_by_name(mizidx, GroupKind::Any, *side, template)?
                 .ok_or_else(|| anyhow!("missing crate template {:?} {template}", side))?;
         }
-        let mut global_pad_templates = FxHashSet::default();
         let points = cfg.points.is_some();
         for (side, deployables) in cfg.deployables.iter() {
             let repair_crate = maybe!(cfg.repair_crate, side, "side repair crate")?.clone();
             self.index_deployables_for_side(
-                &mut global_pad_templates,
                 miz,
                 mizidx,
                 *side,
@@ -748,6 +765,7 @@ impl Ephemeral {
                         plane: AiPlaneCfg { template, .. },
                         ..
                     })
+                    | ActionKind::CruiseMissileSpawn(AiPlaneCfg { template, .. })
                     | ActionKind::Tanker(AiPlaneCfg { template, .. })
                     | ActionKind::Drone(DroneCfg {
                         plane: AiPlaneCfg { template, .. },
@@ -792,6 +810,7 @@ impl Ephemeral {
                     ActionKind::AwacsWaypoint
                     | ActionKind::TankerWaypoint
                     | ActionKind::DroneWaypoint
+                    | ActionKind::CruiseMissileWaypoint                    
                     | ActionKind::FighersWaypoint
                     | ActionKind::AttackersWaypoint
                     | ActionKind::Move(_)
@@ -879,17 +898,6 @@ impl Ephemeral {
         } else {
             let point = centroid2d(points.iter().map(|p| *p));
             template.group.set_pos(point)?;
-            /* 
-            let radius = points
-                .iter()
-                .map(|p: &Vector2| na::distance_squared(&(*p).into(), &point.into()))
-                .fold(0., |acc, d| if d > acc { d } else { acc });
-            /*
-            let radius = radius.sqrt();
-            spctx.remove_junk(point, radius * 1.10).with_context(|| {
-                format_compact!("removing junk before spawn of {}", group.template_name)
-            })?;
-            */
             let spawned = spctx
                 .spawn(template)
                 .with_context(|| format_compact!("spawning template {}", group.template_name))?;

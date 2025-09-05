@@ -15,11 +15,11 @@ for more details.
 */
 
 use dcso3::{
+    Color, LuaVec3, String, Vector2, Vector3,
     coalition::Side,
     env::miz::{GroupId, UnitId},
     net::{Net, PlayerId},
     trigger::{Action, ArrowSpec, CircleSpec, MarkId, QuadSpec, RectSpec, SideFilter, TextSpec},
-    Color, LuaVec3, String, Vector2, Vector3,
 };
 use log::error;
 use std::collections::VecDeque;
@@ -104,6 +104,14 @@ pub enum Msg {
         id: MarkId,
         text: String,
     },
+    SetMarkupStart {
+        id: MarkId,
+        pos: LuaVec3,
+    },
+    SetMarkupEnd {
+        id: MarkId,
+        pos: LuaVec3,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -158,7 +166,9 @@ impl MsgQ {
                     }
                     Msg::SetMarkupColor { id, .. }
                     | Msg::SetMarkupFillColor { id, .. }
-                    | Msg::SetMarkupText { id, .. } => *id != did,
+                    | Msg::SetMarkupText { id, .. }
+                    | Msg::SetMarkupStart { id, .. }
+                    | Msg::SetMarkupEnd { id, .. } => *id != did,
                 },
             })
         };
@@ -379,6 +389,18 @@ impl MsgQ {
         self.0[2].push_back(Cmd::Send(Msg::SetMarkupText { id, text }))
     }
 
+    pub fn set_markup_pos_start(&mut self, id: MarkId, pos: LuaVec3) {
+        self.0[2].push_back(Cmd::Send(Msg::SetMarkupStart { id, pos }))
+    }
+
+    pub fn set_markup_pos_end(&mut self, id: MarkId, pos: LuaVec3) {
+        self.0[2].push_back(Cmd::Send(Msg::SetMarkupEnd { id, pos }))
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.iter().fold(0, |acc, q| acc + q.len())
+    }
+
     pub fn process(&mut self, max_rate: usize, net: &Net, act: &Action) {
         for _ in 0..max_rate {
             let cmd = match self.0[0].pop_front() {
@@ -458,6 +480,10 @@ impl MsgQ {
                 Cmd::Send(Msg::SetMarkupFillColor { id, color }) => {
                     act.set_markup_fill_color(id, color)
                 }
+                Cmd::Send(Msg::SetMarkupStart { id, pos }) => {
+                    act.set_markup_position_start(id, pos)
+                }
+                Cmd::Send(Msg::SetMarkupEnd { id, pos }) => act.set_markup_position_end(id, pos),
                 Cmd::Send(Msg::SetMarkupText { id, text }) => act.set_markup_text(id, text),
             };
             if let Err(e) = res {

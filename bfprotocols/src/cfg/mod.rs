@@ -165,6 +165,8 @@ pub enum UnitTag {
     AWACS,
     Link16,
     Boat,
+    ALCM,
+    NavalSpawnPoint,
 }
 
 #[derive(
@@ -310,11 +312,16 @@ pub struct Crate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DeployableLogistics {
+pub struct DeployableObjective {
     pub pad_templates: Vec<String>,
-    pub ammo_template: String,
-    pub fuel_template: String,
-    pub barracks_template: String,
+    #[serde(default)]
+    pub defenses_template: Option<String>,
+    #[serde(default)]
+    pub ammo_template: Option<String>,
+    #[serde(default)]
+    pub fuel_template: Option<String>,
+    #[serde(default)]
+    pub barracks_template: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -337,12 +344,41 @@ pub struct DeployableJtac {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DeployableKind {
+    Group { template: String },
+    Objective(DeployableObjective),
+}
+
+impl DeployableKind {
+    pub fn is_group(&self) -> bool {
+        match self {
+            Self::Group { .. } => true,
+            Self::Objective(_) => false,
+        }
+    }
+
+    pub fn is_objective(&self) -> bool {
+        match self {
+            Self::Objective(_) => true,
+            Self::Group { .. } => false,
+        }
+    }
+}
+
+fn default_deployable_kind() -> DeployableKind {
+    DeployableKind::Group {
+        template: "".into(),
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Deployable {
     /// The full menu path of the deployable in the menu
     pub path: Vec<String>,
-    /// The template used to spawn the deployable
-    pub template: String,
+    /// The type of deployable
+    #[serde(default = "default_deployable_kind")]
+    pub kind: DeployableKind,
     /// How the deployable should persist across restarts
     pub persist: PersistTyp,
     /// How many instances are allowed at the same time
@@ -357,8 +393,6 @@ pub struct Deployable {
     /// How much does the damaged deployable cost to repair
     #[serde(default)]
     pub repair_cost: u32,
-    /// Does this deployable provide logistics services
-    pub logistics: Option<DeployableLogistics>,
     /// How many points does this deployable cost (if any)
     #[serde(default)]
     pub cost: u32,
@@ -366,6 +400,12 @@ pub struct Deployable {
     pub ewr: Option<DeployableEwr>,
     /// Is this unit a jtac
     pub jtac: Option<DeployableJtac>,
+    #[serde(default)]
+    #[serde(rename = "template")]
+    pub deprecated_template: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "logistics")]
+    pub deprecated_logistics: Option<DeployableObjective>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -554,9 +594,9 @@ pub struct NukeCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoveCfg {
-    /// max distance for troop moves in meters
+    /// max distance for troop moves in meters per unit cost
     pub troop: u32,
-    /// max distance for deployable moves in meters
+    /// max distance for deployable moves in meters per unit cost
     pub deployable: u32,
 }
 
@@ -567,6 +607,8 @@ pub enum ActionKind {
     Bomber(BomberCfg),
     Fighters(AiPlaneCfg),
     Attackers(AiPlaneCfg),
+    CruiseMissileSpawn(AiPlaneCfg),
+    CruiseMissileWaypoint,
     Drone(DroneCfg),
     Nuke(NukeCfg),
     FighersWaypoint,
@@ -582,11 +624,29 @@ pub enum ActionKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ActionGeoLimit {
+    Unlimited,
+    /// This action can only be run within `max` in meters of a friendly objective
+    NearFriendlyObjective {
+        max: u32,
+    },
+}
+
+impl Default for ActionGeoLimit {
+    fn default() -> Self {
+        Self::Unlimited
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Action {
     pub kind: ActionKind,
     pub cost: u32,
     pub penalty: Option<u32>,
     pub limit: Option<u32>,
+    /// defines where this action is allowed to run
+    #[serde(default)]
+    pub geo_limit: ActionGeoLimit,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -745,6 +805,9 @@ pub struct Cfg {
     /// how close must artillery be to participate in an artillery mission
     /// (meters).
     pub artillery_mission_range: u32,
+    /// how close must alcm be to participate in an alcm mission
+    /// (meters).
+    pub alcm_mission_range: u32,
     /// If true players will be locked to the side they initially
     /// choose for the duration of the round
     #[serde(default = "default_lock_sides")]
@@ -831,6 +894,23 @@ impl Cfg {
             .map_err(|e| anyhow!("failed to decode cfg file {:?}, {:?}", path, e))?;
         for (_, actions) in &mut cfg.actions {
             actions.sort_by(|name0, _, name1, _| name0.cmp(name1));
+        }
+        // translate deployables to the new format
+        let mut has_deprecated = false;
+        for (_, deps) in cfg.deployables.iter_mut() {
+            for dep in deps.iter_mut() {
+                if let Some(mut parts) = dep.deprecated_logistics.take() {
+                    parts.defenses_template = dep.deprecated_template.take();
+                    dep.kind = DeployableKind::Objective(parts);
+                    has_deprecated = true;
+                } else if let Some(template) = dep.deprecated_template.take() {
+                    dep.kind = DeployableKind::Group { template };
+                    has_deprecated = true;
+                }
+            }
+        }
+        if has_deprecated {
+            fs::write(path, serde_json::to_string_pretty(&cfg)?)?
         }
         Ok(cfg)
     }

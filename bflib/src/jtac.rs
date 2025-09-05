@@ -33,7 +33,8 @@ use dcso3::{
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
     coalition::Side,
     controller::{
-        ActionTyp, AltType, AttackParams, MissionPoint, PointType, Task, VehicleFormation,
+        ActionTyp, AltType, AttackParams, MissionPoint, OrbitPattern, PointType, Task, TurnMethod,
+        VehicleFormation, WeaponExpend,
     },
     cvt_err, err,
     group::Group,
@@ -245,6 +246,7 @@ pub struct Jtac {
     code: u16,
     last_smoke: DateTime<Utc>,
     nearby_artillery: SmallVec<[GroupId; 8]>,
+    nearby_alcm: SmallVec<[GroupId; 8]>,
     menu_dirty: bool,
     air: bool,
 }
@@ -271,6 +273,7 @@ impl Jtac {
             code: 1688,
             last_smoke: DateTime::<Utc>::default(),
             nearby_artillery: smallvec![],
+            nearby_alcm: smallvec![],
             menu_dirty: false,
             air,
         }
@@ -388,6 +391,16 @@ impl Jtac {
                 write!(msg, "{gid}")?;
             }
         }
+        write!(msg, "]\n")?;
+        write!(msg, "available ALCM: [")?;
+        let len = self.nearby_alcm.len();
+        for (i, gid) in self.nearby_alcm.iter().enumerate() {
+            if i < len - 1 {
+                write!(msg, "{gid},")?;
+            } else {
+                write!(msg, "{gid}")?;
+            }
+        }
         write!(msg, "]")?;
         Ok(msg)
     }
@@ -443,11 +456,16 @@ impl Jtac {
         let id = *id;
         let pos = ct.pos;
         let prev_arty = self.nearby_artillery.clone();
+        let prev_alcm = self.nearby_alcm.clone();
         match &self.target {
             Some(target) if target.id == id => {
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
+
+                self.nearby_alcm = db.alcm_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.menu_dirty |= prev_alcm != self.nearby_alcm;
+
                 Ok(false)
             }
             Some(_) | None => {
@@ -510,7 +528,9 @@ impl Jtac {
                 });
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.nearby_alcm = db.alcm_near_point(self.side, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
+                self.menu_dirty |= prev_alcm != self.nearby_alcm;
                 self.mark_target(lua).context("marking target")?;
                 Ok(true)
             }
@@ -698,6 +718,114 @@ impl Jtac {
         Ok(())
     }
 
+    pub fn alcm_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId, n: u8) -> Result<()> {
+        match self.target.as_mut() {
+            None => bail!("no target"),
+            Some(target) => {
+                let name = db.group(gid)?.name.clone();
+                let apos = db.group_center(gid)?;
+                let pos = Vector2::new(target.pos.x, target.pos.z);
+                let expend = match n {
+                    1 => WeaponExpend::One,
+                    2 => WeaponExpend::Two,
+                    4 => WeaponExpend::Four,
+                    12 => WeaponExpend::All,
+                    _ => bail!("invalid expend {n}"),
+                };
+
+                for i in db.group(gid)?.units.into_iter() {
+                    let first = Unit::get_by_name(lua, &db.unit(i)?.name)?
+                        .get_ammo()?
+                        .first();
+                    let ammo = match first {
+                        Ok(ammo) => ammo.count()?,
+                        Err(_e) => bail! {"ALCM Abort: {gid} is out of missiles."},
+                    };
+                    if ammo < n as u32 {
+                        bail!(
+                            "ALCM Abort: {gid} has only {ammo} missiles remaining, cannot launch {n}."
+                        );
+                    }
+                }
+
+                let attack_params = AttackParams {
+                    altitude: Some(9000.),
+                    attack_qty: Some(1),
+                    direction: None,
+                    expend: Some(expend),
+                    group_attack: Some(false),
+                    weapon_type: Some(2097152), // hard coded, change later?
+                    attack_qty_limit: None,
+                    altitude_enabled: Some(false),
+                    direction_enabled: Some(false),
+                    point: None,
+                    x: Some(target.pos.x),
+                    y: Some(target.pos.z),
+                };
+
+                let task = Task::Bombing {
+                    point: dcso3::LuaVec2(pos),
+                    params: attack_params,
+                };
+                let task = Task::Mission {
+                    airborne: Some(true),
+                    route: vec![
+                        MissionPoint {
+                            action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                            typ: PointType::TurningPoint,
+                            airdrome_id: None,
+                            helipad: None,
+                            time_re_fu_ar: None,
+                            link_unit: None,
+                            pos: LuaVec2(apos),
+                            alt: 9000.,
+                            alt_typ: Some(AltType::BARO),
+                            speed: 890.,
+                            speed_locked: None,
+                            eta: None,
+                            eta_locked: None,
+                            name: None,
+                            task: Box::new(task),
+                        },
+                        MissionPoint {
+                            action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                            typ: PointType::TurningPoint,
+                            airdrome_id: None,
+                            helipad: None,
+                            time_re_fu_ar: None,
+                            link_unit: None,
+                            pos: LuaVec2(apos), // Same position as first point
+                            alt: 9000.,
+                            alt_typ: Some(AltType::BARO),
+                            speed: 890.,
+                            speed_locked: None,
+                            eta: None,
+                            eta_locked: None,
+                            name: None,
+                            task: Box::new(Task::Orbit {
+                                pattern: OrbitPattern::Circle,
+                                speed: Some(750.0),
+                                altitude: Some(9000.0),
+                                point2: Some(LuaVec2(apos)),
+                                point: Some(LuaVec2(apos)),
+                            }),
+                        },
+                    ],
+                };
+                let group = Group::get_by_name(lua, &name)
+                    .with_context(|| format_compact!("getting group {}", name))?;
+                for unit in group.get_units()? {
+                    let unit = unit?;
+                    let _id = unit.object_id()?;
+                }
+                let con = group.get_controller().context("getting controller")?;
+                con.set_task(task.clone())?;
+                con.set_task(task)?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn relay_target(&mut self, db: &Db, lua: MizLua, gid: &GroupId) -> Result<()> {
         match self.target.as_mut() {
             None => bail!("no target"),
@@ -726,6 +854,12 @@ impl Jtac {
                         expend: None,
                         group_attack: Some(true),
                         weapon_type: None,
+                        attack_qty_limit: None,
+                        altitude_enabled: None,
+                        direction_enabled: None,
+                        point: None,
+                        x: None,
+                        y: None,
                     },
                 };
                 let task = Task::Mission {
@@ -861,6 +995,10 @@ impl Jtac {
     pub fn nearby_artillery(&self) -> &[GroupId] {
         &self.nearby_artillery
     }
+
+    pub fn nearby_alcm(&self) -> &[GroupId] {
+        &self.nearby_alcm
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -925,6 +1063,23 @@ impl Jtacs {
                 tracked: None,
             });
         jtac.artillery_mission(db, lua, adjustment, &shooter, n)
+    }
+
+    pub fn alcm_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        jtid: &JtId,
+        shooter: &GroupId,
+        n: u8,
+    ) -> Result<()> {
+        let jtac = self
+            .jtacs
+            .iter_mut()
+            .find_map(|(_, jtx)| jtx.get_mut(&jtid))
+            .ok_or_else(|| anyhow!("no such jtac"))?;
+
+        jtac.alcm_mission(db, lua, &shooter, n)
     }
 
     /// set part of the laser code, defined by the scale of the passed in number. For example,
@@ -1209,6 +1364,7 @@ impl Jtacs {
         } else {
             pos.y += 10.
         };
+
         for (unit, _) in db.instanced_units() {
             let id = EnId::Unit(unit.id);
             macro_rules! lost {

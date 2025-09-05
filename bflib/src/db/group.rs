@@ -222,6 +222,14 @@ impl Db {
             .filter_map(|gid| self.persisted.groups.get(gid))
     }
 
+    pub fn actions(&self) -> impl Iterator<Item = &SpawnedGroup> {
+        self.persisted
+            .actions
+            .into_iter()
+            .chain(self.persisted.troops.into_iter())
+            .filter_map(|gid| self.persisted.groups.get(gid))
+    }
+
     pub(super) fn mark_group(&mut self, gid: &GroupId) -> Result<()> {
         if let Some(id) = self.ephemeral.group_marks.remove(gid) {
             self.ephemeral.msgs.delete_mark(id)
@@ -240,7 +248,8 @@ impl Db {
                 Ok(obj) => {
                     if group.side == obj.owner {
                         let msg = format_compact!(
-                            "objective group {} of class {:?}",
+                            "objective group id {} name {} of class {:?}",
+                            group.id,
                             group.name,
                             group.class
                         );
@@ -458,11 +467,13 @@ impl Db {
                 .map(|d| d.sqrt())
                 .unwrap_or(0.)
         }
+        #[derive(Debug)]
         struct UnitPosition {
             heading: f64,
             position: Vector2,
             altitude: Option<f64>,
         }
+        #[derive(Debug)]
         struct GroupPosition {
             positions: VecDeque<UnitPosition>,
             by_type: FxHashMap<String, VecDeque<UnitPosition>>,
@@ -679,7 +690,14 @@ impl Db {
         let mut gpos = compute_unit_positions(&spctx, idx, location.clone(), &template.group)?;
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
-        let group_name = String::from(format_compact!("{}-{}", template_name, gid));
+        // naval spawn points need to be pre created in the miz, so they must be
+        // spawned with the same name as the pre created group so that they move
+        // to their destination.
+        let group_name = if extra_tags.contains(UnitTag::NavalSpawnPoint) {
+            template_name.clone()
+        } else {
+            String::from(format_compact!("{}-{}", template_name, gid))
+        };
         let mut spawned = SpawnedGroup {
             id: gid,
             name: group_name.clone(),
@@ -687,7 +705,11 @@ impl Db {
             side,
             kind,
             origin,
-            class: ObjGroupClass::from(template_name.as_str()),
+            class: if extra_tags.contains(UnitTag::NavalSpawnPoint) {
+                ObjGroupClass::Logi
+            } else {
+                ObjGroupClass::from(template_name.as_str())
+            },
             units: SetS::new(),
             tags: UnitTags(BitFlags::empty()),
         };
@@ -708,7 +730,11 @@ impl Db {
             | SpawnLoc::AtPosWithCenter { .. }
             | SpawnLoc::AtPosWithComponents { .. }
             | SpawnLoc::AtTrigger { .. } => {
-                if spawned.tags.contains(UnitTag::Boat) {
+                if let Some(tmpl) = self.ephemeral.cfg.crate_template.get(&side)
+                    && &template_name == tmpl
+                {
+                    () // it's ok to spawn crates on ships
+                } else if spawned.tags.contains(UnitTag::Boat) {
                     check_land(&land, &gpos.positions, &gpos.by_type)
                         .with_context(|| format_compact!("placing group {group_name}"))?
                 } else {
@@ -730,7 +756,11 @@ impl Db {
                 .ok_or_else(|| anyhow!("unit type not classified {typ}"))?;
             let tags = UnitTags(tags.0 | extra_tags);
             let template_name = unit.name()?;
-            let unit_name = String::from(format_compact!("{}-{}", group_name, uid));
+            let unit_name = if extra_tags.contains(UnitTag::NavalSpawnPoint) {
+                template_name.clone()
+            } else {
+                String::from(format_compact!("{}-{}", group_name, uid))
+            };
             let pos = match gpos.by_type.get_mut(&typ) {
                 None => gpos.positions.pop_front().unwrap(),
                 Some(positions) => positions.pop_front().unwrap(),
@@ -1090,6 +1120,29 @@ impl Db {
             })
             .collect::<SmallVec<[GroupId; 8]>>();
         artillery
+    }
+
+    pub fn alcm_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
+        let range2 = (self.ephemeral.cfg.alcm_mission_range as f64).powi(2);
+        let alcm = self
+            .actions()
+            .filter_map(|group| {
+                if group.tags.contains(UnitTag::ALCM) && group.side == side {
+                    let center = self.group_center3(&group.id).ok()?;
+                    if na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y))
+                        <= range2
+                    {
+                        
+                        Some(group.id)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<SmallVec<[GroupId; 8]>>();
+        alcm
     }
 
     pub fn update_unit_positions_incremental(

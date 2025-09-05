@@ -28,7 +28,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use bfprotocols::{
-    cfg::{Deployable, DeployableLogistics, UnitTag, VictoryCondition},
+    cfg::{Deployable, DeployableObjective, UnitTag, Vehicle, VictoryCondition},
     db::{
         group::{GroupId, UnitId},
         objective::{ObjectiveId, ObjectiveKind},
@@ -273,10 +273,6 @@ impl Zone {
 pub struct Objective {
     pub id: ObjectiveId,
     pub name: String,
-    // deprecated, remove after transition
-    //pub(super) pos: Option<Vector2>,
-    // deprecated, remove after transition
-    //pub(super) radius: Option<f64>,
     pub owner: Side,
     pub(super) kind: ObjectiveKind,
     pub(super) groups: MapS<Side, Set<GroupId>>,
@@ -454,6 +450,7 @@ impl Db {
             .retain(|_, si| &si.objective != oid);
         if let ObjectiveKind::Farp {
             spec: _,
+            mobile: _,
             pad_template,
         } = obj.kind
         {
@@ -475,73 +472,125 @@ impl Db {
         side: Side,
         pos: Vector2,
         spec: &Deployable,
-        parts: &DeployableLogistics,
+        parts: &DeployableObjective,
     ) -> Result<ObjectiveId> {
         let now = Utc::now();
         let land = Land::singleton(spctx.lua())?;
-        let DeployableLogistics {
+        let DeployableObjective {
             pad_templates: _,
+            defenses_template,
             ammo_template,
             fuel_template,
             barracks_template,
         } = parts;
         let location = {
             let mut points: SmallVec<[Vector2; 16]> = smallvec![];
-            let core = spctx.get_template_ref(idx, GroupKind::Any, side, &spec.template)?;
-            let ammo = spctx.get_template_ref(idx, GroupKind::Any, side, &ammo_template)?;
-            let fuel = spctx.get_template_ref(idx, GroupKind::Any, side, &fuel_template)?;
-            let barracks = spctx.get_template_ref(idx, GroupKind::Any, side, &barracks_template)?;
-            for unit in core
-                .group
-                .units()?
-                .into_iter()
-                .chain(ammo.group.units()?.into_iter())
-                .chain(fuel.group.units()?.into_iter())
-                .chain(barracks.group.units()?.into_iter())
-            {
-                let unit = unit?;
-                points.push(unit.pos()?)
+            let defenses = defenses_template
+                .as_ref()
+                .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
+                .transpose()?;
+            let ammo = ammo_template
+                .as_ref()
+                .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
+                .transpose()?;
+            let fuel = fuel_template
+                .as_ref()
+                .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
+                .transpose()?;
+            let barracks = barracks_template
+                .as_ref()
+                .map(|t| spctx.get_template_ref(idx, GroupKind::Any, side, t))
+                .transpose()?;
+            macro_rules! acc_points {
+                ($group:expr) => {
+                    if let Some(g) = $group.as_ref() {
+                        for unit in g.group.units()? {
+                            let unit = unit?;
+                            points.push(unit.pos()?);
+                        }
+                    }
+                };
             }
-            let center = centroid2d(points);
-            SpawnLoc::AtPosWithCenter { pos, center }
+            acc_points!(defenses);
+            acc_points!(ammo);
+            acc_points!(fuel);
+            acc_points!(barracks);
+            if points.is_empty() {
+                SpawnLoc::AtPosWithCenter { pos, center: pos }
+            } else {
+                let center = centroid2d(points);
+                SpawnLoc::AtPosWithCenter { pos, center }
+            }
         };
+        let dep_name = spec
+            .path
+            .last()
+            .ok_or_else(|| anyhow!("deployable has no name"))?;
         let pad_template = self
             .ephemeral
-            .take_pad_template(side)
+            .take_pad_template(side, dep_name)
             .ok_or_else(|| anyhow!("not enough farp pads available to build this farp"))?;
-        // move the pad to the new location
-        spctx
-            .move_farp_pad(idx, side, pad_template.as_str(), pos)
-            .context("moving farp pad")?;
         let oid = ObjectiveId::new();
-        // delay the spawn of the other components so the unpacker can
-        // get out of the way
         let mut groups: Set<GroupId> = Set::new();
-        for name in [
-            &spec.template,
-            &ammo_template,
-            &fuel_template,
-            &barracks_template,
-        ] {
-            let gid = match self.add_and_queue_group(
+        // if the pad template is a boat then add it to units/groups so that it
+        // will be handled properly when it is born
+        let mut mobile = false;
+        if let Ok(gifo) = spctx.get_template_ref(idx, GroupKind::Any, side, &pad_template)
+            && let Ok(units) = gifo.group.units()
+            && let Ok(unit) = units.first()
+            && let Ok(typ) = unit.typ()
+            && let Some(tags) = self.ephemeral.cfg.unit_classification.get(&Vehicle(typ))
+            && tags.contains(UnitTag::Boat)
+        {
+            log::info!("adding naval spawn point {pad_template}");
+            match self.add_group(
                 spctx,
                 idx,
                 side,
                 location.clone(),
-                &name,
+                &pad_template,
                 DeployKind::Objective { origin: oid },
-                BitFlags::empty(),
-                Some(now + Duration::seconds(60)),
+                UnitTag::NavalSpawnPoint.into(),
             ) {
-                Ok(gid) => gid,
+                Ok(gid) => {
+                    mobile = true;
+                    groups.insert_cow(gid);
+                }
                 Err(e) => {
-                    for gid in &groups {
-                        let _ = self.delete_group(gid);
-                    }
+                    self.ephemeral.return_pad_template(&pad_template);
                     return Err(e);
                 }
-            };
-            groups.insert_cow(gid);
+            }
+        }
+        // delay the spawn of the other components so the unpacker can
+        // get out of the way
+        for name in [
+            &defenses_template,
+            &ammo_template,
+            &fuel_template,
+            &barracks_template,
+        ] {
+            if let Some(name) = name {
+                let gid = match self.add_and_queue_group(
+                    spctx,
+                    idx,
+                    side,
+                    location.clone(),
+                    &name,
+                    DeployKind::Objective { origin: oid },
+                    BitFlags::empty(),
+                    Some(now + Duration::seconds(60)),
+                ) {
+                    Ok(gid) => gid,
+                    Err(e) => {
+                        for gid in &groups {
+                            let _ = self.delete_group(gid);
+                        }
+                        return Err(e);
+                    }
+                };
+                groups.insert_cow(gid);
+            }
         }
         let name = {
             let get_utm_zone = || -> Result<String> {
@@ -571,6 +620,7 @@ impl Db {
             groups: MapS::from_iter([(side, groups)]),
             kind: ObjectiveKind::Farp {
                 spec: spec.clone(),
+                mobile,
                 pad_template: pad_template.clone(),
             },
             zone: Zone::Circle { pos, radius: 2000. },
@@ -607,6 +657,10 @@ impl Db {
         self.persisted.objectives.insert_cow(oid, obj);
         self.persisted.objectives_by_name.insert_cow(name, oid);
         self.persisted.farps.insert_cow(oid);
+        // move the pad to the new location
+        spctx
+            .move_farp_pad(idx, side, pad_template.as_str(), pos)
+            .context("moving farp pad")?;
         let airbase = Airbase::get_by_name(spctx.lua(), pad_template.clone())
             .with_context(|| format_compact!("getting airbase {pad_template}"))?;
         airbase.set_coalition(side)?;
@@ -1205,8 +1259,33 @@ impl Db {
     }
 
     pub fn update_objectives_markup(&mut self) -> Result<()> {
+        let mut pos_update: SmallVec<[(ObjectiveId, String); 8]> = smallvec![];
+        for (id, obj) in &self.persisted.objectives {
+            if let ObjectiveKind::Farp {
+                mobile: true,
+                pad_template,
+                ..
+            } = &obj.kind
+                && let Zone::Circle { .. } = &obj.zone
+            {
+                pos_update.push((*id, pad_template.clone()))
+            }
+        }
+        let mut moved: SmallVec<[ObjectiveId; 8]> = smallvec![];
+        for (oid, pad) in pos_update {
+            let obj = objective_mut!(self, oid)?;
+            if let Some(uid) = self.persisted.units_by_name.get(&pad)
+                && let Some(unit) = self.persisted.units.get(uid)
+                && let Zone::Circle { pos, .. } = &mut obj.zone
+                && pos != &unit.pos
+            {
+                *pos = unit.pos;
+                moved.push(oid)
+            }
+        }
         for (_, obj) in &self.persisted.objectives {
-            self.ephemeral.update_objective_markup(&self.persisted, obj)
+            self.ephemeral
+                .update_objective_markup(&self.persisted, obj, &moved)
         }
         Ok(())
     }

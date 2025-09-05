@@ -1110,7 +1110,8 @@ impl Db {
             .filter_map(|group| {
                 if group.tags.contains(UnitTag::ALCM) && group.side == side {
                     let center = self.group_center3(&group.id).ok()?;
-                    if true {// na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y)) <= range2 {
+                    if true {
+                        // na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y)) <= range2 {
                         Some(group.id)
                     } else {
                         None
@@ -1122,7 +1123,6 @@ impl Db {
             .collect::<SmallVec<[GroupId; 8]>>();
         alcm
     }
-
 
     pub fn update_unit_positions_incremental(
         &mut self,

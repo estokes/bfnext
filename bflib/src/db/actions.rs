@@ -216,6 +216,8 @@ impl ActionArgs {
             Self::AttackersWaypoint(c) => Some(c.pos),
             Self::Awacs(c) => Some(c.pos),
             Self::AwacsWaypoint(c) => Some(c.pos),
+            Self::CruiseMissileSpawn(c) => Some(c.pos),
+            Self::CruiseMissileWaypoint(c) => Some(c.pos),
             Self::Bomber(_) => None,
             Self::Deployable(c) => Some(c.pos),
             Self::Drone(c) => Some(c.pos),

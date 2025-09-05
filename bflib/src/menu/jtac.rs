@@ -212,6 +212,37 @@ pub fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) 
     Ok(())
 }
 
+pub fn jtac_alcm_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    match ctx
+        .jtac
+        .alcm_mission(&ctx.db, lua, &arg.fst, &arg.snd, arg.trd)
+    {
+        Ok(()) => {
+            let jtac = get_jtac(&ctx.jtac, &arg.fst).context("getting jtac")?;
+            let (near, name) = change_info(jtac, &ctx.db, &arg.fth);
+            let msg = format_compact!(
+                "ALCM MISSION STARTED for {}\ndirected by jtac {} near {}\nrequested by {}",
+                arg.snd,
+                arg.fst,
+                near,
+                name
+            );
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_side(10, false, jtac.side(), msg)
+        }
+        Err(e) => {
+            let msg = format!("jtac {} could not start ALCM mission {:?}", arg.fst, e);
+            ctx.db
+                .ephemeral
+                .panel_to_player(&ctx.db.persisted, 10, &arg.fth, msg);
+        }
+    }
+    Ok(())
+}
+
 fn jtac_relay_target(lua: MizLua, arg: ArgTriple<JtId, DbGid, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     let jtac = get_jtac_mut(&mut ctx.jtac, &arg.fst)?;
@@ -385,6 +416,82 @@ fn add_artillery_menu_for_jtac(
                 fst: jtac,
                 snd: *gid,
                 trd: 40,
+                fth: ucid,
+            },
+        )?;
+    }
+    Ok(())
+}
+
+fn add_alcm_menu_for_jtac(
+    lua: MizLua,
+    mizgid: GroupId,
+    ucid: Ucid,
+    root: GroupSubMenu,
+    jtac: JtId,
+    alcm: &[DbGid],
+) -> Result<()> {
+    let mc = MissionCommands::singleton(lua)?;
+    let root = mc.add_submenu_for_group(mizgid, "ALCM".into(), Some(root.clone()))?;
+    for gid in alcm {
+        let root =
+            mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
+        mc.add_command_for_group(
+            mizgid,
+            "Relay Target".into(),
+            Some(root.clone()),
+            jtac_relay_target,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire One".into(),
+            Some(root.clone()),
+            jtac_alcm_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 1,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire Two".into(),
+            Some(root.clone()),
+            jtac_alcm_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 2,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire Four".into(),
+            Some(root.clone()),
+            jtac_alcm_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 4,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire Remaining".into(),
+            Some(root.clone()),
+            jtac_alcm_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 12,
                 fth: ucid,
             },
         )?;
@@ -632,6 +739,16 @@ pub(super) fn add_menu_for_jtac(
         jtac.gid(),
         jtac.nearby_artillery(),
     )?;
+
+    add_alcm_menu_for_jtac(
+        lua,
+        mizgid,
+        *ucid,
+        root.clone(),
+        jtac.gid(),
+        jtac.nearby_alcm(),
+    )?;
+
     let bomber_missions = db.ephemeral.cfg.actions.get(&side);
     let bomber_missions = bomber_missions.iter().flat_map(|acts| {
         acts.iter().filter_map(|(n, a)| match a.kind {

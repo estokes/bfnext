@@ -165,6 +165,7 @@ pub enum UnitTag {
     AWACS,
     Link16,
     Boat,
+    ALCM,
     NavalSpawnPoint,
 }
 
@@ -606,6 +607,8 @@ pub enum ActionKind {
     Bomber(BomberCfg),
     Fighters(AiPlaneCfg),
     Attackers(AiPlaneCfg),
+    CruiseMissileSpawn(AiPlaneCfg),
+    CruiseMissileWaypoint,
     Drone(DroneCfg),
     Nuke(NukeCfg),
     FighersWaypoint,
@@ -802,6 +805,9 @@ pub struct Cfg {
     /// how close must artillery be to participate in an artillery mission
     /// (meters).
     pub artillery_mission_range: u32,
+    /// how close must alcm be to participate in an alcm mission
+    /// (meters).
+    pub alcm_mission_range: u32,
     /// If true players will be locked to the side they initially
     /// choose for the duration of the round
     #[serde(default = "default_lock_sides")]

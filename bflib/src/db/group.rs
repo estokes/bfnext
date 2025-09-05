@@ -50,7 +50,7 @@ use dcso3::{
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
-use log::{error, info, warn};
+use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
 use std::{cmp::max, collections::VecDeque};
@@ -217,6 +217,14 @@ impl Db {
     pub fn deployed(&self) -> impl Iterator<Item = &SpawnedGroup> {
         self.persisted
             .deployed
+            .into_iter()
+            .chain(self.persisted.troops.into_iter())
+            .filter_map(|gid| self.persisted.groups.get(gid))
+    }
+
+    pub fn actions(&self) -> impl Iterator<Item = &SpawnedGroup> {
+        self.persisted
+            .actions
             .into_iter()
             .chain(self.persisted.troops.into_iter())
             .filter_map(|gid| self.persisted.groups.get(gid))
@@ -1106,12 +1114,14 @@ impl Db {
     pub fn alcm_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
         let range2 = (self.ephemeral.cfg.alcm_mission_range as f64).powi(2);
         let alcm = self
-            .deployed()
+            .actions()
             .filter_map(|group| {
                 if group.tags.contains(UnitTag::ALCM) && group.side == side {
                     let center = self.group_center3(&group.id).ok()?;
-                    if true {
-                        // na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y)) <= range2 {
+                    if na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y))
+                        <= range2
+                    {
+                        
                         Some(group.id)
                     } else {
                         None

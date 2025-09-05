@@ -17,7 +17,6 @@ for more details.
 use crate::{
     db::{Db, JtDesc, group::SpawnedUnit, player::InstancedPlayer},
     landcache::LandCache,
-    msgq::MsgQ,
 };
 use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
@@ -45,7 +44,7 @@ use dcso3::{
     radians_to_degrees, simple_enum,
     spot::{ClassSpot, Spot},
     trigger::{MarkId, SmokeColor, Trigger},
-    unit::{Ammo, ClassUnit, Unit},
+    unit::{ClassUnit, Unit},
     weapon::Weapon,
 };
 use enumflags2::BitFlags;
@@ -740,7 +739,7 @@ impl Jtac {
                         .first();
                     let ammo = match first {
                         Ok(ammo) => ammo.count()?,
-                        Err(e) => bail! {"ALCM Abort: {gid} is out of missiles"},
+                        Err(_e) => bail! {"ALCM Abort: {gid} is out of missiles."},
                     };
                     if ammo < n as u32 {
                         bail!(
@@ -755,7 +754,7 @@ impl Jtac {
                     direction: None,
                     expend: Some(expend),
                     group_attack: Some(false),
-                    weapon_type: Some(2097152),
+                    weapon_type: Some(2097152), // hard coded, change later?
                     attack_qty_limit: None,
                     altitude_enabled: Some(false),
                     direction_enabled: Some(false),
@@ -781,7 +780,7 @@ impl Jtac {
                             pos: LuaVec2(apos),
                             alt: 9000.,
                             alt_typ: Some(AltType::BARO),
-                            speed: 1000.,
+                            speed: 890.,
                             speed_locked: None,
                             eta: None,
                             eta_locked: None,
@@ -798,7 +797,7 @@ impl Jtac {
                             pos: LuaVec2(apos), // Same position as first point
                             alt: 9000.,
                             alt_typ: Some(AltType::BARO),
-                            speed: 1000.,
+                            speed: 890.,
                             speed_locked: None,
                             eta: None,
                             eta_locked: None,

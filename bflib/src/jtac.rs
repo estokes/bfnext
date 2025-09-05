@@ -751,6 +751,7 @@ impl Jtac {
                 };
 
                 let mut bombing_task_vec: Vec<MissionPoint> = vec![];
+                let mut fire_task_vec: Vec<Task> = vec![];
 
                 for (_, target) in &self.contacts {
                     if ammo >= n {
@@ -774,31 +775,33 @@ impl Jtac {
                         y: Some(target.pos.z),
                     };
 
-                    let task = Task::Bombing {
+                    fire_task_vec.push(Task::Bombing {
                         point: dcso3::LuaVec2(Vector2::new(target.pos.x, target.pos.z)),
                         params: attack_params,
-                    };
-                    bombing_task_vec.push(MissionPoint {
-                        action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
-                        typ: PointType::TurningPoint,
-                        airdrome_id: None,
-                        helipad: None,
-                        time_re_fu_ar: None,
-                        link_unit: None,
-                        pos: LuaVec2(apos),
-                        alt: 9000.,
-                        alt_typ: Some(AltType::BARO),
-                        speed: 890.,
-                        speed_locked: None,
-                        eta: None,
-                        eta_locked: None,
-                        name: None,
-                        task: Box::new(task),
                     });
+
                     if expend == WeaponExpend::All {
                         break;
                     }
                 }
+
+                bombing_task_vec.push(MissionPoint {
+                    action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                    typ: PointType::TurningPoint,
+                    airdrome_id: None,
+                    helipad: None,
+                    time_re_fu_ar: None,
+                    link_unit: None,
+                    pos: LuaVec2(apos),
+                    alt: 9000.,
+                    alt_typ: Some(AltType::BARO),
+                    speed: 890.,
+                    speed_locked: None,
+                    eta: None,
+                    eta_locked: None,
+                    name: None,
+                    task: Box::new(Task::ComboTask(fire_task_vec)),
+                });
 
                 bombing_task_vec.push(MissionPoint {
                     action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),

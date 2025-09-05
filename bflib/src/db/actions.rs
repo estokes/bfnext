@@ -11,8 +11,8 @@ use crate::{
 use anyhow::{Context, Ok, Result, anyhow, bail};
 use bfprotocols::{
     cfg::{
-        Action, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg, DeployableCfg,
-        DeployableKind, DroneCfg, LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
+        Action, ActionGeoLimit, ActionKind, AiPlaneCfg, AiPlaneKind, AwacsCfg, BomberCfg,
+        DeployableCfg, DeployableKind, DroneCfg, LimitEnforceTyp, MoveCfg, NukeCfg, UnitTag,
     },
     db::{
         group::GroupId,
@@ -197,6 +197,28 @@ impl ActionArgs {
             ActionKind::Move(c) => Ok(Self::Move(pos_group(db, lua, side, c, s)?)),
         }
     }
+
+    fn pos(&self) -> Option<Vector2> {
+        match self {
+            Self::Attackers(c) => Some(c.pos),
+            Self::AttackersWaypoint(c) => Some(c.pos),
+            Self::Awacs(c) => Some(c.pos),
+            Self::AwacsWaypoint(c) => Some(c.pos),
+            Self::Bomber(_) => None,
+            Self::Deployable(c) => Some(c.pos),
+            Self::Drone(c) => Some(c.pos),
+            Self::DroneWaypoint(c) => Some(c.pos),
+            Self::Fighters(c) => Some(c.pos),
+            Self::FightersWaypoint(c) => Some(c.pos),
+            Self::LogisticsRepair(_) => None,
+            Self::LogisticsTransfer(_) => None,
+            Self::Move(c) => Some(c.pos),
+            Self::Nuke(c) => Some(c.pos),
+            Self::Paratrooper(c) => Some(c.pos),
+            Self::Tanker(c) => Some(c.pos),
+            Self::TankerWaypoint(c) => Some(c.pos),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -345,6 +367,22 @@ impl Db {
         if let Some(limit) = cmd.action.limit {
             if *n >= limit {
                 bail!("{side} is out of {} actions", cmd.name)
+            }
+        }
+        match cmd.action.geo_limit {
+            ActionGeoLimit::Unlimited => (),
+            ActionGeoLimit::NearFriendlyObjective { max } => {
+                if let Some(pos) = cmd.args.pos()
+                    && let Some((dist, _, _)) =
+                        Db::objective_near_point(&self.persisted.objectives, pos, |obj| {
+                            obj.owner == side
+                        })
+                    && dist > max as f64
+                {
+                    bail!(
+                        "this action point is {dist} meters but can only be targeted within {max} meters of a friendly objective"
+                    )
+                }
             }
         }
         let name = cmd.name.clone();

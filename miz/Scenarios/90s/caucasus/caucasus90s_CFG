@@ -618,6 +618,22 @@
         "penalty": 25,
         "limit": null
       },
+      "naval-farp": {
+        "kind": {
+          "Deployable": {
+            "name": "Naval FARP",
+            "plane": null
+          }
+        },
+        "cost": 500,
+        "penalty": 0,
+        "limit": null,
+        "geo_limit": {
+          "NearFriendlyObjective": {
+            "max": 10000
+          }
+        }
+      },
       "drone": {
         "kind": {
           "Drone": {
@@ -2516,6 +2532,10 @@
     ]
   },
   "unit_classification": {
+    "leander-gun-achilles": [
+      "Boat",
+      "Artillery"
+    ],
     "J-11A": [
       "Aircraft"
     ],

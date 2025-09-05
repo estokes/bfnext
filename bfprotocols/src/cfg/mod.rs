@@ -621,11 +621,29 @@ pub enum ActionKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ActionGeoLimit {
+    Unlimited,
+    /// This action can only be run within `max` in meters of a friendly objective
+    NearFriendlyObjective {
+        max: u32,
+    },
+}
+
+impl Default for ActionGeoLimit {
+    fn default() -> Self {
+        Self::Unlimited
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Action {
     pub kind: ActionKind,
     pub cost: u32,
     pub penalty: Option<u32>,
     pub limit: Option<u32>,
+    /// defines where this action is allowed to run
+    #[serde(default)]
+    pub geo_limit: ActionGeoLimit,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

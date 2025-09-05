@@ -721,10 +721,9 @@ impl Jtac {
     pub fn alcm_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId, n: u8) -> Result<()> {
         match self.target.as_mut() {
             None => bail!("no target"),
-            Some(target) => {
+            Some(_target) => {
                 let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
-                let pos = Vector2::new(target.pos.x, target.pos.z);
                 let expend = match n {
                     1 => WeaponExpend::One,
                     2 => WeaponExpend::Two,
@@ -732,86 +731,101 @@ impl Jtac {
                     12 => WeaponExpend::All,
                     _ => bail!("invalid expend {n}"),
                 };
-
-                for i in db.group(gid)?.units.into_iter() {
-                    let first = Unit::get_by_name(lua, &db.unit(i)?.name)?
-                        .get_ammo()?
-                        .first();
-                    let ammo = match first {
-                        Ok(ammo) => ammo.count()?,
-                        Err(_e) => bail! {"ALCM Abort: {gid} is out of missiles."},
-                    };
-                    if ammo < n as u32 {
-                        bail!(
-                            "ALCM Abort: {gid} has only {ammo} missiles remaining, cannot launch {n}."
-                        );
+                let mut ammo = {
+                    let mut ammo = 0;
+                    for i in db.group(gid)?.units.into_iter() {
+                        let first = Unit::get_by_name(lua, &db.unit(i)?.name)?
+                            .get_ammo()?
+                            .first();
+                        ammo = match first {
+                            Ok(ammo) => ammo.count()? as u8,
+                            Err(_e) => bail! {"ALCM Abort: {gid} is out of missiles."},
+                        };
+                        if ammo < n as u8 {
+                            bail!(
+                                "ALCM Abort: {gid} has only {ammo} missiles remaining, cannot launch {n}."
+                            );
+                        }
                     }
+                    ammo
+                };
+
+                let mut bombing_task_vec: Vec<MissionPoint> = vec![];
+
+                for (_, target) in &self.contacts {
+                    if ammo >= n {
+                        ammo -= n;
+                    } else {
+                        break;
+                    }
+
+                    let attack_params = AttackParams {
+                        altitude: Some(9000.),
+                        attack_qty: Some(1),
+                        direction: None,
+                        expend: Some(expend.clone()),
+                        group_attack: Some(false),
+                        weapon_type: Some(2097152), // hard coded, change later?
+                        attack_qty_limit: None,
+                        altitude_enabled: Some(false),
+                        direction_enabled: Some(false),
+                        point: None,
+                        x: Some(target.pos.x),
+                        y: Some(target.pos.z),
+                    };
+
+                    let task = Task::Bombing {
+                        point: dcso3::LuaVec2(Vector2::new(target.pos.x, target.pos.z)),
+                        params: attack_params,
+                    };
+                    bombing_task_vec.push(MissionPoint {
+                        action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2(apos),
+                        alt: 9000.,
+                        alt_typ: Some(AltType::BARO),
+                        speed: 890.,
+                        speed_locked: None,
+                        eta: None,
+                        eta_locked: None,
+                        name: None,
+                        task: Box::new(task),
+                    });
                 }
 
-                let attack_params = AttackParams {
-                    altitude: Some(9000.),
-                    attack_qty: Some(1),
-                    direction: None,
-                    expend: Some(expend),
-                    group_attack: Some(false),
-                    weapon_type: Some(2097152), // hard coded, change later?
-                    attack_qty_limit: None,
-                    altitude_enabled: Some(false),
-                    direction_enabled: Some(false),
-                    point: None,
-                    x: Some(target.pos.x),
-                    y: Some(target.pos.z),
-                };
+                bombing_task_vec.push(MissionPoint {
+                    action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                    typ: PointType::TurningPoint,
+                    airdrome_id: None,
+                    helipad: None,
+                    time_re_fu_ar: None,
+                    link_unit: None,
+                    pos: LuaVec2(apos), // Same position as first point
+                    alt: 9000.,
+                    alt_typ: Some(AltType::BARO),
+                    speed: 890.,
+                    speed_locked: None,
+                    eta: None,
+                    eta_locked: None,
+                    name: None,
+                    task: Box::new(Task::Orbit {
+                        pattern: OrbitPattern::Circle,
+                        speed: Some(750.0),
+                        altitude: Some(9000.0),
+                        point2: Some(LuaVec2(apos)),
+                        point: Some(LuaVec2(apos)),
+                    }),
+                });
 
-                let task = Task::Bombing {
-                    point: dcso3::LuaVec2(pos),
-                    params: attack_params,
-                };
                 let task = Task::Mission {
                     airborne: Some(true),
-                    route: vec![
-                        MissionPoint {
-                            action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
-                            typ: PointType::TurningPoint,
-                            airdrome_id: None,
-                            helipad: None,
-                            time_re_fu_ar: None,
-                            link_unit: None,
-                            pos: LuaVec2(apos),
-                            alt: 9000.,
-                            alt_typ: Some(AltType::BARO),
-                            speed: 890.,
-                            speed_locked: None,
-                            eta: None,
-                            eta_locked: None,
-                            name: None,
-                            task: Box::new(task),
-                        },
-                        MissionPoint {
-                            action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
-                            typ: PointType::TurningPoint,
-                            airdrome_id: None,
-                            helipad: None,
-                            time_re_fu_ar: None,
-                            link_unit: None,
-                            pos: LuaVec2(apos), // Same position as first point
-                            alt: 9000.,
-                            alt_typ: Some(AltType::BARO),
-                            speed: 890.,
-                            speed_locked: None,
-                            eta: None,
-                            eta_locked: None,
-                            name: None,
-                            task: Box::new(Task::Orbit {
-                                pattern: OrbitPattern::Circle,
-                                speed: Some(750.0),
-                                altitude: Some(9000.0),
-                                point2: Some(LuaVec2(apos)),
-                                point: Some(LuaVec2(apos)),
-                            }),
-                        },
-                    ],
+                    route: bombing_task_vec,
                 };
+
                 let group = Group::get_by_name(lua, &name)
                     .with_context(|| format_compact!("getting group {}", name))?;
                 for unit in group.get_units()? {

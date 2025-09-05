@@ -437,6 +437,7 @@ fn add_alcm_menu_for_jtac(
     for gid in alcm {
         let root =
             mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
+<<<<<<< HEAD
 
         let quarter =
             mc.add_submenu_for_group(mizgid, "Fire Quarter".into(), Some(root.clone()))?;
@@ -481,6 +482,67 @@ fn add_alcm_menu_for_jtac(
                 },
             )?;
         }
+=======
+        mc.add_command_for_group(
+            mizgid,
+            "Relay Target".into(),
+            Some(root.clone()),
+            jtac_relay_target,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire One".into(),
+            Some(root.clone()),
+            jtac_alcm_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 1,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire Two".into(),
+            Some(root.clone()),
+            jtac_alcm_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 2,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire Four".into(),
+            Some(root.clone()),
+            jtac_alcm_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 4,
+                fth: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire Everything".into(),
+            Some(root.clone()),
+            jtac_alcm_mission,
+            ArgQuad {
+                fst: jtac,
+                snd: *gid,
+                trd: 0,
+                fth: ucid,
+            },
+        )?;
+>>>>>>> cad4f9c3 (woops)
     }
 
     Ok(())

@@ -55,7 +55,7 @@ use mlua::{FromLua, IntoLua, Lua, Table, Value, prelude::LuaResult};
 use rand::{Rng, thread_rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
-use std::{collections::hash_map::Entry, f32::consts::E, fmt, str::FromStr};
+use std::{collections::hash_map::Entry, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
@@ -1120,11 +1120,7 @@ impl Jtacs {
         lua: MizLua,
         jtid: &JtId,
         shooter: &GroupId,
-<<<<<<< HEAD
         n: Vec<u8>,
-=======
-        n: (u8, u8),
->>>>>>> 7e1419d2 (krgnfrdklgjmrdekilog)
     ) -> Result<()> {
         let jtac = self
             .jtacs

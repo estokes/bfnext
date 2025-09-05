@@ -765,6 +765,7 @@ impl Ephemeral {
                         plane: AiPlaneCfg { template, .. },
                         ..
                     })
+                    | ActionKind::CruiseMissileSpawn(AiPlaneCfg { template, .. })
                     | ActionKind::Tanker(AiPlaneCfg { template, .. })
                     | ActionKind::Drone(DroneCfg {
                         plane: AiPlaneCfg { template, .. },
@@ -809,6 +810,7 @@ impl Ephemeral {
                     ActionKind::AwacsWaypoint
                     | ActionKind::TankerWaypoint
                     | ActionKind::DroneWaypoint
+                    | ActionKind::CruiseMissileWaypoint                    
                     | ActionKind::FighersWaypoint
                     | ActionKind::AttackersWaypoint
                     | ActionKind::Move(_)

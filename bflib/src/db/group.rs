@@ -222,6 +222,14 @@ impl Db {
             .filter_map(|gid| self.persisted.groups.get(gid))
     }
 
+    pub fn actions(&self) -> impl Iterator<Item = &SpawnedGroup> {
+        self.persisted
+            .actions
+            .into_iter()
+            .chain(self.persisted.troops.into_iter())
+            .filter_map(|gid| self.persisted.groups.get(gid))
+    }
+
     pub(super) fn mark_group(&mut self, gid: &GroupId) -> Result<()> {
         if let Some(id) = self.ephemeral.group_marks.remove(gid) {
             self.ephemeral.msgs.delete_mark(id)
@@ -1112,6 +1120,29 @@ impl Db {
             })
             .collect::<SmallVec<[GroupId; 8]>>();
         artillery
+    }
+
+    pub fn alcm_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
+        let range2 = (self.ephemeral.cfg.alcm_mission_range as f64).powi(2);
+        let alcm = self
+            .actions()
+            .filter_map(|group| {
+                if group.tags.contains(UnitTag::ALCM) && group.side == side {
+                    let center = self.group_center3(&group.id).ok()?;
+                    if na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y))
+                        <= range2
+                    {
+                        
+                        Some(group.id)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<SmallVec<[GroupId; 8]>>();
+        alcm
     }
 
     pub fn update_unit_positions_incremental(

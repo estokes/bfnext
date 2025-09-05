@@ -55,7 +55,7 @@ use mlua::{FromLua, IntoLua, Lua, Table, Value, prelude::LuaResult};
 use rand::{Rng, thread_rng};
 use serde::{Deserialize, Serialize};
 use smallvec::{SmallVec, smallvec};
-use std::{collections::hash_map::Entry, fmt, str::FromStr};
+use std::{collections::hash_map::Entry, f32::consts::E, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JtId {
@@ -718,18 +718,20 @@ impl Jtac {
         Ok(())
     }
 
-    pub fn alcm_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId, n: u8) -> Result<()> {
+    pub fn alcm_mission(&mut self, db: &Db, lua: MizLua, gid: &GroupId, n: (u8, u8)) -> Result<()> {
+        let magazine_expend = n.0;
+        let per_target = n.1;
+
         match self.target.as_mut() {
             None => bail!("no target"),
             Some(_target) => {
                 let name = db.group(gid)?.name.clone();
                 let apos = db.group_center(gid)?;
-                let expend = match n {
+                let expend = match magazine_expend {
                     1 => WeaponExpend::One,
                     2 => WeaponExpend::Two,
                     4 => WeaponExpend::Four,
-                    0 => WeaponExpend::All,
-                    _ => bail!("invalid expend {n}"),
+                    _ => bail!("invalid expend {0}", magazine_expend),
                 };
                 let mut ammo = {
                     let mut ammo = 0;
@@ -741,13 +743,24 @@ impl Jtac {
                             Ok(ammo) => ammo.count()? as u8,
                             Err(_e) => bail! {"ALCM Abort: {gid} is out of missiles."},
                         };
-                        if ammo < n as u8 {
+                        if ammo < per_target {
                             bail!(
-                                "ALCM Abort: {gid} has only {ammo} missiles remaining, cannot launch {n}."
+                                "ALCM Abort: {gid} has only {ammo} missiles remaining, cannot launch {per_target}."
                             );
                         }
                     }
-                    ammo
+
+                    let ammo = match expend {
+                        WeaponExpend::Quarter => ammo / 4,
+                        WeaponExpend::Half => ammo / 2,
+                        WeaponExpend::All => ammo,
+                        _ => bail!("nice job"),
+                    };
+                    if ammo > 0 {
+                        ammo
+                    } else {
+                        bail!("ALCM Abort: not enough missiles to complete a minimum launch.")
+                    }
                 };
 
                 let mut bombing_task_vec: Vec<MissionPoint> = vec![];
@@ -1091,7 +1104,7 @@ impl Jtacs {
         lua: MizLua,
         jtid: &JtId,
         shooter: &GroupId,
-        n: u8,
+        n: (u8, u8),
     ) -> Result<()> {
         let jtac = self
             .jtacs

@@ -172,6 +172,7 @@
   "crate_load_distance": 50,
   "crate_spread": 500,
   "artillery_mission_range": 70000,
+  "alcm_mission_range": 600000,
   "lock_sides": true,
   "side_switches": 1,
   "max_crates": 6,
@@ -2550,7 +2551,8 @@
   "unit_classification": {
     "leander-gun-achilles": [
       "Boat",
-      "Artillery"
+      "Artillery",
+      "Driveable"
     ],
     "J-11A": [
       "Aircraft"
@@ -2738,8 +2740,7 @@
     ],
     "Ural-375": [
       "Logistics",
-      "Unarmed",
-      "Driveable"
+      "Unarmed"
     ],
     "GeneratorF": [
       "Logistics",
@@ -2800,16 +2801,15 @@
     ],
     "CHAP_Project22160": [
       "Artillery",
-      "Driveable",
-      "Boat"
+      "Boat",
+      "Driveable"
     ],
     "F-15C": [
       "Aircraft"
     ],
     "M 818": [
       "Logistics",
-      "Unarmed",
-      "Driveable"
+      "Unarmed"
     ],
     "Ka-50": [
       "Aircraft",

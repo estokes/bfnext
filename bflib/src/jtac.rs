@@ -728,7 +728,7 @@ impl Jtac {
                     1 => WeaponExpend::One,
                     2 => WeaponExpend::Two,
                     4 => WeaponExpend::Four,
-                    12 => WeaponExpend::All,
+                    0 => WeaponExpend::All,
                     _ => bail!("invalid expend {n}"),
                 };
                 let mut ammo = {
@@ -795,6 +795,9 @@ impl Jtac {
                         name: None,
                         task: Box::new(task),
                     });
+                    if expend == WeaponExpend::All {
+                        break;
+                    }
                 }
 
                 bombing_task_vec.push(MissionPoint {

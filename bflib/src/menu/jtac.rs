@@ -485,13 +485,13 @@ fn add_alcm_menu_for_jtac(
         )?;
         mc.add_command_for_group(
             mizgid,
-            "Fire Remaining".into(),
+            "Fire Everything".into(),
             Some(root.clone()),
             jtac_alcm_mission,
             ArgQuad {
                 fst: jtac,
                 snd: *gid,
-                trd: 12,
+                trd: 0,
                 fth: ucid,
             },
         )?;

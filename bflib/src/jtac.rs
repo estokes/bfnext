@@ -732,7 +732,7 @@ impl Jtac {
                     let first = Unit::get_by_name(lua, &db.unit(i)?.name)?.get_ammo()?.first();
                     let ammo = match first {
                         Ok(ammo) => ammo.count()?,
-                        Err(e) =>                            
+                        Err(_e) =>                            
                             bail!{"ALCM Abort: {gid} is out of missiles"},
                     };
                     if ammo < n as u32 {                    

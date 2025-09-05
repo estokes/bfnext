@@ -486,7 +486,7 @@ fn add_alcm_menu_for_jtac(
         )?;
         mc.add_command_for_group(
             mizgid,
-            "Fire Twelve".into(),
+            "Fire Remaining".into(),
             Some(root.clone()),
             jtac_alcm_mission,
             ArgQuad {

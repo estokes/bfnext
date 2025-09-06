@@ -780,6 +780,8 @@ impl Jtac {
                 let mut bombing_task_vec: Vec<MissionPoint> = vec![];
                 let mut fire_task_vec: Vec<Task> = vec![];
 
+                info!("allocated ammo: {} {}", allocated_ammo, per_target);
+
                 for (_, target) in &self.contacts {
                     if allocated_ammo >= per_target {
                         allocated_ammo -= per_target;
@@ -806,10 +808,6 @@ impl Jtac {
                         point: dcso3::LuaVec2(Vector2::new(target.pos.x, target.pos.z)),
                         params: attack_params,
                     });
-
-                    if expend == WeaponExpend::All {
-                        break;
-                    }
                 }
 
                 bombing_task_vec.push(MissionPoint {

@@ -108,6 +108,7 @@ fn do_pos_action(
         | ActionKind::LogisticsTransfer(_)
         | ActionKind::LogisticsRepair(_)
         | ActionKind::Move(_)
+        | ActionKind::Rtb
         | ActionKind::TankerWaypoint
         | ActionKind::CruiseMissileWaypoint
         | ActionKind::AwacsWaypoint
@@ -225,6 +226,11 @@ fn do_pos_group_action(
             pos,
             group,
         }),
+        ActionKind::Rtb => ActionArgs::Rtb(WithPosAndGroup {
+            cfg: (),
+            pos,
+            group,
+        }),
         ActionKind::Attackers(_)
         | ActionKind::Awacs(_)
         | ActionKind::Deployable(_)
@@ -311,6 +317,7 @@ fn do_objective_action(
         | ActionKind::Nuke(_)
         | ActionKind::Bomber(_)
         | ActionKind::LogisticsTransfer(_)
+        | ActionKind::Rtb
         | ActionKind::Move(_) => bail!("invalid action type for this menu item"),
     };
     let cmd = ActionCmd { name, action, args };
@@ -531,7 +538,8 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                 let root = mc.add_submenu_for_group(arg.snd, title, Some(root.clone()))?;
                 add_pos_group(root.clone(), name.clone(), false)?
             }
-            ActionKind::Attackers(_)
+            ActionKind::Rtb
+            | ActionKind::Attackers(_)
             | ActionKind::Awacs(_)
             | ActionKind::Deployable(_)
             | ActionKind::CruiseMissileSpawn(_)

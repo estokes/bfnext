@@ -100,6 +100,7 @@ pub enum ActionArgs {
     LogisticsRepair(WithObj<AiPlaneCfg>),
     LogisticsTransfer(WithFromTo<AiPlaneCfg>),
     Move(WithPosAndGroup<MoveCfg>),
+    Rtb(WithPosAndGroup<()>),
 }
 
 impl ActionArgs {
@@ -131,6 +132,45 @@ impl ActionArgs {
                 Ok(found[0].1)
             }
         }
+        fn get_closest_base(db: &mut Db, lua: MizLua, side: Side, key: &str) -> Result<Vector2> {
+            let mut found: SmallVec<[(MarkId, Vector2); 4]> = smallvec![];
+            for mk in World::singleton(lua)?.get_mark_panels()? {
+                let mk = mk?;
+                if mk.side.is_match(&side) && mk.text.as_str() == key {
+                    let pos = Vector2::new(mk.pos.0.x, mk.pos.0.z);
+                    found.push((mk.id, pos));
+                }
+            }
+            if found.len() == 0 {
+                Err(anyhow!("key {key} was not found"))
+            } else if found.len() > 1 {
+                Err(anyhow!(
+                    "key {key} was found {} times, make sure to choose a unique key",
+                    found.len()
+                ))
+            } else {
+                db.ephemeral.msgs().delete_mark(found[0].0);
+                let key_pos = found[0].1;
+                let mut min_dist = f64::MAX;
+                {
+                    let mut closest_base = None;
+                    for (_id, obj) in db.objectives() {
+                        if obj.is_airbase() {
+                            let obj_pos = obj.zone.pos();
+                            let dist = na::distance_squared(&obj_pos.into(), &key_pos.into());
+                            if dist < min_dist {
+                                min_dist = dist;
+                                closest_base = Some(obj);
+                            };
+                        }
+                    }
+                    match closest_base {
+                        Some(o) => Ok(o.zone.pos()),
+                        None => bail!("no bases to rtb!"),
+                    }
+                }
+            }
+        }
         fn pos_group<T>(
             db: &mut Db,
             lua: MizLua,
@@ -143,6 +183,22 @@ impl ActionArgs {
                 Some((gid, key)) => Ok(WithPosAndGroup {
                     cfg: c,
                     pos: get_key_pos(db, lua, side, key)?,
+                    group: gid.parse()?,
+                }),
+            }
+        }
+        fn pos_closest_base<T>(
+            db: &mut Db,
+            lua: MizLua,
+            side: Side,
+            c: T,
+            s: &str,
+        ) -> Result<WithPosAndGroup<T>> {
+            match s.split_once(" ") {
+                None => Err(anyhow!("expected <gid> <key>")),
+                Some((gid, key)) => Ok(WithPosAndGroup {
+                    cfg: c,
+                    pos: get_closest_base(db, lua, side, key)?,
                     group: gid.parse()?,
                 }),
             }
@@ -200,6 +256,7 @@ impl ActionArgs {
             ActionKind::CruiseMissileSpawn(c) => {
                 Ok(Self::CruiseMissileSpawn(pos(db, lua, side, c, s)?))
             }
+            ActionKind::Rtb => Ok(Self::Rtb(pos_closest_base(db, lua, side, (), s)?)),
             ActionKind::CruiseMissileWaypoint => Ok(Self::CruiseMissileWaypoint(pos_group(
                 db,
                 lua,
@@ -219,6 +276,7 @@ impl ActionArgs {
             Self::CruiseMissileSpawn(c) => Some(c.pos),
             Self::CruiseMissileWaypoint(c) => Some(c.pos),
             Self::Bomber(_) => None,
+            Self::Rtb(c) => Some(c.pos),
             Self::Deployable(c) => Some(c.pos),
             Self::Drone(c) => Some(c.pos),
             Self::DroneWaypoint(c) => Some(c.pos),
@@ -451,6 +509,7 @@ impl Db {
             ActionArgs::AttackersWaypoint(args) => {
                 self.move_ai_attackers(spctx, side, ucid.clone(), args)?
             }
+            ActionArgs::Rtb(args) => self.rtb(spctx, args).context("rtbing unit")?,
             ActionArgs::Drone(args) => self
                 .drone(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
                 .context("calling drone")?,
@@ -1009,6 +1068,15 @@ impl Db {
         Ok(None)
     }
 
+    fn rtb(&mut self, spctx: &SpawnCtx, mut args: WithPosAndGroup<()>) -> Result<Option<GroupId>> {
+        let gid = args.group;
+        let mission = self
+            .ai_rtb_mission(&mut args, || Task::ComboTask(vec![]))
+            .context("generate rtb mission")?;
+        self.set_ai_mission(spctx, gid, mission)?;
+        Ok(Some(gid))
+    }
+
     fn tanker_mission<'lua>(
         &mut self,
         side: Side,
@@ -1373,6 +1441,132 @@ impl Db {
         Ok(vec![wpt!("tgt", tgt), wpt!("rtb", src)])
     }
 
+    fn ai_rtb_mission<'lua>(
+        &mut self,
+        args: &mut WithPosAndGroup<()>,
+        task: impl Fn() -> Task<'lua> + 'static,
+    ) -> Result<Vec<MissionPoint<'lua>>> {
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let mut min_dist = f64::MAX;
+        let rtb_pos = {
+            let mut closest_base = None;
+            for (_id, obj) in self.objectives() {
+                if obj.is_airbase() {
+                    let obj_pos = obj.zone.pos();
+                    let dist = na::distance_squared(&obj_pos.into(), &args.pos.into());
+                    if dist < min_dist {
+                        min_dist = dist;
+                        closest_base = Some(obj);
+                    };
+                }
+            }
+            match closest_base {
+                Some(o) => o.zone.pos(),
+                None => bail!("no bases to rtb!"),
+            }
+        };
+
+        let (alt, alt_typ, speed) = match &group.origin {
+            DeployKind::Action {
+                marks: _,
+                loc: _,
+                player: _,
+                name: _,
+                spec,
+                time: _,
+                destination: _,
+                rtb: _,
+                origin: _,
+            } => match &spec.kind {
+                ActionKind::Tanker(ai_plane_cfg) => (
+                    ai_plane_cfg.altitude,
+                    ai_plane_cfg.altitude_typ.clone(),
+                    ai_plane_cfg.speed,
+                ),
+                ActionKind::Awacs(awacs_cfg) => (
+                    awacs_cfg.plane.altitude,
+                    awacs_cfg.plane.altitude_typ.clone(),
+                    awacs_cfg.plane.speed,
+                ),
+                ActionKind::Bomber(bomber_cfg) => (
+                    bomber_cfg.plane.altitude,
+                    bomber_cfg.plane.altitude_typ.clone(),
+                    bomber_cfg.plane.speed,
+                ),
+                ActionKind::CruiseMissileSpawn(ai_plane_cfg) => (
+                    ai_plane_cfg.altitude,
+                    ai_plane_cfg.altitude_typ.clone(),
+                    ai_plane_cfg.speed,
+                ),
+                ActionKind::Drone(drone_cfg) => (
+                    drone_cfg.plane.altitude,
+                    drone_cfg.plane.altitude_typ.clone(),
+                    drone_cfg.plane.speed,
+                ),
+                _ => bail!("not a valid type"),
+            },
+            _ => bail!("not the right action kind"),
+        };
+
+        match &group.origin {
+            DeployKind::Action {
+                marks,
+                loc: _,
+                player: _,
+                name: _,
+                spec: _,
+                time: _,
+                destination: _,
+                rtb: _,
+                origin: _,
+            } => {
+                for id in marks.iter() {
+                    self.ephemeral.msgs().delete_mark(*id)
+                }
+            }
+            _ => bail!("not valid action"),
+        };
+
+        let group = &group_mut!(self, gid)?;
+
+        match group.origin {
+            DeployKind::Action {
+                marks: _,
+                loc: _,
+                player: _,
+                name: _,
+                spec: _,
+                time: _,
+                destination,
+                rtb: _,
+                origin: _,
+            } => match destination {
+                Some(mut d) => *d = *rtb_pos,
+                None => bail!("not an action"),
+            },
+            _ => bail!("wrong origin"),
+        };
+
+        Ok(vec![MissionPoint {
+            action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+            typ: PointType::TurningPoint,
+            airdrome_id: None,
+            helipad: None,
+            time_re_fu_ar: None,
+            link_unit: None,
+            pos: LuaVec2(rtb_pos),
+            alt,
+            alt_typ: Some(alt_typ.clone()),
+            speed,
+            eta: None,
+            speed_locked: None,
+            eta_locked: None,
+            name: Some("rtb".to_owned().into()),
+            task: Box::new(task()),
+        }])
+    }
+
     fn bomber_strike(
         &mut self,
         perf: &mut PerfInner,
@@ -1683,6 +1877,7 @@ impl Db {
                     | ActionKind::TankerWaypoint
                     | ActionKind::FighersWaypoint
                     | ActionKind::Move(_)
+                    | ActionKind::Rtb
                     | ActionKind::Deployable(_)
                     | ActionKind::Paratrooper(_)
                     | ActionKind::Bomber(_)
@@ -2129,6 +2324,32 @@ impl Db {
                             if let Some(target) = *rtb {
                                 if at_dest!(group, target, 10_000.) {
                                     to_delete.push(*gid);
+                                }
+                            }
+                        }
+                    }
+                    ActionKind::Rtb => {
+                        if let Some(target) = *destination {
+                            if at_dest!(group, target, 10_000.) {
+                                to_delete.push(*gid);
+                                match player {
+                                    Some(u) => match self.persisted.players.get_mut_cow(u) {
+                                        Some(p) => {
+                                            p.points += (spec.cost as f64 * 0.25).ceil() as i32;
+                                            self.ephemeral.msgs().panel_to_side(
+                                                5,
+                                                false,
+                                                p.side,
+                                                format_compact!(
+                                                    "{}'s {} has RTB'd.",
+                                                    p.name,
+                                                    group.name
+                                                ),
+                                            );
+                                        }
+                                        None => (),
+                                    },
+                                    None => (),
                                 }
                             }
                         }

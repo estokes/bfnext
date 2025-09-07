@@ -362,6 +362,10 @@ fn action_help(ctx: &mut Context, actions: &IndexMap<String, Action, FxBuildHash
                 "{name}: <group> <key> | Move a ground unit. cost {}",
                 action.cost
             )),
+            ActionKind::Rtb => Some(format_compact!(
+                "{name}: <group> <key> | RTB an air asset manually. cost {}",
+                action.cost
+            )),
             ActionKind::Awacs(_) => Some(format_compact!(
                 "{name}: <key> | Spawn an awacs at key, a mark point. cost {}",
                 action.cost

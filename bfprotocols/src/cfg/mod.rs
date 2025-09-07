@@ -621,6 +621,7 @@ pub enum ActionKind {
     LogisticsRepair(AiPlaneCfg),
     LogisticsTransfer(AiPlaneCfg),
     Move(MoveCfg),
+    Rtb,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

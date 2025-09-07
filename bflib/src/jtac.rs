@@ -808,10 +808,6 @@ impl Jtac {
                         point: dcso3::LuaVec2(Vector2::new(target.pos.x, target.pos.z)),
                         params: attack_params,
                     });
-
-                    if expend == WeaponExpend::All {
-                        break;
-                    }
                 }
 
                 bombing_task_vec.push(MissionPoint {

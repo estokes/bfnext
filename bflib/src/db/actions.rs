@@ -2325,9 +2325,10 @@ impl Db {
                                                 false,
                                                 p.side,
                                                 format_compact!(
-                                                    "{}'s {} has RTB'd.",
+                                                    "{}'s {} has RTB'd. points refunded: {}",
                                                     p.name,
-                                                    group.name
+                                                    group.name,
+                                                    (spec.cost as f64 * 0.25).ceil() as i32,
                                                 ),
                                             );
                                         }

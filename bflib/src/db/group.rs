@@ -108,6 +108,7 @@ pub enum DeployKind {
         rtb: Option<Vector2>,
         #[serde(default)]
         origin: Option<ObjectiveId>,
+        #[serde(skip)]
         ammo: i32,
     },
 }

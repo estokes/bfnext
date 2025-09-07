@@ -429,14 +429,17 @@ fn add_alcm_menu_for_jtac(
     ucid: Ucid,
     root: GroupSubMenu,
     jtac: JtId,
-    alcm: &[DbGid],
+    alcm: &[(DbGid, i32)],
 ) -> Result<()> {
     let mc = MissionCommands::singleton(lua)?;
 
     let root = mc.add_submenu_for_group(mizgid, "ALCM".into(), Some(root.clone()))?;
-    for gid in alcm {
-        let root =
-            mc.add_submenu_for_group(mizgid, format_compact!("{gid}").into(), Some(root.clone()))?;
+    for (gid, ammo) in alcm {
+        let root = mc.add_submenu_for_group(
+            mizgid,
+            format_compact!("{gid}({ammo})").into(),
+            Some(root.clone()),
+        )?;
 
         let quarter =
             mc.add_submenu_for_group(mizgid, "Fire Quarter".into(), Some(root.clone()))?;

@@ -1478,6 +1478,7 @@ impl Db {
                 destination: _,
                 rtb: _,
                 origin: _,
+                ammo: _,
             } => match &spec.kind {
                 ActionKind::Tanker(ai_plane_cfg) => (
                     ai_plane_cfg.altitude,
@@ -1512,10 +1513,13 @@ impl Db {
         let group = group_mut!(self, gid)?;
 
         match &mut group.origin {
-            DeployKind::Action { marks, rtb, .. } => {
+            DeployKind::Action {
+                marks, rtb, spec, ..
+            } => {
                 *rtb = Some(rtb_pos);
+                (*spec).kind = ActionKind::Rtb;
                 for id in marks.iter() {
-                    self.ephemeral.msgs().delete_mark(*id)
+                    self.ephemeral.msgs().delete_mark(*id);
                 }
             }
             _ => bail!("only works with some action deployed groups."),
@@ -1626,6 +1630,7 @@ impl Db {
             destination,
             rtb: Some(pos),
             origin: Some(obj.id),
+            ammo: 0,
         };
         let gid = self
             .add_group(
@@ -2012,6 +2017,10 @@ impl Db {
         let con = group.get_controller().context("getting controller")?;
         con.set_task(Task::Mission {
             airborne: Some(true),
+            route: mission.clone(),
+        })?;
+        con.set_task(Task::Mission {
+            airborne: Some(true),
             route: mission,
         })
         .context("setting mission")
@@ -2261,8 +2270,10 @@ impl Db {
                 }
             }};
         }
+
         for gid in &self.persisted.actions {
             let group = group_mut!(self, gid)?;
+
             if let DeployKind::Action {
                 spec,
                 time,
@@ -2440,6 +2451,7 @@ impl Db {
                 }
             }
         }
+
         for gid in to_delete {
             if let Err(e) = self.delete_group(&gid) {
                 error!("delete action group failed {e:?}")

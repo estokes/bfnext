@@ -527,6 +527,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
             ActionKind::Bomber(_) | ActionKind::LogisticsTransfer(_) => (),
             ActionKind::AttackersWaypoint
             | ActionKind::AwacsWaypoint
+            | ActionKind::Rtb
             | ActionKind::CruiseMissileWaypoint
             | ActionKind::FighersWaypoint
             | ActionKind::TankerWaypoint
@@ -538,8 +539,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                 let root = mc.add_submenu_for_group(arg.snd, title, Some(root.clone()))?;
                 add_pos_group(root.clone(), name.clone(), false)?
             }
-            ActionKind::Rtb
-            | ActionKind::Attackers(_)
+            ActionKind::Attackers(_)
             | ActionKind::Awacs(_)
             | ActionKind::Deployable(_)
             | ActionKind::CruiseMissileSpawn(_)

@@ -108,6 +108,7 @@ pub enum DeployKind {
         rtb: Option<Vector2>,
         #[serde(default)]
         origin: Option<ObjectiveId>,
+        ammo: i32,
     },
 }
 
@@ -131,6 +132,7 @@ pub struct SpawnedUnit {
     pub moved: Option<DateTime<Utc>>,
     #[serde(skip)]
     pub airborne_velocity: Option<Vector3>,
+    pub ammo: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,6 +146,7 @@ pub struct SpawnedGroup {
     pub origin: DeployKind,
     pub units: SetS<UnitId>,
     pub tags: UnitTags,
+    pub ammo: i32,
 }
 
 impl Db {
@@ -712,6 +715,7 @@ impl Db {
             },
             units: SetS::new(),
             tags: UnitTags(BitFlags::empty()),
+            ammo: 0,
         };
         for unit in template.group.units()?.into_iter() {
             let unit = unit?;
@@ -792,6 +796,7 @@ impl Db {
                 dead: false,
                 moved: None,
                 airborne_velocity: None,
+                ammo: 0,
             };
             spawned.units.insert_cow(uid);
             self.persisted.units.insert_cow(uid, spawned_unit);
@@ -1122,7 +1127,7 @@ impl Db {
         artillery
     }
 
-    pub fn alcm_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
+    pub fn alcm_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[(GroupId, i32); 8]> {
         let range2 = (self.ephemeral.cfg.alcm_mission_range as f64).powi(2);
         let alcm = self
             .actions()
@@ -1132,8 +1137,14 @@ impl Db {
                     if na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y))
                         <= range2
                     {
-                        
-                        Some(group.id)
+                        let mut ammo = -1;
+                        for unit in &group.units {
+                            if let Ok(unit) = unit!(self, unit) {
+                                ammo = unit.ammo;
+                                break;
+                            };
+                        }
+                        Some((group.id, ammo))
                     } else {
                         None
                     }
@@ -1141,7 +1152,7 @@ impl Db {
                     None
                 }
             })
-            .collect::<SmallVec<[GroupId; 8]>>();
+            .collect::<SmallVec<[(GroupId, i32); 8]>>();
         alcm
     }
 
@@ -1207,6 +1218,9 @@ impl Db {
                 spunit.position = pos;
                 spunit.pos = Vector2::new(pos.p.x, pos.p.z);
                 spunit.heading = azumith3d(pos.x.0);
+                if spunit.tags.contains(UnitTag::ALCM) {
+                    spunit.ammo = instance.get_ammo()?.first()?.count()? as i32;
+                };
                 self.ephemeral
                     .units_potentially_close_to_enemies
                     .insert(*uid);

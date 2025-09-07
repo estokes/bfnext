@@ -33,7 +33,7 @@ use dcso3::{
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
     coalition::Side,
     controller::{
-        ActionTyp, AltType, AttackParams, MissionPoint, PointType, Task, TurnMethod,
+        ActionTyp, AltType, AttackParams, MissionPoint, OrbitPattern, PointType, Task, TurnMethod,
         VehicleFormation, WeaponExpend,
     },
     cvt_err, err,
@@ -246,7 +246,7 @@ pub struct Jtac {
     code: u16,
     last_smoke: DateTime<Utc>,
     nearby_artillery: SmallVec<[GroupId; 8]>,
-    nearby_alcm: SmallVec<[GroupId; 8]>,
+    nearby_alcm: SmallVec<[(GroupId, i32); 8]>,
     menu_dirty: bool,
     air: bool,
 }
@@ -394,11 +394,11 @@ impl Jtac {
         write!(msg, "]\n")?;
         write!(msg, "available ALCM: [")?;
         let len = self.nearby_alcm.len();
-        for (i, gid) in self.nearby_alcm.iter().enumerate() {
+        for (i, (gid, ammo)) in self.nearby_alcm.iter().enumerate() {
             if i < len - 1 {
-                write!(msg, "{gid},")?;
+                write!(msg, "{gid}({ammo}),")?;
             } else {
-                write!(msg, "{gid}")?;
+                write!(msg, "{gid}({ammo})")?;
             }
         }
         write!(msg, "]")?;
@@ -828,6 +828,30 @@ impl Jtac {
                     task: Box::new(Task::ComboTask(fire_task_vec)),
                 });
 
+                bombing_task_vec.push(MissionPoint {
+                    action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                    typ: PointType::TurningPoint,
+                    airdrome_id: None,
+                    helipad: None,
+                    time_re_fu_ar: None,
+                    link_unit: None,
+                    pos: LuaVec2(apos), // Same position as first point
+                    alt: 9000.,
+                    alt_typ: Some(AltType::BARO),
+                    speed: 890.,
+                    speed_locked: None,
+                    eta: None,
+                    eta_locked: None,
+                    name: None,
+                    task: Box::new(Task::Orbit {
+                        pattern: OrbitPattern::Circle,
+                        speed: Some(750.0),
+                        altitude: Some(9000.0),
+                        point2: Some(LuaVec2(apos)),
+                        point: Some(LuaVec2(apos)),
+                    }),
+                });
+
                 let task = Task::Mission {
                     airborne: Some(true),
                     route: bombing_task_vec,
@@ -840,7 +864,8 @@ impl Jtac {
                     let _id = unit.object_id()?;
                 }
                 let con = group.get_controller().context("getting controller")?;
-                con.push_task(task)?;
+                con.set_task(task.clone())?;
+                con.set_task(task)?;
             }
         }
         Ok(())
@@ -1016,7 +1041,7 @@ impl Jtac {
         &self.nearby_artillery
     }
 
-    pub fn nearby_alcm(&self) -> &[GroupId] {
+    pub fn nearby_alcm(&self) -> &[(GroupId, i32)] {
         &self.nearby_alcm
     }
 }

@@ -708,34 +708,6 @@ fn run_jtac_command(
         } else {
             error!("arty expected <id> and <n>")
         }
-    } else if let Some(alcm) = cmd.strip_prefix("alcm ") {
-        if let Some((aid, n)) = alcm.split_once(" ") {
-            let aids: SmallVec<[GroupId; 8]> = match aid.parse::<GroupId>() {
-                Ok(id) => smallvec![id],
-                Err(_) => {
-                    if aid == "all" {
-                        SmallVec::from_iter(jtac.nearby_alcm().into_iter().copied())
-                    } else {
-                        error!("invalid alcm group id {id}")
-                    }
-                }
-            };
-            let n = match n.parse::<u8>() {
-                Ok(n) => n,
-                Err(_) => error!("expected a number of shots between 0 and 255"),
-            };
-            for aid in aids {
-                let arg = ArgQuad {
-                    fst: jtid,
-                    snd: aid,
-                    trd: n,
-                    fth: ucid,
-                };
-                menu::jtac::jtac_artillery_mission(lua, arg)?
-            }
-        } else {
-            error!("arty expected <id> and <n>")
-        }
     } else {
         error!("invalid jtac command {cmd}")
     }

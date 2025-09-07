@@ -19,10 +19,7 @@
     "jtac": "AlwaysAllowed",
     "ca": "AlwaysAllowed"
   },
-<<<<<<< HEAD
   "name_filter": "^.*$",
-=======
->>>>>>> ad3e54cbc575855e43f05000e3797b58bde1b696
   "shutdown": 5,
   "points": {
     "new_player_join": 190,

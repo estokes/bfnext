@@ -463,7 +463,7 @@ impl Jtac {
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
 
-                self.nearby_alcm = db.alcm_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.nearby_alcm = db.alcm_near_point(self.side, lua, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_alcm != self.nearby_alcm;
 
                 Ok(false)
@@ -528,7 +528,7 @@ impl Jtac {
                 });
                 self.nearby_artillery =
                     db.artillery_near_point(self.side, Vector2::new(pos.x, pos.z));
-                self.nearby_alcm = db.alcm_near_point(self.side, Vector2::new(pos.x, pos.z));
+                self.nearby_alcm = db.alcm_near_point(self.side, lua, Vector2::new(pos.x, pos.z));
                 self.menu_dirty |= prev_arty != self.nearby_artillery;
                 self.menu_dirty |= prev_alcm != self.nearby_alcm;
                 self.mark_target(lua).context("marking target")?;
@@ -1578,6 +1578,7 @@ impl Jtacs {
         let mut new_contacts: SmallVec<[&Jtac; 32]> = smallvec![];
         for j in self.jtacs.values_mut() {
             for (_, jtac) in j.iter_mut() {
+                jtac.nearby_alcm = db.alcm_near_point(jtac.side, lua, jtac.location().pos);
                 match jtac.sort_contacts(db, lua) {
                     Ok(false) => (),
                     Ok(true) => new_contacts.push(jtac),

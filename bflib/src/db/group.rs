@@ -133,8 +133,6 @@ pub struct SpawnedUnit {
     pub moved: Option<DateTime<Utc>>,
     #[serde(skip)]
     pub airborne_velocity: Option<Vector3>,
-    #[serde(skip)]
-    pub ammo: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -796,7 +794,6 @@ impl Db {
                 dead: false,
                 moved: None,
                 airborne_velocity: None,
-                ammo: 0,
             };
             spawned.units.insert_cow(uid);
             self.persisted.units.insert_cow(uid, spawned_unit);
@@ -1127,7 +1124,12 @@ impl Db {
         artillery
     }
 
-    pub fn alcm_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[(GroupId, i32); 8]> {
+    pub fn alcm_near_point(
+        &self,
+        side: Side,
+        lua: MizLua,
+        pos: Vector2,
+    ) -> SmallVec<[(GroupId, i32); 8]> {
         let range2 = (self.ephemeral.cfg.alcm_mission_range as f64).powi(2);
         let alcm = self
             .actions()
@@ -1137,13 +1139,21 @@ impl Db {
                     if na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y))
                         <= range2
                     {
+                        let mut unit: Option<Unit> = None;
                         let mut ammo = 0;
-                        for unit in &group.units {
-                            if let Ok(unit) = unit!(self, unit) {
-                                ammo = unit.ammo;
-                                break;
+                        if let Some(uid) = group.units.into_iter().next() {
+                            if let Some(id) = self.ephemeral.object_id_by_uid.get(&uid) {
+                                let instance = match unit.take() {
+                                    Some(unit) => unit.change_instance(id),
+                                    None => Unit::get_instance(lua, id),
+                                };
+                                ammo = (|| -> anyhow::Result<i32> {
+                                    Ok(instance?.get_ammo()?.first()?.count()? as i32)
+                                })()
+                                .unwrap_or(0);
                             };
                         }
+
                         Some((group.id, ammo))
                     } else {
                         None
@@ -1218,12 +1228,6 @@ impl Db {
                 spunit.position = pos;
                 spunit.pos = Vector2::new(pos.p.x, pos.p.z);
                 spunit.heading = azumith3d(pos.x.0);
-                if spunit.tags.contains(UnitTag::ALCM) {
-                    spunit.ammo = (|| -> anyhow::Result<i32> {
-                        Ok(instance.get_ammo()?.first()?.count()? as i32)
-                    })()
-                    .unwrap_or(0);
-                };
                 self.ephemeral
                     .units_potentially_close_to_enemies
                     .insert(*uid);

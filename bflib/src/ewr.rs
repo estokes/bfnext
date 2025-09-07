@@ -78,11 +78,27 @@ impl GibBraa {
             EwrUnits::Metric => {
                 self.range = self.range / 1000;
                 self.speed = (self.speed as f64 * 3.6) as u16;
+                // Round speed to nearest 100s in metric (km/h)
+                self.speed = ((self.speed as f64 / 100.0).round() * 100.0) as u16;
+                // Round altitude: under 1000m to nearest 100s, 1000m+ to nearest 1000s
+                if self.altitude < 1000 {
+                    self.altitude = ((self.altitude as f64 / 100.0).round() * 100.0) as u32;
+                } else {
+                    self.altitude = ((self.altitude as f64 / 1000.0).round() * 1000.0) as u32;
+                }
             }
             EwrUnits::Imperial => {
                 self.range = self.range / 1852;
                 self.altitude = (self.altitude as f64 * 3.38084) as u32;
                 self.speed = (self.speed as f64 * 1.94384) as u16;
+                // Round speed to nearest 100s in imperial (kts)
+                self.speed = ((self.speed as f64 / 100.0).round() * 100.0) as u16;
+                // Round altitude: under 1000ft to nearest 100s, 1000ft+ to nearest 1000s
+                if self.altitude < 1000 {
+                    self.altitude = ((self.altitude as f64 / 100.0).round() * 100.0) as u32;
+                } else {
+                    self.altitude = ((self.altitude as f64 / 1000.0).round() * 1000.0) as u32;
+                }
             }
         }
         self.units = unit;

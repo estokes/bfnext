@@ -1918,6 +1918,7 @@ impl Default for Cfg {
             ground_vehicle_cull_distance: 10000,
             cull_after: 1800,
             slow_timed_events_freq: 10,
+            ewr_update_freq: 60,
             threatened_distance: default_threatened_distance(),
             threatened_cooldown: 300,
             crate_load_distance: 50,

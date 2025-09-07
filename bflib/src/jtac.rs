@@ -1110,6 +1110,74 @@ impl Jtacs {
         jtac.artillery_mission(db, lua, adjustment, &shooter, n)
     }
 
+    pub fn artillery_fire_all(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        jtid: &JtId,
+        shooter: &GroupId,
+    ) -> Result<()> {
+        let jtac = self
+            .jtacs
+            .iter_mut()
+            .find_map(|(_, jtx)| jtx.get_mut(&jtid))
+            .ok_or_else(|| anyhow!("no such jtac"))?;
+        let adjustment = self
+            .artillery_adjustment
+            .entry(*shooter)
+            .or_insert_with(|| ArtilleryAdjustment {
+                adjust: Vector2::zeros(),
+                target: Vector2::zeros(),
+                group: vec![],
+                tracked: None,
+            });
+
+        // Get total ammunition from all units in the artillery group
+        let total_ammo = {
+            let mut total = 0u8;
+            for unit_id in db.group(shooter)?.units.into_iter() {
+                let first = Unit::get_by_name(lua, &db.unit(unit_id)?.name)?
+                    .get_ammo()?
+                    .first();
+                let unit_ammo = match first {
+                    Ok(ammo_info) => ammo_info.count()? as u8,
+                    Err(_e) => 0, // Skip units with no ammo
+                };
+                total = total.saturating_add(unit_ammo);
+            }
+            if total == 0 {
+                bail!("Artillery Abort: {shooter} is out of ammunition.");
+            }
+            total
+        };
+
+        jtac.artillery_mission(db, lua, adjustment, &shooter, total_ammo)
+    }
+
+    pub fn get_artillery_ammo(
+        &self,
+        db: &Db,
+        lua: MizLua,
+        shooter: &GroupId,
+    ) -> Result<dcso3::String> {
+        let group = db.group(shooter)?;
+        let mut total_ammo = 0u8;
+        
+        for unit_id in group.units.into_iter() {
+            let first = Unit::get_by_name(lua, &db.unit(unit_id)?.name)?
+                .get_ammo()?
+                .first();
+            let unit_ammo = match first {
+                Ok(ammo_info) => ammo_info.count()? as u8,
+                Err(_e) => 0, // Skip units with no ammo
+            };
+            total_ammo = total_ammo.saturating_add(unit_ammo);
+        }
+        
+        let result = format!("Artillery Group {} has {} rounds total", shooter, total_ammo);
+        Ok(result.into())
+    }
+
     pub fn alcm_mission(
         &mut self,
         db: &Db,

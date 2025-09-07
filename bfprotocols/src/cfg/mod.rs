@@ -734,9 +734,6 @@ fn default_limited_lives() -> bool {
     true
 }
 
-fn default_ewr_update_freq() -> u32 {
-    60
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -795,9 +792,6 @@ pub struct Cfg {
     /// how often to do more expensive checks such as unit culling and
     /// updating unit positions (Seconds)
     pub slow_timed_events_freq: u32,
-    /// how often to update EWR tracks (Seconds)
-    #[serde(default = "default_ewr_update_freq")]
-    pub ewr_update_freq: u32,
     /// how close various kinds of enemy units can be (with LOS) for an objective
     /// to be considered threatened. Threatened objectives can't spawn deployables
     /// within the exclusion zone. (Meters)

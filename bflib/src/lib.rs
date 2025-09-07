@@ -250,7 +250,6 @@ struct Context {
     menu_init_queue: IndexSet<SlotId, FxBuildHasher>,
     last_frame: Option<DateTime<Utc>>,
     last_slow_timed_events: DateTime<Utc>,
-    last_ewr_update: DateTime<Utc>,
     last_periodic_points: DateTime<Utc>,
     last_unit_position: usize,
     last_player_position: usize,
@@ -1143,22 +1142,6 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
     }
     record_perf(&mut perf.player_positions, ts);
     
-    // Update EWR tracks with separate timing
-    let ewr_freq = Duration::seconds(ctx.db.ephemeral.cfg.ewr_update_freq as i64);
-    if ts - ctx.last_ewr_update >= ewr_freq {
-        ctx.last_ewr_update = ts;
-        let ts = Utc::now();
-        if let Err(e) = ctx.ewr.update_tracks(lua, &mut ctx.landcache, &ctx.db, ts) {
-            error!("could not update ewr tracks {e}")
-        }
-        record_perf(&mut perf.ewr_tracks, ts);
-        let ts = Utc::now();
-        if let Err(e) = generate_ewr_reports(ctx, ts) {
-            error!("could not generate ewr reports {e}")
-        }
-        record_perf(&mut perf.ewr_reports, ts);
-    }
-    
     match run_slow_timed_events(lua, ctx, perf, path, ts) {
         Ok(AdminResult::Continue) => (),
         Ok(AdminResult::Shutdown) => return Ok(AdminResult::Shutdown),
@@ -1227,7 +1210,6 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
 
 fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<()> {
     ctx.last_slow_timed_events = Utc::now();
-    ctx.last_ewr_update = Utc::now();
     let timer = Timer::singleton(lua)?;
     timer.schedule_function(timer.get_time()? + 1., mlua::Value::Nil, {
         let path = path.clone();

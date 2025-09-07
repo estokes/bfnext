@@ -1509,44 +1509,17 @@ impl Db {
             _ => bail!("not the right action kind"),
         };
 
-        match &group.origin {
-            DeployKind::Action {
-                marks,
-                loc: _,
-                player: _,
-                name: _,
-                spec: _,
-                time: _,
-                destination: _,
-                rtb: _,
-                origin: _,
-            } => {
+        let group = group_mut!(self, gid)?;
+
+        match &mut group.origin {
+            DeployKind::Action { marks, rtb, .. } => {
+                *rtb = Some(rtb_pos);
                 for id in marks.iter() {
                     self.ephemeral.msgs().delete_mark(*id)
                 }
             }
-            _ => bail!("not valid action"),
-        };
-
-        let group = &group_mut!(self, gid)?;
-
-        match group.origin {
-            DeployKind::Action {
-                marks: _,
-                loc: _,
-                player: _,
-                name: _,
-                spec: _,
-                time: _,
-                destination,
-                rtb: _,
-                origin: _,
-            } => match destination {
-                Some(mut d) => *d = *rtb_pos,
-                None => bail!("not an action"),
-            },
-            _ => bail!("wrong origin"),
-        };
+            _ => bail!("only works with some action deployed groups."),
+        }
 
         Ok(vec![MissionPoint {
             action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
@@ -2329,7 +2302,7 @@ impl Db {
                         }
                     }
                     ActionKind::Rtb => {
-                        if let Some(target) = *destination {
+                        if let Some(target) = *rtb {
                             if at_dest!(group, target, 10_000.) {
                                 to_delete.push(*gid);
                                 match player {

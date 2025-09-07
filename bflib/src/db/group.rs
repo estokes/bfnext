@@ -132,7 +132,7 @@ pub struct SpawnedUnit {
     pub moved: Option<DateTime<Utc>>,
     #[serde(skip)]
     pub airborne_velocity: Option<Vector3>,
-    #[serde(default)]
+    #[serde(skip)]
     pub ammo: i32,
 }
 
@@ -147,8 +147,6 @@ pub struct SpawnedGroup {
     pub origin: DeployKind,
     pub units: SetS<UnitId>,
     pub tags: UnitTags,
-    #[serde(default)]
-    pub ammo: i32,
 }
 
 impl Db {
@@ -717,7 +715,6 @@ impl Db {
             },
             units: SetS::new(),
             tags: UnitTags(BitFlags::empty()),
-            ammo: 0,
         };
         for unit in template.group.units()?.into_iter() {
             let unit = unit?;

@@ -362,6 +362,10 @@ fn action_help(ctx: &mut Context, actions: &IndexMap<String, Action, FxBuildHash
                 "{name}: <group> <key> | Move a ground unit. cost {}",
                 action.cost
             )),
+            ActionKind::Rtb => Some(format_compact!(
+                "{name}: <group> <key> | RTB an air asset manually. cost {}",
+                action.cost
+            )),
             ActionKind::Awacs(_) => Some(format_compact!(
                 "{name}: <key> | Spawn an awacs at key, a mark point. cost {}",
                 action.cost
@@ -685,34 +689,6 @@ fn run_jtac_command(
                         SmallVec::from_iter(jtac.nearby_artillery().into_iter().copied())
                     } else {
                         error!("invalid arty group id {id}")
-                    }
-                }
-            };
-            let n = match n.parse::<u8>() {
-                Ok(n) => n,
-                Err(_) => error!("expected a number of shots between 0 and 255"),
-            };
-            for aid in aids {
-                let arg = ArgQuad {
-                    fst: jtid,
-                    snd: aid,
-                    trd: n,
-                    fth: ucid,
-                };
-                menu::jtac::jtac_artillery_mission(lua, arg)?
-            }
-        } else {
-            error!("arty expected <id> and <n>")
-        }
-    } else if let Some(alcm) = cmd.strip_prefix("alcm ") {
-        if let Some((aid, n)) = alcm.split_once(" ") {
-            let aids: SmallVec<[GroupId; 8]> = match aid.parse::<GroupId>() {
-                Ok(id) => smallvec![id],
-                Err(_) => {
-                    if aid == "all" {
-                        SmallVec::from_iter(jtac.nearby_alcm().into_iter().copied())
-                    } else {
-                        error!("invalid alcm group id {id}")
                     }
                 }
             };

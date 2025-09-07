@@ -246,7 +246,7 @@ pub struct Jtac {
     code: u16,
     last_smoke: DateTime<Utc>,
     nearby_artillery: SmallVec<[GroupId; 8]>,
-    nearby_alcm: SmallVec<[GroupId; 8]>,
+    nearby_alcm: SmallVec<[(GroupId, i32); 8]>,
     menu_dirty: bool,
     air: bool,
 }
@@ -394,11 +394,11 @@ impl Jtac {
         write!(msg, "]\n")?;
         write!(msg, "available ALCM: [")?;
         let len = self.nearby_alcm.len();
-        for (i, gid) in self.nearby_alcm.iter().enumerate() {
+        for (i, (gid, ammo)) in self.nearby_alcm.iter().enumerate() {
             if i < len - 1 {
-                write!(msg, "{gid},")?;
+                write!(msg, "{gid}({ammo}),")?;
             } else {
-                write!(msg, "{gid}")?;
+                write!(msg, "{gid}({ammo})")?;
             }
         }
         write!(msg, "]")?;
@@ -1041,7 +1041,7 @@ impl Jtac {
         &self.nearby_artillery
     }
 
-    pub fn nearby_alcm(&self) -> &[GroupId] {
+    pub fn nearby_alcm(&self) -> &[(GroupId, i32)] {
         &self.nearby_alcm
     }
 }

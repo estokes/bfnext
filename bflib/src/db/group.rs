@@ -1137,7 +1137,7 @@ impl Db {
                     if na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y))
                         <= range2
                     {
-                        let mut ammo = -1;
+                        let mut ammo = 0;
                         for unit in &group.units {
                             if let Ok(unit) = unit!(self, unit) {
                                 ammo = unit.ammo;
@@ -1219,7 +1219,10 @@ impl Db {
                 spunit.pos = Vector2::new(pos.p.x, pos.p.z);
                 spunit.heading = azumith3d(pos.x.0);
                 if spunit.tags.contains(UnitTag::ALCM) {
-                    spunit.ammo = instance.get_ammo()?.first()?.count()? as i32;
+                    let _ = (|| -> anyhow::Result<()> {
+                        spunit.ammo = instance.get_ammo()?.first()?.count()? as i32;
+                        Ok(())
+                    })();
                 };
                 self.ephemeral
                     .units_potentially_close_to_enemies

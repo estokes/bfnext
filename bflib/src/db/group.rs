@@ -147,6 +147,7 @@ pub struct SpawnedGroup {
     pub origin: DeployKind,
     pub units: SetS<UnitId>,
     pub tags: UnitTags,
+    #[serde(default)]
     pub ammo: i32,
 }
 

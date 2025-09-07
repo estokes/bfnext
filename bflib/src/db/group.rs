@@ -132,6 +132,7 @@ pub struct SpawnedUnit {
     pub moved: Option<DateTime<Utc>>,
     #[serde(skip)]
     pub airborne_velocity: Option<Vector3>,
+    #[serde(default)]
     pub ammo: i32,
 }
 

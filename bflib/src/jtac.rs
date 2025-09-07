@@ -718,6 +718,109 @@ impl Jtac {
         Ok(())
     }
 
+    pub fn artillery_combo_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        adjustment: &mut ArtilleryAdjustment,
+        gid: &GroupId,
+        rounds_per_target: u8,
+        num_targets: u8,
+    ) -> Result<()> {
+        match self.target.as_mut() {
+            None => bail!("no target"),
+            Some(_target) => {
+                let name = db.group(gid)?.name.clone();
+                let apos = db.group_center(gid)?;
+                
+                // Get total ammunition from all units in the artillery group
+                let mut total_ammo = 0u8;
+                for unit_id in db.group(gid)?.units.into_iter() {
+                    let first = Unit::get_by_name(lua, &db.unit(unit_id)?.name)?
+                        .get_ammo()?
+                        .first();
+                    let unit_ammo = match first {
+                        Ok(ammo_info) => ammo_info.count()? as u8,
+                        Err(_e) => 0, // Skip units with no ammo
+                    };
+                    total_ammo = total_ammo.saturating_add(unit_ammo);
+                }
+                
+                if total_ammo == 0 {
+                    bail!("Artillery Abort: {gid} is out of ammunition.");
+                }
+                
+                let total_required = rounds_per_target * num_targets;
+                if total_ammo < total_required {
+                    bail!("Artillery Abort: {gid} has only {total_ammo} rounds remaining, cannot fire {total_required} rounds ({rounds_per_target} per target for {num_targets} targets).");
+                }
+
+                // Create fire tasks for each target
+                let mut fire_task_vec: Vec<Task> = vec![];
+                let mut allocated_ammo = total_ammo;
+                
+                for (i, (_, target)) in self.contacts.iter().enumerate() {
+                    if i >= num_targets as usize || allocated_ammo < rounds_per_target {
+                        break;
+                    }
+                    
+                    let pos = Vector2::new(target.pos.x, target.pos.z);
+                    adjustment.target = pos;
+                    let pos = pos + adjustment.adjust;
+                    
+                    let task = Task::FireAtPoint {
+                        point: LuaVec2(pos),
+                        radius: None,
+                        expend_qty: Some(rounds_per_target as i64),
+                        weapon_type: None,
+                        altitude: Some(0.),
+                        altitude_type: Some(AltType::RADIO),
+                    };
+                    
+                    fire_task_vec.push(task);
+                    allocated_ammo -= rounds_per_target;
+                }
+                
+                if fire_task_vec.is_empty() {
+                    bail!("Artillery Abort: No valid targets found for combo mission.");
+                }
+                
+                let task = Task::Mission {
+                    airborne: Some(false),
+                    route: vec![MissionPoint {
+                        action: Some(ActionTyp::Ground(VehicleFormation::OffRoad)),
+                        typ: PointType::TurningPoint,
+                        airdrome_id: None,
+                        helipad: None,
+                        time_re_fu_ar: None,
+                        link_unit: None,
+                        pos: LuaVec2(apos),
+                        alt: 0.,
+                        alt_typ: Some(AltType::RADIO),
+                        speed: 0.,
+                        speed_locked: None,
+                        eta: None,
+                        eta_locked: None,
+                        name: None,
+                        task: Box::new(Task::ComboTask(fire_task_vec)),
+                    }],
+                };
+                
+                let group = Group::get_by_name(lua, &name)
+                    .with_context(|| format_compact!("getting group {}", name))?;
+                adjustment.tracked = None;
+                for unit in group.get_units()? {
+                    let unit = unit?;
+                    let id = unit.object_id()?;
+                    adjustment.group.push(id);
+                }
+                let con = group.get_controller().context("getting controller")?;
+                con.set_task(task)?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn alcm_mission(
         &mut self,
         db: &Db,
@@ -1108,6 +1211,101 @@ impl Jtacs {
                 tracked: None,
             });
         jtac.artillery_mission(db, lua, adjustment, &shooter, n)
+    }
+
+    pub fn artillery_fire_all(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        jtid: &JtId,
+        shooter: &GroupId,
+    ) -> Result<()> {
+        let jtac = self
+            .jtacs
+            .iter_mut()
+            .find_map(|(_, jtx)| jtx.get_mut(&jtid))
+            .ok_or_else(|| anyhow!("no such jtac"))?;
+        let adjustment = self
+            .artillery_adjustment
+            .entry(*shooter)
+            .or_insert_with(|| ArtilleryAdjustment {
+                adjust: Vector2::zeros(),
+                target: Vector2::zeros(),
+                group: vec![],
+                tracked: None,
+            });
+
+        // Get total ammunition from all units in the artillery group
+        let total_ammo = {
+            let mut total = 0u8;
+            for unit_id in db.group(shooter)?.units.into_iter() {
+                let first = Unit::get_by_name(lua, &db.unit(unit_id)?.name)?
+                    .get_ammo()?
+                    .first();
+                let unit_ammo = match first {
+                    Ok(ammo_info) => ammo_info.count()? as u8,
+                    Err(_e) => 0, // Skip units with no ammo
+                };
+                total = total.saturating_add(unit_ammo);
+            }
+            if total == 0 {
+                bail!("Artillery Abort: {shooter} is out of ammunition.");
+            }
+            total
+        };
+
+        jtac.artillery_mission(db, lua, adjustment, &shooter, total_ammo)
+    }
+
+    pub fn get_artillery_ammo(
+        &self,
+        db: &Db,
+        lua: MizLua,
+        shooter: &GroupId,
+    ) -> Result<dcso3::String> {
+        let group = db.group(shooter)?;
+        let mut total_ammo = 0u8;
+        
+        for unit_id in group.units.into_iter() {
+            let first = Unit::get_by_name(lua, &db.unit(unit_id)?.name)?
+                .get_ammo()?
+                .first();
+            let unit_ammo = match first {
+                Ok(ammo_info) => ammo_info.count()? as u8,
+                Err(_e) => 0, // Skip units with no ammo
+            };
+            total_ammo = total_ammo.saturating_add(unit_ammo);
+        }
+        
+        let result = format!("Artillery Group {} has {} rounds total", shooter, total_ammo);
+        Ok(result.into())
+    }
+
+    pub fn artillery_combo_mission(
+        &mut self,
+        db: &Db,
+        lua: MizLua,
+        jtid: &JtId,
+        shooter: &GroupId,
+        rounds_per_target: u8,
+        num_targets: u8,
+    ) -> Result<()> {
+        let jtac = self
+            .jtacs
+            .iter_mut()
+            .find_map(|(_, jtx)| jtx.get_mut(&jtid))
+            .ok_or_else(|| anyhow!("no such jtac"))?;
+        let adjustment = self
+            .artillery_adjustment
+            .entry(*shooter)
+            .or_insert_with(|| ArtilleryAdjustment {
+                adjust: Vector2::zeros(),
+                target: Vector2::zeros(),
+                group: vec![],
+                tracked: None,
+            });
+
+        jtac.artillery_combo_mission(db, lua, adjustment, &shooter, rounds_per_target, num_targets)
     }
 
     pub fn alcm_mission(

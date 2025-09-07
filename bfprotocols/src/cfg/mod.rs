@@ -735,6 +735,7 @@ fn default_limited_lives() -> bool {
     true
 }
 
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cfg {

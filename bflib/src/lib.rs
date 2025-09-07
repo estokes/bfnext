@@ -1141,6 +1141,7 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
         }
     }
     record_perf(&mut perf.player_positions, ts);
+    
     match run_slow_timed_events(lua, ctx, perf, path, ts) {
         Ok(AdminResult::Continue) => (),
         Ok(AdminResult::Shutdown) => return Ok(AdminResult::Shutdown),

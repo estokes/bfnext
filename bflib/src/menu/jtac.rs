@@ -212,6 +212,90 @@ pub fn jtac_artillery_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, u8, Ucid>) 
     Ok(())
 }
 
+pub fn jtac_artillery_fire_all(lua: MizLua, arg: ArgTriple<JtId, DbGid, Ucid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    match ctx
+        .jtac
+        .artillery_fire_all(&ctx.db, lua, &arg.fst, &arg.snd)
+    {
+        Ok(()) => {
+            let jtac = get_jtac(&ctx.jtac, &arg.fst).context("getting jtac")?;
+            let (near, name) = change_info(jtac, &ctx.db, &arg.trd);
+            let msg = format_compact!(
+                "ARTILLERY FIRE ALL MISSION STARTED for {}\ndirected by jtac {} near {}\nrequested by {}",
+                arg.snd,
+                arg.fst,
+                near,
+                name
+            );
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_side(10, false, jtac.side(), msg)
+        }
+        Err(e) => {
+            let msg = format!("jtac {} could not start artillery fire all mission {:?}", arg.fst, e);
+            ctx.db
+                .ephemeral
+                .panel_to_player(&ctx.db.persisted, 10, &arg.trd, msg);
+        }
+    }
+    Ok(())
+}
+
+pub fn jtac_get_artillery_ammo(lua: MizLua, arg: ArgTriple<JtId, DbGid, Ucid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    match ctx
+        .jtac
+        .get_artillery_ammo(&ctx.db, lua, &arg.snd)
+    {
+        Ok(ammo_report) => {
+            ctx.db
+                .ephemeral
+                .panel_to_player(&ctx.db.persisted, 10, &arg.trd, ammo_report);
+        }
+        Err(e) => {
+            let msg = format!("Could not get artillery ammunition report: {:?}", e);
+            ctx.db
+                .ephemeral
+                .panel_to_player(&ctx.db.persisted, 10, &arg.trd, msg);
+        }
+    }
+    Ok(())
+}
+
+pub fn jtac_artillery_combo_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, Vec<u8>, Ucid>) -> Result<()> {
+    let ctx = unsafe { Context::get_mut() };
+    let mut params = arg.trd;
+    let num_targets = params.pop().unwrap();
+    let rounds_per_target = params.pop().unwrap();
+    match ctx
+        .jtac
+        .artillery_combo_mission(&ctx.db, lua, &arg.fst, &arg.snd, rounds_per_target, num_targets)
+    {
+        Ok(()) => {
+            let jtac = get_jtac(&ctx.jtac, &arg.fst).context("getting jtac")?;
+            let (_near, name) = change_info(jtac, &ctx.db, &arg.fth);
+            let msg = format_compact!(
+                "Artillery Combo Mission: {name} firing {rounds_per_target} rounds per target at {num_targets} targets"
+            );
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_side(10, false, jtac.side(), msg);
+        }
+        Err(e) => {
+            let jtac = get_jtac(&ctx.jtac, &arg.fst).context("getting jtac")?;
+            let msg = format_compact!("Artillery Combo Mission failed: {e}");
+            ctx.db
+                .ephemeral
+                .msgs()
+                .panel_to_side(10, false, jtac.side(), msg);
+        }
+    }
+    Ok(())
+}
+
 pub fn jtac_alcm_mission(lua: MizLua, arg: ArgQuad<JtId, DbGid, Vec<u8>, Ucid>) -> Result<()> {
     let ctx = unsafe { Context::get_mut() };
     match ctx
@@ -359,6 +443,17 @@ fn add_artillery_menu_for_jtac(
         )?;
         mc.add_command_for_group(
             mizgid,
+            "Get Ammo".into(),
+            Some(root.clone()),
+            jtac_get_artillery_ammo,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: ucid,
+            },
+        )?;
+        mc.add_command_for_group(
+            mizgid,
             "Fire One".into(),
             Some(root.clone()),
             jtac_artillery_mission,
@@ -419,6 +514,41 @@ fn add_artillery_menu_for_jtac(
                 fth: ucid,
             },
         )?;
+        mc.add_command_for_group(
+            mizgid,
+            "Fire All".into(),
+            Some(root.clone()),
+            jtac_artillery_fire_all,
+            ArgTriple {
+                fst: jtac,
+                snd: *gid,
+                trd: ucid,
+            },
+        )?;
+        
+        // Add Target Group submenu with combo options
+        let target_group = mc.add_submenu_for_group(mizgid, "Target Group".into(), Some(root.clone()))?;
+        let fire_1_per = mc.add_submenu_for_group(mizgid, "Fire 1 per".into(), Some(target_group.clone()))?;
+        let fire_2_per = mc.add_submenu_for_group(mizgid, "Fire 2 per".into(), Some(target_group.clone()))?;
+        let fire_5_per = mc.add_submenu_for_group(mizgid, "Fire 5 per".into(), Some(target_group.clone()))?;
+        let fire_10_per = mc.add_submenu_for_group(mizgid, "Fire 10 per".into(), Some(target_group.clone()))?;
+        
+        for (submenu, rounds_per_target) in vec![(fire_1_per, 1), (fire_2_per, 2), (fire_5_per, 5), (fire_10_per, 10)] {
+            for num_targets in 2..=6 {
+                mc.add_command_for_group(
+                    mizgid,
+                    format_compact!("Target {num_targets} units").into(),
+                    Some(submenu.clone()),
+                    jtac_artillery_combo_mission,
+                    ArgQuad {
+                        fst: jtac,
+                        snd: *gid,
+                        trd: vec![rounds_per_target, num_targets],
+                        fth: ucid,
+                    },
+                )?;
+            }
+        }
     }
     Ok(())
 }

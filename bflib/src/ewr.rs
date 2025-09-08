@@ -48,7 +48,7 @@ pub const HEADER: &'static str = "BRG      RNG      ALT      SPD        HDG     
 
 impl fmt::Display for GibBraa {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (range_u, altitude_u, speed_u) = match self.units {
+        let (range_u, altitude_u, _u) = match self.units {
             EwrUnits::Imperial => ("nm", "ft", "kts "),
             EwrUnits::Metric => ("km", "m ", "km/h"),
         };
@@ -60,8 +60,8 @@ impl fmt::Display for GibBraa {
             range_u,
             self.altitude,
             altitude_u,
-            self.speed,
-            speed_u,
+            self.,
+            _u,
             self.heading,
             self.age
         )
@@ -77,12 +77,26 @@ impl GibBraa {
         match unit {
             EwrUnits::Metric => {
                 self.range = self.range / 1000;
-                self.speed = (self.speed as f64 * 3.6) as u16;
+                // Round speed to nearest 100s in metric (km/h)
+                self.speed = ((self.speed as f64 / 100.0).round() * 100.0) as u16;
+                // Round altitude: under 1000m to nearest 100s, 1000m+ to nearest 1000s
+                if self.altitude < 1000 {
+                    self.altitude = ((self.altitude as f64 / 100.0).round() * 100.0) as u32;
+                } else {
+                    self.altitude = ((self.altitude as f64 / 1000.0).round() * 1000.0) as u32;
+                }
             }
             EwrUnits::Imperial => {
                 self.range = self.range / 1852;
                 self.altitude = (self.altitude as f64 * 3.38084) as u32;
-                self.speed = (self.speed as f64 * 1.94384) as u16;
+                // Round speed to nearest 100s in imperial (kts)
+                self.speed = ((self.speed as f64 / 100.0).round() * 100.0) as u16;
+                // Round altitude: under 1000ft to nearest 100s, 1000ft+ to nearest 1000s
+                if self.altitude < 1000 {
+                    self.altitude = ((self.altitude as f64 / 100.0).round() * 100.0) as u32;
+                } else {
+                    self.altitude = ((self.altitude as f64 / 1000.0).round() * 1000.0) as u32;
+                }
             }
         }
         self.units = unit;

@@ -630,6 +630,23 @@ impl Db {
                     )?;
                     return Ok(());
                 }
+                if let ActionKind::CruiseMissileSpawn(ai) = &spec.kind {
+                    delete_expired!(ai);
+                    let player = *player;
+                    let mission = self
+                        .cruise_missile_mission(side, player, spawn_pos, args)
+                        .context("generate alcm mission")?;
+                    let group = group!(self, gid)?;
+                    self.ephemeral.spawn_group(
+                        perf,
+                        &self.persisted,
+                        idx,
+                        spctx,
+                        group,
+                        mission,
+                    )?;
+                    return Ok(());
+                }
                 if let ActionKind::Drone(ai) = &spec.kind {
                     delete_expired!(ai.plane);
                     let player = *player;

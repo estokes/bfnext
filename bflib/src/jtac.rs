@@ -33,7 +33,7 @@ use dcso3::{
     LuaVec2, LuaVec3, MizLua, String, Vector2, Vector3,
     coalition::Side,
     controller::{
-        ActionTyp, AltType, AttackParams, MissionPoint, OrbitPattern, PointType, Task, TurnMethod,
+        ActionTyp, AltType, AttackParams, Command, MissionPoint, PointType, Task, TurnMethod,
         VehicleFormation, WeaponExpend,
     },
     cvt_err, err,
@@ -810,6 +810,8 @@ impl Jtac {
                     });
                 }
 
+                fire_task_vec.push(Task::WrappedCommand(Command::SetUnlimitedFuel(true)));
+
                 bombing_task_vec.push(MissionPoint {
                     action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
                     typ: PointType::TurningPoint,
@@ -828,29 +830,29 @@ impl Jtac {
                     task: Box::new(Task::ComboTask(fire_task_vec)),
                 });
 
-                bombing_task_vec.push(MissionPoint {
-                    action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
-                    typ: PointType::TurningPoint,
-                    airdrome_id: None,
-                    helipad: None,
-                    time_re_fu_ar: None,
-                    link_unit: None,
-                    pos: LuaVec2(apos), // Same position as first point
-                    alt: 9000.,
-                    alt_typ: Some(AltType::BARO),
-                    speed: 890.,
-                    speed_locked: None,
-                    eta: None,
-                    eta_locked: None,
-                    name: None,
-                    task: Box::new(Task::Orbit {
-                        pattern: OrbitPattern::Circle,
-                        speed: Some(750.0),
-                        altitude: Some(9000.0),
-                        point2: Some(LuaVec2(apos)),
-                        point: Some(LuaVec2(apos)),
-                    }),
-                });
+                // bombing_task_vec.push(MissionPoint {
+                //     action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
+                //     typ: PointType::TurningPoint,
+                //     airdrome_id: None,
+                //     helipad: None,
+                //     time_re_fu_ar: None,
+                //     link_unit: None,
+                //     pos: LuaVec2(apos), // Same position as first point
+                //     alt: 9000.,
+                //     alt_typ: Some(AltType::BARO),
+                //     speed: 890.,
+                //     speed_locked: None,
+                //     eta: None,
+                //     eta_locked: None,
+                //     name: None,
+                //     task: Box::new(Task::Orbit {
+                //         pattern: OrbitPattern::Circle,
+                //         speed: Some(750.0),
+                //         altitude: Some(9000.0),
+                //         point2: Some(LuaVec2(apos)),
+                //         point: Some(LuaVec2(apos)),
+                //     }),
+                // });
 
                 let task = Task::Mission {
                     airborne: Some(true),
@@ -864,8 +866,9 @@ impl Jtac {
                     let _id = unit.object_id()?;
                 }
                 let con = group.get_controller().context("getting controller")?;
-                con.set_task(task.clone())?;
-                con.set_task(task)?;
+                //con.set_task(task.clone())?;
+                //con.set_task(task)?;
+                con.push_task(task)?;
             }
         }
         Ok(())

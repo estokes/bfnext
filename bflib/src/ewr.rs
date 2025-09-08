@@ -16,8 +16,8 @@ for more details.
 
 use crate::{
     db::{
-        player::{InstancedPlayer, Player},
         Db,
+        player::{InstancedPlayer, Player},
     },
     landcache::LandCache,
 };
@@ -25,11 +25,11 @@ use anyhow::Result;
 use bfprotocols::stats::{DetectionSource, EnId, Stat};
 use chrono::prelude::*;
 use dcso3::{
-    azumith2d_to, azumith3d, coalition::Side, land::Land, net::Ucid, radians_to_degrees, MizLua,
-    Position3, Vector2, Vector3,
+    MizLua, Position3, Vector2, Vector3, azumith2d_to, azumith3d, coalition::Side, land::Land,
+    net::Ucid, radians_to_degrees,
 };
 use fxhash::FxHashMap;
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 use std::fmt;
 
 #[derive(Debug, Clone, Copy)]
@@ -60,7 +60,7 @@ impl fmt::Display for GibBraa {
             range_u,
             self.altitude,
             altitude_u,
-            self.,
+            self.speed,
             _u,
             self.heading,
             self.age

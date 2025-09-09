@@ -119,7 +119,6 @@ struct Track {
     pos: Position3,
     velocity: Vector3,
     last: DateTime<Utc>,
-    last_update_time: DateTime<Utc>, // When this track was last updated (with 60s latency)
     side: Side,
     was_detected: bool,
     detected: bool,
@@ -219,16 +218,16 @@ impl Ewr {
                                     // Original implementation: update track data immediately
                                     track.pos = *pos;
                                     track.velocity = *velocity;
-                                    track.last_update_time = now;
+                                    track.last = now;
                                 }
                                 EwrMode::Delayed => {
                                     // Configurable delay: only update track data if the configured delay has passed since last update
                                     // For new tracks (last_update_time is epoch), update immediately
-                                    let time_since_update = (now - track.last_update_time).num_seconds();
-                                    if time_since_update >= ewr_delay as i64 || track.last_update_time == DateTime::<Utc>::UNIX_EPOCH {
+                                    let time_since_update = (now - track.last).num_seconds();
+                                    if time_since_update >= ewr_delay as i64 || track.last == DateTime::<Utc>::UNIX_EPOCH {
                                         track.pos = *pos;
                                         track.velocity = *velocity;
-                                        track.last_update_time = now;
+                                        track.last = now;
                                     }
                                 }
                             }
@@ -289,7 +288,7 @@ impl Ewr {
         }
         let ownship = EnId::Player(*ucid);
         tracks.retain(|tucid, track| {
-            let age = (now - track.last_update_time).num_seconds();
+            let age = (now - track.last).num_seconds();
             let include = (friendly && track.side == side) || (!friendly && track.side != side);
             if include && age <= 120 && tucid != &ownship {
                 let cpos = Vector2::new(track.pos.p.x, track.pos.p.z);

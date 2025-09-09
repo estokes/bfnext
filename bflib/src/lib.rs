@@ -850,7 +850,7 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
             Some(uid) => uid,
             None => continue,
         };
-        let braa_to_chickens = ctx.ewr.where_chicken(now, false, false, ucid, player, inst);
+        let braa_to_chickens = ctx.ewr.where_chicken(now, false, false, ucid, player, inst, ctx.db.ephemeral.cfg.ewr_mode, ctx.db.ephemeral.cfg.ewr_delay);
         if !braa_to_chickens.is_empty() {
             let mut report = format_compact!("Bandits BRAA\n");
             write!(report, "{}\n", ewr::HEADER)?;
@@ -1054,7 +1054,7 @@ fn run_slow_timed_events(
             error!("could not advance actions {e:?}")
         }
         let ts = Utc::now();
-        if let Err(e) = ctx.ewr.update_tracks(lua, &mut ctx.landcache, &ctx.db, ts) {
+        if let Err(e) = ctx.ewr.update_tracks(lua, &mut ctx.landcache, &ctx.db, ts, ctx.db.ephemeral.cfg.ewr_mode, ctx.db.ephemeral.cfg.ewr_delay) {
             error!("could not update ewr tracks {e}")
         }
         record_perf(&mut perf.ewr_tracks, ts);

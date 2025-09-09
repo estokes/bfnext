@@ -1972,6 +1972,8 @@ impl Default for Cfg {
             ]),
             jtac_priority: default_jtac_priority(),
             extra_fixed_wing_objectives: FxHashSet::default(),
+            ewr_mode: EwrMode::Original,
+            ewr_delay: 60,
         }
     }
 }

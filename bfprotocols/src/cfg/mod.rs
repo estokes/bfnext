@@ -332,6 +332,21 @@ pub struct DeployableEwr {
     // CR estokes: Actual radar simulation ...
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub enum EwrMode {
+    /// Original EWR implementation with immediate track updates
+    Original,
+    /// EWR with configurable delay on track updates
+    Delayed,
+}
+
+impl Default for EwrMode {
+    fn default() -> Self {
+        Self::Original
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DeployableJtac {
@@ -735,6 +750,10 @@ fn default_limited_lives() -> bool {
     true
 }
 
+fn default_ewr_delay() -> u32 {
+    60
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -857,6 +876,12 @@ pub struct Cfg {
     /// a port.
     #[serde(default)]
     pub extra_fixed_wing_objectives: FxHashSet<String>,
+    /// EWR system mode - controls track update timing
+    #[serde(default)]
+    pub ewr_mode: EwrMode,
+    /// EWR track update delay in seconds (only used when ewr_mode is Delayed)
+    #[serde(default = "default_ewr_delay")]
+    pub ewr_delay: u32,
 }
 
 impl Cfg {

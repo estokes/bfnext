@@ -1,7 +1,6 @@
 {
   "rust-analyzer.diagnostics.enable": true,
 
-  "rust-analyzer.checkOnSave.command": "check",     // or "clippy"
   "rust-analyzer.check.extraArgs": ["--package=bflib", "--release"],
   "rust-analyzer.check.workspace": false,
 

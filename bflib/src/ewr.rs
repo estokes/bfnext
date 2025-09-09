@@ -12,6 +12,14 @@ bflib is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
+
+EWR SYSTEM CONFIGURATION:
+The EWR system supports two modes controlled by the 'ewr_mode' configuration option:
+- EwrMode::Original: Original implementation with immediate track updates and complex reporting timing
+- EwrMode::Delayed: Modified implementation with configurable delay on track updates and simplified reporting
+
+The delay is controlled by the 'ewr_delay' configuration option (in seconds, default: 60).
+The default mode is EwrMode::Original to maintain backward compatibility.
 */
 
 use crate::{
@@ -22,7 +30,10 @@ use crate::{
     landcache::LandCache,
 };
 use anyhow::Result;
-use bfprotocols::stats::{DetectionSource, EnId, Stat};
+use bfprotocols::{
+    cfg::EwrMode,
+    stats::{DetectionSource, EnId, Stat},
+};
 use chrono::prelude::*;
 use dcso3::{
     MizLua, Position3, Vector2, Vector3, azumith2d_to, azumith3d, coalition::Side, land::Land,
@@ -155,6 +166,8 @@ impl Ewr {
         landcache: &mut LandCache,
         db: &Db,
         now: DateTime<Utc>,
+        ewr_mode: EwrMode,
+        ewr_delay: u32,
     ) -> Result<()> {
         let land = Land::singleton(lua)?;
         let aircraft: SmallVec<[(EnId, Side, Position3, Vector3); 128]> = {
@@ -200,8 +213,24 @@ impl Ewr {
                     let dist = na::distance_squared(&ewr_pos.into(), &pos.p.0.into());
                     if dist <= range {
                         if landcache.is_visible(&land, dist.sqrt(), ewr_pos, pos.p.0)? {
-                            track.pos = *pos;
-                            track.velocity = *velocity;
+                            match ewr_mode {
+                                EwrMode::Original => {
+                                    // Original implementation: update track data immediately
+                                    track.pos = *pos;
+                                    track.velocity = *velocity;
+                                    track.last = now;
+                                }
+                                EwrMode::Delayed => {
+                                    // Configurable delay: only update track data if the configured delay has passed since last update
+                                    // For new tracks (last_update_time is epoch), update immediately
+                                    let time_since_update = (now - track.last).num_seconds();
+                                    if time_since_update >= ewr_delay as i64 || track.last == DateTime::<Utc>::UNIX_EPOCH {
+                                        track.pos = *pos;
+                                        track.velocity = *velocity;
+                                        track.last = now;
+                                    }
+                                }
+                            }
                             track.last = now;
                             track.side = *obj_side;
                             track.detected |= ewr_side != *obj_side;
@@ -243,6 +272,8 @@ impl Ewr {
         ucid: &Ucid,
         player: &Player,
         inst: &InstancedPlayer,
+        ewr_mode: EwrMode,
+        ewr_delay: u32,
     ) -> SmallVec<[GibBraa; 64]> {
         let side = player.side;
         let pos = Vector2::new(inst.position.p.x, inst.position.p.z);
@@ -287,16 +318,32 @@ impl Ewr {
             reports.pop();
         }
         let since_last = (now - state.last).num_seconds();
-        if force
-            || since_last >= 60
-            || (reports[0].range <= 20000 && reports[0].age <= 10)
-            || (reports[0].range <= 40000 && reports[0].age <= 10 && since_last >= 30)
-        {
-            state.last = now;
-            reports.iter_mut().for_each(|r| r.convert(state.units));
-            reports
-        } else {
-            smallvec![]
+        match ewr_mode {
+            EwrMode::Original => {
+                // Original reporting logic with complex timing rules
+                if force
+                    || since_last >= 60
+                    || (reports[0].range <= 20000 && reports[0].age <= 10)
+                    || (reports[0].range <= 40000 && reports[0].age <= 10 && since_last >= 30)
+                {
+                    state.last = now;
+                    reports.iter_mut().for_each(|r| r.convert(state.units));
+                    reports
+                } else {
+                    smallvec![]
+                }
+            }
+            EwrMode::Delayed => {
+                // With configurable track update delay, we can simplify the reporting logic
+                // Reports are sent every delay period or when forced
+                if force || since_last >= ewr_delay as i64 {
+                    state.last = now;
+                    reports.iter_mut().for_each(|r| r.convert(state.units));
+                    reports
+                } else {
+                    smallvec![]
+                }
+            }
         }
     }
 }

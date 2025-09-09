@@ -53,7 +53,7 @@ fn ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
             if let Some((_, Some(inst))) = &player.current_slot {
                 let chickens = ctx
                     .ewr
-                    .where_chicken(Utc::now(), false, true, ucid, player, inst);
+                    .where_chicken(Utc::now(), false, true, ucid, player, inst, ctx.db.ephemeral.cfg.ewr_mode, ctx.db.ephemeral.cfg.ewr_delay);
                 write!(report, "{}\n", ewr::HEADER)?;
                 for braa in chickens {
                     write!(report, "{braa}\n")?;
@@ -77,7 +77,7 @@ fn friendly_ewr_report(lua: MizLua, gid: GroupId) -> Result<()> {
             if let Some((_, Some(inst))) = &player.current_slot {
                 let friendlies = ctx
                     .ewr
-                    .where_chicken(Utc::now(), true, true, ucid, player, inst);
+                    .where_chicken(Utc::now(), true, true, ucid, player, inst, ctx.db.ephemeral.cfg.ewr_mode, ctx.db.ephemeral.cfg.ewr_delay);
                 write!(report, "{}\n", ewr::HEADER)?;
                 for braa in friendlies {
                     write!(report, "{braa}\n")?;

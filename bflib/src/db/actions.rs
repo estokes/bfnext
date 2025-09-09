@@ -1660,6 +1660,21 @@ impl Db {
                     drone_cfg.plane.altitude_typ.clone(),
                     drone_cfg.plane.speed,
                 ),
+                ActionKind::Sead(ai_plane_cfg) => (
+                    ai_plane_cfg.altitude,
+                    ai_plane_cfg.altitude_typ.clone(),
+                    ai_plane_cfg.speed,
+                ),
+                ActionKind::Fighters(ai_plane_cfg) => (
+                    ai_plane_cfg.altitude,
+                    ai_plane_cfg.altitude_typ.clone(),
+                    ai_plane_cfg.speed,
+                ),
+                ActionKind::Attackers(ai_plane_cfg) => (
+                    ai_plane_cfg.altitude,
+                    ai_plane_cfg.altitude_typ.clone(),
+                    ai_plane_cfg.speed,
+                ),
                 _ => bail!("not a valid type"),
             },
             _ => bail!("not the right action kind"),
@@ -2396,117 +2411,6 @@ impl Db {
         Ok(())
     }
 
-    fn rtb_sead_group(&mut self, lua: MizLua, gid: GroupId) -> Result<()> {
-        // Get group info first
-        let (group_pos, side, player_ucid, group_name) = {
-            let group = group!(self, gid)?;
-            let player_ucid = match &group.origin {
-                DeployKind::Action { player, .. } => *player,
-                _ => None,
-            };
-            (
-                self.group_center(&gid)?,
-                group.side,
-                player_ucid,
-                group.name.clone(),
-            )
-        };
-        
-        // Find the nearest friendly airbase
-        let mut min_dist = f64::MAX;
-        let rtb_pos = {
-            let mut closest_base = None;
-            for (_id, obj) in self.objectives() {
-                if obj.is_airbase() && obj.owner == side {
-                    let obj_pos = obj.zone.pos();
-                    let dist = na::distance_squared(&obj_pos.into(), &group_pos.into());
-                    if dist < min_dist {
-                        min_dist = dist;
-                        closest_base = Some(obj);
-                    };
-                }
-            }
-            match closest_base {
-                Some(o) => o.zone.pos(),
-                None => bail!("no friendly bases to RTB!"),
-            }
-        };
-
-        // Get flight parameters and update group origin
-        let (alt, alt_typ, speed) = {
-            let group = group_mut!(self, gid)?;
-            match &group.origin {
-                DeployKind::Action { spec, .. } => match &spec.kind {
-                    ActionKind::Sead(ai_plane_cfg) => (
-                        ai_plane_cfg.altitude,
-                        ai_plane_cfg.altitude_typ.clone(),
-                        ai_plane_cfg.speed,
-                    ),
-                    _ => bail!("not a SEAD group"),
-                },
-                _ => bail!("not an action group"),
-            }
-        };
-
-        // Update the group's origin to RTB mode
-        {
-            let group = group_mut!(self, gid)?;
-            match &mut group.origin {
-                DeployKind::Action {
-                    marks, rtb, spec, ..
-                } => {
-                    *rtb = Some(rtb_pos);
-                    (*spec).kind = ActionKind::Rtb;
-                    // Clear any existing marks
-                    for id in marks.drain() {
-                        self.ephemeral.msgs().delete_mark(id);
-                    }
-                }
-                _ => bail!("only works with action deployed groups"),
-            }
-        }
-
-        // Create RTB mission
-        let mission = vec![MissionPoint {
-            action: Some(ActionTyp::Air(TurnMethod::FlyOverPoint)),
-            typ: PointType::TurningPoint,
-            airdrome_id: None,
-            helipad: None,
-            time_re_fu_ar: None,
-            link_unit: None,
-            pos: LuaVec2(rtb_pos),
-            alt,
-            alt_typ: Some(alt_typ.clone()),
-            speed,
-            eta: None,
-            speed_locked: None,
-            eta_locked: None,
-            name: Some("rtb".to_owned().into()),
-            task: Box::new(Task::ComboTask(vec![])),
-        }];
-
-        // Set the mission for the group
-        let spctx = SpawnCtx::new(lua)?;
-        self.set_ai_mission(&spctx, gid, mission)?;
-
-        // Notify players that SEAD group is RTB due to out of ARM
-        if let Some(ucid) = player_ucid {
-            if let Some(player) = self.persisted.players.get(&ucid) {
-                self.ephemeral.msgs().panel_to_side(
-                    5,
-                    false,
-                    side,
-                    format_compact!(
-                        "{}'s {} is RTB - out of anti-radiation missiles",
-                        player.name,
-                        group_name
-                    ),
-                );
-            }
-        }
-
-        Ok(())
-    }
 
     pub fn advance_actions(
         &mut self,
@@ -2522,7 +2426,6 @@ impl Db {
         let mut to_deploy: SmallVec<[(Vector2, String, Side, Ucid); 2]> = smallvec![];
         let mut to_paratroop: SmallVec<[(Vector2, String, Side, Ucid, ObjectiveId); 2]> =
             smallvec![];
-        let mut to_rtb_sead: SmallVec<[GroupId; 4]> = smallvec![];
         macro_rules! at_dest {
             ($group:expr, $dest:expr, $radius:expr) => {{
                 let r2 = f64::powi($radius, 2);
@@ -2541,39 +2444,6 @@ impl Db {
             }};
         }
 
-        // Helper function to check if SEAD group is out of anti-radiation missiles
-        fn sead_out_of_arm<'lua>(
-            db: &Db,
-            lua: MizLua<'lua>,
-            group: &crate::db::group::SpawnedGroup,
-        ) -> Result<bool> {
-            use dcso3::weapon::WeaponFlag;
-            
-            for uid in &group.units {
-                let unit = unit!(db, uid)?;
-                let dcs_unit = dcso3::unit::Unit::get_by_name(lua, &unit.name)?;
-                
-                // Check if unit has any anti-radiation missiles
-                let ammo = dcs_unit.get_ammo()?;
-                for ammo_item in ammo {
-                    let ammo_item = ammo_item?;
-                    
-                    // Get weapon flags to check if it's an anti-radiation missile
-                    let weapon_flags = ammo_item.weapon_flags()?;
-                    
-                    // Check for anti-radiation missile flags
-                    let is_arm = (weapon_flags & WeaponFlag::AntiRadarMissile as u64) != 0 
-                        || (weapon_flags & WeaponFlag::AntiRadarMissile2 as u64) != 0;
-                    
-                    if is_arm && ammo_item.count()? > 0 {
-                        // Found ARM with count > 0, group is not out of ARM
-                        return Ok(false);
-                    }
-                }
-            }
-            // If we get here, no unit in the group has any anti-radiation missiles
-            Ok(true)
-        }
 
         for gid in &self.persisted.actions {
             let group = group_mut!(self, gid)?;
@@ -2609,9 +2479,7 @@ impl Db {
                                 continue;
                             }
                         }
-                        // Check if SEAD group is out of anti-radiation missiles
-                        // We'll check this after the main loop to avoid borrowing conflicts
-                        to_rtb_sead.push(*gid);
+                        // SEAD groups now require manual RTB - no automatic RTB based on ammunition
                     }
                     ActionKind::Bomber(b) => {
                         if let Some(target) = *destination {
@@ -2820,16 +2688,6 @@ impl Db {
                     &ucid,
                     format_compact!("deploy mission failed {e:?}"),
                 )
-            }
-        }
-        for gid in to_rtb_sead {
-            // Check if this SEAD group is actually out of anti-radiation missiles
-            if let Some(group) = self.persisted.groups.get(&gid) {
-                if sead_out_of_arm(self, lua, group).unwrap_or(false) {
-                    if let Err(e) = self.rtb_sead_group(lua, gid) {
-                        error!("SEAD RTB failed {e:?}")
-                    }
-                }
             }
         }
         Ok(())

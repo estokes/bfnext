@@ -89,6 +89,8 @@ pub enum ActionArgs {
     FightersWaypoint(WithPosAndGroup<()>),
     Attackers(WithPos<AiPlaneCfg>),
     AttackersWaypoint(WithPosAndGroup<()>),
+    Sead(WithPos<AiPlaneCfg>),
+    SeadWaypoint(WithPosAndGroup<()>),
     Drone(WithPos<DroneCfg>),
     DroneWaypoint(WithPosAndGroup<()>),
     Nuke(WithPos<NukeCfg>),
@@ -240,6 +242,10 @@ impl ActionArgs {
             ActionKind::AttackersWaypoint => {
                 Ok(Self::AttackersWaypoint(pos_group(db, lua, side, (), s)?))
             }
+            ActionKind::Sead(c) => Ok(Self::Sead(pos(db, lua, side, c, s)?)),
+            ActionKind::SeadWaypoint => {
+                Ok(Self::SeadWaypoint(pos_group(db, lua, side, (), s)?))
+            }
             ActionKind::Drone(c) => Ok(Self::Drone(pos(db, lua, side, c, s)?)),
             ActionKind::DroneWaypoint => Ok(Self::DroneWaypoint(pos_group(db, lua, side, (), s)?)),
             ActionKind::Nuke(c) => Ok(Self::Nuke(pos(db, lua, side, c, s)?)),
@@ -271,6 +277,8 @@ impl ActionArgs {
         match self {
             Self::Attackers(c) => Some(c.pos),
             Self::AttackersWaypoint(c) => Some(c.pos),
+            Self::Sead(c) => Some(c.pos),
+            Self::SeadWaypoint(c) => Some(c.pos),
             Self::Awacs(c) => Some(c.pos),
             Self::AwacsWaypoint(c) => Some(c.pos),
             Self::CruiseMissileSpawn(c) => Some(c.pos),
@@ -509,6 +517,12 @@ impl Db {
             ActionArgs::AttackersWaypoint(args) => {
                 self.move_ai_attackers(spctx, side, ucid.clone(), args)?
             }
+            ActionArgs::Sead(args) => {
+                self.ai_sead(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)?
+            }
+            ActionArgs::SeadWaypoint(args) => {
+                self.move_ai_sead(spctx, side, ucid.clone(), args)?
+            }
             ActionArgs::Rtb(args) => self.rtb(spctx, args).context("rtbing unit")?,
             ActionArgs::Drone(args) => self
                 .drone(perf, spctx, idx, side, ucid.clone(), name, cmd.action, args)
@@ -687,6 +701,23 @@ impl Db {
                     let mission = self
                         .ai_attackers_mission(side, player, spawn_pos, args)
                         .context("generate ai attackers mission")?;
+                    let group = group!(self, gid)?;
+                    self.ephemeral.spawn_group(
+                        perf,
+                        &self.persisted,
+                        idx,
+                        spctx,
+                        group,
+                        mission,
+                    )?;
+                    return Ok(());
+                }
+                if let ActionKind::Sead(ai) = &spec.kind {
+                    delete_expired!(ai);
+                    let player = *player;
+                    let mission = self
+                        .ai_sead_mission(side, player, spawn_pos, args)
+                        .context("generate ai sead mission")?;
                     let group = group!(self, gid)?;
                     self.ephemeral.spawn_group(
                         perf,
@@ -919,6 +950,57 @@ impl Db {
         )
     }
 
+    fn ai_sead_mission<'lua>(
+        &mut self,
+        side: Side,
+        ucid: Option<Ucid>,
+        spawn_pos: Vector2,
+        args: WithPosAndGroup<()>,
+    ) -> Result<Vec<MissionPoint<'lua>>> {
+        let main_task = Task::EngageTargets {
+            target_types: vec![
+                // Radar-guided SAM systems
+                Attribute::SAM_SR,      // SAM Search Radar
+                Attribute::SAM_TR,      // SAM Tracking Radar
+                Attribute::SAM_LL,      // SAM Launcher
+                Attribute::SAM_CC,      // SAM Command Center
+                Attribute::SR_SAM,      // Short Range SAM
+                Attribute::MR_SAM,      // Medium Range SAM
+                Attribute::LR_SAM,      // Long Range SAM
+                Attribute::SAMElements, // SAM elements
+                Attribute::SAM,         // General SAM
+                Attribute::SAMRelated,  // SAM related
+                Attribute::AirDefence,  // Air Defence
+                Attribute::ArmedAirDefence, // Armed Air Defence
+                Attribute::AirDefenceVehicles, // Air Defence vehicles
+                // EWR (Early Warning Radar) systems
+                Attribute::EWR,         // Early Warning Radar
+                // Static and Mobile AAA that might have radar
+                Attribute::StaticAAA,   // Static AAA
+                Attribute::MobileAAA,   // Mobile AAA
+            ],
+            max_dist: Some(15_000.), // Same range as Attackers
+            priority: None,
+        };
+        let init_task = Task::ComboTask(vec![
+            Task::WrappedCommand(Command::SetUnlimitedFuel(true)),
+            main_task.clone(),
+        ]);
+        self.ai_loiter_point_mission(
+            side,
+            ucid,
+            args,
+            OrbitPattern::Circle,
+            spawn_pos,
+            |k| match k {
+                ActionKind::Sead(_) => true,
+                _ => false,
+            },
+            move || init_task.clone(),
+            move || vec![main_task.clone()],
+        )
+    }
+
     fn move_ai_attackers(
         &mut self,
         spctx: &SpawnCtx,
@@ -932,6 +1014,24 @@ impl Db {
         let mission = self
             .ai_attackers_mission(side, ucid, pos, args)
             .context("generate attackers mission")?;
+        self.set_ai_mission(spctx, gid, mission)
+            .context("setting ai mission")?;
+        Ok(None)
+    }
+
+    fn move_ai_sead(
+        &mut self,
+        spctx: &SpawnCtx,
+        side: Side,
+        ucid: Option<Ucid>,
+        args: WithPosAndGroup<()>,
+    ) -> Result<Option<GroupId>> {
+        let gid = args.group;
+        let group = group!(self, gid)?;
+        let pos = group_position(spctx.lua(), &group.name)?;
+        let mission = self
+            .ai_sead_mission(side, ucid, pos, args)
+            .context("generate sead mission")?;
         self.set_ai_mission(spctx, gid, mission)
             .context("setting ai mission")?;
         Ok(None)
@@ -962,6 +1062,44 @@ impl Db {
             BitFlags::empty(),
             move |db, group, pos| {
                 db.ai_attackers_mission(
+                    side,
+                    ucid,
+                    pos,
+                    WithPosAndGroup {
+                        cfg: (),
+                        pos: args.pos,
+                        group,
+                    },
+                )
+            },
+        )?))
+    }
+
+    fn ai_sead(
+        &mut self,
+        perf: &mut PerfInner,
+        spctx: &SpawnCtx,
+        idx: &MizIndex,
+        side: Side,
+        ucid: Option<Ucid>,
+        name: String,
+        action: Action,
+        args: WithPos<AiPlaneCfg>,
+    ) -> Result<Option<GroupId>> {
+        Ok(Some(self.add_and_spawn_ai_air(
+            perf,
+            spctx,
+            idx,
+            side,
+            &ucid,
+            name,
+            action,
+            0.,
+            &args,
+            None,
+            BitFlags::empty(),
+            move |db, group, pos| {
+                db.ai_sead_mission(
                     side,
                     ucid,
                     pos,
@@ -1522,6 +1660,21 @@ impl Db {
                     drone_cfg.plane.altitude_typ.clone(),
                     drone_cfg.plane.speed,
                 ),
+                ActionKind::Sead(ai_plane_cfg) => (
+                    ai_plane_cfg.altitude,
+                    ai_plane_cfg.altitude_typ.clone(),
+                    ai_plane_cfg.speed,
+                ),
+                ActionKind::Fighters(ai_plane_cfg) => (
+                    ai_plane_cfg.altitude,
+                    ai_plane_cfg.altitude_typ.clone(),
+                    ai_plane_cfg.speed,
+                ),
+                ActionKind::Attackers(ai_plane_cfg) => (
+                    ai_plane_cfg.altitude,
+                    ai_plane_cfg.altitude_typ.clone(),
+                    ai_plane_cfg.speed,
+                ),
                 _ => bail!("not a valid type"),
             },
             _ => bail!("not the right action kind"),
@@ -1829,7 +1982,8 @@ impl Db {
                     | ActionKind::Drone(DroneCfg { plane: a, .. })
                     | ActionKind::CruiseMissileSpawn(a)
                     | ActionKind::Fighters(a)
-                    | ActionKind::Attackers(a) => {
+                    | ActionKind::Attackers(a)
+                    | ActionKind::Sead(a) => {
                         match loc {
                             SpawnLoc::InAir { pos: oldpos, .. } => {
                                 let dir = *oldpos - args.pos;
@@ -1866,6 +2020,7 @@ impl Db {
                         (a.altitude, a.altitude_typ.clone(), a.speed, marks, player)
                     }
                     ActionKind::AttackersWaypoint
+                    | ActionKind::SeadWaypoint
                     | ActionKind::AwacsWaypoint
                     | ActionKind::DroneWaypoint
                     | ActionKind::CruiseMissileWaypoint
@@ -2256,6 +2411,7 @@ impl Db {
         Ok(())
     }
 
+
     pub fn advance_actions(
         &mut self,
         lua: MizLua,
@@ -2288,6 +2444,7 @@ impl Db {
             }};
         }
 
+
         for gid in &self.persisted.actions {
             let group = group_mut!(self, gid)?;
 
@@ -2313,6 +2470,16 @@ impl Db {
                                 to_delete.push(*gid);
                             }
                         }
+                    }
+                    ActionKind::Sead(ai) => {
+                        // Check duration first
+                        if let Some(d) = ai.duration {
+                            if now - *time > Duration::hours(d as i64) {
+                                to_delete.push(*gid);
+                                continue;
+                            }
+                        }
+                        // SEAD groups now require manual RTB - no automatic RTB based on ammunition
                     }
                     ActionKind::Bomber(b) => {
                         if let Some(target) = *destination {
@@ -2460,6 +2627,7 @@ impl Db {
                     ActionKind::AwacsWaypoint
                     | ActionKind::FighersWaypoint
                     | ActionKind::AttackersWaypoint
+                    | ActionKind::SeadWaypoint
                     | ActionKind::CruiseMissileWaypoint
                     | ActionKind::TankerWaypoint
                     | ActionKind::DroneWaypoint

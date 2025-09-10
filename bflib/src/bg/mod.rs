@@ -20,7 +20,7 @@ mod rpcs;
 mod statspub;
 
 use crate::{admin::AdminCommand, db::persisted::Persisted};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use bfprotocols::{
     cfg::Cfg,
     perf::{Perf, PerfStat},
@@ -28,7 +28,7 @@ use bfprotocols::{
 };
 use bytes::{BufMut, Bytes, BytesMut};
 use chrono::prelude::*;
-use compact_str::{format_compact, CompactString};
+use compact_str::{CompactString, format_compact};
 use crossbeam::queue::SegQueue;
 use dcso3::perf::{Perf as ApiPerf, PerfStat as ApiPerfStat};
 use fxhash::FxHashMap;
@@ -444,6 +444,10 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                     if let Err(e) = logs.switch_to_netidx(publisher.clone(), base.clone()).await {
                         eprintln!("failed to initialize netidx logs {e:?}")
                     }
+                }
+                match &logs {
+                    Logs::Files { .. } => log::info!("log is in files mode"),
+                    Logs::Netidx { .. } => log::info!("log is in netidx mode"),
                 }
             }
             Task::SaveState(path, db) => {

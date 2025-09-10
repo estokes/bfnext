@@ -1,11 +1,12 @@
 use anyhow::Result;
 use bytes::BytesMut;
 use futures::{
+    StreamExt,
     channel::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
     },
-    select_biased, StreamExt,
+    select_biased,
 };
 use fxhash::FxHashSet;
 use log::error;

@@ -1,5 +1,5 @@
 {
-  "netidx_base": null,
+  "netidx_base": "/chicken/coop",
   "auto_reset": {
     "condition": {
       "MapOwned": {

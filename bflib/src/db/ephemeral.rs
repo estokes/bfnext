@@ -813,6 +813,8 @@ impl Ephemeral {
                     | ActionKind::CruiseMissileWaypoint
                     | ActionKind::FighersWaypoint
                     | ActionKind::AttackersWaypoint
+                    | ActionKind::Sead(_)
+                    | ActionKind::SeadWaypoint
                     | ActionKind::Move(_)
                     | ActionKind::Rtb
                     | ActionKind::Nuke(_) => (),

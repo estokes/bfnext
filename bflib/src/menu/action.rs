@@ -72,6 +72,10 @@ fn do_pos_action(
             cfg: cfg.clone(),
             pos,
         }),
+        ActionKind::Sead(cfg) => ActionArgs::Sead(WithPos {
+            cfg: cfg.clone(),
+            pos,
+        }),
         ActionKind::Awacs(cfg) => ActionArgs::Awacs(WithPos {
             cfg: cfg.clone(),
             pos,
@@ -114,7 +118,8 @@ fn do_pos_action(
         | ActionKind::AwacsWaypoint
         | ActionKind::FighersWaypoint
         | ActionKind::DroneWaypoint
-        | ActionKind::AttackersWaypoint => bail!("invalid action type for this menu item"),
+        | ActionKind::AttackersWaypoint
+        | ActionKind::SeadWaypoint => bail!("invalid action type for this menu item"),
     };
     let cmd = ActionCmd { name, action, args };
     run_action(ctx, perf, lua, side, slot, ucid, Some(mark), cmd)
@@ -221,6 +226,11 @@ fn do_pos_group_action(
             pos,
             group,
         }),
+        ActionKind::SeadWaypoint => ActionArgs::SeadWaypoint(WithPosAndGroup {
+            cfg: (),
+            pos,
+            group,
+        }),
         ActionKind::Move(cfg) => ActionArgs::Move(WithPosAndGroup {
             cfg: cfg.clone(),
             pos,
@@ -232,6 +242,7 @@ fn do_pos_group_action(
             group,
         }),
         ActionKind::Attackers(_)
+        | ActionKind::Sead(_)
         | ActionKind::Awacs(_)
         | ActionKind::Deployable(_)
         | ActionKind::CruiseMissileSpawn(_)
@@ -307,6 +318,7 @@ fn do_objective_action(
         | ActionKind::DroneWaypoint
         | ActionKind::AttackersWaypoint
         | ActionKind::Attackers(_)
+        | ActionKind::Sead(_)
         | ActionKind::Awacs(_)
         | ActionKind::CruiseMissileSpawn(_)
         | ActionKind::Deployable(_)
@@ -318,7 +330,8 @@ fn do_objective_action(
         | ActionKind::Bomber(_)
         | ActionKind::LogisticsTransfer(_)
         | ActionKind::Rtb
-        | ActionKind::Move(_) => bail!("invalid action type for this menu item"),
+        | ActionKind::Move(_)
+        | ActionKind::SeadWaypoint => bail!("invalid action type for this menu item"),
     };
     let cmd = ActionCmd { name, action, args };
     run_action(ctx, perf, lua, side, slot, ucid, None, cmd)
@@ -526,6 +539,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
         match &action.kind {
             ActionKind::Bomber(_) | ActionKind::LogisticsTransfer(_) => (),
             ActionKind::AttackersWaypoint
+            | ActionKind::SeadWaypoint
             | ActionKind::AwacsWaypoint
             | ActionKind::Rtb
             | ActionKind::CruiseMissileWaypoint
@@ -540,6 +554,7 @@ fn add_action_menu(lua: MizLua, arg: ArgTriple<Ucid, GroupId, SlotId>) -> Result
                 add_pos_group(root.clone(), name.clone(), false)?
             }
             ActionKind::Attackers(_)
+            | ActionKind::Sead(_)
             | ActionKind::Awacs(_)
             | ActionKind::Deployable(_)
             | ActionKind::CruiseMissileSpawn(_)

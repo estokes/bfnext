@@ -50,6 +50,10 @@ impl<'lua> Ammo<'lua> {
             .raw_get::<_, LuaTable>("desc")?
             .raw_get("displayName")?)
     }
+
+    pub fn weapon_flags(&self) -> Result<u64> {
+        Ok(self.t.raw_get::<_, LuaTable>("desc")?.raw_get("flags")?)
+    }
 }
 
 wrapped_table!(Unit, Some("Unit"));

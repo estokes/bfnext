@@ -358,6 +358,14 @@ fn action_help(ctx: &mut Context, actions: &IndexMap<String, Action, FxBuildHash
                 "{name}: <group> <key> | Move ai attackers. cost {}",
                 action.cost
             )),
+            ActionKind::Sead(_) => Some(format_compact!(
+                "{name}: <key> | Spawn ai sead units. cost {}",
+                action.cost
+            )),
+            ActionKind::SeadWaypoint => Some(format_compact!(
+                "{name}: <group> <key> | Move ai sead units. cost {}",
+                action.cost
+            )),
             ActionKind::Move(_) => Some(format_compact!(
                 "{name}: <group> <key> | Move a ground unit. cost {}",
                 action.cost

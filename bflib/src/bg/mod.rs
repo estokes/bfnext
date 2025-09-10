@@ -20,7 +20,7 @@ mod rpcs;
 mod statspub;
 
 use crate::{admin::AdminCommand, db::persisted::Persisted};
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bfprotocols::{
     cfg::Cfg,
     perf::{Perf, PerfStat},
@@ -338,7 +338,12 @@ impl Logs {
         }
     }
 
-    async fn switch_to_netidx(&mut self, publisher: Publisher, base: NetIdxPath) -> Result<()> {
+    async fn switch_to_netidx(
+        &mut self,
+        publisher: Publisher,
+        cfg: &Config,
+        base: NetIdxPath,
+    ) -> Result<()> {
         match self {
             Self::Netidx { .. } => Ok(()),
             Self::Files {
@@ -354,11 +359,18 @@ impl Logs {
                         0,
                         &PerfStat::default(),
                         &ApiPerfStat::default(),
-                    )?;
-                    let stats =
-                        Statspub::new(publisher.clone(), stats_path.clone(), base.append("stats"))
-                            .await?;
-                    let log = LogPublisher::new(publisher.clone(), log_path, base.append("log"))?;
+                    )
+                    .context("starting pubperf")?;
+                    let stats = Statspub::new(
+                        publisher.clone(),
+                        &cfg,
+                        stats_path.clone(),
+                        base.append("stats"),
+                    )
+                    .await
+                    .context("starting stats pub")?;
+                    let log = LogPublisher::new(publisher.clone(), log_path, base.append("log"))
+                        .context("starting log pub")?;
                     Ok::<_, anyhow::Error>(Self::Netidx {
                         publisher: publisher.clone(),
                         perf,
@@ -427,7 +439,7 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                             continue;
                         }
                     };
-                    let publisher = match PublisherBuilder::new(cfg).build().await {
+                    let publisher = match PublisherBuilder::new(cfg.clone()).build().await {
                         Ok(p) => p,
                         Err(e) => {
                             error!("failed to init netidx publisher {e:?}");
@@ -441,12 +453,15 @@ async fn background_loop(write_dir: PathBuf, mut rx: UnboundedReceiver<Task>) {
                             None
                         }
                     };
-                    if let Err(e) = logs.switch_to_netidx(publisher.clone(), base.clone()).await {
+                    if let Err(e) = logs
+                        .switch_to_netidx(publisher.clone(), &cfg, base.clone())
+                        .await
+                    {
                         eprintln!("failed to initialize netidx logs {e:?}")
                     }
                 }
                 match &logs {
-                    Logs::Files { .. } => log::info!("log is in files mode"),
+                    Logs::Files { .. } => log::info!("log is in file mode"),
                     Logs::Netidx { .. } => log::info!("log is in netidx mode"),
                 }
             }

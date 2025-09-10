@@ -1,9 +1,10 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use arcstr::ArcStr;
-use bfprotocols::stats::{Stat, PATH};
+use bfprotocols::stats::{PATH, Stat};
 use chrono::prelude::*;
 use netidx::{
     chars::Chars,
+    config::Config,
     path::Path,
     publisher::{Publisher, Value},
     resolver_client::GlobSet,
@@ -11,7 +12,7 @@ use netidx::{
 };
 use netidx_archive::{
     config::{ConfigBuilder, PublishConfigBuilder, RecordConfigBuilder},
-    logfile::{BatchItem, Id, BATCH_POOL},
+    logfile::{BATCH_POOL, BatchItem, Id},
     logfile_collection::ArchiveCollectionWriter,
     recorder::Recorder,
 };
@@ -27,21 +28,30 @@ pub(super) struct Statspub {
 }
 
 impl Statspub {
-    pub(super) async fn new(publisher: Publisher, write_dir: PathBuf, base: Path) -> Result<Self> {
+    pub(super) async fn new(
+        publisher: Publisher,
+        cfg: &Config,
+        write_dir: PathBuf,
+        base: Path,
+    ) -> Result<Self> {
         let shard = ArcStr::from("0");
         let config = ConfigBuilder::default()
             .archive_directory(write_dir)
             .publish(
                 PublishConfigBuilder::default()
                     .base(base)
-                    .build()?,
+                    .bind_from_cfg(&cfg)
+                    .build()
+                    .context("publish config builder")?,
             )
             .record([(
                 shard.clone(),
                 RecordConfigBuilder::default()
                     .spec(GlobSet::new(true, vec![])?)
-                    .build()?,
+                    .build()
+                    .context("record config builder")?,
             )])
+            .netidx_config(cfg.clone())
             .build()?;
         let recorder = Recorder::start_with(config, Some(publisher), None)
             .await
@@ -77,7 +87,11 @@ impl Statspub {
                     .ok_or_else(|| anyhow!("no id after adding id"))?
             }
         };
-        Ok(Self { id, log, _recorder: recorder })
+        Ok(Self {
+            id,
+            log,
+            _recorder: recorder,
+        })
     }
 
     /// This will not block

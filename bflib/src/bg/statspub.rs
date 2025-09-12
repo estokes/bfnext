@@ -67,7 +67,7 @@ impl Statspub {
             .lock()
             .remove(&shard_id)
             .ok_or_else(|| anyhow!("no writer for shard"))?;
-        if log.len()? > 0 {
+        if log.len()? > 4096 {
             let now = Utc::now();
             log.rotate_and_compress(now, None).await?;
             let reader = log

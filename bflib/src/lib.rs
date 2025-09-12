@@ -24,6 +24,7 @@ mod landcache;
 mod menu;
 mod msgq;
 mod shots;
+mod splash;
 mod spawnctx;
 
 extern crate nalgebra as na;
@@ -259,6 +260,7 @@ struct Context {
     landcache: LandCache,
     ewr: Ewr,
     jtac: Jtacs,
+    splash_damage: splash::SplashDamageSystem,
 }
 
 impl Context {
@@ -647,7 +649,10 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             if let Err(e) = ctx.shots_out.shot(&ctx.db, start_ts, &e) {
                 error!("error processing shot event {:?}", e)
             }
-            ()
+            // Process splash damage for weapon shots
+            if let Err(e) = ctx.splash_damage.track_weapon_shot(lua, &e, start_ts) {
+                error!("error tracking weapon shot for splash damage {:?}", e)
+            }
         }
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Some(unit) = e.initiator.as_ref().and_then(|u| u.as_unit().ok()) {
@@ -1201,6 +1206,10 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
     }
     if let Err(e) = run_jtac_commands(ctx, lua) {
         error!("failed to run jtac commands {e:?}")
+    }
+    // Update tracked weapons for splash damage
+    if let Err(e) = ctx.splash_damage.update_tracked_weapons(lua, ts, &ctx.db) {
+        error!("error updating tracked weapons {:?}", e)
     }
     ctx.load_state.step();
     record_perf(&mut perf.timed_events, ts);

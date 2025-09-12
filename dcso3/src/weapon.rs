@@ -11,7 +11,7 @@ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.
 */
 
-use super::{as_tbl, object::Object, unit::Unit};
+use super::{as_tbl, object::Object, unit::Unit, LuaVec3};
 use crate::{cvt_err, object::{DcsObject, DcsOid}, simple_enum, wrapped_table, LuaEnv, MizLua};
 use anyhow::{bail, Result};
 use mlua::{prelude::*, Value};
@@ -115,6 +115,26 @@ impl<'lua> Weapon<'lua> {
 
     pub fn get_desc(&self) -> Result<mlua::Table<'lua>> {
         Ok(self.t.call_method("getDesc", ())?)
+    }
+
+    /// Get weapon position (inherited from Object)
+    pub fn get_position(&self) -> Result<crate::Position3> {
+        self.as_object()?.get_position()
+    }
+
+    /// Get weapon velocity (inherited from Object)
+    pub fn get_velocity(&self) -> Result<LuaVec3> {
+        self.as_object()?.get_velocity()
+    }
+
+    /// Get weapon 3D point (inherited from Object)
+    pub fn get_point(&self) -> Result<LuaVec3> {
+        self.as_object()?.get_point()
+    }
+
+    /// Check if weapon is in air (inherited from Object)
+    pub fn in_air(&self) -> Result<bool> {
+        self.as_object()?.in_air()
     }
 }
 

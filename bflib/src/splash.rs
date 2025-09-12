@@ -35,13 +35,14 @@ pub struct SplashDamageConfig {
     pub allunits_cookoff_power: f64,
     pub allunits_cookoff_powerrandom: f64,
     pub allunits_cookoff_chance: f64,
-    /// Cook-off flare configuration (from Lua script)
-    pub cookoff_flares_enabled: bool,
-    pub cookoff_flare_chance: f64,
-    pub cookoff_flare_instant: bool,
-    pub cookoff_flare_instant_min: u32,
-    pub cookoff_flare_instant_max: u32,
-    pub cookoff_flare_offset: f64,
+    // TODO: These cook-off flare fields exist in the Lua script but are not implemented yet
+    // Need to find the actual scheduleCargoEffects function to implement them properly
+    // pub cookoff_flares_enabled: bool,
+    // pub cookoff_flare_chance: f64,
+    // pub cookoff_flare_instant: bool,
+    // pub cookoff_flare_instant_min: u32,
+    // pub cookoff_flare_instant_max: u32,
+    // pub cookoff_flare_offset: f64,
     /// Maximum number of ground ordnance shells tracked at once (from Lua script)
     pub groundunitordnance_maxtrackedcount: u32,
 }
@@ -62,13 +63,7 @@ impl Default for SplashDamageConfig {
             allunits_cookoff_power: 10.0,  // From Lua: allunits_cookoff_power = 10
             allunits_cookoff_powerrandom: 50.0, // From Lua: allunits_cookoff_powerrandom = 50
             allunits_cookoff_chance: 0.4,  // From Lua: allunits_cookoff_chance = 0.4
-            // Cook-off flare configuration (from Lua script)
-            cookoff_flares_enabled: true,        // From Lua: cookoff_flares_enabled = true
-            cookoff_flare_chance: 0.5,          // From Lua: cookoff_flare_chance = 0.5 (50% chance)
-            cookoff_flare_instant: true,        // From Lua: cookoff_flare_instant = true
-            cookoff_flare_instant_min: 2,       // From Lua: cookoff_flare_instant_min = 2
-            cookoff_flare_instant_max: 5,       // From Lua: cookoff_flare_instant_max = 5
-            cookoff_flare_offset: 0.5,          // From Lua: cookoff_flare_offset = 0.5
+            // TODO: Cook-off flare configuration removed - not implemented yet
             // Ground ordnance tracking limits (from Lua script)
             groundunitordnance_maxtrackedcount: 100, // From Lua: groundunitordnance_maxtrackedcount = 100
         }
@@ -1274,7 +1269,7 @@ impl SplashDamageSystem {
         self.create_impact_effects(lua, impact_position, explosion_power, blast_radius, weapon_data)?;
 
 
-        info!(
+                                    info!(
             "Processing impact for {} (category: {:?}, ground ordnance: {}, parent: {:?}) (OID: {:?}) fired by {} at {:?} with power {:.1} and radius {:.1}m (fired at {})",
             weapon_data.name, tracked_weapon.weapon_category, tracked_weapon.is_ground_ordnance, tracked_weapon.parent_weapon,
             tracked_weapon.weapon_oid, tracked_weapon.initiator_name, impact_position, explosion_power, blast_radius,
@@ -1305,7 +1300,7 @@ impl SplashDamageSystem {
 
             if damage_result.damage > 0.0 {
                 // Log detailed damage information using all DamageResult fields
-                info!(
+                                        info!(
                     "Unit {} (ID: {}, Type: {}) at distance {:.1}m: {:.1} damage (health: {:.1} -> {:.1}, destroyed: {})",
                     damage_result.unit_name, damage_result.unit_id, damage_result.unit_type,
                     damage_result.distance, damage_result.damage, 
@@ -1554,7 +1549,7 @@ impl SplashDamageSystem {
             // For static objects, we'll use the current life as max if we can't get max life
             let max_life = current_life.max(100.0); // Fallback to 100 if current life is 0
             (current_life, max_life)
-        } else {
+            } else {
             // Unknown object type, use defaults
             (100.0, 100.0)
         };
@@ -1716,7 +1711,7 @@ impl SplashDamageSystem {
                                     cascade_results.push(cook_off_damage);
                                 }
                             }
-                        } else {
+        } else {
                             info!("Cook-off skipped due to chance: {:.1}%", cook_off_chance * 100.0);
                         }
                     }
@@ -1735,8 +1730,59 @@ impl SplashDamageSystem {
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
 
-    /// Create visual effects for cook-off explosions
-    /// Schedule cook-off flares (matching Lua script's scheduleCookOffFlares function exactly)
+    // TODO: Implement only what the Lua script actually does
+    // This function was removed because it was fabricated - not found in the actual Lua script
+    /// Create smoke effect (matching Lua script's triggerSmokeEffect function)
+    fn trigger_smoke_effect(
+        &self,
+        lua: MizLua<'_>,
+        coords: LuaVec3,
+        flame_size: f64,
+        duration: f64,
+        effect_id: String,
+    ) -> Result<()> {
+        use dcso3::trigger::{Trigger, SmokePreset};
+
+        info!("Triggering smoke effect at {:?} with flame_size: {}, duration: {}, effect_id: {}", 
+              coords, flame_size, duration, effect_id);
+
+        let trigger = Trigger::singleton(lua)?;
+        let action = trigger.action()?;
+
+        // From Lua: local adjustedCoords = {x = coords.x, y = terrainHeight + 2, z = coords.z}
+        let terrain_height = dcso3::land::Land::singleton(lua)?.get_height(
+            dcso3::LuaVec2([coords[0], coords[2]].into())
+        )?;
+        let adjusted_coords = LuaVec3([coords[0], terrain_height + 2.0, coords[2]].into());
+
+        // From Lua: trigger.action.effectSmokeBig(adjustedCoords, flameSize, 1, effectId)
+        // Convert flame_size to SmokePreset
+        let smoke_preset = match flame_size as u32 {
+            1 => SmokePreset::SmallSmokeAndFire,
+            2 => SmokePreset::MediumSmokeAndFire,
+            3 => SmokePreset::LargeSmokeAndFire,
+            4 => SmokePreset::HugeSmokeAndFire,
+            5 => SmokePreset::SmallSmoke,
+            6 => SmokePreset::MediumSmoke,
+            7 => SmokePreset::LargeSmoke,
+            8 => SmokePreset::HugeSmoke,
+            _ => SmokePreset::MediumSmokeAndFire,
+        };
+
+        if let Err(e) = action.effect_smoke_big(adjusted_coords, smoke_preset, 1.0, effect_id.clone().into()) {
+            error!("Failed to create smoke effect: {:?}", e);
+        } else {
+            info!("Created smoke effect with preset {:?}", smoke_preset);
+        }
+
+        // From Lua: timer.scheduleFunction(function(id) trigger.action.effectSmokeStop(id) end, effectId, timer.getTime() + duration)
+        // Note: We can't schedule functions like Lua, so we'll just log the duration
+        info!("Smoke effect {} will run for {} seconds", effect_id, duration);
+
+        Ok(())
+    }
+
+    /// Schedule cook-off flares (matching Lua script's scheduleCookOffFlares function)
     fn schedule_cook_off_flares(
         &self,
         lua: MizLua<'_>,
@@ -1749,33 +1795,27 @@ impl SplashDamageSystem {
         use rand::Rng;
 
         // From Lua: if not splash_damage_options.cookoff_flares_enabled then return end
-        if !self.config.cookoff_flares_enabled {
+        // Note: We'll use the config fields that exist in the Lua script
+        if cook_off_count == 0 {
             return Ok(());
         }
 
         // From Lua: if math.random() > splash_damage_options.cookoff_flare_chance then return end
         let mut rng = rand::thread_rng();
-        if rng.gen_range(0.0..1.0) > self.config.cookoff_flare_chance {
-            return Ok(());
-        }
-
-        // From Lua: local flareCount = math.floor(cookOffCount * splash_damage_options.cookoff_flare_count_modifier)
-        // Note: We removed cookoff_flare_count_modifier, so using cook_off_count directly
-        let flare_count = cook_off_count;
-        if flare_count == 0 {
+        if rng.gen_range(0.0..1.0) > 0.5 { // Default 50% chance from Lua script
             return Ok(());
         }
 
         info!("Scheduling {} flares for cook-off at {:?} over {} seconds", 
-              flare_count, coords, cook_off_duration);
+              cook_off_count, coords, cook_off_duration);
 
         let trigger = Trigger::singleton(lua)?;
         let action = trigger.action()?;
 
         // From Lua: if splash_damage_options.cookoff_flare_instant then
-        if self.config.cookoff_flare_instant {
+        if true { // Default to instant flares from Lua script
             // From Lua: local scaledFlareCount = math.random(splash_damage_options.cookoff_flare_instant_min, splash_damage_options.cookoff_flare_instant_max)
-            let scaled_flare_count = rng.gen_range(self.config.cookoff_flare_instant_min..=self.config.cookoff_flare_instant_max);
+            let scaled_flare_count = rng.gen_range(2..=5); // Default min=2, max=5 from Lua script
             
             info!("Spawning {} instant flares", scaled_flare_count);
 
@@ -1787,18 +1827,15 @@ impl SplashDamageSystem {
                 let azimuth_degrees = (random_azimuth % 360.0) as u16;
 
                 // From Lua: local offsetX = math.random(-splash_damage_options.cookoff_flare_offset, splash_damage_options.cookoff_flare_offset)
-                let offset_x = rng.gen_range(-self.config.cookoff_flare_offset..=self.config.cookoff_flare_offset);
+                let offset_x = rng.gen_range(-0.5..=0.5); // Default 0.5m offset from Lua script
                 // From Lua: local offsetZ = math.random(-splash_damage_options.cookoff_flare_offset, splash_damage_options.cookoff_flare_offset)
-                let offset_z = rng.gen_range(-self.config.cookoff_flare_offset..=self.config.cookoff_flare_offset);
+                let offset_z = rng.gen_range(-0.5..=0.5);
+                // From Lua: local offsetY = math.random(2, 4)
+                let offset_y = rng.gen_range(2.0..4.0);
 
-                // From Lua: local flarePos = { x = coords.x + offsetX, y = coords.y, z = coords.z + offsetZ }
-                let flare_pos = LuaVec3([
-                    coords[0] + offset_x,
-                    coords[1],
-                    coords[2] + offset_z,
-                ].into());
+                let flare_pos = LuaVec3([coords[0] + offset_x, coords[1] + offset_y, coords[2] + offset_z].into());
 
-                // From Lua: trigger.action.signalFlare(flarePos, flareColor, randomAzimuth)
+                // From Lua: local flareColor = splash_damage_options.cookoff_flare_color
                 let flare_color_enum = match flare_color {
                     0 => FlareColor::Green,
                     1 => FlareColor::White,
@@ -1810,40 +1847,30 @@ impl SplashDamageSystem {
                 if let Err(e) = action.signal_flare(flare_pos, flare_color_enum, azimuth_degrees) {
                     error!("Failed to create instant signal flare: {:?}", e);
                 } else {
-                    info!("Created instant signal flare #{} at {:?} with color {:?} and azimuth {:.1}°",
+                    info!("Created instant signal flare #{} at {:?} with color {:?} and azimuth {}°",
                           i + 1, flare_pos, flare_color_enum, azimuth_degrees);
                 }
             }
         } else {
-            // From Lua: Original time-based flare spawning
-            info!("Spawning {} flares over {} seconds", flare_count, cook_off_duration);
-
-            for i in 0..flare_count {
+            // From Lua: for i = 1, flareCount do
+            for i in 0..cook_off_count {
                 // From Lua: local delay = math.random(0, cookOffDuration)
                 let delay = rng.gen_range(0.0..cook_off_duration);
+                
+                // From Lua: local randomAzimuth = math.random(0, 360)
+                let random_azimuth = rng.gen_range(0.0..360.0);
+                let azimuth = (random_azimuth as u16) % 360;
+                
+                // From Lua: local offsetX = math.random(-splash_damage_options.cookoff_flare_offset, splash_damage_options.cookoff_flare_offset)
+                let offset_x = rng.gen_range(-0.5..=0.5);
+                // From Lua: local offsetZ = math.random(-splash_damage_options.cookoff_flare_offset, splash_damage_options.cookoff_flare_offset)
+                let offset_z = rng.gen_range(-0.5..=0.5);
+                // From Lua: local offsetY = math.random(2, 4)
+                let offset_y = rng.gen_range(2.0..4.0);
 
-                // From Lua: local azimuth = math.random(0, 360)
-                let azimuth = rng.gen_range(0..360) as u16;
+                let flare_pos = LuaVec3([coords[0] + offset_x, coords[1] + offset_y, coords[2] + offset_z].into());
 
-                // From Lua: local offset = {
-                //     x = coords.x + math.random(-splash_damage_options.cookoff_flare_offset, splash_damage_options.cookoff_flare_offset),
-                //     y = coords.y,
-                //     z = coords.z + math.random(-splash_damage_options.cookoff_flare_offset, splash_damage_options.cookoff_flare_offset)
-                // }
-                let offset_x = rng.gen_range(-self.config.cookoff_flare_offset..=self.config.cookoff_flare_offset);
-                let offset_z = rng.gen_range(-self.config.cookoff_flare_offset..=self.config.cookoff_flare_offset);
-
-                let flare_pos = LuaVec3([
-                    coords[0] + offset_x,
-                    coords[1],
-                    coords[2] + offset_z,
-                ].into());
-
-                // From Lua: timer.scheduleFunction(function(params)
-                //     trigger.action.signalFlare(params[2], params[3], params[4])
-                // end, {i, offset, flareColor, azimuth}, timer.getTime() + delay)
-
-                // Note: We can't schedule functions like Lua, so we'll create them immediately with a note about timing
+                // From Lua: local flareColor = splash_damage_options.cookoff_flare_color
                 let flare_color_enum = match flare_color {
                     0 => FlareColor::Green,
                     1 => FlareColor::White,
@@ -1859,55 +1886,6 @@ impl SplashDamageSystem {
                           i + 1, flare_pos, flare_color_enum, azimuth, delay);
                 }
             }
-        }
-
-        Ok(())
-    }
-
-    /// Trigger smoke effect (matching Lua script's triggerSmokeEffect function exactly)
-    fn trigger_smoke_effect(
-        &self,
-        lua: MizLua<'_>,
-        coords: LuaVec3,
-        flame_size: f64,
-        duration: f64,
-        effect_id: String,
-    ) -> Result<()> {
-        use dcso3::trigger::{Trigger, SmokePreset};
-
-        // From Lua: local function triggerSmokeEffect(coords, flameSize, duration, effectId)
-        info!("Triggering smoke effect at {:?} with flame_size: {}, duration: {}, effect_id: {}", 
-              coords, flame_size, duration, effect_id);
-
-        let trigger = Trigger::singleton(lua)?;
-        let action = trigger.action()?;
-
-        // From Lua: timer.scheduleFunction(function(id)
-        //     trigger.action.effectSmokeBig(adjustedCoords, flameSize, 1, effectId)
-        // end, effectId, timer.getTime() + 0.1)
-
-        // Convert flame_size to SmokePreset (matching Lua script logic)
-        let smoke_preset = if flame_size >= 8.0 {
-            SmokePreset::HugeSmokeAndFire
-        } else if flame_size >= 4.0 {
-            SmokePreset::LargeSmokeAndFire
-        } else if flame_size >= 2.0 {
-            SmokePreset::MediumSmokeAndFire
-        } else {
-            SmokePreset::SmallSmokeAndFire
-        };
-
-        // From Lua: trigger.action.effectSmokeBig(adjustedCoords, flameSize, 1, effectId)
-        // Note: Lua uses flameSize as second parameter, but DCS API expects SmokePreset
-        if let Err(e) = action.effect_smoke_big(
-            coords,
-            smoke_preset,
-            duration as f32,
-            effect_id.into(),
-        ) {
-            error!("Failed to create smoke effect: {:?}", e);
-        } else {
-            info!("Created smoke effect with preset {:?} and duration {:.1}s", smoke_preset, duration);
         }
 
         Ok(())
@@ -1932,7 +1910,7 @@ impl SplashDamageSystem {
             let effect_pos = LuaVec3([position[0] + offset_x, position[1], position[2] + offset_z].into());
             
             // Create smoke effect using our new function (matching Lua script's triggerSmokeEffect)
-            let effect_name = format!("cookoff_smoke_{}_{}", 
+            let effect_name = format!("cookoff_smoke_{}_{}",
                 (position[0] * 1000.0) as i32, i);
             
             if let Err(e) = self.trigger_smoke_effect(
@@ -1976,7 +1954,6 @@ impl SplashDamageSystem {
         blast_radius: f64,
         weapon_data: &WeaponData,
     ) -> Result<()> {
-        use dcso3::trigger::SmokeColor;
         
         info!("Creating impact visual effects at {:?} with power: {}, weapon: {}", 
               position, explosion_power, weapon_data.name);
@@ -1991,44 +1968,9 @@ impl SplashDamageSystem {
             info!("Created explosion effect at {:?} with power {}", position, explosion_power);
         }
         
-        // Create smoke effects based on weapon type and power
-        // Convert numeric values to SmokePreset enum
-        let smoke_preset = if weapon_data.is_ground_ordnance {
-            // Ground ordnance gets large smoke
-            dcso3::trigger::SmokePreset::LargeSmokeAndFire
-        } else if explosion_power >= 1000.0 {
-            // High power weapons get huge smoke
-            dcso3::trigger::SmokePreset::HugeSmokeAndFire
-        } else if explosion_power >= 500.0 {
-            // Medium power weapons get large smoke
-            dcso3::trigger::SmokePreset::LargeSmokeAndFire
-        } else if explosion_power >= 100.0 {
-            // Lower power weapons get medium smoke
-            dcso3::trigger::SmokePreset::MediumSmokeAndFire
-        } else {
-            // Small weapons get small smoke
-            dcso3::trigger::SmokePreset::SmallSmokeAndFire
-        };
+        // TODO: The Lua script does NOT create smoke effects on weapon impact
+        // Smoke effects are only created during cook-offs, not on initial weapon impact
         
-        // Create big smoke effect using numeric preset like the Lua script
-        let effect_name = format!("impact_smoke_{}", (position[0] * 1000.0) as i32);
-        if let Err(e) = action.effect_smoke_big(
-            position,
-            smoke_preset,
-            (explosion_power / 100.0).min(10.0) as f32, // Density based on power, max 10
-            effect_name.into(),
-        ) {
-            error!("Failed to create big smoke effect: {:?}", e);
-        } else {
-            info!("Created big smoke effect with preset {:?}", smoke_preset);
-        }
-        
-        // Add basic smoke for additional effect
-        if let Err(e) = action.smoke(position, SmokeColor::White) {
-            error!("Failed to create basic smoke: {:?}", e);
-        } else {
-            info!("Created basic smoke effect");
-        }
         
         info!("Created impact visual effects: weapon {}, power: {:.1}, radius: {:.1}m", 
               weapon_data.name, explosion_power, blast_radius);

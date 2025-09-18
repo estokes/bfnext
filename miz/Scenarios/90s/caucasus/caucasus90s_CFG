@@ -133,6 +133,7 @@
     "E-3A": 0,
     "RQ-1A Predator": 0,
     "MiG-29A": 21600,
+    "MiG-29 Fulcrum": 21600,
     "MiG-29S": 21600,
     "F-14A-135-GR": 36000,
     "MiG-21Bis": 14400,
@@ -181,9 +182,10 @@
     "C-101CC": "Recon",
     "J-11A": "Standard",
     "MiG-29A": "Intercept",
+    "MiG-29 Fulcrum": "Intercept",
+    "MiG-29S": "Intercept",
     "MiG-21Bis": "Intercept",
     "L-39C": "Recon",
-    "MiG-29S": "Intercept",
     "TF-51D": "Recon",
     "F-14A-135-GR": "Standard",
     "F-16C_50": "Standard",
@@ -3227,9 +3229,6 @@
       "RadarGuided",
       "SearchRadar"
     ],
-    "MiG-29A": [
-      "Aircraft"
-    ],
     "Soldier M249": [
       "Infantry",
       "SR",
@@ -3246,7 +3245,13 @@
     "F-14A-135-GR": [
       "Aircraft"
     ],
-    "MiG-29S": [
+      "MiG-29A": [
+      "Aircraft"
+    ],
+      "MiG-29 Fulcrum": [
+      "Aircraft"
+    ],
+      "MiG-29S": [
       "Aircraft"
     ],
     "5p73 s-125 ln": [

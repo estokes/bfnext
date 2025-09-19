@@ -904,39 +904,6 @@
       {
         "path": [
           "Radar SAMs",
-          "SA-15B Tor M2"
-        ],
-        "kind": {
-          "Group": {
-            "template": "DEPSA15M2"
-          }
-        },
-        "persist": "Forever",
-        "limit": 4,
-        "limit_enforce": "DeleteOldest",
-        "crates": [
-          {
-            "name": "SA15B Tor M2",
-            "weight": 1500,
-            "required": 3,
-            "pos_unit": null,
-            "max_drop_height_agl": 10,
-            "max_drop_speed": 50
-          }
-        ],
-        "repair_crate": null,
-        "repair_cost": 0,
-        "cost": 80,
-        "ewr": {
-          "range": 30000
-        },
-        "jtac": null,
-        "template": null,
-        "logistics": null
-      },
-      {
-        "path": [
-          "Radar SAMs",
           "SA-2 Guideline"
         ],
         "kind": {
@@ -1673,55 +1640,6 @@
         "cost": 50,
         "ewr": {
           "range": 20000
-        },
-        "jtac": null,
-        "template": null,
-        "logistics": null
-      },
-      {
-        "path": [
-          "Radar SAMs",
-          "NASAMS System"
-        ],
-        "kind": {
-          "Group": {
-            "template": "DEPNASAMS"
-          }
-        },
-        "persist": "Forever",
-        "limit": 4,
-        "limit_enforce": "DeleteOldest",
-        "crates": [
-          {
-            "name": "NASAMS Launchers",
-            "weight": 1500,
-            "required": 1,
-            "pos_unit": "NASAMS_LN_C",
-            "max_drop_height_agl": 10,
-            "max_drop_speed": 50
-          },
-          {
-            "name": "NASAMS Radar",
-            "weight": 1500,
-            "required": 1,
-            "pos_unit": "NASAMS_Radar_MPQ64F1",
-            "max_drop_height_agl": 10,
-            "max_drop_speed": 50
-          },
-          {
-            "name": "NASAMS CC",
-            "weight": 1500,
-            "required": 1,
-            "pos_unit": "NASAMS_Command_Post",
-            "max_drop_height_agl": 10,
-            "max_drop_speed": 50
-          }
-        ],
-        "repair_crate": null,
-        "repair_cost": 0,
-        "cost": 70,
-        "ewr": {
-          "range": 30000
         },
         "jtac": null,
         "template": null,

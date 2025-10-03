@@ -165,6 +165,7 @@
     "F-5E": 14400,
     "F-5E-3": 14400,
     "JF-17": 36000,
+    "F-15E": 36000,
     "F-15ESE": 36000,
     "AV8BNA": 36000,
     "Mirage-F1EE": 14400
@@ -253,7 +254,7 @@
   "limited_lives": true,
   "actions": {
     "Red": {
-      "attack-helicopters": {
+      "attack-KA50": {
         "kind": {
           "Attackers": {
             "kind": "Helicopter",
@@ -265,7 +266,7 @@
             "freq": null
           }
         },
-        "cost": 300,
+        "cost": 200,
         "penalty": 50,
         "limit": null
       },
@@ -349,9 +350,25 @@
             "plane": null
           }
         },
+        "cost": 200,
+        "penalty": 100,
+        "limit": 3,
+        "geo_limit": {
+          "NearFriendlyObjective": {
+            "max": 10000
+          }
+        }
+      },
+      "naval-cruiser": {
+        "kind": {
+          "Deployable": {
+            "name": "Naval Cruiser",
+            "plane": null
+          }
+        },
         "cost": 500,
-        "penalty": 0,
-        "limit": null,
+        "penalty": 200,
+        "limit": 2,
         "geo_limit": {
           "NearFriendlyObjective": {
             "max": 10000
@@ -386,7 +403,7 @@
         "penalty": null,
         "limit": null
       },
-      "dronesmall": {
+      "drone-small": {
         "kind": {
           "Drone": {
             "jtac": {
@@ -498,7 +515,7 @@
         "penalty": null,
         "limit": null
       },
-      "transfer": {
+      "transfer-supplies": {
         "kind": {
           "LogisticsTransfer": {
             "kind": "Helicopter",
@@ -516,7 +533,7 @@
       }
     },
     "Blue": {
-      "attack-helicopters": {
+      "attack-AH64": {
         "kind": {
           "Attackers": {
             "kind": "Helicopter",
@@ -565,22 +582,6 @@
         "penalty": null,
         "limit": null
       },
-      "basket-tanker": {
-        "kind": {
-          "Tanker": {
-            "kind": "FixedWing",
-            "duration": 8,
-            "template": "BBASKETTANKER",
-            "altitude": 6145.0,
-            "altitude_typ": "BARO",
-            "speed": 226.0,
-            "freq": 264000000
-          }
-        },
-        "cost": 50,
-        "penalty": 50,
-        "limit": null
-      },
       "bomber": {
         "kind": {
           "Bomber": {
@@ -600,22 +601,6 @@
         },
         "cost": 400,
         "penalty": 100,
-        "limit": null
-      },
-      "boom-tanker": {
-        "kind": {
-          "Tanker": {
-            "kind": "FixedWing",
-            "duration": 8,
-            "template": "BBOOMTANKER",
-            "altitude": 6215.0,
-            "altitude_typ": "BARO",
-            "speed": 227.0,
-            "freq": 264000000
-          }
-        },
-        "cost": 50,
-        "penalty": 50,
         "limit": null
       },
       "deploy-ewr": {
@@ -644,9 +629,25 @@
             "plane": null
           }
         },
+        "cost": 200,
+        "penalty": 100,
+        "limit": 3,
+        "geo_limit": {
+          "NearFriendlyObjective": {
+            "max": 10000
+          }
+        }
+      },
+      "naval-cruiser": {
+        "kind": {
+          "Deployable": {
+            "name": "Naval Cruiser",
+            "plane": null
+          }
+        },
         "cost": 500,
-        "penalty": 0,
-        "limit": null,
+        "penalty": 200,
+        "limit": 2,
         "geo_limit": {
           "NearFriendlyObjective": {
             "max": 10000
@@ -681,7 +682,7 @@
         "penalty": null,
         "limit": null
       },
-      "dronesmall": {
+      "drone-small": {
         "kind": {
           "Drone": {
             "jtac": {
@@ -771,13 +772,61 @@
         "penalty": 50,
         "limit": null
       },
+      "tanker-basket": {
+        "kind": {
+          "Tanker": {
+            "kind": "FixedWing",
+            "duration": 8,
+            "template": "BBASKETTANKER",
+            "altitude": 6145.0,
+            "altitude_typ": "BARO",
+            "speed": 226.0,
+            "freq": 264000000
+          }
+        },
+        "cost": 50,
+        "penalty": 50,
+        "limit": null
+      },
+      "tanker-boom": {
+        "kind": {
+          "Tanker": {
+            "kind": "FixedWing",
+            "duration": 8,
+            "template": "BBOOMTANKER",
+            "altitude": 6215.0,
+            "altitude_typ": "BARO",
+            "speed": 227.0,
+            "freq": 264000000
+          }
+        },
+        "cost": 50,
+        "penalty": 50,
+        "limit": null
+      },
       "tanker-waypoint": {
         "kind": "TankerWaypoint",
         "cost": 5,
         "penalty": null,
         "limit": null
       },
-      "transfer": {
+	  "testf16": {
+        "kind": {
+          "Attackers": {
+            "kind": "FixedWing",
+            "duration": 2,
+            "template": "BTESTF16",
+            "altitude": 8357.0,
+            "altitude_typ": "BARO",
+            "speed": 275.0,
+            "freq": null
+          }
+        },
+        "cost": 300,
+        "penalty": 50,
+        "limit": null
+      },
+      "transfer-supplies": {
         "kind": {
           "LogisticsTransfer": {
             "kind": "Helicopter",
@@ -837,9 +886,9 @@
       "total_slots": 1
     },
     "CH-47Fbl1": {
-      "troop_slots": 4,
+      "troop_slots": 3,
       "crate_slots": 3,
-      "total_slots": 4
+      "total_slots": 3
     },
     "L-39ZA": {
       "troop_slots": 0,
@@ -854,6 +903,62 @@
   "deployables": {
     "Red": [
       {
+        "path": [
+          "Radar SAMs",
+          "SA-3 Goa"
+        ],
+        "kind": {
+          "Group": {
+            "template": "DEPSA3"
+          }
+        },
+        "persist": "Forever",
+        "limit": 5,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "SA-3 Launcher",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "5p73 s-125 ln",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          },
+          {
+            "name": "SA-3 Search Radar",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "p-19 s-125 sr",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          },
+          {
+            "name": "SA-3 Track Radar",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "snr s-125 tr",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          }
+        ],
+        "repair_crate": {
+          "name": "SA-3 Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 25,
+        "cost": 50,
+        "ewr": {
+          "range": 30000
+        },
+        "jtac": null,
+        "template": null,
+        "logistics": null
+      },      
+	  {
         "path": [
           "Radar SAMs",
           "SA-6 Kub"
@@ -892,7 +997,7 @@
           "max_drop_height_agl": 10,
           "max_drop_speed": 50
         },
-        "repair_cost": 0,
+        "repair_cost": 35,
         "cost": 70,
         "ewr": {
           "range": 40000
@@ -912,7 +1017,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 4,
+        "limit": 3,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -956,10 +1061,10 @@
           "max_drop_height_agl": 10,
           "max_drop_speed": 50
         },
-        "repair_cost": 0,
+        "repair_cost": 45,
         "cost": 90,
         "ewr": {
-          "range": 40000
+          "range": 60000
         },
         "jtac": null,
         "template": null,
@@ -1012,10 +1117,10 @@
           "max_drop_height_agl": 10,
           "max_drop_speed": 50
         },
-        "repair_cost": 0,
+        "repair_cost": 60,
         "cost": 120,
         "ewr": {
-          "range": 60000
+          "range": 800000
         },
         "jtac": null,
         "template": null,
@@ -1153,7 +1258,7 @@
           "max_drop_height_agl": 10,
           "max_drop_speed": 50
         },
-        "repair_cost": 0,
+        "repair_cost": 25,
         "cost": 50,
         "ewr": {
           "range": 10000
@@ -1220,6 +1325,54 @@
         "repair_cost": 0,
         "cost": 30,
         "ewr": null,
+        "jtac": null,
+        "template": null,
+        "logistics": null
+      },
+      {
+        "path": [
+          "Anti-ship missile",
+          "CSS-C-2 Silkworm"	
+        ],
+        "kind": {
+          "Group": {
+            "template": "DEPSILKWORM"
+          }
+        },
+        "persist": "Forever",
+        "limit": 3,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Silkworm Launchers",
+            "weight": 1500,
+            "required": 3,
+            "pos_unit": "hy_launcher",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          },
+          {
+            "name": "Silkworm Search Radar",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "Silkworm_SR",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          }
+        ],
+        "repair_crate": {
+          "name": "Silkworm Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 40,
+        "cost": 80,
+        "ewr": {
+          "range": 40000
+        },
         "jtac": null,
         "template": null,
         "logistics": null
@@ -1334,7 +1487,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 10,
+        "limit": 8,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1346,8 +1499,15 @@
             "max_drop_speed": 350
           }
         ],
-        "repair_crate": null,
-        "repair_cost": 0,
+        "repair_crate": {
+          "name": "Msta Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 25,
         "cost": 80,
         "ewr": null,
         "jtac": null,
@@ -1365,7 +1525,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 10,
+        "limit": 7,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1399,7 +1559,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 8,
+        "limit": 6,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1433,7 +1593,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 6,
+        "limit": 5,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1479,8 +1639,15 @@
             "max_drop_speed": 350
           }
         ],
-        "repair_crate": null,
-        "repair_cost": 0,
+        "repair_crate": {
+          "name": "Smerch Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 50,
         "cost": 150,
         "ewr": null,
         "jtac": null,
@@ -1590,7 +1757,36 @@
           "Objective": {
             "pad_templates": [
               "RNAVALFARP0",
-              "RNAVALFARP1"
+              "RNAVALFARP1",
+              "RNAVALFARP2"
+            ],
+            "defenses_template": null,
+            "ammo_template": null,
+            "fuel_template": null,
+            "barracks_template": null
+          }
+        },
+        "persist": "Forever",
+        "limit": 3,
+        "limit_enforce": "DeleteOldest",
+        "crates": [],
+        "repair_crate": null,
+        "repair_cost": 0,
+        "cost": 100,
+        "ewr": null,
+        "jtac": null,
+        "template": null,
+        "logistics": null
+      },   
+      {
+        "path": [
+          "Naval Cruiser"
+        ],
+        "kind": {
+          "Objective": {
+            "pad_templates": [
+              "RCRUISER0",
+              "RCRUISER1"
             ],
             "defenses_template": null,
             "ammo_template": null,
@@ -1610,16 +1806,16 @@
         "template": null,
         "logistics": null
       }
-    ],
+	],
     "Blue": [
       {
         "path": [
           "Radar SAMs",
-          "Roland ADS"
+          "Rapier System"
         ],
         "kind": {
           "Group": {
-            "template": "DEPROLAND"
+            "template": "DEPRAPIER"
           }
         },
         "persist": "Forever",
@@ -1627,19 +1823,90 @@
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
-            "name": "Roland",
+            "name": "Rapier Launchers",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "rapier_fsa_launcher",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          },
+          {
+            "name": "Rapier Search Radar",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "rapier_fsa_blindfire_radar",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          },
+          {
+            "name": "Rapier Optical Tracker",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "rapier_fsa_optical_tracker_unit",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          }
+        ],
+        "repair_crate": {
+          "name": "Rapier Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 25,
+        "cost": 50,
+        "ewr": {
+          "range": 30000
+        },
+        "jtac": null,
+        "template": null,
+        "logistics": null
+      },
+      {
+        "path": [
+          "Radar SAMs",
+          "Roland ADS Group"
+        ],
+        "kind": {
+          "Group": {
+            "template": "DEPROLAND"
+          }
+        },
+        "persist": "Forever",
+        "limit": 4,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Roland ADS",
             "weight": 1500,
             "required": 2,
             "pos_unit": null,
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
+          },
+          {
+            "name": "Roland Search Radar",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "rapier_fsa_blindfire_radar",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
           }
         ],
-        "repair_crate": null,
-        "repair_cost": 0,
-        "cost": 50,
+        "repair_crate": {
+          "name": "Roland Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 35,
+        "cost": 70,
         "ewr": {
-          "range": 20000
+          "range": 35000
         },
         "jtac": null,
         "template": null,
@@ -1656,7 +1923,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 4,
+        "limit": 3,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -1700,7 +1967,7 @@
           "max_drop_height_agl": 10,
           "max_drop_speed": 50
         },
-        "repair_cost": 0,
+        "repair_cost": 45,
         "cost": 90,
         "ewr": {
           "range": 60000
@@ -1756,10 +2023,10 @@
           "max_drop_height_agl": 10,
           "max_drop_speed": 50
         },
-        "repair_cost": 0,
+        "repair_cost": 60,
         "cost": 120,
         "ewr": {
-          "range": 60000
+          "range": 800000
         },
         "jtac": null,
         "template": null,
@@ -1959,10 +2226,58 @@
           "max_drop_height_agl": 10,
           "max_drop_speed": 50
         },
-        "repair_cost": 0,
+        "repair_cost": 25,
         "cost": 50,
         "ewr": {
           "range": 10000
+        },
+        "jtac": null,
+        "template": null,
+        "logistics": null
+      },
+      {
+        "path": [
+          "Anti-ship missile",
+          "CSS-C-2 Silkworm"		  
+        ],
+        "kind": {
+          "Group": {
+            "template": "DEPSILKWORMG"
+          }
+        },
+        "persist": "Forever",
+        "limit": 3,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Silkworm Launchers",
+            "weight": 1500,
+            "required": 3,
+            "pos_unit": "hy_launcher",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          },
+          {
+            "name": "Silkworm Search Radar",
+            "weight": 1500,
+            "required": 1,
+            "pos_unit": "Silkworm_SR",
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          }
+        ],
+        "repair_crate": {
+          "name": "Silkworm Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 40,
+        "cost": 80,
+        "ewr": {
+          "range": 40000
         },
         "jtac": null,
         "template": null,
@@ -2078,7 +2393,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 10,
+        "limit": 8,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -2090,8 +2405,15 @@
             "max_drop_speed": 350
           }
         ],
-        "repair_crate": null,
-        "repair_cost": 0,
+        "repair_crate": {
+          "name": "Firtina Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 25,
         "cost": 80,
         "ewr": null,
         "jtac": null,
@@ -2109,7 +2431,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 10,
+        "limit": 7,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -2143,7 +2465,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 8,
+        "limit": 6,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -2177,7 +2499,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 6,
+        "limit": 5,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -2223,8 +2545,15 @@
             "max_drop_speed": 350
           }
         ],
-        "repair_crate": null,
-        "repair_cost": 0,
+        "repair_crate": {
+          "name": "MLRS Repair/Rearm",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 50,
         "cost": 150,
         "ewr": null,
         "jtac": null,
@@ -2334,7 +2663,36 @@
           "Objective": {
             "pad_templates": [
               "BNAVALFARP0",
-              "BNAVALFARP1"
+              "BNAVALFARP1",
+              "BNAVALFARP2"
+            ],
+            "defenses_template": null,
+            "ammo_template": null,
+            "fuel_template": null,
+            "barracks_template": null
+          }
+        },
+        "persist": "Forever",
+        "limit": 3,
+        "limit_enforce": "DeleteOldest",
+        "crates": [],
+        "repair_crate": null,
+        "repair_cost": 0,
+        "cost": 100,
+        "ewr": null,
+        "jtac": null,
+        "template": null,
+        "logistics": null
+      },
+      {
+        "path": [
+          "Naval Cruiser"
+        ],
+        "kind": {
+          "Objective": {
+            "pad_templates": [
+              "BCRUISER0",
+              "BCRUISER1"
             ],
             "defenses_template": null,
             "ammo_template": null,
@@ -2353,8 +2711,8 @@
         "jtac": null,
         "template": null,
         "logistics": null
-      }
-    ]
+      }    
+	]
   },
   "troops": {
     "Red": [
@@ -2469,23 +2827,112 @@
     ]
   },
   "unit_classification": {
+    "ELNYA": [
+      "Unarmed",
+      "Boat"
+    ],    
     "leander-gun-achilles": [
       "Boat",
+      "SAM",
+      "MR",
+      "AAA",      
       "Artillery",
+	  "SearchRadar",
+      "TrackRadar",
+      "EngagesWeapons",
       "Driveable"
+    ],
+	"CHAP_Project22160": [
+      "Boat",
+      "SAM",
+      "MR",
+      "AAA",      
+      "Artillery",
+	  "SearchRadar",
+      "TrackRadar",
+      "EngagesWeapons",
+      "Driveable"
+    ],	
+    "PERRY": [
+      "Boat",
+      "SAM",
+      "MR",
+      "AAA",      
+      "Artillery",
+	  "SearchRadar",
+      "TrackRadar",
+      "EngagesWeapons",
+      "Driveable"
+    ],
+    "CVN_72": [
+      "Boat",
+      "SAM",
+      "MR",
+      "AAA",      
+	  "SearchRadar",
+      "TrackRadar",
+      "EngagesWeapons",
+      "Driveable"
+    ],
+    "Stennis": [
+      "Boat",
+      "SAM",
+      "MR",
+      "AAA",      
+	  "SearchRadar",
+      "TrackRadar",
+      "EngagesWeapons",
+      "Driveable"
+    ],
+    "CV_1143_5": [
+      "Boat",
+      "SAM",
+      "MR",
+      "AAA",      
+	  "SearchRadar",
+      "TrackRadar",
+      "EngagesWeapons",
+      "Driveable"
+    ],	
+    "TICONDEROG": [
+      "Boat",
+      "SAM",
+      "LR",
+      "AAA",      
+      "Artillery",
+	  "SearchRadar",
+      "TrackRadar",
+      "EngagesWeapons",
+      "Driveable"
+    ],
+    "MOSCOW": [
+      "Boat",
+      "SAM",
+      "LR",
+      "AAA",      
+      "Artillery",
+	  "SearchRadar",
+      "TrackRadar",
+      "EngagesWeapons",
+      "Driveable"
+    ],
+    "Silkworm_SR": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "SearchRadar"
+    ],
+    "hy_launcher": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "Launcher"
     ],
     "J-11A": [
       "Aircraft"
     ],
     "C-101CC": [
       "Aircraft"
-    ],
-    "Roland Radar": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "SearchRadar",
-      "Driveable"
     ],
     "TV tower": [
       "Unarmed"
@@ -2666,6 +3113,10 @@
       "Logistics",
       "Unarmed"
     ],
+    "Container_10ft": [
+      "Logistics",
+      "Unarmed"
+    ],
     "UH-60A": [
       "Aircraft",
       "Helicopter"
@@ -2696,13 +3147,6 @@
       "Aircraft",
       "Helicopter"
     ],
-    "NASAMS_LN_B": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "EngagesWeapons",
-      "Launcher"
-    ],
     "Ural-4320-31": [
       "Logistics",
       "Unarmed"
@@ -2717,11 +3161,6 @@
       "RadarGuided",
       "TrackRadar",
       "SearchRadar",
-      "Driveable"
-    ],
-    "CHAP_Project22160": [
-      "Artillery",
-      "Boat",
       "Driveable"
     ],
     "F-15C": [
@@ -2833,15 +3272,15 @@
       "SmallArms",
       "Driveable"
     ],
-    "ATZ-60_Maz": [
-      "Unarmed"
-    ],
     "BTR-82A": [
       "APC",
       "MR",
       "ATGM",
       "SmallArms",
       "Driveable"
+    ],
+    "ATZ-60_Maz": [
+      "Unarmed"
     ],
     "ZIL-131 KUNG": [
       "Unarmed"
@@ -2896,6 +3335,9 @@
       "LightCannon",
       "Driveable"
     ],
+    "F-15E": [
+      "Aircraft"
+    ],
     "F-15ESE": [
       "Aircraft"
     ],
@@ -2909,7 +3351,7 @@
       "EngagesWeapons",
       "Driveable"
     ],
-    "ATZ-10": [
+    "ATZ-5": [
       "Logistics",
       "Unarmed"
     ],
@@ -2921,7 +3363,8 @@
     ],
     "UAZ-469": [
       "Logistics",
-      "Unarmed"
+      "Unarmed",
+      "Driveable"	  
     ],
     "TF-51D": [
       "Aircraft"
@@ -2933,10 +3376,6 @@
     ],
     "MosquitoFBMkVI": [
       "Aircraft"
-    ],
-    "ELNYA": [
-      "Unarmed",
-      "Boat"
     ],
     "SA-11 Buk CC 9S470M1": [
       "SAM",
@@ -2952,15 +3391,6 @@
       "SmallArms",
       "Driveable"
     ],
-    "Tor 9A331": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "EngagesWeapons",
-      "TrackRadar",
-      "SearchRadar",
-      "Launcher"
-    ],
     "M6 Linebacker": [
       "SAM",
       "APC",
@@ -2973,13 +3403,6 @@
     ".Ammunition depot": [
       "Logistics",
       "Unarmed"
-    ],
-    "NASAMS_Radar_MPQ64F1": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "EngagesWeapons",
-      "SearchRadar"
     ],
     "Leopard-2A5": [
       "Armor",
@@ -3015,6 +3438,12 @@
       "RadarGuided",
       "TrackRadar"
     ],
+    "S_75M_Volhov": [
+      "SAM",
+      "LR",
+      "RadarGuided",
+      "Launcher"
+    ],
     "ZU-23 Emplacement": [
       "AAA",
       "SR",
@@ -3022,19 +3451,13 @@
     ],
     "Vulcan": [
       "AAA",
-      "MR",
+      "SR",
       "RadarGuided",
       "Driveable"
     ],
     "FPS-117": [
       "EWR",
       "Unarmed"
-    ],
-    "S_75M_Volhov": [
-      "SAM",
-      "LR",
-      "RadarGuided",
-      "Launcher"
     ],
     "T155_Firtina": [
       "Armor",
@@ -3045,12 +3468,19 @@
     ],
     "Roland ADS": [
       "SAM",
-      "MR",
+      "SR",
       "RadarGuided",
       "EngagesWeapons",
       "TrackRadar",
       "SearchRadar",
       "Launcher",
+      "Driveable"
+    ],
+    "Roland Radar": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "SearchRadar",
       "Driveable"
     ],
     "2B11 mortar": [
@@ -3101,17 +3531,8 @@
       "RadarGuided",
       "ControlUnit"
     ],
-    "NASAMS_Command_Post": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "AuxRadarUnit"
-    ],
     "Tu-160": [
       "Aircraft"
-    ],
-    "Ural-375 PBU": [
-      "Unarmed"
     ],
     "Patriot ECS": [
       "SAM",
@@ -3155,7 +3576,19 @@
     "ZiL-131 APA-80": [
       "Unarmed"
     ],
-    "tt_ZU-23": [
+    "Ural-375 PBU": [
+      "Unarmed"
+    ],
+    "GAZ-66": [
+      "Unarmed"
+    ],
+    "Land_Rover_101_FC": [
+      "Unarmed"
+    ],
+    "Land_Rover_109_S3": [
+      "Unarmed"
+    ],    
+	"tt_ZU-23": [
       "AAA",
       "SR",
       "Driveable"
@@ -3217,6 +3650,24 @@
       "Launcher",
       "Driveable"
     ],
+    "rapier_fsa_blindfire_radar": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "SearchRadar"
+    ],
+    "rapier_fsa_optical_tracker_unit": [
+      "SAM",
+      "SR",
+      "OpticallyGuided"
+    ],
+    "rapier_fsa_launcher": [
+      "SAM",
+      "SR",
+      "RadarGuided",
+      "OpticallyGuided",
+      "Launcher"
+    ],
     "LAV-25": [
       "APC",
       "MR",
@@ -3273,15 +3724,6 @@
     "Mi-26": [
       "Aircraft",
       "Helicopter"
-    ],
-    "CHAP_TorM2": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "EngagesWeapons",
-      "TrackRadar",
-      "SearchRadar",
-      "Launcher"
     ],
     "Cow": [
       "Logistics",
@@ -3372,6 +3814,24 @@
       "Launcher",
       "Driveable"
     ],
+    "Tor 9A331": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "EngagesWeapons",
+      "TrackRadar",
+      "SearchRadar",
+      "Launcher"
+    ],
+    "CHAP_TorM2": [
+      "SAM",
+      "MR",
+      "RadarGuided",
+      "EngagesWeapons",
+      "TrackRadar",
+      "SearchRadar",
+      "Launcher"
+    ],	
     "FARP Fuel Depot": [
       "Logistics",
       "Unarmed"
@@ -3397,13 +3857,6 @@
       "AAA",
       "SR",
       "Driveable"
-    ],
-    "NASAMS_LN_C": [
-      "SAM",
-      "MR",
-      "RadarGuided",
-      "EngagesWeapons",
-      "Launcher"
     ],
     "Patriot ln": [
       "SAM",

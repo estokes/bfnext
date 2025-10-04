@@ -810,22 +810,6 @@
         "penalty": null,
         "limit": null
       },
-	  "testf16": {
-        "kind": {
-          "Attackers": {
-            "kind": "FixedWing",
-            "duration": 2,
-            "template": "BTESTF16",
-            "altitude": 8357.0,
-            "altitude_typ": "BARO",
-            "speed": 275.0,
-            "freq": null
-          }
-        },
-        "cost": 300,
-        "penalty": 50,
-        "limit": null
-      },
       "transfer-supplies": {
         "kind": {
           "LogisticsTransfer": {

@@ -297,9 +297,8 @@ impl Context {
 
     fn do_bg_task(&self, task: bg::Task) {
         if let Some(to_bg) = &self.to_background {
-            match to_bg.send(task) {
-                Ok(()) => (),
-                Err(_) => panic!("background thread is dead"),
+            if let Err(e) = to_bg.send(task) {
+                error!("Failed to send task to background thread: {}", e);
             }
         }
     }
@@ -555,12 +554,12 @@ fn on_player_try_change_slot(
 fn unit_killed(
     lua: MizLua,
     ctx: &mut Context,
-    id: DcsOid<ClassUnit>,
+    id: &DcsOid<ClassUnit>,
     now: DateTime<Utc>,
 ) -> Result<()> {
     ctx.recently_landed.remove(&id);
     ctx.shots_out.dead(id.clone(), now);
-    if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, &id) {
+    if let Err(e) = ctx.jtac.unit_dead(lua, &mut ctx.db, id) {
         error!("jtac unit dead failed for {:?} {:?}", id, e)
     }
     if let Err(e) = ctx.db.unit_dead(&id, Utc::now()) {
@@ -633,7 +632,8 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                     }
                 }
                 if dead {
-                    if let Err(e) = unit_killed(lua, ctx, target.object_id()?, start_ts) {
+                    let target_id = target.object_id()?;
+                    if let Err(e) = unit_killed(lua, ctx, &target_id, start_ts) {
                         error!("0 unit killed failed {:?}", e)
                     }
                 }
@@ -657,7 +657,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Dead(e) | Event::UnitLost(e) | Event::PilotDead(e) => {
             if let Some(unit) = e.initiator.as_ref().and_then(|u| u.as_unit().ok()) {
                 let id = unit.object_id()?;
-                if let Err(e) = unit_killed(lua, ctx, id, start_ts) {
+                if let Err(e) = unit_killed(lua, ctx, &id, start_ts) {
                     error!("1 unit killed failed {:?}", e)
                 }
             } else if let Some(st) = e.initiator.as_ref().and_then(|s| s.as_static().ok()) {
@@ -669,7 +669,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
         Event::Ejection(e) => {
             if let Ok(unit) = e.initiator.as_unit() {
                 let id = unit.object_id()?;
-                if let Err(e) = unit_killed(lua, ctx, id, start_ts) {
+                if let Err(e) = unit_killed(lua, ctx, &id, start_ts) {
                     error!("2 unit killed failed {}", e)
                 }
             }
@@ -1123,7 +1123,7 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
         Ok((i, dead)) => {
             ctx.last_unit_position = i;
             for id in dead {
-                if let Err(e) = unit_killed(lua, ctx, id.clone(), ts) {
+                if let Err(e) = unit_killed(lua, ctx, &id, ts) {
                     error!("unit killed failed {:?} {:?}", id, e)
                 }
             }
@@ -1139,7 +1139,7 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
         Ok((i, dead)) => {
             ctx.last_player_position = i;
             for id in dead {
-                if let Err(e) = unit_killed(lua, ctx, id.clone(), ts) {
+                if let Err(e) = unit_killed(lua, ctx, &id, ts) {
                     error!("unit killed failed {:?} {:?}", id, e)
                 }
             }
@@ -1182,7 +1182,7 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
         Err(e) => error!("error updating jtac target positions {:?}", e),
         Ok(dead) => {
             for id in dead {
-                if let Err(e) = unit_killed(lua, ctx, id.clone(), now) {
+                if let Err(e) = unit_killed(lua, ctx, &id, now) {
                     error!("unit killed failed {:?} {:?}", id, e)
                 }
             }

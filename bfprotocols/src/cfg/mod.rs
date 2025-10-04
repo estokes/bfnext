@@ -92,7 +92,6 @@ impl Rule {
         }
     }
 
-    #[allow(dead_code)]
     pub fn blacklist(&mut self, ucid: Ucid, name: String) {
         match self {
             Self::Blacklist { denied } => {
@@ -109,7 +108,6 @@ impl Rule {
         }
     }
 
-    #[allow(dead_code)]
     pub fn whitelist(&mut self, ucid: Ucid, name: String) {
         match self {
             Self::Blacklist { denied } => {
@@ -255,7 +253,6 @@ impl LifeType {
         }
     }
 
-    #[allow(dead_code)]
     pub fn down(&self) -> Option<LifeType> {
         match self {
             LifeType::Recon => None,

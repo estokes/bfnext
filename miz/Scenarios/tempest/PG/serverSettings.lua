@@ -37,7 +37,7 @@ cfg =
     {
         [1] = "C:\\users\\dcs\\Saved Games\\tempest\\Missions\\Tempest.miz",
     }, -- end of ["missionList"]
-    ["password"] = "",
+    ["password"] = "b33r",
     ["listLoop"] = false,
     ["name"] = "Tempest",
     ["require_pure_scripts"] = true,

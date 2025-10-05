@@ -1,9 +1,9 @@
-cfg = 
+cfg =
 {
-    ["description"] = "It's a cluckin good time!",
+    ["description"] = "Tempest server!",
     ["require_pure_textures"] = true,
     ["listStartIndex"] = 1,
-    ["advanced"] = 
+    ["advanced"] =
     {
         ["allow_change_tailno"] = true,
         ["disable_events"] = false,
@@ -29,20 +29,20 @@ cfg =
         ["allow_trial_only_clients"] = false,
         ["allow_dynamic_radio"] = false,
     }, -- end of ["advanced"]
-    ["port"] = 10315,
+    ["port"] = 10314,
     ["mode"] = 0,
     ["bind_address"] = "",
     ["isPublic"] = true,
-    ["missionList"] = 
+    ["missionList"] =
     {
-        [1] = "C:\\users\\dcs\\Saved Games\\pg_90s\\Missions\\Operation Fowl Intent - 90s.miz",
+        [1] = "C:\\users\\dcs\\Saved Games\\tempest\\Missions\\Tempest.miz",
     }, -- end of ["missionList"]
     ["password"] = "",
     ["listLoop"] = false,
-    ["name"] = "The Coop - 90s",
+    ["name"] = "Tempest",
     ["require_pure_scripts"] = true,
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,
     ["require_pure_models"] = true,
-    ["maxPlayers"] = "50",
+    ["maxPlayers"] = "32",
 } -- end of cfg

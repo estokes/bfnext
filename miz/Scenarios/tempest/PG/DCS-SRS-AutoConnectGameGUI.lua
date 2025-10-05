@@ -3,16 +3,16 @@
 -- The file must be in Saved Games\DCS\Scripts\Hooks or Saved Games\DCS.openalpha\Scripts\Hooks
 -- Make sure you enter the correct address into SERVER_SRS_HOST and SERVER_SRS_PORT (5002 by default) below.
 -- You can optionally enable SERVER_SRS_HOST_AUTO and SRS will attempt to find your public IP address
--- You can also enable SRS Chat commands to list frequencies and a message to all 
+-- You can also enable SRS Chat commands to list frequencies and a message to all
 -- non SRS connected users to encourage them to connect
 
 -- User options --
 local SRSAuto = {}
 
 SRSAuto.SERVER_SRS_HOST_AUTO = false -- if set to true SRS will set the SERVER_SRS_HOST for you!
-SRSAuto.SERVER_SRS_PORT = "5009" --  SRS Server default is 5002 TCP & UDP
+SRSAuto.SERVER_SRS_PORT = "5010" --  SRS Server default is 5002 TCP & UDP
 SRSAuto.SERVER_SRS_HOST = "135.181.77.146" -- overridden if SRS_HOST_AUTO is true -- set to your PUBLIC ipv4 address or domain srs.example.com
-SRSAuto.SERVER_SEND_AUTO_CONNECT = true -- set to false to disable auto connect or just remove this file 
+SRSAuto.SERVER_SEND_AUTO_CONNECT = true -- set to false to disable auto connect or just remove this file
 
 ---- SRS CHAT COMMANDS ----
 SRSAuto.CHAT_COMMANDS_ENABLED = false -- if true type -freq, -freqs or -frequencies in ALL chat in multilayer to see the frequencies
@@ -113,15 +113,15 @@ SRSAuto.srsNudge = function()
         for _,v in pairs(net.get_player_list()) do
 
             local _player = net.get_player_info(v)
-           
-               
+
+
                 if _player.side ~= 0  then
 
                     _playerByName[_player.name] = _player
                      --SRSAuto.log("SRS NUDGE - Added ".._player.name)
 
                 end
-            
+
         end
         local fileContent = SRSAuto.readFile(SRSAuto.SRS_NUDGE_PATH);
 

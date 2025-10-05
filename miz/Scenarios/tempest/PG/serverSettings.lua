@@ -1,6 +1,6 @@
 cfg =
 {
-    ["description"] = "Tempest server!",
+    ["description"] = "Tempest Server!",
     ["require_pure_textures"] = true,
     ["listStartIndex"] = 1,
     ["advanced"] =

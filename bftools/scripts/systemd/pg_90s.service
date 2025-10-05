@@ -6,7 +6,7 @@ Description=Start up PG 90s
 Type=simple
 User=dcs
 Environment="DISPLAY=:1"
-ExecStart=/home/dcs/bin/dcs pg_90s miz/Scenarios/90s/PG PG.miz true false
+ExecStart=/home/dcs/bin/dcs pg_90s miz/Scenarios/90s/PG PG.miz true:5009 false
 
 [Install]
 WantedBy=multi-user.target

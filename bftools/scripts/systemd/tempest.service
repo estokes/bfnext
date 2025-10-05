@@ -6,7 +6,7 @@ Description=Start up tempest
 Type=simple
 User=dcs
 Environment="DISPLAY=:1"
-ExecStart=/home/dcs/bin/dcs tempest miz/Scenarios/tempest/PG PG.miz true false
+ExecStart=/home/dcs/bin/dcs tempest miz/Scenarios/tempest/PG PG.miz true:5010 false
 
 [Install]
 WantedBy=multi-user.target

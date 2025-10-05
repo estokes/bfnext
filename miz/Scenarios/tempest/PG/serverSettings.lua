@@ -1,6 +1,6 @@
 cfg =
 {
-    ["description"] = "Tempest Server!",
+    ["description"] = "Tempest Blueflash Server!",
     ["require_pure_textures"] = true,
     ["listStartIndex"] = 1,
     ["advanced"] =
@@ -35,7 +35,7 @@ cfg =
     ["isPublic"] = true,
     ["missionList"] =
     {
-        [1] = "C:\\users\\dcs\\Saved Games\\tempest\\Missions\\Tempest.miz",
+        [1] = "C:\\users\\dcs\\Saved Games\\tempest\\Missions\\Blueflash PG.miz",
     }, -- end of ["missionList"]
     ["password"] = "b33r",
     ["listLoop"] = false,

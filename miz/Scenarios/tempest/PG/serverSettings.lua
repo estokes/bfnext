@@ -39,7 +39,7 @@ cfg =
     }, -- end of ["missionList"]
     ["password"] = "b33r",
     ["listLoop"] = false,
-    ["name"] = "Tempest",
+    ["name"] = "Tempest Blueflash SARH | PVP | Dynamic Campaign",
     ["require_pure_scripts"] = true,
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,

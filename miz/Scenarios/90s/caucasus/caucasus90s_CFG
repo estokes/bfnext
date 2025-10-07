@@ -454,8 +454,8 @@
             "deployable": 10000
           }
         },
-        "cost": 20,
-        "penalty": 10,
+        "cost": 10,
+        "penalty": 1,
         "limit": null
       },
       "paratroops": {
@@ -733,7 +733,7 @@
             "deployable": 20000
           }
         },
-        "cost": 15,
+        "cost": 10,
         "penalty": 1,
         "limit": null
       },

@@ -870,9 +870,9 @@
       "total_slots": 1
     },
     "CH-47Fbl1": {
-      "troop_slots": 3,
+      "troop_slots": 4,
       "crate_slots": 3,
-      "total_slots": 3
+      "total_slots": 4
     },
     "L-39ZA": {
       "troop_slots": 0,

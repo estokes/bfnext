@@ -1,12 +1,12 @@
 [Unit]
 After=tigervnc.service
-Description=Start up PG 90s
+Description=Start up tempest
 
 [Service]
 Type=simple
 User=dcs
 Environment="DISPLAY=:1"
-ExecStart=/home/dcs/bin/dcs pg_90s miz/Scenarios/90s/PG PG.miz true:5009 false
+ExecStart=/home/dcs/bin/dcs tempest miz/Scenarios/tempest/PG PG.miz true:5010 false
 
 [Install]
 WantedBy=multi-user.target

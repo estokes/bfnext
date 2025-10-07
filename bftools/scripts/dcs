@@ -2,9 +2,13 @@
 
 trap quit SIGINT SIGTERM SIGQUIT
 
-if test -z "$1" -o -z "$2" -o -z "$3"; then
-    echo "usage: dcs <name> <git-path> <miz-name> <srs> [<cbt>]"
+function usage() {
+    echo "usage: dcs <name> <git-path> <miz-name> <srs:port> [<cbt>]"
     exit 1
+}
+
+if test -z "$1" -o -z "$2" -o -z "$3" -o -z "$4" -o -z "$5"; then
+    usage
 fi
 
 if echo "$1" | grep -Eq "[[:space:]]"; then
@@ -22,14 +26,14 @@ if ! test -f "${HOME}/bfnext/${2}/${3}"; then
     exit 4
 fi
 
-if test "$4" == "true"; then
+if test "${4%%:*}" == "true"; then
     USE_SRS=1
-elif test "$4" == "false"; then
+    SRS_PORT=${4#*:}
+elif test "${4%%:*}" == "false"; then
     USE_SRS=0
 else
-    echo "usage: dcs <name> <git-path> <miz-name> <srs>"
     echo "expected true or false for srs"
-    exit 5
+    usage
 fi
 
 CBT=false
@@ -38,15 +42,13 @@ if test "$5" == "true"; then
 elif test "$5" == "false"; then
     CBT=false
 else
-    echo "usage: dcs <name> <git-path> <miz-name> <srs> <cbt>"
     echo "expected true or false for cbt"
-    exit 6
+    usage
 fi
 
-BLOCK=120
+BLOCK=30
 NAME="$1"
 PFX="${HOME}/.wine_${NAME}/drive_c"
-SRS="${HOME}/.wine_srs_${NAME}/drive_c/Program Files/srs_${NAME}"
 DCS="${PFX}/Program Files/Eagle Dynamics/DCS World Server"
 DATA="${PFX}/users/dcs/Saved Games/$NAME"
 BFLOG="${DATA}/Logs/bfnext.txt"
@@ -122,7 +124,7 @@ function kill_dcs() {
 
 function kill_srs() {
     PID=$(ps auxwww \
-        | grep "\\srs_${NAME}\\SR-Server.exe" \
+        | grep "SRS-Server-Commandline-Linux --port ${SRS_PORT}" \
         | grep -v grep \
         | awk '{print $2}')
     echo "killing SRS with $PID"
@@ -147,13 +149,13 @@ function watchdog() {
             kill_dcs
         fi
         sleep 60
-    done 
+    done
 }
 
 function run_srs() {
     while true; do
         cd "$SRS"
-        WINEPREFIX="${HOME}/.wine_srs_${NAME}" wine ./SR-Server.exe
+        ~/bin/SRS-Server-Commandline-Linux --port ${SRS_PORT} --coalitionSecurity
         sleep 10
     done
 }

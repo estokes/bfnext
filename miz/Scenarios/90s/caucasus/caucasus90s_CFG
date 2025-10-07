@@ -454,8 +454,8 @@
             "deployable": 10000
           }
         },
-        "cost": 20,
-        "penalty": 10,
+        "cost": 10,
+        "penalty": 1,
         "limit": null
       },
       "paratroops": {
@@ -730,10 +730,10 @@
         "kind": {
           "Move": {
             "troop": 2500,
-            "deployable": 20000
+            "deployable": 10000
           }
         },
-        "cost": 15,
+        "cost": 10,
         "penalty": 1,
         "limit": null
       },
@@ -870,9 +870,9 @@
       "total_slots": 1
     },
     "CH-47Fbl1": {
-      "troop_slots": 3,
+      "troop_slots": 4,
       "crate_slots": 3,
-      "total_slots": 3
+      "total_slots": 4
     },
     "L-39ZA": {
       "troop_slots": 0,

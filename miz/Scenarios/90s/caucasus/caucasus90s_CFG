@@ -1363,6 +1363,40 @@
       },
       {
         "path": [
+          "JTAC vehicle",
+          "BRDM-2"
+        ],
+        "kind": {
+          "Group": {
+            "template": "DEPRJTAC"
+          }
+        },
+        "persist": "Forever",
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "JTAC Crate",
+            "weight": 1500,
+            "required": 2,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "repair_cost": 0,
+        "cost": 30,
+        "ewr": null,
+        "jtac": {
+          "range": 12000,
+          "nolos": false
+        },
+        "template": null,
+        "logistics": null
+      },
+      {
+        "path": [
           "Ground Units",
           "Ammo Truck"
         ],
@@ -1403,7 +1437,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 20,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -2269,6 +2303,40 @@
       },
       {
         "path": [
+          "JTAC vehicle",
+          "M1043 HMMWV"
+        ],
+        "kind": {
+          "Group": {
+            "template": "DEPBJTAC"
+          }
+        },
+        "persist": "Forever",
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "JTAC Crate",
+            "weight": 1500,
+            "required": 2,
+            "pos_unit": null,
+            "max_drop_height_agl": 20,
+            "max_drop_speed": 350
+          }
+        ],
+        "repair_crate": null,
+        "repair_cost": 0,
+        "cost": 30,
+        "ewr": null,
+        "jtac": {
+          "range": 12000,
+          "nolos": false
+        },
+        "template": null,
+        "logistics": null
+      },
+      {
+        "path": [
           "Ground Units",
           "Ammo Truck"
         ],
@@ -2309,7 +2377,7 @@
           }
         },
         "persist": "Forever",
-        "limit": 20,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "crates": [
           {
@@ -3003,6 +3071,18 @@
     "JTAC": [
       "Infantry",
       "LR"
+    ],
+    "BRDM-2": [
+      "APC",
+      "MR",
+      "LightCannon",
+      "Driveable"
+    ],
+    "M1043 HMMWV Armament": [
+      "APC",
+      "MR",
+      "LightCannon",
+      "Driveable"
     ],
     "M1045 HMMWV TOW": [
       "APC",

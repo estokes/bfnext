@@ -37,7 +37,7 @@ cfg =
     {
         [1] = "C:\\users\\dcs\\Saved Games\\tempest\\Missions\\Blueflash PG.miz",
     }, -- end of ["missionList"]
-    ["password"] = "b33r",
+    ["password"] = "",
     ["listLoop"] = false,
     ["name"] = "Tempest Blueflash SARH | PVP | Dynamic Campaign",
     ["require_pure_scripts"] = true,

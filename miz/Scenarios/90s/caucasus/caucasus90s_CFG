@@ -366,7 +366,7 @@
             "plane": null
           }
         },
-        "cost": 500,
+        "cost": 600,
         "penalty": 200,
         "limit": 2,
         "geo_limit": {
@@ -645,7 +645,7 @@
             "plane": null
           }
         },
-        "cost": 500,
+        "cost": 600,
         "penalty": 200,
         "limit": 2,
         "geo_limit": {

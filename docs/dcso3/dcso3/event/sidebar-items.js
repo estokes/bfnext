@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BirthPlace","Event"],"struct":["AtPlace","Birth","EjectionEvent","LeaveUnit","ShootingEnd","Shot","UnitEvent","WeaponAdd","WeaponUse"]};

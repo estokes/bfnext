@@ -1,0 +1,588 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Logistics &amp; Supply - Fowl Engine User Guide</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive guide for players in the Fowl Engine Dynamic Campaign System for DCS">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fowl Engine User Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yourusername/bfnext" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="logistics--supply"><a class="header" href="#logistics--supply">Logistics &amp; Supply</a></h1>
+<p>The logistics system adds strategic depth to Fowl Engine. Understanding supply flows is key to sustained operations.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Logistics simulates the supply chain required to maintain military operations. Without adequate supplies, objectives cannot function effectively.</p>
+<h2 id="the-logistics-system"><a class="header" href="#the-logistics-system">The Logistics System</a></h2>
+<h3 id="what-is-logistics"><a class="header" href="#what-is-logistics">What is Logistics?</a></h3>
+<p><strong>Logistics tracks two main resources</strong>:</p>
+<ol>
+<li><strong>Equipment</strong> (weapons, vehicles, parts)</li>
+<li><strong>Fuel</strong> (aviation fuel, vehicle fuel)</li>
+</ol>
+<p><strong>Three levels of infrastructure</strong>:</p>
+<ol>
+<li><strong>Logistics (Logi)</strong> - Infrastructure health</li>
+<li><strong>Supply</strong> - Equipment inventory level</li>
+<li><strong>Fuel</strong> - Fuel inventory level</li>
+</ol>
+<h2 id="supply-flow"><a class="header" href="#supply-flow">Supply Flow</a></h2>
+<h3 id="logistics-hubs"><a class="header" href="#logistics-hubs">Logistics Hubs</a></h3>
+<p><strong>Central Distribution</strong>:</p>
+<ul>
+<li>Logistics hubs are special objectives</li>
+<li>They distribute supplies to connected objectives</li>
+<li>Form the backbone of supply network</li>
+</ul>
+<p><strong>Hub Connections</strong>:</p>
+<ul>
+<li>Each hub connects to multiple objectives</li>
+<li>Supply flows automatically</li>
+<li>Captured objectives reconnect supply lines</li>
+</ul>
+<h3 id="supply-routes"><a class="header" href="#supply-routes">Supply Routes</a></h3>
+<p>Supplies flow from:</p>
+<pre><code>Logistics Hub → Frontline Objectives → FARPs
+</code></pre>
+<p><strong>Route Characteristics</strong>:</p>
+<ul>
+<li>Automatic distribution every tick interval</li>
+<li>Prioritizes objectives with lowest supply</li>
+<li>Distance affects delivery amount</li>
+<li>Broken routes halt supply flow</li>
+</ul>
+<h3 id="supply-ticks"><a class="header" href="#supply-ticks">Supply Ticks</a></h3>
+<p>The system runs on a <strong>tick cycle</strong>:</p>
+<p><strong>Tick Frequency</strong> (PG Tempest):</p>
+<ul>
+<li>Every <strong>10 minutes</strong></li>
+<li>Supplies distribute during each tick</li>
+<li>Automatic process, no player action needed</li>
+<li>Full delivery cycle: <strong>24 ticks</strong> (4 hours)</li>
+</ul>
+<p><strong>During Each Tick</strong>:</p>
+<ol>
+<li>System assesses all objectives</li>
+<li>Calculates supply needs</li>
+<li>Distributes from logistics hubs</li>
+<li>Updates objective supply levels</li>
+</ol>
+<h2 id="supply--fuel-levels"><a class="header" href="#supply--fuel-levels">Supply &amp; Fuel Levels</a></h2>
+<h3 id="supply-percentage"><a class="header" href="#supply-percentage">Supply Percentage</a></h3>
+<p>Represents equipment and munitions:</p>
+<ul>
+<li><strong>100%</strong>: Fully stocked</li>
+<li><strong>75-99%</strong>: Good condition</li>
+<li><strong>50-74%</strong>: Adequate supplies</li>
+<li><strong>25-49%</strong>: Low stocks</li>
+<li><strong>0-24%</strong>: Critical shortage</li>
+</ul>
+<p><strong>Effects of Low Supply</strong>:</p>
+<ul>
+<li>Reduced repair speeds</li>
+<li>Limited deployments available</li>
+<li>Decreased operational tempo</li>
+<li>Warehouse capacity reduced</li>
+</ul>
+<h3 id="fuel-percentage"><a class="header" href="#fuel-percentage">Fuel Percentage</a></h3>
+<p>Represents aviation fuel stocks:</p>
+<ul>
+<li><strong>100%</strong>: Full fuel reserves</li>
+<li><strong>75-99%</strong>: Good fuel stocks</li>
+<li><strong>50-74%</strong>: Adequate fuel</li>
+<li><strong>25-49%</strong>: Low fuel</li>
+<li><strong>0-24%</strong>: Fuel emergency</li>
+</ul>
+<p><strong>Effects of Low Fuel</strong>:</p>
+<ul>
+<li>Aircraft cannot rearm</li>
+<li>Helicopter operations limited</li>
+<li>May prevent takeoffs</li>
+<li>Logistics vehicles affected</li>
+</ul>
+<h2 id="supply-priorities"><a class="header" href="#supply-priorities">Supply Priorities</a></h2>
+<h3 id="automatic-distribution"><a class="header" href="#automatic-distribution">Automatic Distribution</a></h3>
+<p>The system prioritizes:</p>
+<ol>
+<li><strong>Lowest supply first</strong> - Most desperate get priority</li>
+<li><strong>Connected objectives</strong> - Must have supply route</li>
+<li><strong>Available inventory</strong> - Hub must have supplies</li>
+</ol>
+<p><strong>Example Priority</strong>:</p>
+<pre><code>Objective A: 20% supply → Gets first priority
+Objective B: 45% supply → Gets second priority  
+Objective C: 80% supply → Gets last priority
+</code></pre>
+<h2 id="logistics-infrastructure-logi"><a class="header" href="#logistics-infrastructure-logi">Logistics Infrastructure (Logi)</a></h2>
+<h3 id="what-is-logi"><a class="header" href="#what-is-logi">What is Logi?</a></h3>
+<p>Logi represents the physical infrastructure:</p>
+<ul>
+<li>Buildings</li>
+<li>Roads and railways</li>
+<li>Communications</li>
+<li>Support facilities</li>
+</ul>
+<h3 id="logi-percentage"><a class="header" href="#logi-percentage">Logi Percentage</a></h3>
+<ul>
+<li><strong>100%</strong>: Perfect condition</li>
+<li><strong>75-99%</strong>: Minor damage</li>
+<li><strong>50-74%</strong>: Moderate damage</li>
+<li><strong>25-49%</strong>: Heavy damage</li>
+<li><strong>1-24%</strong>: Critical damage</li>
+<li><strong>0%</strong>: Destroyed (objective capturable!)</li>
+</ul>
+<h3 id="logi-effects"><a class="header" href="#logi-effects">Logi Effects</a></h3>
+<p><strong>High Logi (75-100%)</strong>:</p>
+<ul>
+<li>Fast repair times</li>
+<li>Efficient supply processing</li>
+<li>Normal operations</li>
+</ul>
+<p><strong>Medium Logi (25-74%)</strong>:</p>
+<ul>
+<li>Slower operations</li>
+<li>Reduced efficiency</li>
+<li>Still functional</li>
+</ul>
+<p><strong>Low Logi (1-24%)</strong>:</p>
+<ul>
+<li>Severely impaired</li>
+<li>Very slow repairs</li>
+<li>Minimal functionality</li>
+</ul>
+<p><strong>Zero Logi (0%)</strong>:</p>
+<ul>
+<li><strong>OBJECTIVE CAN BE CAPTURED</strong></li>
+<li>No supply processing</li>
+<li>No repairs possible</li>
+<li>Critical vulnerability</li>
+</ul>
+<h2 id="repairing-logistics"><a class="header" href="#repairing-logistics">Repairing Logistics</a></h2>
+<h3 id="natural-repair"><a class="header" href="#natural-repair">Natural Repair</a></h3>
+<p>Logistics gradually repair over time:</p>
+<ul>
+<li>Automatic process</li>
+<li>Slow regeneration</li>
+<li>Requires some supply availability</li>
+</ul>
+<p><strong>Repair Rate</strong>:</p>
+<ul>
+<li>Typically 1-5% per tick</li>
+<li>Server-configured</li>
+<li>Requires positive supply level</li>
+</ul>
+<h3 id="manual-repair"><a class="header" href="#manual-repair">Manual Repair</a></h3>
+<p>Players can expedite repairs:</p>
+<p><strong>Via Actions Menu</strong>:</p>
+<pre><code>F10 → Actions → Repair (or Repair-Fast) → [Select Objective]
+</code></pre>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Costs <strong>100 points</strong> (helo) or <strong>200 points</strong> (fast fixed-wing)</li>
+<li>Must own the objective</li>
+<li>Repair crate must be delivered to objective</li>
+</ul>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Immediate logi increase (one step)</li>
+<li>Prevents capture vulnerability</li>
+<li>Strategic investment</li>
+<li>Fast option gets there quicker</li>
+</ul>
+<h2 id="warehouse-system"><a class="header" href="#warehouse-system">Warehouse System</a></h2>
+<h3 id="equipment-inventory"><a class="header" href="#equipment-inventory">Equipment Inventory</a></h3>
+<p>Objectives store equipment in warehouses:</p>
+<p><strong>Types of Equipment</strong>:</p>
+<ul>
+<li>Aircraft and helicopters</li>
+<li>Tanks and armored vehicles</li>
+<li>Artillery systems</li>
+<li>Infantry units</li>
+<li>Support equipment</li>
+</ul>
+<p><strong>Capacity</strong>:</p>
+<ul>
+<li>Each objective has maximum capacity</li>
+<li>Varies by objective type</li>
+<li>Display format: <code>stored / capacity</code></li>
+</ul>
+<h3 id="liquid-inventory"><a class="header" href="#liquid-inventory">Liquid Inventory</a></h3>
+<p>Fuel stored separately:</p>
+<p><strong>Liquid Types</strong>:</p>
+<ul>
+<li>Jet fuel (aircraft)</li>
+<li>Aviation gasoline (props)</li>
+<li>Diesel (vehicles)</li>
+</ul>
+<h2 id="supply-strategies"><a class="header" href="#supply-strategies">Supply Strategies</a></h2>
+<h3 id="offensive-strategy"><a class="header" href="#offensive-strategy">Offensive Strategy</a></h3>
+<p><strong>Attacking Enemy Supply</strong>:</p>
+<ol>
+<li><strong>Target logistics hubs</strong> - Cut off multiple objectives</li>
+<li><strong>Interdict supply routes</strong> - Attack connecting objectives</li>
+<li><strong>Reduce frontline supply</strong> - Weaken enemy operations</li>
+</ol>
+<p><strong>Maintaining Your Supply</strong>:</p>
+<ol>
+<li><strong>Protect logistics hubs</strong> - Heavy air defense</li>
+<li><strong>Secure supply routes</strong> - Defend connecting objectives</li>
+<li><strong>Keep logi above 0%</strong> - Prevents captures</li>
+</ol>
+<h3 id="defensive-strategy"><a class="header" href="#defensive-strategy">Defensive Strategy</a></h3>
+<p><strong>Supply Line Defense</strong>:</p>
+<ul>
+<li>Deploy SAMs at logistics hubs</li>
+<li>Maintain CAP over critical objectives</li>
+<li>Repair logi quickly when damaged</li>
+<li>Keep fuel reserves high</li>
+</ul>
+<p><strong>Emergency Response</strong>:</p>
+<ul>
+<li>If logi falls to 0%, immediate priority repair</li>
+<li>Rush fighters to defend against capture</li>
+<li>Deploy ground units to contest zone</li>
+</ul>
+<h2 id="reading-supply-information"><a class="header" href="#reading-supply-information">Reading Supply Information</a></h2>
+<h3 id="f10-map-markers"><a class="header" href="#f10-map-markers">F10 Map Markers</a></h3>
+<p>Typical format:</p>
+<pre><code>Musa Airbase
+Health: 85
+Logi: 42
+Supply: 75
+Fuel: 100
+Points: 0
+</code></pre>
+<ul>
+<li><strong>Health</strong>: 85 - Facility condition</li>
+<li><strong>Logi</strong>: 42 - Infrastructure (safe from capture, above 0)</li>
+<li><strong>Supply</strong>: 75 - Equipment stocks (good level)</li>
+<li><strong>Fuel</strong>: 100 - Fuel stocks (full)</li>
+<li><strong>Points</strong>: 0 - Capture point value</li>
+</ul>
+<p><strong>Note</strong>: Values are whole numbers 0-100.</p>
+<h3 id="in-game-notifications"><a class="header" href="#in-game-notifications">In-Game Notifications</a></h3>
+<p>System messages for supply events:</p>
+<ul>
+<li>"Objective supply critical" - Below 25%</li>
+<li>"Objective fuel emergency" - Below 25%</li>
+<li>"Logistics damaged" - Logi falling</li>
+<li>"Objective capturable" - Logi at 0%</li>
+</ul>
+<h2 id="logistics-transfers"><a class="header" href="#logistics-transfers">Logistics Transfers</a></h2>
+<h3 id="manual-transfers"><a class="header" href="#manual-transfers">Manual Transfers</a></h3>
+<p>Admin or special actions can transfer supplies:</p>
+<p><strong>Command</strong>:</p>
+<pre><code>-admin transfer &lt;from-objective&gt; &lt;to-objective&gt;
+</code></pre>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Emergency supply to starved objective</li>
+<li>Balancing supply distribution</li>
+<li>Preparing for major operations</li>
+</ul>
+<p><strong>Restrictions</strong>:</p>
+<ul>
+<li>Requires admin privileges (for <code>-admin</code> variant)</li>
+<li>Limited by warehouse capacity</li>
+<li>Both objectives must be owned</li>
+</ul>
+<h2 id="advanced-topics"><a class="header" href="#advanced-topics">Advanced Topics</a></h2>
+<h3 id="supply-line-optimization"><a class="header" href="#supply-line-optimization">Supply Line Optimization</a></h3>
+<p><strong>Efficient Network</strong>:</p>
+<ul>
+<li>Capture objectives in logical order</li>
+<li>Maintain control of connecting objectives</li>
+<li>Don't overextend supply lines</li>
+</ul>
+<p><strong>Example Bad Strategy</strong>:</p>
+<pre><code>Hub → A → (enemy) → B → Front
+</code></pre>
+<p>Objective B is cut off!</p>
+<p><strong>Example Good Strategy</strong>:</p>
+<pre><code>Hub → A → B → Front
+</code></pre>
+<p>Clear supply line maintained.</p>
+<h3 id="logistics-as-weapon"><a class="header" href="#logistics-as-weapon">Logistics as Weapon</a></h3>
+<p><strong>Starve Enemy Objectives</strong>:</p>
+<ol>
+<li>Identify their logistics hubs</li>
+<li>Strike them repeatedly</li>
+<li>Target connecting objectives</li>
+<li>Wait for supply depletion</li>
+<li>Attack when weakened</li>
+</ol>
+<p><strong>Siege Warfare</strong>:</p>
+<ul>
+<li>Surround enemy objective</li>
+<li>Cut off supply routes</li>
+<li>Wait for supplies to deplete</li>
+<li>Capture when logistics fail</li>
+</ul>
+<h3 id="supply-consumption"><a class="header" href="#supply-consumption">Supply Consumption</a></h3>
+<p>Different operations consume supplies:</p>
+<p><strong>High Consumption</strong>:</p>
+<ul>
+<li>Repairing damaged aircraft</li>
+<li>Deploying heavy armor</li>
+<li>Sustained combat operations</li>
+<li>Large-scale actions</li>
+</ul>
+<p><strong>Low Consumption</strong>:</p>
+<ul>
+<li>CAP flights</li>
+<li>Basic repairs</li>
+<li>Small unit deployments</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="why-is-my-objective-low-on-supply"><a class="header" href="#why-is-my-objective-low-on-supply">"Why is my objective low on supply?"</a></h3>
+<p>Possible causes:</p>
+<ul>
+<li>Logistics hub captured by enemy</li>
+<li>Supply route broken</li>
+<li>High consumption rate</li>
+<li>Insufficient tick intervals passed</li>
+</ul>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Check supply route integrity</li>
+<li>Protect logistics hubs</li>
+<li>Wait for next supply tick</li>
+<li>Reduce unnecessary deployments</li>
+</ul>
+<h3 id="logi-wont-repair"><a class="header" href="#logi-wont-repair">"Logi won't repair"</a></h3>
+<p>Possible causes:</p>
+<ul>
+<li>Supply level too low</li>
+<li>Recent damage faster than repair</li>
+<li>Server settings</li>
+</ul>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Wait for supply delivery</li>
+<li>Use manual repair action</li>
+<li>Defend objective from attacks</li>
+</ul>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>Learn about the <a href="./points-and-lives.html">Points and Lives System</a> to understand how resources are earned and used!</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../gameplay/capturing-objectives.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../gameplay/points-and-lives.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../gameplay/capturing-objectives.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../gameplay/points-and-lives.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

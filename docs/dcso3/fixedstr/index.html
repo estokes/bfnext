@@ -1,0 +1,243 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Library for several alternative string types using const generics."><title>fixedstr - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-aa0817cf.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="fixedstr" data-themes="" data-resource-suffix="" data-rustdoc-version="1.90.0 (1159e78c4 2025-09-14)" data-channel="1.90.0" data-search-js="search-fa3e91e5.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-68b7e25d.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-eebb9057.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../fixedstr/index.html">fixedstr</a><span class="version">0.5.9</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#macros">Crate Items</a></h3><ul class="block"><li><a href="#macros" title="Macros">Macros</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>fixedstr</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/fixedstr/lib.rs.html#1-1101">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><strong>Library for several alternative string types using const generics.</strong></p>
+<ul>
+<li>The size of some types such as <a href="type.str8.html" title="type fixedstr::str8">str8</a> and <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a>&lt;8&gt;
+are 8 bytes, compared to 16 bytes for <code>&amp;str</code> on 64bit systems,
+providing more efficient ways of representing small strings.</li>
+<li>Most types (except the optional [Flexstr] and [Sharedstr]) can be
+copied and stack-allocated.</li>
+<li><code>#![no_std]</code> is supported by all but the optional [fstr] type.
+Features that use the alloc crate can also be optionally excluded.</li>
+<li>Unicode is supported by all but the optional [cstr] type.</li>
+<li>Serde serialization is supported by all but the optional [Sharedstr] type.</li>
+<li>Select functions are <code>const</code>, including const constructors.</li>
+</ul>
+<p><strong>COMPATIBILITY NOTICES</strong>:</p>
+<blockquote>
+<p><strong>With Version 0.5.0, the default availability of some
+string types have changed.</strong>  The default configuration is minimalized.
+The <code>std</code>, <code>flex-str</code> and <code>shared-str</code>
+options are no longer enabled by default.  The crate now
+supports <strong><code>#![no_std]</code></strong> by default.  The <code>std</code> option only enables the
+[fstr] type, which prints warnings to stderr. <strong>However,</strong> unless
+you require one of the types [fstr], [Flexstr] or [Sharedstr], your
+build configurations most likely will work as before: the builds will just be
+smaller.  If <code>default-features=false</code> is already part of your
+configuration, it should also work as before.</p>
+</blockquote>
+<blockquote>
+<p>Another change that could potentially affect backwards compatibility is that
+zstr’s <code>Index&lt;usize&gt;</code> and <code>IndexMut&lt;usize&gt;</code> traits, which allow
+arbitrary modifications to underlying bytes, is now only available
+with the optional <code>experimental</code> feature.  Previously, they were
+available as default features.</p>
+</blockquote>
+<p><strong>Other Important Recent Updates:</strong></p>
+<blockquote>
+<p><strong>Version 0.5.1 introduced the new <em><code>no-alloc</code></em> option</strong>.  In addition to support
+for no_std (for all but the fstr type), this option disables compilation of
+any features that use the alloc crate.  This may make some no_std implementations
+easier. The default build is no longer minimal (see below).</p>
+</blockquote>
+<blockquote>
+<p>As of Version 0.4.6, all string types except for <code>fstr</code> support
+<strong><code>#![no_std]</code></strong>.</p>
+</blockquote>
+<blockquote>
+<p>Starting in Version 0.4.2, the underlying representation of the zero-terminated <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a>
+type no longer allows non-zero bytes after the first zero.  In particular,
+the <a href="struct.zstr.html#method.from_raw" title="associated function fixedstr::zstr::from_raw">zstr::from_raw</a> function now enforces this rule.</p>
+</blockquote>
+<blockquote>
+<p>Starting in Version 0.4.0, warnings about
+capacity being exceeded are only sent to stderr when using the fstr type.
+For other types, truncation is done silently. Consider using the
+<code>try_make</code> function or the <a href="https://doc.rust-lang.org/1.90.0/core/str/traits/trait.FromStr.html" title="trait core::str::traits::FromStr">core::str::FromStr</a> trait.</p>
+</blockquote>
+ <hr>
+<p><strong>CRATE OVERVIEW</strong></p>
+<p>The two string types that are always provided by this crate are <strong><a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a></strong> and <strong>[tstr]</strong>.
+However, [tstr] is not public by default and should be referenced
+through the type aliases <a href="type.str4.html" title="type fixedstr::str4">str4</a>, <a href="type.str8.html" title="type fixedstr::str8">str8</a>, <a href="type.str16.html" title="type fixedstr::str16">str16</a>, …  <a href="type.str256.html" title="type fixedstr::str256">str256</a>.</p>
+<ul>
+<li>
+<p>A <strong><a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a>&lt;N&gt;</strong> is represented by a <code>[u8;N]</code> array underneath
+and can hold zero-terminated, utf-8 strings of up to N-1 bytes.
+Furthermore, no non-zero bytes can follow the first zero. This
+allows the length of a <code>zstr&lt;N&gt;</code> string to be found in O(log N) time.</p>
+</li>
+<li>
+<p>The types <strong><a href="type.str4.html" title="type fixedstr::str4">str4</a></strong> through <strong><a href="type.str256.html" title="type fixedstr::str256">str256</a></strong> are aliases for internal types
+[tstr]&lt;4&gt; through [tstr]&lt;256&gt; respectively.  These strings are stored
+in <code>[u8;N]</code> arrays with the first byte holding the length of the
+string.  Each <code>tstr&lt;N&gt;</code> can store strings of up to N-1 bytes, with
+maximum N=256. Because Rust does not currently provide
+a way to specify conditions (or type casts) on const generics at
+compile time, the tstr type is not public by
+default and can only be used through the aliases.  The <code>pub-tstr</code> option
+makes the <code>tstr</code> type public but is not recommended: any <code>tstr&lt;N&gt;</code> with
+<code>N&gt;256</code> is not valid and will result in erroneous behavior.</p>
+</li>
+</ul>
+<p>In addition, the following string types are available as options:</p>
+<ul>
+<li>A <strong>[fstr]&lt;N&gt;</strong> stores a string of up to N bytes.
+It’s represented by a <code>[u8;N]</code> array and a separate usize variable
+holding the length.  This type is <strong>enabled with either the <code>std</code> or
+<code>fstr</code> option</strong> and some functions will print warnings to stderr when
+capacity is exceeded. This is the only type that does not support
+<code>no_std</code>, but serde is supported.</li>
+<li>The type <strong>[cstr]</strong>, which is <strong>made available
+with the <code>circular-str</code> option</strong>, uses a fixed u8 array
+that is arranged as a circular queue (aka ring buffer).  This allows
+efficient implementations of pushing/triming characters <em>in front</em> of
+the string without additional memory allocation.  The downside of these
+strings is that the underlying representation can be non-contiguous as it allows
+wrap-around.  As a result, there is no efficient way to implement
+<code>Deref&lt;str&gt;</code>.  Additionally, cstr is the only string type of the crate
+that does not support Unicode. <strong>Only single-byte characters</strong> are
+currently supported. There is, however, an iterator over all characters
+and most common traits are implemented.  Serde and no-std are both supported.</li>
+<li>The <strong>[Flexstr]&lt;N&gt;</strong> type becomes available with the <strong><code>flex-str</code> option</strong>.
+This type uses an internal enum that is either a tstr&lt;N&gt;
+or an owned String (alloc::string::String) in case the length of the string exceeds N-1.
+This type is designed for situations where strings only
+occasionally exceed the limit of N-1 bytes. This type does not implement
+the <code>Copy</code> trait.  Serde and no_std are supported.</li>
+<li>The <strong>[Sharedstr]&lt;N&gt;</strong> type becomes available with the <strong><code>shared-str</code>
+option</strong>. This type is similar to a [Flexstr]&lt;N&gt; but uses a
+<code>Rc&lt;RefCell&lt;..&gt;&gt;</code> underneath to allow strings to be shared as well as
+mutated.  This type does not implement <code>Copy</code> but <code>Clone</code> is done
+in constant time.  no_std is supported but <strong>not serde</strong>.</li>
+</ul>
+<p><strong>SUMMARY OF OPTIONAL FEATURES</strong></p>
+<ul>
+<li><em><strong>serde</strong></em> : Serialization was initially contributed
+by <a href="https://github.com/wallefan">wallefan</a> and adopted to other types
+(except <code>Sharedstr</code>).  This feature enables the Serialize/Deserialize
+traits.</li>
+<li><em><strong>circular-str</strong></em>: this feature makes available the <strong>[cstr]</strong> type.</li>
+<li><em><strong>flex-str</strong></em>: this feature makes available the <strong>[Flexstr]</strong> type.</li>
+<li><em><strong>shared-str</strong></em>: this feature makes available the <strong>[Sharedstr]</strong> type.</li>
+<li><em><strong>std</strong></em>: this feature cancels <code>no_std</code> by enabling the <strong>[fstr]</strong> type.
+An alias for this feature name is ‘fstr’.</li>
+<li><em><strong>pub-tstr</strong></em>: this feature will make the tstr type public. It is not
+recommended: use instead the type aliases <a href="type.str4.html" title="type fixedstr::str4">str4</a> - <a href="type.str256.html" title="type fixedstr::str256">str256</a>, which are
+always available.</li>
+<li><strong>no-alloc</strong>: this <em>anti-feature</em> disables any features that requires the alloc (or std)
+crate.  It will disable <em>entirely</em> the fstr, Flexstr and Sharedstr types: using
+<code>no-alloc</code> together with <code>flex-str</code>, for example, will not enable the Flexstr type.
+It also disables the features in [tstr], <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a> and [cstr] that require the
+alloc crate, in particular any use of alloc::string::String.  Using this feature
+is <em>stronger than no_std</em>.  Note that when compiled with the <code>all-features</code> option, this feature will be included, which will exclude other features.</li>
+<li><em><strong>experimental</strong></em>: the meaning of this feature may change.  Currently
+it implements custom Indexing traits for the zstr type, including
+<code>IndexMut&lt;usize&gt;</code>, which allows individual bytes to be changed
+arbitrarily.  Experimental features are not part of the documentation.</li>
+</ul>
+<p>None of these features is provided by default, so specifying
+<code>default-features=false</code> has no effect.</p>
+<p><strong>SAMPLE BUILD CONFIGURATIONS</strong></p>
+<p>The simplest way to install this create is to <strong><code>cargo add fixedstr</code></strong> in your
+crate or add <code>fixedstr = "0.5"</code> to your dependencies in Cargo.toml.
+The default build makes available the <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a> type and the type aliases
+<a href="type.str4.html" title="type fixedstr::str4">str4</a> - <a href="type.str256.html" title="type fixedstr::str256">str256</a> for [tstr].  Serde is not available with this build
+but no_std is supported, substituting some std features with those from the
+alloc crate.</p>
+<p>For <strong>the smallest possible build</strong>, do <strong><code>cargo add fixedstr --features no-alloc</code></strong>
+in your crate or add the following in Cargo.toml.</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>  [dependencies]
+  fixedstr = {version=<span class="string">"0.5"</span>, features=[<span class="string">"no-alloc"</span>]}</code></pre></div>
+<p>To further enable serde serialization, add the following instead:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>  [dependencies]
+  fixedstr = {version=<span class="string">"0.5"</span>, features=[<span class="string">"serde"</span>,<span class="string">"no-alloc"</span>]}</code></pre></div>
+<p>and to exclude <code>cstr</code> but include all other features (except <code>no-alloc</code>):</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>  [dependencies]
+  fixedstr = {version=<span class="string">"0.5"</span>, features=[<span class="string">"std"</span>,<span class="string">"flex-str"</span>,<span class="string">"shared-str"</span>,<span class="string">"serde"</span>,<span class="string">"pub-tstr"</span>,<span class="string">"experimental"</span>]}</code></pre></div>
+ <br>
+<p><strong>Do not</strong> install this crate with the <code>--all-features</code> option unless you
+understand that it would include <code>no-alloc</code>, which will disable several
+types and other features of the crate.</p>
+<h3 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code> <span class="kw">use </span>fixedstr::<span class="kw-2">*</span>;
+ <span class="kw">let </span>a = str8::from(<span class="string">"abcdefg"</span>); <span class="comment">//creates new string from &amp;str
+ </span><span class="kw">let </span>a1 = a; <span class="comment">// copied, not moved
+ </span><span class="kw">let </span>a2:<span class="kw-2">&amp;</span>str = a.to_str();
+ <span class="kw">let </span>a3:String = a.to_string();
+ <span class="macro">assert_eq!</span>(a.nth_ascii(<span class="number">2</span>), <span class="string">'c'</span>);
+ <span class="kw">let </span>ab = a.substr(<span class="number">1</span>,<span class="number">5</span>);  <span class="comment">// copies substring to new str8
+ </span><span class="macro">assert_eq!</span>(ab,<span class="string">"bcde"</span>);  <span class="comment">// can compare with &amp;str
+ </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>a[<span class="number">1</span>..<span class="number">4</span>],<span class="string">"bcd"</span>); <span class="comment">// implements Index
+ </span><span class="macro">assert!</span>(a&lt;ab);  <span class="comment">// implements Ord (and Hash, Debug, Display, other traits)
+ </span><span class="kw">let </span><span class="kw-2">mut </span>u:zstr&lt;<span class="number">8</span>&gt; = zstr::from(<span class="string">"aλb"</span>); <span class="comment">//unicode support
+ </span>{<span class="macro">assert_eq!</span>(u.nth(<span class="number">1</span>).unwrap(),<span class="string">'λ'</span>);} <span class="comment">// nth returns Option&lt;char&gt;
+ </span><span class="macro">assert!</span>(u.set(<span class="number">1</span>,<span class="string">'μ'</span>));  <span class="comment">// changes a character of the same character class
+ </span><span class="macro">assert!</span>(!u.set(<span class="number">1</span>,<span class="string">'c'</span>)); <span class="comment">// .set returns false on failure
+ </span><span class="macro">assert!</span>(u.set(<span class="number">2</span>,<span class="string">'c'</span>));
+ <span class="macro">assert_eq!</span>(u, <span class="string">"aμc"</span>);
+ <span class="macro">assert_eq!</span>(u.len(),<span class="number">4</span>);  <span class="comment">// length in bytes
+ </span><span class="macro">assert_eq!</span>(u.charlen(),<span class="number">3</span>);  <span class="comment">// length in chars
+ </span><span class="kw">let </span><span class="kw-2">mut </span>ac:str16 = a.resize(); <span class="comment">// copies to larger capacity string
+ </span><span class="kw">let </span>remainder:<span class="kw-2">&amp;</span>str = ac.push(<span class="string">"hijklmnopqrst"</span>);  <span class="comment">//appends string, returns left over
+ </span><span class="macro">assert_eq!</span>(ac.len(),<span class="number">15</span>);
+ <span class="macro">assert_eq!</span>(remainder, <span class="string">"pqrst"</span>);
+ ac.truncate(<span class="number">10</span>); <span class="comment">// shortens string in place
+ </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>ac,<span class="string">"abcdefghij"</span>);
+ <span class="kw">let </span>(upper,lower) = (str8::make(<span class="string">"ABC"</span>), str8::make(<span class="string">"abc"</span>));
+ <span class="macro">assert_eq!</span>(upper, lower.to_ascii_upper()); <span class="comment">// no owned String needed
+  
+ </span><span class="kw">let </span>c1 = str8::from(<span class="string">"abcdef"</span>); <span class="comment">// string concatenation with + for strN types  
+ </span><span class="kw">let </span>c2 = str8::from(<span class="string">"xyz123"</span>);
+ <span class="kw">let </span>c3 = c1 + c2;       
+ <span class="macro">assert_eq!</span>(c3,<span class="string">"abcdefxyz123"</span>);   
+ <span class="macro">assert_eq!</span>(c3.capacity(),<span class="number">15</span>);  <span class="comment">// type of c3 is str16
+
+ </span><span class="kw">let </span>c4 = <span class="macro">str_format!</span>(str16,<span class="string">"abc {}{}{}"</span>,<span class="number">1</span>,<span class="number">2</span>,<span class="number">3</span>); <span class="comment">// impls core::fmt::Write
+ </span><span class="macro">assert_eq!</span>(c4,<span class="string">"abc 123"</span>);  <span class="comment">// str_format! truncates if capacity exceeded
+ </span><span class="kw">let </span>c5 = <span class="macro">try_format!</span>(str8,<span class="string">"abcdef{}"</span>,<span class="string">"ghijklmn"</span>);
+ <span class="macro">assert!</span>(c5.is_none());  <span class="comment">// try_format! returns None if capacity exceeded
+
+ </span><span class="attr">#[cfg(feature = <span class="string">"shared-str"</span>)]
+ #[cfg(not(feature = <span class="string">"no-alloc"</span>))]
+ </span>{
+   <span class="kw">let </span><span class="kw-2">mut </span>s:Sharedstr&lt;<span class="number">8</span>&gt; = Sharedstr::from(<span class="string">"abcd"</span>);
+   <span class="kw">let </span><span class="kw-2">mut </span>s2 = s.clone(); <span class="comment">// O(1) cost
+   </span>s.push_char(<span class="string">'e'</span>);
+   s2.set(<span class="number">0</span>,<span class="string">'A'</span>);
+   <span class="macro">assert_eq!</span>(s2, <span class="string">"Abcde"</span>);
+   <span class="macro">assert!</span>(s==s2 &amp;&amp; s.ptr_eq(<span class="kw-2">&amp;</span>s2));
+ }
+
+ <span class="attr">#[cfg(feature = <span class="string">"experimental"</span>)]
+ </span>{
+   <span class="kw">let </span><span class="kw-2">mut </span>s = &lt;zstr&lt;<span class="number">8</span>&gt;&gt;::from(<span class="string">"abcd"</span>);
+   s[<span class="number">0</span>] = <span class="string">b'A'</span>;       <span class="comment">// implements IndexMut&lt;usize&gt; (only for zstr)
+   </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>s[<span class="number">0</span>..<span class="number">3</span>],<span class="string">"Abc"</span>);
+ }</code></pre></div>
+</div></details><h2 id="macros" class="section-header">Macros<a href="#macros" class="anchor">§</a></h2><dl class="item-table"><dt><a class="macro" href="macro.convert_to_str.html" title="macro fixedstr::convert_to_str">convert_<wbr>to_<wbr>str</a></dt><dd>Version of <a href="macro.to_fixedstr.html" title="macro fixedstr::to_fixedstr">to_fixedstr!</a> that returns None instead of truncating .</dd><dt><a class="macro" href="macro.str_format.html" title="macro fixedstr::str_format">str_<wbr>format</a></dt><dd>creates a formated string of given type (by implementing <a href="https://doc.rust-lang.org/1.90.0/core/fmt/trait.Write.html" title="trait core::fmt::Write">core::fmt::Write</a>):</dd><dt><a class="macro" href="macro.to_fixedstr.html" title="macro fixedstr::to_fixedstr">to_<wbr>fixedstr</a></dt><dd>Macro for converting any expression that implements the Display trait
+into the specified type, similar to <code>to_string</code> but without necessary
+heap allocation.  Truncation is automatic and silent. Example:</dd><dt><a class="macro" href="macro.try_format.html" title="macro fixedstr::try_format">try_<wbr>format</a></dt><dd>version of <a href="macro.str_format.html" title="macro fixedstr::str_format">str_format</a>! that returns an Option of the given type.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a></dt><dd><code>zstr&lt;N&gt;</code>: utf-8 strings of size up to N bytes. The strings are
+zero-terminated with a single byte, with the additional requirement that
+all bytes following the first zero are also zeros in the underlying array.
+This allows for an O(log N) <a href="struct.zstr.html#method.len" title="method fixedstr::zstr::len">zstr::len</a> function.  Note that
+<a href="https://www.ibm.com/docs/en/db2/11.5?topic=support-unicode-character-encoding">utf8 encodings</a>
+of unicode characters allow single null bytes to be distinguished as
+end-of-string.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.str4.html" title="type fixedstr::str4">str4</a></dt><dd>Alias for internal type <code>tstr&lt;4&gt;</code>.
+<br>Holds strings of up to three single-byte chars, good enough to represent abbreviations
+such as those for states and airports. Each str&lt;4&gt; is exactly 32 bits.
+Alias for internal type <code>tstr&lt;4&gt;</code>.   See documentation for [tstr].</dd><dt><a class="type" href="type.str8.html" title="type fixedstr::str8">str8</a></dt><dd>Types for small strings that use an efficient representation
+underneath.  Alias for internal type [tstr]&lt;8&gt;.
+A str8 is 8 bytes and can hold string of up to 7 bytes.
+See documentation for the aliased [tstr] type.</dd><dt><a class="type" href="type.str12.html" title="type fixedstr::str12">str12</a></dt><dt><a class="type" href="type.str16.html" title="type fixedstr::str16">str16</a></dt><dd>A str16 can hold a string of up to 15 bytes. See docs for [fstr] or <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a>.
+The size of str16 is 16 bytes, which is the same as for &amp;str on 64bit
+systems.</dd><dt><a class="type" href="type.str24.html" title="type fixedstr::str24">str24</a></dt><dt><a class="type" href="type.str32.html" title="type fixedstr::str32">str32</a></dt><dd>A str32 can hold a string of up to 31 bytes. See docs for [fstr] or <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a></dd><dt><a class="type" href="type.str48.html" title="type fixedstr::str48">str48</a></dt><dt><a class="type" href="type.str64.html" title="type fixedstr::str64">str64</a></dt><dd>A str64 can hold a string of up to 63 bytes. See docs for [fstr] or <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a></dd><dt><a class="type" href="type.str96.html" title="type fixedstr::str96">str96</a></dt><dt><a class="type" href="type.str128.html" title="type fixedstr::str128">str128</a></dt><dd>A str28 can hold a string of up to 127 bytes. See docs for [fstr] or <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a></dd><dt><a class="type" href="type.str192.html" title="type fixedstr::str192">str192</a></dt><dt><a class="type" href="type.str256.html" title="type fixedstr::str256">str256</a></dt><dd>Each type strN is represented underneath by a <code>[u8;N]</code> with N&lt;=256.
+The first byte of the array always holds the length of the string.
+Each such type can hold a string of up to N-1 bytes, with max size=255.
+These types represent the best combination of [fstr] and <a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a> in
+terms of speed and memory efficiency.
+<br>
+In addition, the str4-str128 types implement <a href="https://doc.rust-lang.org/1.90.0/core/ops/arith/trait.Add.html" title="trait core::ops::arith::Add">core::ops::Add</a> in a way that
+two str8 strings will always concatenate to str16, and similarly for
+all other strN types up to str128.</dd><dt><a class="type" href="type.ztr8.html" title="type fixedstr::ztr8">ztr8</a></dt><dd><a href="struct.zstr.html" title="struct fixedstr::zstr">zstr</a> type aliases for convenience</dd><dt><a class="type" href="type.ztr16.html" title="type fixedstr::ztr16">ztr16</a></dt><dt><a class="type" href="type.ztr32.html" title="type fixedstr::ztr32">ztr32</a></dt><dt><a class="type" href="type.ztr64.html" title="type fixedstr::ztr64">ztr64</a></dt><dt><a class="type" href="type.ztr128.html" title="type fixedstr::ztr128">ztr128</a></dt></dl><script type="text/json" id="notable-traits-data">{"&[u8]":"<h3>Notable traits for <code>&amp;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.90.0/std/primitive.u8.html\">u8</a>]</code></h3><pre><code><div class=\"where\">impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/std/io/trait.Read.html\" title=\"trait std::io::Read\">Read</a> for &amp;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.90.0/std/primitive.u8.html\">u8</a>]</div>","&mut [u8]":"<h3>Notable traits for <code>&amp;mut [<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.90.0/std/primitive.u8.html\">u8</a>]</code></h3><pre><code><div class=\"where\">impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a> for &amp;mut [<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.90.0/std/primitive.u8.html\">u8</a>]</div>"}</script></section></div></main></body></html>

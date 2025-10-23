@@ -1,0 +1,1003 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Deployable Units Reference - Fowl Engine User Guide</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive guide for players in the Fowl Engine Dynamic Campaign System for DCS">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fowl Engine User Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yourusername/bfnext" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="deployable-units-reference"><a class="header" href="#deployable-units-reference">Deployable Units Reference</a></h1>
+<p>Complete listing of all deployable ground units with costs, crate requirements, and limits for PG Tempest.</p>
+<h2 id="quick-reference-summary"><a class="header" href="#quick-reference-summary">Quick Reference Summary</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Category</th><th>Unit Count</th><th>Cost Range</th><th>Crate Range</th></tr></thead><tbody>
+<tr><td><strong>Radar SAMs</strong></td><td>5 types</td><td>40-100 pts</td><td>2-4 crates</td></tr>
+<tr><td><strong>IR SAMs</strong></td><td>4 types</td><td>35-50 pts</td><td>2 crates</td></tr>
+<tr><td><strong>AAA</strong></td><td>3 types</td><td>5-50 pts</td><td>1-2 crates</td></tr>
+<tr><td><strong>IFVs</strong></td><td>8 types</td><td>20-45 pts</td><td>2 crates</td></tr>
+<tr><td><strong>MBTs</strong></td><td>8 types</td><td>65-80 pts</td><td>3 crates</td></tr>
+<tr><td><strong>Artillery</strong></td><td>11 types</td><td>50-100 pts</td><td>2-3 crates</td></tr>
+<tr><td><strong>Ballistic Missiles</strong></td><td>6 types</td><td>200 pts</td><td>3 crates</td></tr>
+<tr><td><strong>Combined Groups</strong></td><td>2 types</td><td>250-500 pts</td><td>5 crates</td></tr>
+<tr><td><strong>Support</strong></td><td>Various</td><td>5-100 pts</td><td>1-4 crates</td></tr>
+<tr><td><strong>Troops</strong></td><td>4 types</td><td>0-25 pts</td><td>N/A (load at base)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Total Deployable Types</strong>: 50+ units across both coalitions</p>
+<hr />
+<h2 id="how-to-deploy"><a class="header" href="#how-to-deploy">How to Deploy</a></h2>
+<ol>
+<li>Load cargo helicopter/aircraft with crates at friendly objective</li>
+<li>Transport crates to deployment location</li>
+<li>Unload crates (must drop all required crates for unit type)</li>
+<li>Unit spawns automatically when all crates are delivered</li>
+</ol>
+<p><strong>Important Restrictions</strong>:</p>
+<p><strong>Drop Parameters</strong>:</p>
+<ul>
+<li><strong>Max drop height</strong>: 10-20m AGL (varies by unit)</li>
+<li><strong>Max drop speed</strong>: 50-350 knots (varies by unit)</li>
+</ul>
+<p><strong>Threatened Objectives</strong>:</p>
+<ul>
+<li>⚠️ <strong>CANNOT deploy</strong> troops or crates at threatened objectives!</li>
+<li>Error: "you can't deploy troops here while enemies are near"</li>
+<li>Wait for objective to clear (5 minute cooldown after enemies leave)</li>
+<li>Check for white circle = capturable (can still deploy there if you own it)</li>
+</ul>
+<hr />
+<h2 id="red-coalition-deployables"><a class="header" href="#red-coalition-deployables">RED COALITION DEPLOYABLES</a></h2>
+<h3 id="radar-sams"><a class="header" href="#radar-sams">Radar SAMs</a></h3>
+<h4 id="sa-15-tor"><a class="header" href="#sa-15-tor">SA-15 Tor</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "SA15 Tor" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="sa-6-kub"><a class="header" href="#sa-6-kub">SA-6 Kub</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>:
+<ul>
+<li>2x "Kub Launcher" (1500kg each)</li>
+<li>1x "Kub Radar" (1500kg)</li>
+</ul>
+</li>
+<li><strong>Total</strong>: 3 crates</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "Kub Repair/Rearm" crate (0 points)</li>
+</ul>
+<h4 id="sa-2-guideline"><a class="header" href="#sa-2-guideline">SA-2 Guideline</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>:
+<ul>
+<li>1x "SA-2 Launchers" (1500kg)</li>
+<li>1x "SA-2 Search Radar" (1500kg)</li>
+<li>1x "SA-2 Track Radar" (1500kg)</li>
+<li>1x "SA-2 Rangefinding Radar" (1500kg)</li>
+</ul>
+</li>
+<li><strong>Total</strong>: 4 crates</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "SA-2 Repair/Rearm" crate (0 points)</li>
+</ul>
+<h3 id="anti-aircraft-artillery-aaa"><a class="header" href="#anti-aircraft-artillery-aaa">Anti-Aircraft Artillery (AAA)</a></h3>
+<h4 id="zu-23-on-ural"><a class="header" href="#zu-23-on-ural">ZU-23 on Ural</a></h4>
+<ul>
+<li><strong>Cost</strong>: 5 points</li>
+<li><strong>Crates Required</strong>: 1x "ZU-23 on Ural" (1000kg)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="shilka-zsu-23-4"><a class="header" href="#shilka-zsu-23-4">Shilka (ZSU-23-4)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 15 points</li>
+<li><strong>Crates Required</strong>: 2x "Shilka Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="tunguska"><a class="header" href="#tunguska">Tunguska</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "Tunguska Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h3 id="ir-infrared-sams"><a class="header" href="#ir-infrared-sams">IR (Infrared) SAMs</a></h3>
+<h4 id="sa-9-strela-9p31"><a class="header" href="#sa-9-strela-9p31">SA-9 Strela (9P31)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 35 points</li>
+<li><strong>Crates Required</strong>: 2x "SA-9 Strela Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="sa-13-strela-10m3"><a class="header" href="#sa-13-strela-10m3">SA-13 Strela (10M3)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "SA-13 Strela Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h3 id="infantry-fighting-vehicles-ifvs"><a class="header" href="#infantry-fighting-vehicles-ifvs">Infantry Fighting Vehicles (IFVs)</a></h3>
+<h4 id="btr-82a"><a class="header" href="#btr-82a">BTR-82A</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "BTR Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 5 km (line-of-sight required)</li>
+</ul>
+<h4 id="bmp-2"><a class="header" href="#bmp-2">BMP-2</a></h4>
+<ul>
+<li><strong>Cost</strong>: 45 points</li>
+<li><strong>Crates Required</strong>: 2x "BMP2 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h4 id="btr-80"><a class="header" href="#btr-80">BTR-80</a></h4>
+<ul>
+<li><strong>Cost</strong>: 20 points</li>
+<li><strong>Crates Required</strong>: 2x "BTR80 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 5 km (line-of-sight required)</li>
+</ul>
+<h4 id="btr-rd"><a class="header" href="#btr-rd">BTR-RD</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "BTR-RD Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 4 km (line-of-sight required)</li>
+</ul>
+<h4 id="pt-76"><a class="header" href="#pt-76">PT-76</a></h4>
+<ul>
+<li><strong>Cost</strong>: 20 points</li>
+<li><strong>Crates Required</strong>: 2x "PT-76 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 5 km (line-of-sight required)</li>
+</ul>
+<h4 id="bmp-1"><a class="header" href="#bmp-1">BMP-1</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "BMP Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h3 id="main-battle-tanks-mbts"><a class="header" href="#main-battle-tanks-mbts">Main Battle Tanks (MBTs)</a></h3>
+<h4 id="t-72b"><a class="header" href="#t-72b">T-72B</a></h4>
+<ul>
+<li><strong>Cost</strong>: 80 points</li>
+<li><strong>Crates Required</strong>: 3x "T-72B Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 2 km (line-of-sight required)</li>
+</ul>
+<h4 id="t-64"><a class="header" href="#t-64">T-64</a></h4>
+<ul>
+<li><strong>Cost</strong>: 80 points</li>
+<li><strong>Crates Required</strong>: 3x "T64 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 2 km (line-of-sight required)</li>
+</ul>
+<h4 id="t-55a"><a class="header" href="#t-55a">T-55A</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "T-55A Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 1.5 km (line-of-sight required)</li>
+</ul>
+<h4 id="type-59"><a class="header" href="#type-59">Type 59</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "Type59 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 1.5 km (line-of-sight required)</li>
+</ul>
+<h3 id="artillery"><a class="header" href="#artillery">Artillery</a></h3>
+<h4 id="2s19-msta-152mm-sph"><a class="header" href="#2s19-msta-152mm-sph">2S19 Msta (152mm SPH)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 3x "Msta Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="tos-1a"><a class="header" href="#tos-1a">TOS-1A</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "TOS1 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="2s9-nona"><a class="header" href="#2s9-nona">2S9 Nona</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "2S9 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 5</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="bm-21-grad-mlrs"><a class="header" href="#bm-21-grad-mlrs">BM-21 Grad (MLRS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 60 points</li>
+<li><strong>Crates Required</strong>: 2x "Grad Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="9k57-uragan-mlrs"><a class="header" href="#9k57-uragan-mlrs">9K57 Uragan (MLRS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 80 points</li>
+<li><strong>Crates Required</strong>: 2x "Uragan Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="9a52-smerch-mlrs---he"><a class="header" href="#9a52-smerch-mlrs---he">9A52 Smerch (MLRS - HE)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 3x "Smerch Crate HE" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="9a52-smerch-mlrs---cluster-munitions"><a class="header" href="#9a52-smerch-mlrs---cluster-munitions">9A52 Smerch (MLRS - Cluster Munitions)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 3x "Smerch Crate CM" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="ballistic-missiles"><a class="header" href="#ballistic-missiles">Ballistic Missiles</a></h3>
+<h4 id="iskander-cluster-munitions"><a class="header" href="#iskander-cluster-munitions">Iskander (Cluster Munitions)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "IskanderCM Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 1</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="iskander-high-explosive"><a class="header" href="#iskander-high-explosive">Iskander (High Explosive)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "IskanderHE Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 1</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="support-units"><a class="header" href="#support-units">Support Units</a></h3>
+<h4 id="ammo-truck"><a class="header" href="#ammo-truck">Ammo Truck</a></h4>
+<ul>
+<li><strong>Cost</strong>: 10 points</li>
+<li><strong>Crates Required</strong>: 2x "Ammo Truck Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="combined-arms-groups"><a class="header" href="#combined-arms-groups">Combined Arms Groups</a></h3>
+<h4 id="group-atgm"><a class="header" href="#group-atgm">Group ATGM</a></h4>
+<ul>
+<li><strong>Cost</strong>: 250 points</li>
+<li><strong>Crates Required</strong>: 5x "Group ATGM Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>Note</strong>: Full combined arms ATGM group</li>
+</ul>
+<h4 id="group-armor"><a class="header" href="#group-armor">Group Armor</a></h4>
+<ul>
+<li><strong>Cost</strong>: 500 points</li>
+<li><strong>Crates Required</strong>: 5x "Group Armor Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>Note</strong>: Full combined arms armor group</li>
+</ul>
+<h3 id="early-warning-radar"><a class="header" href="#early-warning-radar">Early Warning Radar</a></h3>
+<h4 id="1l13-ewr"><a class="header" href="#1l13-ewr">1L13 EWR</a></h4>
+<ul>
+<li><strong>Cost</strong>: 20 points</li>
+<li><strong>Crates Required</strong>: 1x "1L13 Crate" (1500kg)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>EWR Range</strong>: 500 km</li>
+</ul>
+<h3 id="naval-units"><a class="header" href="#naval-units">Naval Units</a></h3>
+<h4 id="project-22160-patrol-ship"><a class="header" href="#project-22160-patrol-ship">Project 22160 (Patrol Ship)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 75 points</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>JTAC Range</strong>: 16 km (no line-of-sight required)</li>
+</ul>
+<h4 id="naval-farp-carrier"><a class="header" href="#naval-farp-carrier">Naval FARP Carrier</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 1</li>
+<li><strong>Note</strong>: Provides helicopter FARP at sea</li>
+</ul>
+<h4 id="naval-farp-frigate"><a class="header" href="#naval-farp-frigate">Naval FARP Frigate</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Note</strong>: Provides helicopter FARP at sea</li>
+</ul>
+<h3 id="farp-forward-arming-and-refueling-point"><a class="header" href="#farp-forward-arming-and-refueling-point">FARP (Forward Arming and Refueling Point)</a></h3>
+<h4 id="field-farp"><a class="header" href="#field-farp">Field FARP</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 4x "FARP Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Note</strong>: Creates complete FARP with 4 pads, ammo, fuel, and defenses</li>
+</ul>
+<hr />
+<h2 id="blue-coalition-deployables"><a class="header" href="#blue-coalition-deployables">BLUE COALITION DEPLOYABLES</a></h2>
+<h3 id="radar-sams-1"><a class="header" href="#radar-sams-1">Radar SAMs</a></h3>
+<h4 id="roland-ads"><a class="header" href="#roland-ads">Roland ADS</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "Roland" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="crotale"><a class="header" href="#crotale">Crotale</a></h4>
+<ul>
+<li><strong>Cost</strong>: 40 points</li>
+<li><strong>Crates Required</strong>: 2x "Croatle" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="roland-battery-system"><a class="header" href="#roland-battery-system">Roland Battery System</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 3x "Roland Launchers" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 3</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "RolandBat Repair/Rearm" crate (0 points)</li>
+</ul>
+<h4 id="hawk-system"><a class="header" href="#hawk-system">Hawk System</a></h4>
+<ul>
+<li><strong>Cost</strong>: 90 points</li>
+<li><strong>Crates Required</strong>:
+<ul>
+<li>1x "Hawk Launchers" (1500kg)</li>
+<li>1x "Hawk Search Radar" (1500kg)</li>
+<li>1x "Hawk Track Radar" (1500kg)</li>
+<li>1x "Hawk CC" (1500kg)</li>
+</ul>
+</li>
+<li><strong>Total</strong>: 4 crates</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "Hawk Repair/Rearm" crate (0 points)</li>
+</ul>
+<h4 id="rapier-system"><a class="header" href="#rapier-system">Rapier System</a></h4>
+<ul>
+<li><strong>Cost</strong>: 45 points</li>
+<li><strong>Crates Required</strong>:
+<ul>
+<li>3x "Rapier Launchers" (1500kg each)</li>
+<li>1x "Rapier TR" (1500kg)</li>
+</ul>
+</li>
+<li><strong>Total</strong>: 4 crates</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "Rapier Repair/Rearm" crate (0 points)</li>
+</ul>
+<h3 id="ir-sams"><a class="header" href="#ir-sams">IR SAMs</a></h3>
+<h4 id="avenger"><a class="header" href="#avenger">Avenger</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "Avenger Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="linebacker"><a class="header" href="#linebacker">Linebacker</a></h4>
+<ul>
+<li><strong>Cost</strong>: 45 points</li>
+<li><strong>Crates Required</strong>: 2x "Linebacker Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h3 id="anti-aircraft-artillery-aaa-1"><a class="header" href="#anti-aircraft-artillery-aaa-1">Anti-Aircraft Artillery (AAA)</a></h3>
+<h4 id="hl-with-zu-23-emplacement"><a class="header" href="#hl-with-zu-23-emplacement">HL with ZU-23 (Emplacement)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 5 points</li>
+<li><strong>Crates Required</strong>: 1x "ZU-23 Emplacement" (1000kg)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="vulcan-m163-vads"><a class="header" href="#vulcan-m163-vads">Vulcan (M163 VADS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 15 points</li>
+<li><strong>Crates Required</strong>: 2x "Vulkan Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="gepard-flakpanzer"><a class="header" href="#gepard-flakpanzer">Gepard (Flakpanzer)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "Flakpanzergepard Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 8</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="infantry-fighting-vehicles-ifvs-1"><a class="header" href="#infantry-fighting-vehicles-ifvs-1">Infantry Fighting Vehicles (IFVs)</a></h3>
+<h4 id="lav-25"><a class="header" href="#lav-25">LAV-25</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "LAV25 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 4 km (line-of-sight required)</li>
+</ul>
+<h4 id="scimitar"><a class="header" href="#scimitar">Scimitar</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "Scimitar Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 4 km (line-of-sight required)</li>
+</ul>
+<h4 id="scorpion"><a class="header" href="#scorpion">Scorpion</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "Scorpion Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 4 km (line-of-sight required)</li>
+</ul>
+<h4 id="m2a2-bradley"><a class="header" href="#m2a2-bradley">M2A2 Bradley</a></h4>
+<ul>
+<li><strong>Cost</strong>: 45 points</li>
+<li><strong>Crates Required</strong>: 2x "Bradley Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 5 km (line-of-sight required)</li>
+</ul>
+<h3 id="main-battle-tanks-mbts-1"><a class="header" href="#main-battle-tanks-mbts-1">Main Battle Tanks (MBTs)</a></h3>
+<h4 id="chieftain"><a class="header" href="#chieftain">Chieftain</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "Chieftain Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h4 id="leopard-1a3"><a class="header" href="#leopard-1a3">Leopard 1A3</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "Leo1A3 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h4 id="leopard-2a4"><a class="header" href="#leopard-2a4">Leopard 2A4</a></h4>
+<ul>
+<li><strong>Cost</strong>: 80 points</li>
+<li><strong>Crates Required</strong>: 3x "Leopard Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 8</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h4 id="m60"><a class="header" href="#m60">M60</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "M60 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h3 id="artillery-1"><a class="header" href="#artillery-1">Artillery</a></h3>
+<h4 id="l118-light-gun"><a class="header" href="#l118-light-gun">L118 Light Gun</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "L118 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="m109-paladin-155mm-sph"><a class="header" href="#m109-paladin-155mm-sph">M109 Paladin (155mm SPH)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "M109 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="m270-mlrs"><a class="header" href="#m270-mlrs">M270 MLRS</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 3x "MLRS Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="ballistic-missiles-1"><a class="header" href="#ballistic-missiles-1">Ballistic Missiles</a></h3>
+<h4 id="atacms-cluster-munitions"><a class="header" href="#atacms-cluster-munitions">ATACMS (Cluster Munitions)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "ATACMS Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="atacms-high-explosive"><a class="header" href="#atacms-high-explosive">ATACMS (High Explosive)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "ATACMSHE Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="gmlrs-cluster-munitions"><a class="header" href="#gmlrs-cluster-munitions">GMLRS (Cluster Munitions)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "GMLRSCM Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="gmlrs-high-explosive"><a class="header" href="#gmlrs-high-explosive">GMLRS (High Explosive)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "GMLRSHE Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="combined-arms-groups-1"><a class="header" href="#combined-arms-groups-1">Combined Arms Groups</a></h3>
+<h4 id="group-atgm-1"><a class="header" href="#group-atgm-1">Group ATGM</a></h4>
+<ul>
+<li><strong>Cost</strong>: 250 points</li>
+<li><strong>Crates Required</strong>: 5x "Group ATGM Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>Note</strong>: Full combined arms ATGM group</li>
+</ul>
+<h4 id="group-armor-1"><a class="header" href="#group-armor-1">Group Armor</a></h4>
+<ul>
+<li><strong>Cost</strong>: 500 points</li>
+<li><strong>Crates Required</strong>: 5x "Group Armor Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>Note</strong>: Full combined arms armor group</li>
+</ul>
+<h3 id="support-units-1"><a class="header" href="#support-units-1">Support Units</a></h3>
+<h4 id="ammo-truck-1"><a class="header" href="#ammo-truck-1">Ammo Truck</a></h4>
+<ul>
+<li><strong>Cost</strong>: 10 points</li>
+<li><strong>Crates Required</strong>: 2x "Ammo Truck Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="early-warning-radar-1"><a class="header" href="#early-warning-radar-1">Early Warning Radar</a></h3>
+<h4 id="anfps-117"><a class="header" href="#anfps-117">AN/FPS-117</a></h4>
+<ul>
+<li><strong>Cost</strong>: 20 points</li>
+<li><strong>Crates Required</strong>: 1x "FPS-117 Crate" (1500kg)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>EWR Range</strong>: 500 km</li>
+</ul>
+<h3 id="naval-units-1"><a class="header" href="#naval-units-1">Naval Units</a></h3>
+<h4 id="hms-achilles-frigate"><a class="header" href="#hms-achilles-frigate">HMS Achilles (Frigate)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>JTAC Range</strong>: 16 km (no line-of-sight required)</li>
+</ul>
+<h4 id="naval-farp-destroyer"><a class="header" href="#naval-farp-destroyer">Naval FARP Destroyer</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Note</strong>: Provides helicopter FARP at sea</li>
+</ul>
+<h4 id="naval-farp-carrier-1"><a class="header" href="#naval-farp-carrier-1">Naval FARP Carrier</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 1</li>
+<li><strong>Note</strong>: Provides helicopter FARP at sea</li>
+</ul>
+<h3 id="farp-forward-arming-and-refueling-point-1"><a class="header" href="#farp-forward-arming-and-refueling-point-1">FARP (Forward Arming and Refueling Point)</a></h3>
+<h4 id="field-farp-1"><a class="header" href="#field-farp-1">Field FARP</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 4x "FARP Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Note</strong>: Creates complete FARP with 4 pads, ammo, fuel, and defenses</li>
+</ul>
+<hr />
+<h2 id="troop-types"><a class="header" href="#troop-types">TROOP TYPES</a></h2>
+<p>Troops are loaded at friendly objectives and transported via helicopter or ground vehicle.</p>
+<h3 id="red-coalition-troops"><a class="header" href="#red-coalition-troops">RED COALITION TROOPS</a></h3>
+<h4 id="standard-infantry-"><a class="header" href="#standard-infantry-">Standard Infantry ⭐</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: 8 km (no line-of-sight required) ⭐</li>
+<li><strong>Special</strong>: Can see through terrain</li>
+</ul>
+<h4 id="anti-tank-infantry"><a class="header" href="#anti-tank-infantry">Anti-Tank Infantry</a></h4>
+<ul>
+<li><strong>Cost</strong>: 2 points</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 800 kg per squad</li>
+<li><strong>Max Allowed</strong>: 30</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+</ul>
+<h4 id="mortar-infantry"><a class="header" href="#mortar-infantry">Mortar Infantry</a></h4>
+<ul>
+<li><strong>Cost</strong>: 5 points</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 1000 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+</ul>
+<h4 id="igla-manpads"><a class="header" href="#igla-manpads">Igla (MANPADS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Can Capture</strong>: NO</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: None</li>
+</ul>
+<h3 id="blue-coalition-troops"><a class="header" href="#blue-coalition-troops">BLUE COALITION TROOPS</a></h3>
+<h4 id="standard-infantry--1"><a class="header" href="#standard-infantry--1">Standard Infantry ⭐</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: 8 km (no line-of-sight required) ⭐</li>
+<li><strong>Special</strong>: Can see through terrain</li>
+</ul>
+<h4 id="anti-tank-infantry-1"><a class="header" href="#anti-tank-infantry-1">Anti-Tank Infantry</a></h4>
+<ul>
+<li><strong>Cost</strong>: 2 points</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 800 kg per squad</li>
+<li><strong>Max Allowed</strong>: 30</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+</ul>
+<h4 id="mortar-infantry-1"><a class="header" href="#mortar-infantry-1">Mortar Infantry</a></h4>
+<ul>
+<li><strong>Cost</strong>: 5 points</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 1000 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+</ul>
+<h4 id="stinger-manpads"><a class="header" href="#stinger-manpads">Stinger (MANPADS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Can Capture</strong>: NO</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: None</li>
+</ul>
+<p><strong>Important Notes</strong>:</p>
+<ul>
+<li>Standard, Anti-Tank, and Mortar infantry can <strong>ALL capture objectives</strong></li>
+<li>MANPADS (Igla/Stinger) <strong>CANNOT capture</strong></li>
+<li><strong>Standard Infantry has NO line-of-sight requirement for JTAC</strong> - can see through terrain!</li>
+<li>Anti-Tank and Mortar infantry DO require line-of-sight for JTAC</li>
+<li>Heavier troops = fewer can fit in transport aircraft</li>
+</ul>
+<hr />
+<h2 id="general-notes"><a class="header" href="#general-notes">General Notes</a></h2>
+<h3 id="crate-capacity"><a class="header" href="#crate-capacity">Crate Capacity</a></h3>
+<ul>
+<li><strong>Mi-8</strong>: 3 crate slots</li>
+<li><strong>CH-47</strong>: 3 crate slots</li>
+<li><strong>UH-1H</strong>: 1 crate slot</li>
+<li><strong>Server Max</strong>: 6 crates total</li>
+</ul>
+<h3 id="unit-limits"><a class="header" href="#unit-limits">Unit Limits</a></h3>
+<p>When you reach the maximum allowed units:</p>
+<ul>
+<li><strong>DeleteOldest</strong>: System automatically deletes your oldest deployed unit of that type</li>
+</ul>
+<h3 id="repairrearm-crates"><a class="header" href="#repairrearm-crates">Repair/Rearm Crates</a></h3>
+<p>Some units (SA-6, SA-2) support repair/rearm crates:</p>
+<ul>
+<li><strong>Cost</strong>: 0 points (free)</li>
+<li>Delivered to deployed unit</li>
+<li>Repairs damage and restocks ammunition</li>
+</ul>
+<hr />
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="../f10-menu/cargo.html">Cargo Operations</a> - How to transport crates</li>
+<li><a href="../f10-menu/actions.html">Actions Menu</a> - Air deployments</li>
+<li><a href="../gameplay/points-and-lives.html">Points System</a> - Earning points to deploy</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/action-types.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/faq.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/action-types.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/faq.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

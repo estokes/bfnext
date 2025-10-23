@@ -1,0 +1,388 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Objectives - Fowl Engine User Guide</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive guide for players in the Fowl Engine Dynamic Campaign System for DCS">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fowl Engine User Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yourusername/bfnext" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="objectives"><a class="header" href="#objectives">Objectives</a></h1>
+<p>Objectives are the heart of the Fowl Engine dynamic campaign. Understanding how they work is essential for strategic success.</p>
+<h2 id="what-are-objectives"><a class="header" href="#what-are-objectives">What Are Objectives?</a></h2>
+<p>Objectives represent strategic locations on the battlefield:</p>
+<ul>
+<li><strong>Airbases</strong>: Major air facilities with full services</li>
+<li><strong>FARPs</strong>: Forward Arming and Refueling Points</li>
+<li><strong>FOBs</strong>: Forward Operating Bases for ground operations</li>
+<li><strong>Logistics Hubs</strong>: Supply distribution centers</li>
+</ul>
+<h2 id="objective-types"><a class="header" href="#objective-types">Objective Types</a></h2>
+<h3 id="airbases"><a class="header" href="#airbases">Airbases</a></h3>
+<ul>
+<li>Full repair and rearm capabilities</li>
+<li>Spawning locations for aircraft</li>
+<li>Critical for air superiority</li>
+<li>Highest strategic value</li>
+</ul>
+<h3 id="farps-forward-arming-and-refueling-points"><a class="header" href="#farps-forward-arming-and-refueling-points">FARPs (Forward Arming and Refueling Points)</a></h3>
+<ul>
+<li>Forward helicopter bases</li>
+<li>Limited repair capabilities</li>
+<li>Mobile deployment possible</li>
+<li>Tactical importance</li>
+</ul>
+<h3 id="fobs-forward-operating-bases"><a class="header" href="#fobs-forward-operating-bases">FOBs (Forward Operating Bases)</a></h3>
+<ul>
+<li>Ground unit staging areas</li>
+<li>Limited but essential support</li>
+<li>Strategic positions for ground war</li>
+<li>Supply storage</li>
+</ul>
+<h3 id="logistics-hubs"><a class="header" href="#logistics-hubs">Logistics Hubs</a></h3>
+<ul>
+<li>Central supply distribution</li>
+<li>Connect to multiple objectives</li>
+<li>Critical for sustained operations</li>
+<li>Often heavily defended</li>
+</ul>
+<h2 id="objective-ownership"><a class="header" href="#objective-ownership">Objective Ownership</a></h2>
+<h3 id="current-owner"><a class="header" href="#current-owner">Current Owner</a></h3>
+<p>Each objective is controlled by:</p>
+<ul>
+<li><strong>Blue Coalition</strong></li>
+<li><strong>Red Coalition</strong></li>
+<li><strong>Neutral</strong> (rare, usually initial state)</li>
+</ul>
+<h3 id="ownership-display"><a class="header" href="#ownership-display">Ownership Display</a></h3>
+<p>Check ownership via:</p>
+<ul>
+<li><strong>F10 Map Markers</strong>: Color-coded (Blue/Red)</li>
+<li><strong>Objective Name</strong>: Prefix indicates owner</li>
+<li><strong>JTAC Reports</strong>: Include ownership info</li>
+</ul>
+<h2 id="objective-status"><a class="header" href="#objective-status">Objective Status</a></h2>
+<h3 id="health"><a class="header" href="#health">Health</a></h3>
+<p>Indicates physical damage to facilities:</p>
+<ul>
+<li><strong>100%</strong>: Fully operational</li>
+<li><strong>75-99%</strong>: Minor damage</li>
+<li><strong>50-74%</strong>: Moderate damage</li>
+<li><strong>25-49%</strong>: Heavy damage</li>
+<li><strong>0-24%</strong>: Critical condition</li>
+</ul>
+<p><strong>Effects of Low Health</strong>:</p>
+<ul>
+<li>Reduced repair speeds</li>
+<li>Limited aircraft spawns</li>
+<li>Slower logistics processing</li>
+</ul>
+<h3 id="logistics-logi"><a class="header" href="#logistics-logi">Logistics (Logi)</a></h3>
+<p>Represents infrastructure for supply operations:</p>
+<ul>
+<li><strong>0</strong>: Completely destroyed, <strong>can be captured</strong></li>
+<li><strong>1-100</strong>: Infrastructure present, <strong>cannot be captured</strong></li>
+</ul>
+<p><strong>Key Rule</strong>: An objective can only be captured when its Logi is at <strong>0%</strong> (destroyed).</p>
+<h3 id="supply-level"><a class="header" href="#supply-level">Supply Level</a></h3>
+<p>Resources available for operations:</p>
+<ul>
+<li><strong>100%</strong>: Fully supplied</li>
+<li><strong>50-99%</strong>: Adequate supplies</li>
+<li><strong>25-49%</strong>: Low supplies</li>
+<li><strong>0-24%</strong>: Critical shortage</li>
+</ul>
+<h3 id="fuel-level"><a class="header" href="#fuel-level">Fuel Level</a></h3>
+<p>Aviation fuel availability:</p>
+<ul>
+<li><strong>100%</strong>: Full fuel stocks</li>
+<li><strong>0%</strong>: No fuel available</li>
+</ul>
+<h2 id="objective-states"><a class="header" href="#objective-states">Objective States</a></h2>
+<h3 id="threatened"><a class="header" href="#threatened">Threatened</a></h3>
+<p>An objective becomes "threatened" when:</p>
+<ul>
+<li>Enemy units are nearby (within aircraft-specific threat distance)</li>
+<li>Enemy ground forces are close</li>
+<li>Recently captured by enemy</li>
+</ul>
+<p><strong>Cooldown</strong>: 300 seconds (5 minutes) - objective stays threatened for 5 minutes after last enemy contact</p>
+<p><strong>Effects</strong>:</p>
+<ul>
+<li>⚠️ <strong>Blocks cargo and troop deployment</strong> - cannot unload at threatened objectives!</li>
+<li>May trigger defensive unit spawns</li>
+<li>Tracked internally by system</li>
+</ul>
+<p><strong>Important</strong>: You cannot deploy units (troops or crates) at threatened objectives. The system will show: "you can't deploy troops here while enemies are near"</p>
+<h3 id="capturable"><a class="header" href="#capturable">Capturable</a></h3>
+<p>Ready to be captured when:</p>
+<ul>
+<li>Logi = 0</li>
+<li>Troops in capture zone</li>
+<li>Correct troop type present</li>
+</ul>
+<p><strong>Visual Indicator</strong>: Capturable objectives show a <strong>white circle</strong> on F10 map instead of the owner's color.</p>
+<h2 id="objective-information"><a class="header" href="#objective-information">Objective Information</a></h2>
+<h2 id="reading-map-markers"><a class="header" href="#reading-map-markers">Reading Map Markers</a></h2>
+<p>Typical objective marker format:</p>
+<pre><code>Musa Airbase
+Health: 100
+Logi: 100
+Supply: 99
+Fuel: 100
+Points: 0
+</code></pre>
+<p>Breakdown:</p>
+<ul>
+<li><strong>Objective name</strong> - First line</li>
+<li><strong>Health</strong>: 100 - Facility condition (0-100)</li>
+<li><strong>Logi</strong>: 100 - Infrastructure (0-100, must be 0 to capture)</li>
+<li><strong>Supply</strong>: 99 - Equipment stocks (0-100)</li>
+<li><strong>Fuel</strong>: 100 - Fuel stocks (0-100)</li>
+<li><strong>Points</strong>: 0 - Point value for capturing</li>
+</ul>
+<p><strong>Capturable Example</strong>:</p>
+<pre><code>Enemy Base
+Health: 65
+Logi: 0
+Supply: 45
+Fuel: 30
+Points: 0
+</code></pre>
+<p>Note <code>Logi: 0</code> means this objective CAN be captured!</p>
+<p><strong>Visual Indicator</strong>: When an objective becomes capturable (Logi: 0), the <strong>circle around the airbase on the F10 map turns WHITE</strong> instead of the owner's color. This is an easy way to spot capturable objectives at a glance!</p>
+<h2 id="objective-zones"><a class="header" href="#objective-zones">Objective Zones</a></h2>
+<h3 id="capture-zone"><a class="header" href="#capture-zone">Capture Zone</a></h3>
+<p>The physical area for capturing:</p>
+<ul>
+<li>Defined by mission design (circular or polygonal)</li>
+<li>Infantry must be inside to capture</li>
+<li>Check F10 map markers for zone location</li>
+<li>Only one zone per objective</li>
+</ul>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>Learn how to <a href="./capturing-objectives.html">capture objectives</a> and manage the <a href="./logistics.html">logistics system</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../getting-started/hud-and-menus.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../gameplay/capturing-objectives.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../getting-started/hud-and-menus.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../gameplay/capturing-objectives.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

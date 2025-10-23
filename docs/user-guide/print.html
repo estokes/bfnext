@@ -1,0 +1,4285 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Fowl Engine User Guide</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive guide for players in the Fowl Engine Dynamic Campaign System for DCS">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fowl Engine User Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yourusername/bfnext" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p>Welcome to the <strong>Fowl Engine Dynamic Campaign System</strong> for DCS World! This guide documents the campaign mechanics and systems.</p>
+<h2 id="what-is-fowl-engine"><a class="header" href="#what-is-fowl-engine">What is Fowl Engine?</a></h2>
+<p>Fowl Engine (also known as BFNEXT) is a dynamic campaign system that transforms DCS World into a persistent, player-driven war. Unlike traditional missions, the campaign state evolves based on player actions, creating a living, breathing battlefield where every sortie matters.</p>
+<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
+<ul>
+<li><strong>Persistent World</strong>: The campaign state saves between server restarts, preserving your progress</li>
+<li><strong>Dynamic Objectives</strong>: Capture and defend strategic locations that affect the overall war effort</li>
+<li><strong>Logistics System</strong>: Supply lines and resource management add strategic depth</li>
+<li><strong>Points &amp; Lives</strong>: Reward system that encourages teamwork and careful planning</li>
+<li><strong>JTAC System</strong>: Advanced targeting system for coordinating strikes</li>
+<li><strong>Deployable Units</strong>: Use points to deploy reinforcements where needed</li>
+<li><strong>Team-Based Gameplay</strong>: Choose Blue or Red coalition and work with your team</li>
+</ul>
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<ul>
+<li>Join the <a href="https://discord.gg/wAsBEfse">Discord community</a></li>
+<li>Check the <a href="https://docs.google.com/presentation/d/1EAOe0iK-1s6i0UV5ObxSD86gGBj1Ixz6FOotQn5XPdc/edit#slide=id.g2b6a346170f_1_35">presentation</a></li>
+<li>Play on the test server: <strong>The Coop - Operation Fowl Intent</strong></li>
+</ul>
+<h2 id="about-this-guide"><a class="header" href="#about-this-guide">About This Guide</a></h2>
+<p>This guide is organized into sections:</p>
+<ul>
+<li><strong>Getting Started</strong>: Registration and interface</li>
+<li><strong>Core Gameplay</strong>: Campaign mechanics</li>
+<li><strong>F10 Menu Systems</strong>: Menu systems documentation</li>
+<li><strong>Advanced Topics</strong>: Artillery and ALCM operations</li>
+<li><strong>Reference</strong>: Command lists and unit tables</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="welcome-to-fowl-engine"><a class="header" href="#welcome-to-fowl-engine">Welcome to Fowl Engine</a></h1>
+<p>This page covers initial setup for the Fowl Engine dynamic campaign.</p>
+<h2 id="first-steps"><a class="header" href="#first-steps">First Steps</a></h2>
+<p>When you first connect to a Fowl Engine server:</p>
+<ol>
+<li><strong>Read the briefing</strong>: Check the mission briefing for current campaign status</li>
+<li><strong>Join a team</strong>: You must register for either Blue or Red coalition</li>
+<li><strong>Choose your role</strong>: Select an appropriate aircraft or ground unit</li>
+<li><strong>Learn the basics</strong>: Familiarize yourself with chat commands and F10 menus</li>
+</ol>
+<h2 id="what-makes-fowl-engine-different"><a class="header" href="#what-makes-fowl-engine-different">What Makes Fowl Engine Different?</a></h2>
+<h3 id="persistent-campaign"><a class="header" href="#persistent-campaign">Persistent Campaign</a></h3>
+<p>Unlike traditional DCS missions that reset after each flight:</p>
+<ul>
+<li>The battlefield state is saved between server restarts</li>
+<li>Your actions have lasting consequences</li>
+<li>The war evolves based on player decisions</li>
+</ul>
+<h3 id="strategic-depth"><a class="header" href="#strategic-depth">Strategic Depth</a></h3>
+<ul>
+<li>Capture objectives to expand your coalition's territory</li>
+<li>Manage logistics and supply lines</li>
+<li>Deploy reinforcements strategically</li>
+<li>Coordinate with teammates for maximum effectiveness</li>
+</ul>
+<h3 id="reward-system"><a class="header" href="#reward-system">Reward System</a></h3>
+<ul>
+<li>Earn points for successful missions</li>
+<li>Spend points on deployable units and special actions</li>
+<li>Limited lives encourage careful planning</li>
+<li>Team-based objectives reward cooperation</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="joining-a-team"><a class="header" href="#joining-a-team">Joining a Team</a></h1>
+<p>Before you can fly or fight, you must register for either the Blue or Red coalition.</p>
+<h2 id="registration-commands"><a class="header" href="#registration-commands">Registration Commands</a></h2>
+<h3 id="first-time-registration"><a class="header" href="#first-time-registration">First-Time Registration</a></h3>
+<p>To register for a team, type in chat:</p>
+<pre><code>blue
+</code></pre>
+<p>or</p>
+<pre><code>red
+</code></pre>
+<p>The system will confirm your registration:</p>
+<blockquote>
+<p>"Welcome to the Blue team. You may only occupy slots belonging to your team. Good luck!"</p>
+</blockquote>
+<h3 id="important-notes"><a class="header" href="#important-notes">Important Notes</a></h3>
+<ul>
+<li>You can only occupy slots for your registered team</li>
+<li>Registration is <strong>permanent</strong> by default</li>
+<li>The server announces your team choice to all players</li>
+<li>You must be in spectator mode to register</li>
+</ul>
+<h2 id="side-switching"><a class="header" href="#side-switching">Side Switching</a></h2>
+<p>The server allows <strong>1 side switch</strong>. You can switch teams using:</p>
+<pre><code>-switch blue
+</code></pre>
+<p>or</p>
+<pre><code>-switch red
+</code></pre>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>You must be in <strong>spectator mode</strong></li>
+<li>You must have side switches remaining (check with <code>-lives</code>)</li>
+<li>Once used, you cannot switch again</li>
+</ul>
+<p><strong>Important</strong>:</p>
+<ul>
+<li>You get exactly <strong>1 side switch</strong> per campaign</li>
+<li>After using your switch, you're locked to that side permanently</li>
+</ul>
+<h2 id="what-happens-after-registration"><a class="header" href="#what-happens-after-registration">What Happens After Registration?</a></h2>
+<p>Once registered:</p>
+<ol>
+<li><strong>Slot Selection</strong>: You can now occupy any slot for your team</li>
+<li><strong>Team Chat</strong>: Your messages are visible to your coalition</li>
+<li><strong>Points Balance</strong>: You start with an initial points balance</li>
+<li><strong>Lives</strong>: You receive a starting number of lives</li>
+<li><strong>F10 Menus</strong>: Team-specific menus become available</li>
+</ol>
+<h2 id="checking-your-status"><a class="header" href="#checking-your-status">Checking Your Status</a></h2>
+<p>To verify your registration and see your stats:</p>
+<pre><code>-lives
+</code></pre>
+<p>This displays:</p>
+<ul>
+<li>Your current team</li>
+<li>Remaining lives</li>
+<li>Points balance</li>
+<li>Side switches remaining (if any)</li>
+</ul>
+<h2 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h2>
+<h3 id="you-are-already-on-the-blue-team"><a class="header" href="#you-are-already-on-the-blue-team">"You are already on the Blue team"</a></h3>
+<p>You're already registered! No action needed.</p>
+<h3 id="you-must-be-in-spectators-to-switch-sides"><a class="header" href="#you-must-be-in-spectators-to-switch-sides">"You must be in spectators to switch sides"</a></h3>
+<p>You need to leave your current slot before switching teams.</p>
+<h3 id="you-may-not-switch-sides"><a class="header" href="#you-may-not-switch-sides">"You may not switch sides"</a></h3>
+<p>The server doesn't allow side switching, or you've used all your switches.</p>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>See <a href="getting-started/./hud-and-menus.html">Understanding the Menus</a> for interface documentation.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="understanding-the-menus"><a class="header" href="#understanding-the-menus">Understanding the Menus</a></h1>
+<p>Fowl Engine provides several ways to interact with the campaign system. This page covers the essential interface elements you'll use constantly.</p>
+<h2 id="chat-system"><a class="header" href="#chat-system">Chat System</a></h2>
+<h3 id="in-game-chat"><a class="header" href="#in-game-chat">In-Game Chat</a></h3>
+<p>The chat system is your primary way to issue commands and communicate.</p>
+<p><strong>Opening Chat</strong>:</p>
+<ul>
+<li>Press <code>Shift+Tab</code> to open chat</li>
+<li>Type your command</li>
+<li>Press Enter to send</li>
+</ul>
+<p><strong>Chat Visibility</strong>:</p>
+<ul>
+<li>Commands starting with <code>-</code> are processed by the system</li>
+<li>Most commands are only visible to you</li>
+<li>Regular chat messages are visible to your team</li>
+</ul>
+<h3 id="command-prefix"><a class="header" href="#command-prefix">Command Prefix</a></h3>
+<p>Almost all system commands start with a dash <code>-</code>:</p>
+<pre><code>-help
+-lives
+-time
+-balance
+</code></pre>
+<p>See the <a href="getting-started/../gameplay/chat-commands.html">Chat Commands</a> section for a complete list.</p>
+<h2 id="f10-map-menu"><a class="header" href="#f10-map-menu">F10 Map Menu</a></h2>
+<p>The F10 map is your tactical hub in DCS, and Fowl Engine extends it with powerful new features.</p>
+<h3 id="accessing-the-f10-map"><a class="header" href="#accessing-the-f10-map">Accessing the F10 Map</a></h3>
+<ol>
+<li>Press <code>F10</code> to open the map</li>
+<li>You'll see standard DCS map features plus Fowl Engine additions</li>
+<li>Right-click to access context menus</li>
+</ol>
+<h3 id="map-markers"><a class="header" href="#map-markers">Map Markers</a></h3>
+<p>Fowl Engine adds several types of markers:</p>
+<p><strong>Objective Markers</strong>:</p>
+<ul>
+<li>Show ownership (Blue/Red)</li>
+<li>Display health and logistics status</li>
+<li>Indicate supply levels</li>
+</ul>
+<p><strong>JTAC Markers</strong>:</p>
+<ul>
+<li>Show active JTAC targets</li>
+<li>Include laser codes for precision strikes</li>
+<li>Updated in real-time</li>
+</ul>
+<p><strong>Player Markers</strong>:</p>
+<ul>
+<li>Your F10 marks become menu targets</li>
+<li>Used for spawning units and waypoints</li>
+<li>Limited to 24 characters for menu display</li>
+</ul>
+<h2 id="f10-radio-menu"><a class="header" href="#f10-radio-menu">F10 Radio Menu</a></h2>
+<p>The F10 radio menu (not to be confused with the map) provides access to coalition commands while in your aircraft.</p>
+<h3 id="main-menu-categories"><a class="header" href="#main-menu-categories">Main Menu Categories</a></h3>
+<p>Fowl Engine adds these top-level menus:</p>
+<ol>
+<li><strong>Actions</strong> - Deploy units, call support missions</li>
+<li><strong>JTAC</strong> - Control JTAC units for targeting</li>
+<li><strong>Cargo</strong> - Manage cargo loading/unloading</li>
+<li><strong>Troops</strong> - Load/unload infantry units</li>
+<li><strong>EWR</strong> - Early Warning Radar reports</li>
+</ol>
+<p>Each menu is context-sensitive and only appears if:</p>
+<ul>
+<li>Your aircraft has the necessary capability</li>
+<li>You have the required permissions</li>
+<li>The system is enabled for your role</li>
+</ul>
+<h2 id="f10-map-vs-f10-radio-menu"><a class="header" href="#f10-map-vs-f10-radio-menu">F10 Map vs F10 Radio Menu</a></h2>
+<p>It's important to understand the difference:</p>
+<div class="table-wrapper"><table><thead><tr><th>F10 Map</th><th>F10 Radio Menu</th></tr></thead><tbody>
+<tr><td>Shows battlefield overview</td><td>In-aircraft commands</td></tr>
+<tr><td>Always accessible</td><td>Only in slotted aircraft</td></tr>
+<tr><td>Place markers</td><td>Execute actions</td></tr>
+<tr><td>Strategic planning</td><td>Tactical execution</td></tr>
+</tbody></table>
+</div>
+<p><strong>Common workflow</strong>:</p>
+<ol>
+<li>Open <strong>F10 Map</strong> to plan</li>
+<li>Place markers at target locations</li>
+<li>Slot into aircraft</li>
+<li>Open <strong>F10 Radio Menu</strong> → Actions</li>
+<li>Select action linked to your map marker</li>
+</ol>
+<h2 id="menu-navigation-tips"><a class="header" href="#menu-navigation-tips">Menu Navigation Tips</a></h2>
+<h3 id="using-number-keys"><a class="header" href="#using-number-keys">Using Number Keys</a></h3>
+<ul>
+<li>Each menu item has a number (1-9)</li>
+<li>Press the number to select instantly</li>
+<li>Faster than mouse navigation in combat</li>
+</ul>
+<h3 id="menu-structure"><a class="header" href="#menu-structure">Menu Structure</a></h3>
+<p>Menus use hierarchical structure:</p>
+<pre><code>F10
+├── Actions
+│   ├── Deploy AWACS (1500 pts)
+│   │   └── [Your Map Markers]
+│   ├── Deploy Fighters (800 pts)
+│   └── Next&gt;&gt;
+├── JTAC
+│   ├── Status
+│   └── Fire Mission
+└── EWR
+    ├── Report
+    └── Toggle
+</code></pre>
+<h3 id="next-pagination"><a class="header" href="#next-pagination">"Next&gt;&gt;" Pagination</a></h3>
+<ul>
+<li>Long lists are split into pages</li>
+<li>Select "Next&gt;&gt;" to see more options</li>
+<li>Common in Actions and JTAC menus</li>
+</ul>
+<h2 id="on-screen-messages"><a class="header" href="#on-screen-messages">On-Screen Messages</a></h2>
+<p>Fowl Engine sends you messages through the DCS message system:</p>
+<p><strong>Message Types</strong>:</p>
+<ul>
+<li><strong>White text</strong>: Information and confirmations</li>
+<li><strong>Command responses</strong>: Results of your actions</li>
+<li><strong>System announcements</strong>: Team-wide notifications</li>
+</ul>
+<p><strong>Message Duration</strong>:</p>
+<ul>
+<li>Most messages display for 5-10 seconds</li>
+<li>Critical messages may persist longer</li>
+<li>Check chat log to review missed messages</li>
+</ul>
+<h2 id="accessibility-options"><a class="header" href="#accessibility-options">Accessibility Options</a></h2>
+<h3 id="units-system"><a class="header" href="#units-system">Units System</a></h3>
+<p>Toggle between Imperial and Metric units:</p>
+<ul>
+<li>F10 → EWR → "Units to Imperial"</li>
+<li>F10 → EWR → "Units to Metric"</li>
+</ul>
+<h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
+<p><strong>Must-Know Commands</strong>:</p>
+<ul>
+<li><code>-help</code> - Command list</li>
+<li><code>-lives</code> - Status check</li>
+<li><code>-balance</code> - Check points</li>
+</ul>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="getting-started/../gameplay/objectives.html">Core Gameplay</a> - Campaign mechanics</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="objectives"><a class="header" href="#objectives">Objectives</a></h1>
+<p>Objectives are the heart of the Fowl Engine dynamic campaign. Understanding how they work is essential for strategic success.</p>
+<h2 id="what-are-objectives"><a class="header" href="#what-are-objectives">What Are Objectives?</a></h2>
+<p>Objectives represent strategic locations on the battlefield:</p>
+<ul>
+<li><strong>Airbases</strong>: Major air facilities with full services</li>
+<li><strong>FARPs</strong>: Forward Arming and Refueling Points</li>
+<li><strong>FOBs</strong>: Forward Operating Bases for ground operations</li>
+<li><strong>Logistics Hubs</strong>: Supply distribution centers</li>
+</ul>
+<h2 id="objective-types"><a class="header" href="#objective-types">Objective Types</a></h2>
+<h3 id="airbases"><a class="header" href="#airbases">Airbases</a></h3>
+<ul>
+<li>Full repair and rearm capabilities</li>
+<li>Spawning locations for aircraft</li>
+<li>Critical for air superiority</li>
+<li>Highest strategic value</li>
+</ul>
+<h3 id="farps-forward-arming-and-refueling-points"><a class="header" href="#farps-forward-arming-and-refueling-points">FARPs (Forward Arming and Refueling Points)</a></h3>
+<ul>
+<li>Forward helicopter bases</li>
+<li>Limited repair capabilities</li>
+<li>Mobile deployment possible</li>
+<li>Tactical importance</li>
+</ul>
+<h3 id="fobs-forward-operating-bases"><a class="header" href="#fobs-forward-operating-bases">FOBs (Forward Operating Bases)</a></h3>
+<ul>
+<li>Ground unit staging areas</li>
+<li>Limited but essential support</li>
+<li>Strategic positions for ground war</li>
+<li>Supply storage</li>
+</ul>
+<h3 id="logistics-hubs"><a class="header" href="#logistics-hubs">Logistics Hubs</a></h3>
+<ul>
+<li>Central supply distribution</li>
+<li>Connect to multiple objectives</li>
+<li>Critical for sustained operations</li>
+<li>Often heavily defended</li>
+</ul>
+<h2 id="objective-ownership"><a class="header" href="#objective-ownership">Objective Ownership</a></h2>
+<h3 id="current-owner"><a class="header" href="#current-owner">Current Owner</a></h3>
+<p>Each objective is controlled by:</p>
+<ul>
+<li><strong>Blue Coalition</strong></li>
+<li><strong>Red Coalition</strong></li>
+<li><strong>Neutral</strong> (rare, usually initial state)</li>
+</ul>
+<h3 id="ownership-display"><a class="header" href="#ownership-display">Ownership Display</a></h3>
+<p>Check ownership via:</p>
+<ul>
+<li><strong>F10 Map Markers</strong>: Color-coded (Blue/Red)</li>
+<li><strong>Objective Name</strong>: Prefix indicates owner</li>
+<li><strong>JTAC Reports</strong>: Include ownership info</li>
+</ul>
+<h2 id="objective-status"><a class="header" href="#objective-status">Objective Status</a></h2>
+<h3 id="health"><a class="header" href="#health">Health</a></h3>
+<p>Indicates physical damage to facilities:</p>
+<ul>
+<li><strong>100%</strong>: Fully operational</li>
+<li><strong>75-99%</strong>: Minor damage</li>
+<li><strong>50-74%</strong>: Moderate damage</li>
+<li><strong>25-49%</strong>: Heavy damage</li>
+<li><strong>0-24%</strong>: Critical condition</li>
+</ul>
+<p><strong>Effects of Low Health</strong>:</p>
+<ul>
+<li>Reduced repair speeds</li>
+<li>Limited aircraft spawns</li>
+<li>Slower logistics processing</li>
+</ul>
+<h3 id="logistics-logi"><a class="header" href="#logistics-logi">Logistics (Logi)</a></h3>
+<p>Represents infrastructure for supply operations:</p>
+<ul>
+<li><strong>0</strong>: Completely destroyed, <strong>can be captured</strong></li>
+<li><strong>1-100</strong>: Infrastructure present, <strong>cannot be captured</strong></li>
+</ul>
+<p><strong>Key Rule</strong>: An objective can only be captured when its Logi is at <strong>0%</strong> (destroyed).</p>
+<h3 id="supply-level"><a class="header" href="#supply-level">Supply Level</a></h3>
+<p>Resources available for operations:</p>
+<ul>
+<li><strong>100%</strong>: Fully supplied</li>
+<li><strong>50-99%</strong>: Adequate supplies</li>
+<li><strong>25-49%</strong>: Low supplies</li>
+<li><strong>0-24%</strong>: Critical shortage</li>
+</ul>
+<h3 id="fuel-level"><a class="header" href="#fuel-level">Fuel Level</a></h3>
+<p>Aviation fuel availability:</p>
+<ul>
+<li><strong>100%</strong>: Full fuel stocks</li>
+<li><strong>0%</strong>: No fuel available</li>
+</ul>
+<h2 id="objective-states"><a class="header" href="#objective-states">Objective States</a></h2>
+<h3 id="threatened"><a class="header" href="#threatened">Threatened</a></h3>
+<p>An objective becomes "threatened" when:</p>
+<ul>
+<li>Enemy units are nearby (within aircraft-specific threat distance)</li>
+<li>Enemy ground forces are close</li>
+<li>Recently captured by enemy</li>
+</ul>
+<p><strong>Cooldown</strong>: 300 seconds (5 minutes) - objective stays threatened for 5 minutes after last enemy contact</p>
+<p><strong>Effects</strong>:</p>
+<ul>
+<li>⚠️ <strong>Blocks cargo and troop deployment</strong> - cannot unload at threatened objectives!</li>
+<li>May trigger defensive unit spawns</li>
+<li>Tracked internally by system</li>
+</ul>
+<p><strong>Important</strong>: You cannot deploy units (troops or crates) at threatened objectives. The system will show: "you can't deploy troops here while enemies are near"</p>
+<h3 id="capturable"><a class="header" href="#capturable">Capturable</a></h3>
+<p>Ready to be captured when:</p>
+<ul>
+<li>Logi = 0</li>
+<li>Troops in capture zone</li>
+<li>Correct troop type present</li>
+</ul>
+<p><strong>Visual Indicator</strong>: Capturable objectives show a <strong>white circle</strong> on F10 map instead of the owner's color.</p>
+<h2 id="objective-information"><a class="header" href="#objective-information">Objective Information</a></h2>
+<h2 id="reading-map-markers"><a class="header" href="#reading-map-markers">Reading Map Markers</a></h2>
+<p>Typical objective marker format:</p>
+<pre><code>Musa Airbase
+Health: 100
+Logi: 100
+Supply: 99
+Fuel: 100
+Points: 0
+</code></pre>
+<p>Breakdown:</p>
+<ul>
+<li><strong>Objective name</strong> - First line</li>
+<li><strong>Health</strong>: 100 - Facility condition (0-100)</li>
+<li><strong>Logi</strong>: 100 - Infrastructure (0-100, must be 0 to capture)</li>
+<li><strong>Supply</strong>: 99 - Equipment stocks (0-100)</li>
+<li><strong>Fuel</strong>: 100 - Fuel stocks (0-100)</li>
+<li><strong>Points</strong>: 0 - Point value for capturing</li>
+</ul>
+<p><strong>Capturable Example</strong>:</p>
+<pre><code>Enemy Base
+Health: 65
+Logi: 0
+Supply: 45
+Fuel: 30
+Points: 0
+</code></pre>
+<p>Note <code>Logi: 0</code> means this objective CAN be captured!</p>
+<p><strong>Visual Indicator</strong>: When an objective becomes capturable (Logi: 0), the <strong>circle around the airbase on the F10 map turns WHITE</strong> instead of the owner's color. This is an easy way to spot capturable objectives at a glance!</p>
+<h2 id="objective-zones"><a class="header" href="#objective-zones">Objective Zones</a></h2>
+<h3 id="capture-zone"><a class="header" href="#capture-zone">Capture Zone</a></h3>
+<p>The physical area for capturing:</p>
+<ul>
+<li>Defined by mission design (circular or polygonal)</li>
+<li>Infantry must be inside to capture</li>
+<li>Check F10 map markers for zone location</li>
+<li>Only one zone per objective</li>
+</ul>
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<p>Learn how to <a href="gameplay/./capturing-objectives.html">capture objectives</a> and manage the <a href="gameplay/./logistics.html">logistics system</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="capturing-objectives"><a class="header" href="#capturing-objectives">Capturing Objectives</a></h1>
+<p>Capturing objectives is the primary way to win the campaign. This guide covers the complete capture process.</p>
+<h2 id="prerequisites-for-capture"><a class="header" href="#prerequisites-for-capture">Prerequisites for Capture</a></h2>
+<p>An objective can only be captured when <strong>ALL</strong> of these conditions are met:</p>
+<ol>
+<li><strong>Logistics = 0%</strong> ✓</li>
+<li><strong>Capture troops in zone</strong> ✓</li>
+<li><strong>Troops are correct type</strong> ✓</li>
+<li><strong>No enemy contest</strong> ✓</li>
+</ol>
+<h2 id="the-capture-process"><a class="header" href="#the-capture-process">The Capture Process</a></h2>
+<h3 id="step-1-reduce-logistics-to-0"><a class="header" href="#step-1-reduce-logistics-to-0">Step 1: Reduce Logistics to 0%</a></h3>
+<p>Logistics must be destroyed before capture. Methods:</p>
+<p><strong>Ground Strikes</strong>:</p>
+<ul>
+<li>Attack logistics buildings with bombs</li>
+<li>Use precision weapons (GBUs, AGMs)</li>
+<li>Target specific logi structures</li>
+</ul>
+<p><strong>Artillery</strong>:</p>
+<ul>
+<li>JTAC-directed artillery fire</li>
+<li>Area bombardment</li>
+<li>Sustained fire missions</li>
+</ul>
+<p><strong>Cruise Missiles</strong>:</p>
+<ul>
+<li>Long-range strikes</li>
+<li>High accuracy on logi buildings</li>
+<li>Coordinate via Actions menu</li>
+</ul>
+<p><strong>Monitoring Progress</strong>:</p>
+<ul>
+<li>Check F10 map marker: <code>Logi: 0</code> indicates ready (fully destroyed)</li>
+<li><strong>Circle turns WHITE</strong> on F10 map when capturable (instead of owner's color)</li>
+<li>System announces when objective becomes capturable</li>
+</ul>
+<h3 id="step-2-deploy-capture-troops"><a class="header" href="#step-2-deploy-capture-troops">Step 2: Deploy Capture Troops</a></h3>
+<p>Not all troops can capture! You need specific infantry units.</p>
+<p><strong>Getting Capture Troops</strong> (PG Tempest):</p>
+<p>Troops that <strong>CAN capture</strong>:</p>
+<ul>
+<li><strong>Standard Infantry</strong>: 0 points, 8km JTAC (no line-of-sight)</li>
+<li><strong>Anti-Tank Infantry</strong>: 2 points, 8km JTAC (line-of-sight required)</li>
+<li><strong>Mortar Infantry</strong>: 5 points, 8km JTAC (line-of-sight required)</li>
+</ul>
+<p>Troops that <strong>CANNOT capture</strong>:</p>
+<ul>
+<li><strong>Igla/Stinger (MANPADS)</strong>: 25 points</li>
+</ul>
+<p><strong>Loading Troops</strong>:</p>
+<ol>
+<li>Land at friendly objective/FARP</li>
+<li>F10 → Troops → Load → Select troop type</li>
+<li>Transport via helicopter (Mi-8, UH-1H, CH-47, etc.)</li>
+</ol>
+<p>See <a href="gameplay/../f10-menu/troops.html">Troop Transport</a> for detailed instructions.</p>
+<h3 id="step-3-enter-the-capture-zone"><a class="header" href="#step-3-enter-the-capture-zone">Step 3: Enter the Capture Zone</a></h3>
+<p>The capture zone is the designated area around the objective.</p>
+<p><strong>Identifying the Zone</strong>:</p>
+<ul>
+<li>Check F10 map markers</li>
+<li>Usually circular around the objective center</li>
+<li>Radius varies by objective type</li>
+</ul>
+<p><strong>Positioning Troops</strong>:</p>
+<ol>
+<li>Fly/drive into the capture zone</li>
+<li>Land or stop vehicle</li>
+<li>Unload troops using F10 → Troops → Unload</li>
+<li>Troops must remain in zone</li>
+</ol>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Infantry must be <strong>on the ground</strong> and <strong>alive</strong></li>
+<li>Troops still in helicopters don't count</li>
+<li>Dead troops don't count</li>
+<li>Objective must NOT be threatened (cannot unload at threatened objectives)</li>
+</ul>
+<h3 id="step-4-hold-the-zone"><a class="header" href="#step-4-hold-the-zone">Step 4: Hold the Zone</a></h3>
+<p><strong>Capture Timer</strong>:</p>
+<ul>
+<li>Capture is not instantaneous</li>
+<li>System checks periodically</li>
+<li>All conditions must remain met until capture completes</li>
+</ul>
+<h2 id="success"><a class="header" href="#success">Success!</a></h2>
+<p>When capture succeeds:</p>
+<p><strong>System Announces</strong>:</p>
+<ul>
+<li>Team-wide notification</li>
+<li>Objective changes color on map</li>
+<li>New owner displayed</li>
+</ul>
+<p><strong>Rewards</strong>:</p>
+<ul>
+<li>Points awarded to capturing players</li>
+<li>Points divided among all participants</li>
+<li>Capture points vary by objective value</li>
+</ul>
+<p><strong>Immediate Effects</strong>:</p>
+<ul>
+<li>Airbase coalition changes</li>
+<li>Defensive units respawn for new owner</li>
+<li>Logistics begins one step of repair</li>
+<li>Supply lines recalculate</li>
+</ul>
+<h2 id="failed-captures"><a class="header" href="#failed-captures">Failed Captures</a></h2>
+<p>Captures can fail if:</p>
+<p><strong>Logistics Restored</strong>:</p>
+<ul>
+<li>Automatic repair can raise logi above 0%</li>
+<li>Capture becomes impossible until logi reduced again</li>
+</ul>
+<p><strong>Troops Killed</strong>:</p>
+<ul>
+<li>All capturing troops die</li>
+<li>Need to deploy fresh troops</li>
+</ul>
+<p><strong>Zone Contested</strong>:</p>
+<ul>
+<li>Enemy troops enter the zone</li>
+<li>Capture pauses until contest resolved</li>
+</ul>
+<p><strong>Troops Leave Zone</strong>:</p>
+<ul>
+<li>Troops moved out by player</li>
+<li>Troops ordered to relocate</li>
+<li>Reset capture progress</li>
+</ul>
+<h2 id="point-rewards"><a class="header" href="#point-rewards">Point Rewards</a></h2>
+<p>Capture points are awarded based on:</p>
+<ul>
+<li>Objective strategic value</li>
+<li>Server point configuration</li>
+<li>Number of participants</li>
+</ul>
+<p><strong>Example</strong> (PG Tempest):</p>
+<pre><code>Capture objective: 50 points
+3 participants: ~17 points each
+1 participant: 50 points
+</code></pre>
+<p>Points divided equally among all players whose troops participated in the capture.</p>
+<h2 id="after-capture"><a class="header" href="#after-capture">After Capture</a></h2>
+<p>When capture succeeds:</p>
+<ul>
+<li>Objective changes owner immediately</li>
+<li>Airbase coalition switches</li>
+<li>Logistics repairs one step automatically</li>
+<li>Supply lines recalculate</li>
+<li>Capturing troops are deleted</li>
+<li>Points awarded to participants</li>
+</ul>
+<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
+<p>Learn about the <a href="gameplay/./logistics.html">Logistics &amp; Supply</a> system to maintain your captured objectives!</p>
+<p>For detailed troop specifications, see the <a href="gameplay/../reference/deployables.html">Deployable Units Reference</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="logistics--supply"><a class="header" href="#logistics--supply">Logistics &amp; Supply</a></h1>
+<p>The logistics system adds strategic depth to Fowl Engine. Understanding supply flows is key to sustained operations.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Logistics simulates the supply chain required to maintain military operations. Without adequate supplies, objectives cannot function effectively.</p>
+<h2 id="the-logistics-system"><a class="header" href="#the-logistics-system">The Logistics System</a></h2>
+<h3 id="what-is-logistics"><a class="header" href="#what-is-logistics">What is Logistics?</a></h3>
+<p><strong>Logistics tracks two main resources</strong>:</p>
+<ol>
+<li><strong>Equipment</strong> (weapons, vehicles, parts)</li>
+<li><strong>Fuel</strong> (aviation fuel, vehicle fuel)</li>
+</ol>
+<p><strong>Three levels of infrastructure</strong>:</p>
+<ol>
+<li><strong>Logistics (Logi)</strong> - Infrastructure health</li>
+<li><strong>Supply</strong> - Equipment inventory level</li>
+<li><strong>Fuel</strong> - Fuel inventory level</li>
+</ol>
+<h2 id="supply-flow"><a class="header" href="#supply-flow">Supply Flow</a></h2>
+<h3 id="logistics-hubs-1"><a class="header" href="#logistics-hubs-1">Logistics Hubs</a></h3>
+<p><strong>Central Distribution</strong>:</p>
+<ul>
+<li>Logistics hubs are special objectives</li>
+<li>They distribute supplies to connected objectives</li>
+<li>Form the backbone of supply network</li>
+</ul>
+<p><strong>Hub Connections</strong>:</p>
+<ul>
+<li>Each hub connects to multiple objectives</li>
+<li>Supply flows automatically</li>
+<li>Captured objectives reconnect supply lines</li>
+</ul>
+<h3 id="supply-routes"><a class="header" href="#supply-routes">Supply Routes</a></h3>
+<p>Supplies flow from:</p>
+<pre><code>Logistics Hub → Frontline Objectives → FARPs
+</code></pre>
+<p><strong>Route Characteristics</strong>:</p>
+<ul>
+<li>Automatic distribution every tick interval</li>
+<li>Prioritizes objectives with lowest supply</li>
+<li>Distance affects delivery amount</li>
+<li>Broken routes halt supply flow</li>
+</ul>
+<h3 id="supply-ticks"><a class="header" href="#supply-ticks">Supply Ticks</a></h3>
+<p>The system runs on a <strong>tick cycle</strong>:</p>
+<p><strong>Tick Frequency</strong> (PG Tempest):</p>
+<ul>
+<li>Every <strong>10 minutes</strong></li>
+<li>Supplies distribute during each tick</li>
+<li>Automatic process, no player action needed</li>
+<li>Full delivery cycle: <strong>24 ticks</strong> (4 hours)</li>
+</ul>
+<p><strong>During Each Tick</strong>:</p>
+<ol>
+<li>System assesses all objectives</li>
+<li>Calculates supply needs</li>
+<li>Distributes from logistics hubs</li>
+<li>Updates objective supply levels</li>
+</ol>
+<h2 id="supply--fuel-levels"><a class="header" href="#supply--fuel-levels">Supply &amp; Fuel Levels</a></h2>
+<h3 id="supply-percentage"><a class="header" href="#supply-percentage">Supply Percentage</a></h3>
+<p>Represents equipment and munitions:</p>
+<ul>
+<li><strong>100%</strong>: Fully stocked</li>
+<li><strong>75-99%</strong>: Good condition</li>
+<li><strong>50-74%</strong>: Adequate supplies</li>
+<li><strong>25-49%</strong>: Low stocks</li>
+<li><strong>0-24%</strong>: Critical shortage</li>
+</ul>
+<p><strong>Effects of Low Supply</strong>:</p>
+<ul>
+<li>Reduced repair speeds</li>
+<li>Limited deployments available</li>
+<li>Decreased operational tempo</li>
+<li>Warehouse capacity reduced</li>
+</ul>
+<h3 id="fuel-percentage"><a class="header" href="#fuel-percentage">Fuel Percentage</a></h3>
+<p>Represents aviation fuel stocks:</p>
+<ul>
+<li><strong>100%</strong>: Full fuel reserves</li>
+<li><strong>75-99%</strong>: Good fuel stocks</li>
+<li><strong>50-74%</strong>: Adequate fuel</li>
+<li><strong>25-49%</strong>: Low fuel</li>
+<li><strong>0-24%</strong>: Fuel emergency</li>
+</ul>
+<p><strong>Effects of Low Fuel</strong>:</p>
+<ul>
+<li>Aircraft cannot rearm</li>
+<li>Helicopter operations limited</li>
+<li>May prevent takeoffs</li>
+<li>Logistics vehicles affected</li>
+</ul>
+<h2 id="supply-priorities"><a class="header" href="#supply-priorities">Supply Priorities</a></h2>
+<h3 id="automatic-distribution"><a class="header" href="#automatic-distribution">Automatic Distribution</a></h3>
+<p>The system prioritizes:</p>
+<ol>
+<li><strong>Lowest supply first</strong> - Most desperate get priority</li>
+<li><strong>Connected objectives</strong> - Must have supply route</li>
+<li><strong>Available inventory</strong> - Hub must have supplies</li>
+</ol>
+<p><strong>Example Priority</strong>:</p>
+<pre><code>Objective A: 20% supply → Gets first priority
+Objective B: 45% supply → Gets second priority  
+Objective C: 80% supply → Gets last priority
+</code></pre>
+<h2 id="logistics-infrastructure-logi"><a class="header" href="#logistics-infrastructure-logi">Logistics Infrastructure (Logi)</a></h2>
+<h3 id="what-is-logi"><a class="header" href="#what-is-logi">What is Logi?</a></h3>
+<p>Logi represents the physical infrastructure:</p>
+<ul>
+<li>Buildings</li>
+<li>Roads and railways</li>
+<li>Communications</li>
+<li>Support facilities</li>
+</ul>
+<h3 id="logi-percentage"><a class="header" href="#logi-percentage">Logi Percentage</a></h3>
+<ul>
+<li><strong>100%</strong>: Perfect condition</li>
+<li><strong>75-99%</strong>: Minor damage</li>
+<li><strong>50-74%</strong>: Moderate damage</li>
+<li><strong>25-49%</strong>: Heavy damage</li>
+<li><strong>1-24%</strong>: Critical damage</li>
+<li><strong>0%</strong>: Destroyed (objective capturable!)</li>
+</ul>
+<h3 id="logi-effects"><a class="header" href="#logi-effects">Logi Effects</a></h3>
+<p><strong>High Logi (75-100%)</strong>:</p>
+<ul>
+<li>Fast repair times</li>
+<li>Efficient supply processing</li>
+<li>Normal operations</li>
+</ul>
+<p><strong>Medium Logi (25-74%)</strong>:</p>
+<ul>
+<li>Slower operations</li>
+<li>Reduced efficiency</li>
+<li>Still functional</li>
+</ul>
+<p><strong>Low Logi (1-24%)</strong>:</p>
+<ul>
+<li>Severely impaired</li>
+<li>Very slow repairs</li>
+<li>Minimal functionality</li>
+</ul>
+<p><strong>Zero Logi (0%)</strong>:</p>
+<ul>
+<li><strong>OBJECTIVE CAN BE CAPTURED</strong></li>
+<li>No supply processing</li>
+<li>No repairs possible</li>
+<li>Critical vulnerability</li>
+</ul>
+<h2 id="repairing-logistics"><a class="header" href="#repairing-logistics">Repairing Logistics</a></h2>
+<h3 id="natural-repair"><a class="header" href="#natural-repair">Natural Repair</a></h3>
+<p>Logistics gradually repair over time:</p>
+<ul>
+<li>Automatic process</li>
+<li>Slow regeneration</li>
+<li>Requires some supply availability</li>
+</ul>
+<p><strong>Repair Rate</strong>:</p>
+<ul>
+<li>Typically 1-5% per tick</li>
+<li>Server-configured</li>
+<li>Requires positive supply level</li>
+</ul>
+<h3 id="manual-repair"><a class="header" href="#manual-repair">Manual Repair</a></h3>
+<p>Players can expedite repairs:</p>
+<p><strong>Via Actions Menu</strong>:</p>
+<pre><code>F10 → Actions → Repair (or Repair-Fast) → [Select Objective]
+</code></pre>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Costs <strong>100 points</strong> (helo) or <strong>200 points</strong> (fast fixed-wing)</li>
+<li>Must own the objective</li>
+<li>Repair crate must be delivered to objective</li>
+</ul>
+<p><strong>Benefits</strong>:</p>
+<ul>
+<li>Immediate logi increase (one step)</li>
+<li>Prevents capture vulnerability</li>
+<li>Strategic investment</li>
+<li>Fast option gets there quicker</li>
+</ul>
+<h2 id="warehouse-system"><a class="header" href="#warehouse-system">Warehouse System</a></h2>
+<h3 id="equipment-inventory"><a class="header" href="#equipment-inventory">Equipment Inventory</a></h3>
+<p>Objectives store equipment in warehouses:</p>
+<p><strong>Types of Equipment</strong>:</p>
+<ul>
+<li>Aircraft and helicopters</li>
+<li>Tanks and armored vehicles</li>
+<li>Artillery systems</li>
+<li>Infantry units</li>
+<li>Support equipment</li>
+</ul>
+<p><strong>Capacity</strong>:</p>
+<ul>
+<li>Each objective has maximum capacity</li>
+<li>Varies by objective type</li>
+<li>Display format: <code>stored / capacity</code></li>
+</ul>
+<h3 id="liquid-inventory"><a class="header" href="#liquid-inventory">Liquid Inventory</a></h3>
+<p>Fuel stored separately:</p>
+<p><strong>Liquid Types</strong>:</p>
+<ul>
+<li>Jet fuel (aircraft)</li>
+<li>Aviation gasoline (props)</li>
+<li>Diesel (vehicles)</li>
+</ul>
+<h2 id="supply-strategies"><a class="header" href="#supply-strategies">Supply Strategies</a></h2>
+<h3 id="offensive-strategy"><a class="header" href="#offensive-strategy">Offensive Strategy</a></h3>
+<p><strong>Attacking Enemy Supply</strong>:</p>
+<ol>
+<li><strong>Target logistics hubs</strong> - Cut off multiple objectives</li>
+<li><strong>Interdict supply routes</strong> - Attack connecting objectives</li>
+<li><strong>Reduce frontline supply</strong> - Weaken enemy operations</li>
+</ol>
+<p><strong>Maintaining Your Supply</strong>:</p>
+<ol>
+<li><strong>Protect logistics hubs</strong> - Heavy air defense</li>
+<li><strong>Secure supply routes</strong> - Defend connecting objectives</li>
+<li><strong>Keep logi above 0%</strong> - Prevents captures</li>
+</ol>
+<h3 id="defensive-strategy"><a class="header" href="#defensive-strategy">Defensive Strategy</a></h3>
+<p><strong>Supply Line Defense</strong>:</p>
+<ul>
+<li>Deploy SAMs at logistics hubs</li>
+<li>Maintain CAP over critical objectives</li>
+<li>Repair logi quickly when damaged</li>
+<li>Keep fuel reserves high</li>
+</ul>
+<p><strong>Emergency Response</strong>:</p>
+<ul>
+<li>If logi falls to 0%, immediate priority repair</li>
+<li>Rush fighters to defend against capture</li>
+<li>Deploy ground units to contest zone</li>
+</ul>
+<h2 id="reading-supply-information"><a class="header" href="#reading-supply-information">Reading Supply Information</a></h2>
+<h3 id="f10-map-markers"><a class="header" href="#f10-map-markers">F10 Map Markers</a></h3>
+<p>Typical format:</p>
+<pre><code>Musa Airbase
+Health: 85
+Logi: 42
+Supply: 75
+Fuel: 100
+Points: 0
+</code></pre>
+<ul>
+<li><strong>Health</strong>: 85 - Facility condition</li>
+<li><strong>Logi</strong>: 42 - Infrastructure (safe from capture, above 0)</li>
+<li><strong>Supply</strong>: 75 - Equipment stocks (good level)</li>
+<li><strong>Fuel</strong>: 100 - Fuel stocks (full)</li>
+<li><strong>Points</strong>: 0 - Capture point value</li>
+</ul>
+<p><strong>Note</strong>: Values are whole numbers 0-100.</p>
+<h3 id="in-game-notifications"><a class="header" href="#in-game-notifications">In-Game Notifications</a></h3>
+<p>System messages for supply events:</p>
+<ul>
+<li>"Objective supply critical" - Below 25%</li>
+<li>"Objective fuel emergency" - Below 25%</li>
+<li>"Logistics damaged" - Logi falling</li>
+<li>"Objective capturable" - Logi at 0%</li>
+</ul>
+<h2 id="logistics-transfers"><a class="header" href="#logistics-transfers">Logistics Transfers</a></h2>
+<h3 id="manual-transfers"><a class="header" href="#manual-transfers">Manual Transfers</a></h3>
+<p>Admin or special actions can transfer supplies:</p>
+<p><strong>Command</strong>:</p>
+<pre><code>-admin transfer &lt;from-objective&gt; &lt;to-objective&gt;
+</code></pre>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Emergency supply to starved objective</li>
+<li>Balancing supply distribution</li>
+<li>Preparing for major operations</li>
+</ul>
+<p><strong>Restrictions</strong>:</p>
+<ul>
+<li>Requires admin privileges (for <code>-admin</code> variant)</li>
+<li>Limited by warehouse capacity</li>
+<li>Both objectives must be owned</li>
+</ul>
+<h2 id="advanced-topics"><a class="header" href="#advanced-topics">Advanced Topics</a></h2>
+<h3 id="supply-line-optimization"><a class="header" href="#supply-line-optimization">Supply Line Optimization</a></h3>
+<p><strong>Efficient Network</strong>:</p>
+<ul>
+<li>Capture objectives in logical order</li>
+<li>Maintain control of connecting objectives</li>
+<li>Don't overextend supply lines</li>
+</ul>
+<p><strong>Example Bad Strategy</strong>:</p>
+<pre><code>Hub → A → (enemy) → B → Front
+</code></pre>
+<p>Objective B is cut off!</p>
+<p><strong>Example Good Strategy</strong>:</p>
+<pre><code>Hub → A → B → Front
+</code></pre>
+<p>Clear supply line maintained.</p>
+<h3 id="logistics-as-weapon"><a class="header" href="#logistics-as-weapon">Logistics as Weapon</a></h3>
+<p><strong>Starve Enemy Objectives</strong>:</p>
+<ol>
+<li>Identify their logistics hubs</li>
+<li>Strike them repeatedly</li>
+<li>Target connecting objectives</li>
+<li>Wait for supply depletion</li>
+<li>Attack when weakened</li>
+</ol>
+<p><strong>Siege Warfare</strong>:</p>
+<ul>
+<li>Surround enemy objective</li>
+<li>Cut off supply routes</li>
+<li>Wait for supplies to deplete</li>
+<li>Capture when logistics fail</li>
+</ul>
+<h3 id="supply-consumption"><a class="header" href="#supply-consumption">Supply Consumption</a></h3>
+<p>Different operations consume supplies:</p>
+<p><strong>High Consumption</strong>:</p>
+<ul>
+<li>Repairing damaged aircraft</li>
+<li>Deploying heavy armor</li>
+<li>Sustained combat operations</li>
+<li>Large-scale actions</li>
+</ul>
+<p><strong>Low Consumption</strong>:</p>
+<ul>
+<li>CAP flights</li>
+<li>Basic repairs</li>
+<li>Small unit deployments</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="why-is-my-objective-low-on-supply"><a class="header" href="#why-is-my-objective-low-on-supply">"Why is my objective low on supply?"</a></h3>
+<p>Possible causes:</p>
+<ul>
+<li>Logistics hub captured by enemy</li>
+<li>Supply route broken</li>
+<li>High consumption rate</li>
+<li>Insufficient tick intervals passed</li>
+</ul>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Check supply route integrity</li>
+<li>Protect logistics hubs</li>
+<li>Wait for next supply tick</li>
+<li>Reduce unnecessary deployments</li>
+</ul>
+<h3 id="logi-wont-repair"><a class="header" href="#logi-wont-repair">"Logi won't repair"</a></h3>
+<p>Possible causes:</p>
+<ul>
+<li>Supply level too low</li>
+<li>Recent damage faster than repair</li>
+<li>Server settings</li>
+</ul>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Wait for supply delivery</li>
+<li>Use manual repair action</li>
+<li>Defend objective from attacks</li>
+</ul>
+<h2 id="next-steps-3"><a class="header" href="#next-steps-3">Next Steps</a></h2>
+<p>Learn about the <a href="gameplay/./points-and-lives.html">Points and Lives System</a> to understand how resources are earned and used!</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="points-and-lives-system"><a class="header" href="#points-and-lives-system">Points and Lives System</a></h1>
+<p>Fowl Engine uses a points and lives system to reward good play and encourage careful decision-making.</p>
+<h2 id="points-system"><a class="header" href="#points-system">Points System</a></h2>
+<h3 id="what-are-points"><a class="header" href="#what-are-points">What Are Points?</a></h3>
+<p>Points are the campaign currency:</p>
+<ul>
+<li>Earned through successful missions</li>
+<li>Spent on deployments and actions</li>
+<li>Tracked per player</li>
+<li>Persistent across server restarts</li>
+</ul>
+<h3 id="earning-points"><a class="header" href="#earning-points">Earning Points</a></h3>
+<p><strong>Combat Actions</strong>:</p>
+<ul>
+<li>Destroying enemy units</li>
+<li>Successful strikes on objectives</li>
+<li>Air-to-air kills</li>
+<li>Ground kills</li>
+</ul>
+<p><strong>Strategic Actions</strong>:</p>
+<ul>
+<li><strong>Capturing objectives</strong> - 50 points (split among participants)</li>
+</ul>
+<p><strong>Teamwork</strong>:</p>
+<ul>
+<li>Multi-player captures share the 50 points equally</li>
+<li>Example: 3 players capture = ~17 points each</li>
+</ul>
+<h3 id="point-values"><a class="header" href="#point-values">Point Values</a></h3>
+<p>Point values vary by:</p>
+<ul>
+<li>Target type (aircraft &gt; tanks &gt; infantry)</li>
+<li>Strategic importance</li>
+<li>Server configuration</li>
+<li>Objective value</li>
+</ul>
+<p><strong>Actual Point Values</strong> (PG Tempest):</p>
+<ul>
+<li><strong>Ground kill</strong>: <strong>2 points</strong></li>
+<li><strong>Air kill</strong>: <strong>25 points</strong></li>
+<li><strong>LR SAM bonus</strong>: <strong>+5 points</strong> (for killing long-range SAMs)</li>
+<li><strong>Objective capture</strong>: <strong>50 points</strong> (split among participants)</li>
+<li><strong>New player bonus</strong>: <strong>190 points</strong> (starting balance)</li>
+</ul>
+<h3 id="spending-points"><a class="header" href="#spending-points">Spending Points</a></h3>
+<p><strong>Deployable Units</strong>:</p>
+<pre><code>F10 → Actions → [Deploy Action] → [Location]
+</code></pre>
+<p><strong>Actual Costs</strong> (PG Tempest):</p>
+<ul>
+<li><strong>Drone</strong> (Small): <strong>50 points</strong></li>
+<li><strong>Drone</strong> (Large MQ-9): <strong>100 points</strong></li>
+<li><strong>Paratroops</strong>: <strong>100 points</strong></li>
+<li><strong>Light Attack Helicopters</strong>: <strong>120 points</strong></li>
+<li><strong>Naval FARP Destroyer</strong>: <strong>100 points</strong></li>
+<li><strong>Naval FARP Carrier</strong>: <strong>150 points</strong></li>
+<li><strong>Fighters</strong> (CAP): <strong>200 points</strong></li>
+<li><strong>SEAD Package</strong>: <strong>200 points</strong></li>
+<li><strong>Attack Helicopters</strong>: <strong>200-300 points</strong></li>
+<li><strong>Bomber</strong>: <strong>200 points</strong></li>
+<li><strong>ALCM</strong> (Cruise Missile Platform): <strong>25-150 points</strong></li>
+</ul>
+<p><strong>Special Actions</strong>:</p>
+<ul>
+<li><strong>Logistics Repair</strong>: <strong>100 points</strong> (helo), <strong>200 points</strong> (fast)</li>
+<li><strong>Logistics Transfer</strong>: <strong>100 points</strong></li>
+<li><strong>Deploy EWR Radar</strong>: <strong>50 points</strong></li>
+<li><strong>AWACS</strong>: <strong>50 points</strong></li>
+<li><strong>Waypoint Commands</strong>: <strong>5-15 points</strong></li>
+<li><strong>RTB (Return to Base)</strong>: <strong>0 points</strong></li>
+</ul>
+<h3 id="checking-your-balance"><a class="header" href="#checking-your-balance">Checking Your Balance</a></h3>
+<p><strong>Via Chat</strong>:</p>
+<pre><code>-balance
+</code></pre>
+<p>Response:</p>
+<pre><code>You have 1250 points
+</code></pre>
+<p><strong>Via Lives Command</strong>:</p>
+<pre><code>-lives
+</code></pre>
+<p>Shows complete status including points.</p>
+<h2 id="lives-system"><a class="header" href="#lives-system">Lives System</a></h2>
+<h3 id="what-are-lives"><a class="header" href="#what-are-lives">What Are Lives?</a></h3>
+<p>Lives represent your ability to continue flying:</p>
+<ul>
+<li>Limited number per player</li>
+<li>Lost when you die</li>
+<li>Prevents reckless behavior</li>
+<li>Encourages careful planning</li>
+</ul>
+<h3 id="starting-lives"><a class="header" href="#starting-lives">Starting Lives</a></h3>
+<p>Lives vary by aircraft type:</p>
+<ul>
+<li><strong>Standard</strong> (F-15, F/A-18, Su-27, etc.): <strong>3 lives</strong></li>
+<li><strong>Attack</strong> (A-10, Ka-50, AH-64, etc.): <strong>4 lives</strong></li>
+<li><strong>Intercept</strong> (MiG-21, F-5, Mirage-F1, etc.): <strong>4 lives</strong></li>
+<li><strong>Logistics</strong> (Mi-8, UH-1H, CH-47, etc.): <strong>6 lives</strong></li>
+<li><strong>Recon</strong> (L-39, TF-51, Yak-52, etc.): <strong>6 lives</strong></li>
+</ul>
+<h3 id="losing-lives"><a class="header" href="#losing-lives">Losing Lives</a></h3>
+<p>You lose a life when:</p>
+<ul>
+<li>Your aircraft is destroyed</li>
+<li>You eject and can't be rescued</li>
+<li>You crash</li>
+<li>Enemy shoots you down</li>
+</ul>
+<p><strong>Important</strong>:</p>
+<ul>
+<li>Deaths in combat count</li>
+<li>Practice crashes count (be careful!)</li>
+<li>Friendly fire counts</li>
+</ul>
+<h3 id="what-happens-at-0-lives"><a class="header" href="#what-happens-at-0-lives">What Happens at 0 Lives?</a></h3>
+<p><strong>Spectator Mode</strong>:</p>
+<ul>
+<li>Cannot occupy slots</li>
+<li>Can watch the battle</li>
+<li>Still earn points (on some servers)</li>
+<li>Can communicate with team</li>
+</ul>
+<p><strong>Life Reset</strong>:</p>
+<ul>
+<li>Admins can reset your lives</li>
+<li>May require request via Discord</li>
+<li>Some servers have automatic reset timers</li>
+<li>Depends on server policy</li>
+</ul>
+<h3 id="checking-your-lives"><a class="header" href="#checking-your-lives">Checking Your Lives</a></h3>
+<p><strong>Via Chat</strong>:</p>
+<pre><code>-lives
+</code></pre>
+<p>Response example:</p>
+<pre><code>Team: Blue
+Lives: 5
+Points: 1250
+Side Switches: 1
+</code></pre>
+<h2 id="point-transfers"><a class="header" href="#point-transfers">Point Transfers</a></h2>
+<p>Some servers allow point transfers between players.</p>
+<p><strong>Transfer Command</strong>:</p>
+<pre><code>-transfer &lt;amount&gt; &lt;player-name&gt;
+-transfer &lt;amount&gt; objective:&lt;objective-name&gt;
+</code></pre>
+<p><strong>Examples</strong>:</p>
+<pre><code>-transfer 500 Viper21
+-transfer 100 objective:Batumi
+</code></pre>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Help new players</li>
+<li>Pool for expensive deployment</li>
+<li>Contribute points to objectives</li>
+<li>Reimburse friendly fire</li>
+<li>Strategic coordination</li>
+</ul>
+<p><strong>Restrictions</strong>:</p>
+<ul>
+<li>Cannot transfer to enemy team</li>
+<li>Must have sufficient points</li>
+</ul>
+<h2 id="admin-point-management"><a class="header" href="#admin-point-management">Admin Point Management</a></h2>
+<p>Admins can manage points:</p>
+<p><strong>Check Balance</strong>:</p>
+<pre><code>-admin balance &lt;player&gt;
+</code></pre>
+<p><strong>Set Points</strong>:</p>
+<pre><code>-admin set-points &lt;amount&gt; &lt;player&gt;
+</code></pre>
+<p><strong>Reset Lives</strong>:</p>
+<pre><code>-admin reset-lives &lt;player&gt;
+</code></pre>
+<h2 id="next-steps-4"><a class="header" href="#next-steps-4">Next Steps</a></h2>
+<p>Now learn about <a href="gameplay/./chat-commands.html">Chat Commands</a> to interact with the system!</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="chat-commands"><a class="header" href="#chat-commands">Chat Commands</a></h1>
+<p>Chat commands are your primary interface for interacting with the Fowl Engine system. This page covers the most commonly used commands.</p>
+<h2 id="command-format"><a class="header" href="#command-format">Command Format</a></h2>
+<p>All system commands start with a dash <code>-</code>:</p>
+<pre><code>-command [arguments]
+</code></pre>
+<p><strong>Important</strong>:</p>
+<ul>
+<li>Commands are <strong>case-insensitive</strong></li>
+<li>Spaces matter in arguments</li>
+<li>Most commands are silent (only you see response)</li>
+</ul>
+<h2 id="essential-commands"><a class="header" href="#essential-commands">Essential Commands</a></h2>
+<h3 id="registration--status"><a class="header" href="#registration--status">Registration &amp; Status</a></h3>
+<h4 id="blue--red"><a class="header" href="#blue--red"><code>blue</code> / <code>red</code></a></h4>
+<p>Register for a team (first-time only).</p>
+<pre><code>blue
+</code></pre>
+<pre><code>red
+</code></pre>
+<p><strong>Response</strong>:</p>
+<pre><code>Welcome to the Blue team. You may only occupy slots 
+belonging to your team. Good luck!
+</code></pre>
+<p><strong>Usage</strong>:</p>
+<ul>
+<li>First time joining server</li>
+<li>Must be in spectator mode</li>
+<li>Permanent choice (unless server allows switching)</li>
+</ul>
+<hr />
+<h4 id="-switch-blue---switch-red"><a class="header" href="#-switch-blue---switch-red"><code>-switch blue</code> / <code>-switch red</code></a></h4>
+<p>Switch teams (if allowed by server).</p>
+<pre><code>-switch blue
+</code></pre>
+<pre><code>-switch red
+</code></pre>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Must be in spectator mode</li>
+<li>Must have side switches remaining</li>
+<li>Server must allow switching</li>
+</ul>
+<p><strong>Response</strong>:</p>
+<pre><code>[Your name] has switched to Blue
+</code></pre>
+<hr />
+<h4 id="-lives"><a class="header" href="#-lives"><code>-lives</code></a></h4>
+<p>Check your current status.</p>
+<pre><code>-lives
+</code></pre>
+<p><strong>Response</strong>:</p>
+<pre><code>Team: Blue
+Lives: 5
+Points: 1250
+Side Switches: 1
+</code></pre>
+<p>Shows:</p>
+<ul>
+<li>Current team</li>
+<li>Remaining lives</li>
+<li>Points balance</li>
+<li>Available side switches</li>
+</ul>
+<hr />
+<h4 id="-balance"><a class="header" href="#-balance"><code>-balance</code></a></h4>
+<p>Check your points balance.</p>
+<pre><code>-balance
+</code></pre>
+<p><strong>Response</strong>:</p>
+<pre><code>You have 1250 points
+</code></pre>
+<p>Quick way to check points without full status.</p>
+<hr />
+<h3 id="time--server"><a class="header" href="#time--server">Time &amp; Server</a></h3>
+<h4 id="-time"><a class="header" href="#-time"><code>-time</code></a></h4>
+<p>Check server restart time.</p>
+<pre><code>-time
+</code></pre>
+<p><strong>Response</strong>:</p>
+<pre><code>The server will shutdown in 02:45:30
+</code></pre>
+<p>Shows time remaining until:</p>
+<ul>
+<li>Automatic server restart</li>
+<li>Campaign save</li>
+<li>Scheduled maintenance</li>
+</ul>
+<p>If no restart scheduled:</p>
+<pre><code>The server isn't configured to restart automatically
+</code></pre>
+<hr />
+<h3 id="help"><a class="header" href="#help">Help</a></h3>
+<h4 id="-help"><a class="header" href="#-help"><code>-help</code></a></h4>
+<p>Display available commands.</p>
+<pre><code>-help
+</code></pre>
+<p><strong>Response</strong>: Lists all available commands with brief descriptions.</p>
+<p><strong>Tip</strong>: Keep this page bookmarked for detailed explanations!</p>
+<hr />
+<h2 id="unit-management-commands"><a class="header" href="#unit-management-commands">Unit Management Commands</a></h2>
+<h3 id="troop-operations"><a class="header" href="#troop-operations">Troop Operations</a></h3>
+<h4 id="-bind-troop-id"><a class="header" href="#-bind-troop-id"><code>-bind &lt;troop-id&gt;</code></a></h4>
+<p>Bind troops to your user for movement commands.</p>
+<pre><code>-bind 12345
+</code></pre>
+<p><strong>Usage</strong>:</p>
+<ul>
+<li>After deploying troops</li>
+<li>Enables movement commands</li>
+<li>Troops follow your orders</li>
+</ul>
+<p><strong>Finding Troop ID</strong>:</p>
+<ul>
+<li>Check F10 map markers</li>
+<li>System message after deployment</li>
+<li>Format: usually numeric</li>
+</ul>
+<hr />
+<p><em>Command removed - use <code>-delete</code> instead to remove troops</em></p>
+<hr />
+<h4 id="-delete-group-id"><a class="header" href="#-delete-group-id"><code>-delete &lt;group-id&gt;</code></a></h4>
+<p>Delete deployed troops/groups.</p>
+<pre><code>-delete 12345
+</code></pre>
+<p><strong>Important</strong>:</p>
+<ul>
+<li>Gives <strong>50% refund</strong> of deployment cost!</li>
+<li>Permanent action</li>
+<li>Clean removal</li>
+</ul>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Remove stuck troops</li>
+<li>Clean up after mission</li>
+<li>Delete accidental deployments</li>
+<li>Get some points back</li>
+</ul>
+<hr />
+<h3 id="jtac-commands"><a class="header" href="#jtac-commands">JTAC Commands</a></h3>
+<h4 id="-jtac-id-command"><a class="header" href="#-jtac-id-command"><code>-jtac &lt;id&gt; &lt;command&gt;</code></a></h4>
+<p>Control JTAC units via chat.</p>
+<p><strong>Available Commands</strong>:</p>
+<pre><code>-jtac &lt;id&gt; status      - Show JTAC status
+-jtac &lt;id&gt; shift       - Shift to next target
+-jtac &lt;id&gt; autoshift   - Toggle auto-shift
+-jtac &lt;id&gt; pointer     - Toggle IR pointer
+-jtac &lt;id&gt; smoke       - Smoke target
+-jtac &lt;id&gt; code &lt;code&gt; - Set laser code
+-jtac &lt;id&gt; arty &lt;aid&gt; &lt;n&gt; - Artillery fire mission
+-jtac &lt;id&gt; bomber [mission] - Bomber mission
+</code></pre>
+<p><strong>Example</strong>:</p>
+<pre><code>-jtac 12345 status
+-jtac 12345 arty 54321 5
+</code></pre>
+<p>See <a href="gameplay/../f10-menu/jtac.html">JTAC System</a> for detailed usage.</p>
+<p><strong>Note</strong>: Most players use F10 menu for JTAC instead of chat commands.</p>
+<hr />
+<h3 id="action-commands"><a class="header" href="#action-commands">Action Commands</a></h3>
+<h4 id="-action-name-args"><a class="header" href="#-action-name-args"><code>-action &lt;name&gt; &lt;args&gt;</code></a></h4>
+<p>Control deployed action units via chat.</p>
+<pre><code>-action help                    - List available actions
+-action &lt;name&gt; &lt;key&gt;            - Execute action at map marker
+-action &lt;name&gt; &lt;group&gt; &lt;key&gt;    - Execute action on group
+</code></pre>
+<p><strong>Examples</strong>:</p>
+<pre><code>-action help
+-action fighters CAP1
+-action rtb 12345 HOME
+</code></pre>
+<p><strong>Note</strong>: Most players use F10 menu for actions instead of chat commands.</p>
+<hr />
+<h2 id="administrative-commands"><a class="header" href="#administrative-commands">Administrative Commands</a></h2>
+<p>These commands require admin privileges.</p>
+<h3 id="admin-access"><a class="header" href="#admin-access">Admin Access</a></h3>
+<p>Only players with admin privileges can use these commands. Check with server staff if you think you need admin access.</p>
+<h4 id="-admin-help"><a class="header" href="#-admin-help"><code>-admin help</code></a></h4>
+<p>List all admin commands.</p>
+<pre><code>-admin help
+</code></pre>
+<p><strong>Response</strong>: Complete list of admin commands with syntax.</p>
+<hr />
+<h3 id="common-admin-commands"><a class="header" href="#common-admin-commands">Common Admin Commands</a></h3>
+<h4 id="-admin-reduce-objective-percent"><a class="header" href="#-admin-reduce-objective-percent"><code>-admin reduce &lt;objective&gt; &lt;percent&gt;</code></a></h4>
+<p>Reduce supplies at objective.</p>
+<pre><code>-admin reduce Batumi 50
+</code></pre>
+<p>Reduces objective supplies by specified percentage.</p>
+<hr />
+<h4 id="-admin-tick"><a class="header" href="#-admin-tick"><code>-admin tick</code></a></h4>
+<p>Force logistics tick immediately.</p>
+<pre><code>-admin tick
+</code></pre>
+<p>Triggers supply distribution without waiting for scheduled tick.</p>
+<hr />
+<h4 id="-admin-deliver"><a class="header" href="#-admin-deliver"><code>-admin deliver</code></a></h4>
+<p>Force logistics delivery.</p>
+<pre><code>-admin deliver
+</code></pre>
+<p>Triggers supply delivery cycle.</p>
+<hr />
+<h4 id="-admin-repair-airbase"><a class="header" href="#-admin-repair-airbase"><code>-admin repair &lt;airbase&gt;</code></a></h4>
+<p>Repair one step at airbase.</p>
+<pre><code>-admin repair Batumi
+</code></pre>
+<p>Increases logi by one step.</p>
+<hr />
+<h4 id="-admin-spawn-key"><a class="header" href="#-admin-spawn-key"><code>-admin spawn &lt;key&gt;</code></a></h4>
+<p>Spawn units at F10 mark.</p>
+<pre><code>-admin spawn MARK1 deployable blue 180 TankPlatoon
+</code></pre>
+<p><strong>Format</strong>: <code>&lt;key&gt; &lt;troop|deployable&gt; &lt;side&gt; &lt;heading&gt; &lt;name&gt;</code></p>
+<hr />
+<h4 id="-admin-switch-side-player"><a class="header" href="#-admin-switch-side-player"><code>-admin switch &lt;side&gt; &lt;player&gt;</code></a></h4>
+<p>Force player side switch.</p>
+<pre><code>-admin switch blue Viper21
+</code></pre>
+<p>Switches player to specified side regardless of restrictions.</p>
+<hr />
+<h4 id="-admin-ban-duration-player"><a class="header" href="#-admin-ban-duration-player"><code>-admin ban &lt;duration&gt; &lt;player&gt;</code></a></h4>
+<p>Ban player from server.</p>
+<pre><code>-admin ban 7days Griefer123
+</code></pre>
+<pre><code>-admin ban forever Hacker456
+</code></pre>
+<p><strong>Duration examples</strong>:</p>
+<ul>
+<li><code>10minutes</code></li>
+<li><code>2hours</code></li>
+<li><code>7days</code></li>
+<li><code>forever</code></li>
+</ul>
+<hr />
+<h4 id="-admin-unban-player"><a class="header" href="#-admin-unban-player"><code>-admin unban &lt;player&gt;</code></a></h4>
+<p>Unban player.</p>
+<pre><code>-admin unban Viper21
+</code></pre>
+<hr />
+<h4 id="-admin-kick-player"><a class="header" href="#-admin-kick-player"><code>-admin kick &lt;player&gt;</code></a></h4>
+<p>Kick player from server.</p>
+<pre><code>-admin kick IdlePlayer
+</code></pre>
+<p>Removes player without banning.</p>
+<hr />
+<h4 id="-admin-reset-lives-player"><a class="header" href="#-admin-reset-lives-player"><code>-admin reset-lives &lt;player&gt;</code></a></h4>
+<p>Reset player's lives.</p>
+<pre><code>-admin reset-lives Viper21
+</code></pre>
+<p>Restores lives to starting amount.</p>
+<hr />
+<h4 id="-admin-connected"><a class="header" href="#-admin-connected"><code>-admin connected</code></a></h4>
+<p>List connected players.</p>
+<pre><code>-admin connected
+</code></pre>
+<p>Shows all currently connected players with IDs.</p>
+<hr />
+<h4 id="-admin-banned"><a class="header" href="#-admin-banned"><code>-admin banned</code></a></h4>
+<p>List banned players.</p>
+<pre><code>-admin banned
+</code></pre>
+<p>Shows all banned players and ban durations.</p>
+<hr />
+<h4 id="-admin-search-regex"><a class="header" href="#-admin-search-regex"><code>-admin search &lt;regex&gt;</code></a></h4>
+<p>Search player database.</p>
+<pre><code>-admin search Viper.*
+</code></pre>
+<p>Searches players using regular expressions.</p>
+<hr />
+<h4 id="-admin-balance-player"><a class="header" href="#-admin-balance-player"><code>-admin balance &lt;player&gt;</code></a></h4>
+<p>Check player's point balance.</p>
+<pre><code>-admin balance Viper21
+</code></pre>
+<hr />
+<h4 id="-admin-set-points-amount-player"><a class="header" href="#-admin-set-points-amount-player"><code>-admin set-points &lt;amount&gt; &lt;player&gt;</code></a></h4>
+<p>Set player's points.</p>
+<pre><code>-admin set-points 5000 Viper21
+</code></pre>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Compensate for bugs</li>
+<li>Event rewards</li>
+<li>Balance adjustments</li>
+</ul>
+<hr />
+<h4 id="-admin-delete-group-id"><a class="header" href="#-admin-delete-group-id"><code>-admin delete &lt;group-id&gt;</code></a></h4>
+<p>Delete deployed group cleanly.</p>
+<pre><code>-admin delete 12345
+</code></pre>
+<p>Better than player <code>-delete</code> for complex cleanups.</p>
+<hr />
+<h4 id="-admin-deslot-player"><a class="header" href="#-admin-deslot-player"><code>-admin deslot &lt;player&gt;</code></a></h4>
+<p>Force player to spectators.</p>
+<pre><code>-admin deslot Viper21
+</code></pre>
+<p>Removes player from their slot.</p>
+<hr />
+<h4 id="-admin-reset-winner"><a class="header" href="#-admin-reset-winner"><code>-admin reset [winner]</code></a></h4>
+<p>Reset campaign (dangerous!).</p>
+<pre><code>-admin reset
+</code></pre>
+<pre><code>-admin reset blue
+</code></pre>
+<p><strong>Warning</strong>:</p>
+<ul>
+<li>Resets entire campaign state</li>
+<li>Usually requires confirmation</li>
+<li>Use for new campaigns only</li>
+</ul>
+<hr />
+<h4 id="-admin-shutdown"><a class="header" href="#-admin-shutdown"><code>-admin shutdown</code></a></h4>
+<p>Shutdown server.</p>
+<pre><code>-admin shutdown
+</code></pre>
+<p>Graceful server shutdown with save.</p>
+<hr />
+<h2 id="point-transfer-commands"><a class="header" href="#point-transfer-commands">Point Transfer Commands</a></h2>
+<p>If enabled by server:</p>
+<h4 id="-transfer-amount-playerobjective"><a class="header" href="#-transfer-amount-playerobjective"><code>-transfer &lt;amount&gt; &lt;player|objective&gt;</code></a></h4>
+<p>Transfer points to another player or objective.</p>
+<pre><code>-transfer 500 Viper21
+-transfer 100 objective:Batumi
+</code></pre>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Sufficient points</li>
+<li>Valid player name or objective name</li>
+<li>For players: same team only</li>
+</ul>
+<hr />
+<h2 id="command-tips"><a class="header" href="#command-tips">Command Tips</a></h2>
+<h3 id="finding-player-names"><a class="header" href="#finding-player-names">Finding Player Names</a></h3>
+<p><strong>For Commands</strong>:</p>
+<ul>
+<li>Use exact name as shown in player list</li>
+<li>Case-sensitive in some cases</li>
+<li>Use quotes if name has spaces: <code>"Player Name"</code></li>
+<li>Some commands accept UCID or Player ID</li>
+</ul>
+<p><strong>Getting Player Info</strong>:</p>
+<pre><code>-admin connected
+</code></pre>
+<p>Lists all players with IDs.</p>
+<h3 id="command-errors"><a class="header" href="#command-errors">Command Errors</a></h3>
+<p><strong>"Command not found"</strong>:</p>
+<ul>
+<li>Check spelling</li>
+<li>Verify dash <code>-</code> prefix</li>
+<li>Ensure server supports command</li>
+</ul>
+<p><strong>"Permission denied"</strong>:</p>
+<ul>
+<li>Command requires admin</li>
+<li>You don't have privileges</li>
+<li>Contact server staff</li>
+</ul>
+<p><strong>"Invalid syntax"</strong>:</p>
+<ul>
+<li>Check argument format</li>
+<li>Verify spacing</li>
+<li>Re-read command examples</li>
+</ul>
+<h2 id="command-aliases"><a class="header" href="#command-aliases">Command Aliases</a></h2>
+<p>Some commands have shortcuts:</p>
+<div class="table-wrapper"><table><thead><tr><th>Full Command</th><th>Alias</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>blue</code></td><td>(none)</td><td>Registration only</td></tr>
+<tr><td><code>red</code></td><td>(none)</td><td>Registration only</td></tr>
+<tr><td><code>help</code></td><td><code>-help</code></td><td>Both work</td></tr>
+<tr><td><code>points</code></td><td><code>-balance</code></td><td>System interprets</td></tr>
+<tr><td><code>credits</code></td><td><code>-balance</code></td><td>System interprets</td></tr>
+</tbody></table>
+</div>
+<h2 id="server-specific-commands"><a class="header" href="#server-specific-commands">Server-Specific Commands</a></h2>
+<p>Some servers add custom commands:</p>
+<ul>
+<li>Check server Discord</li>
+<li>Read MOTD (Message of the Day)</li>
+<li>Ask in chat</li>
+<li>Check server documentation</li>
+</ul>
+<h2 id="next-steps-5"><a class="header" href="#next-steps-5">Next Steps</a></h2>
+<p>Now explore the <a href="gameplay/../f10-menu/overview.html">F10 Menu Systems</a> for more advanced interactions!</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="f10-menu-overview"><a class="header" href="#f10-menu-overview">F10 Menu Overview</a></h1>
+<p>The F10 radio menu is your tactical command center in Fowl Engine. This page provides an overview of all available menus.</p>
+<h2 id="accessing-f10-menus"><a class="header" href="#accessing-f10-menus">Accessing F10 Menus</a></h2>
+<p><strong>In Aircraft</strong>:</p>
+<ol>
+<li>Slot into an aircraft</li>
+<li>Press <code>F10</code> (or your configured radio menu key)</li>
+<li>Navigate using number keys or mouse</li>
+</ol>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Must be in a slotted aircraft (not spectator)</li>
+<li>Menus vary by aircraft type</li>
+<li>Some menus require specific capabilities</li>
+</ul>
+<h2 id="main-menu-structure"><a class="header" href="#main-menu-structure">Main Menu Structure</a></h2>
+<p>When you open F10, you'll see Fowl Engine menus:</p>
+<pre><code>F10 Radio Menu
+├── Actions          (Deploy units, call missions)
+├── JTAC            (Control targeting units)
+├── Cargo           (Load/unload cargo)
+├── Troops          (Load/unload infantry)
+└── EWR             (Radar reports)
+</code></pre>
+<p><strong>Note</strong>: Not all menus appear for every aircraft. Availability depends on:</p>
+<ul>
+<li>Aircraft type and capabilities</li>
+<li>Server configuration</li>
+<li>Your permissions</li>
+<li>Current game state</li>
+</ul>
+<h2 id="menu-types"><a class="header" href="#menu-types">Menu Types</a></h2>
+<h3 id="actions-menu"><a class="header" href="#actions-menu">Actions Menu</a></h3>
+<p><strong>Purpose</strong>: Deploy units and call support missions</p>
+<p><strong>What You Can Do</strong>:</p>
+<ul>
+<li>Deploy AWACS, tankers, CAP fighters</li>
+<li>Call SEAD and strike missions</li>
+<li>Deploy drones and cruise missiles</li>
+<li>Spawn deployable units</li>
+<li>Order logistics operations</li>
+</ul>
+<p><strong>Costs</strong>: Most actions cost points</p>
+<p><strong>See</strong>: <a href="f10-menu/./actions.html">Actions Menu</a> for details</p>
+<hr />
+<h3 id="jtac-menu"><a class="header" href="#jtac-menu">JTAC Menu</a></h3>
+<p><strong>Purpose</strong>: Control Joint Terminal Attack Controllers</p>
+<p><strong>What You Can Do</strong>:</p>
+<ul>
+<li>Check JTAC status</li>
+<li>Shift laser to next target</li>
+<li>Change laser codes</li>
+<li>Request fire missions (artillery/missiles)</li>
+<li>Mark targets with smoke</li>
+<li>Configure targeting filters</li>
+</ul>
+<p><strong>Costs</strong>: Fire missions may cost points</p>
+<p><strong>See</strong>: <a href="f10-menu/./jtac.html">JTAC System</a> for details</p>
+<hr />
+<h3 id="cargo-menu"><a class="header" href="#cargo-menu">Cargo Menu</a></h3>
+<p><strong>Purpose</strong>: Transport equipment and supplies</p>
+<p><strong>What You Can Do</strong>:</p>
+<ul>
+<li>Load cargo crates</li>
+<li>Unload cargo at objectives</li>
+<li>Check cargo capacity</li>
+<li>View loaded cargo</li>
+</ul>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Aircraft with cargo capability</li>
+<li>Proximity to cargo/objective</li>
+</ul>
+<p><strong>See</strong>: <a href="f10-menu/./cargo.html">Cargo Operations</a> for details</p>
+<hr />
+<h3 id="troops-menu"><a class="header" href="#troops-menu">Troops Menu</a></h3>
+<p><strong>Purpose</strong>: Transport infantry units</p>
+<p><strong>What You Can Do</strong>:</p>
+<ul>
+<li>Load infantry squads</li>
+<li>Unload troops at objectives</li>
+<li>Check troop capacity</li>
+<li>View loaded troops</li>
+</ul>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Aircraft with troop capability</li>
+<li>Proximity to troops/objective</li>
+</ul>
+<p><strong>See</strong>: <a href="f10-menu/./troops.html">Troop Transport</a> for details</p>
+<hr />
+<h3 id="ewr-menu"><a class="header" href="#ewr-menu">EWR Menu</a></h3>
+<p><strong>Purpose</strong>: Early Warning Radar information</p>
+<p><strong>What You Can Do</strong>:</p>
+<ul>
+<li>Request radar reports</li>
+<li>Toggle EWR on/off</li>
+<li>Get friendly unit reports</li>
+<li>Change unit systems (Imperial/Metric)</li>
+</ul>
+<p><strong>Costs</strong>: Free</p>
+<p><strong>See</strong>: <a href="f10-menu/./ewr.html">Early Warning Radar</a> for details</p>
+<hr />
+<h2 id="menu-navigation"><a class="header" href="#menu-navigation">Menu Navigation</a></h2>
+<h3 id="number-keys"><a class="header" href="#number-keys">Number Keys</a></h3>
+<ul>
+<li>Each menu item has a number (1-9)</li>
+<li>Press number to select</li>
+<li>Press <code>0</code> or <code>Escape</code> to go back</li>
+</ul>
+<h3 id="pagination"><a class="header" href="#pagination">Pagination</a></h3>
+<ul>
+<li>Long lists split into pages with "Next&gt;&gt;"</li>
+<li>Select "Next&gt;&gt;" to see more options</li>
+</ul>
+<h2 id="context-sensitive-menus"><a class="header" href="#context-sensitive-menus">Context-Sensitive Menus</a></h2>
+<p>Menus adapt to your situation:</p>
+<p><strong>Aircraft Type</strong>:</p>
+<ul>
+<li>Cargo menu only in cargo aircraft</li>
+<li>Troop menu only in troop transports</li>
+<li>Different options per aircraft</li>
+</ul>
+<p><strong>Location</strong>:</p>
+<ul>
+<li>Proximity affects available actions</li>
+<li>Some menus require being near objectives</li>
+<li>Landing/ground vs. airborne options differ</li>
+</ul>
+<p><strong>Game State</strong>:</p>
+<ul>
+<li>Deployed units affect menu options</li>
+<li>Your point balance limits choices</li>
+<li>Team situation changes availability</li>
+</ul>
+<h2 id="f10-map-markers-integration"><a class="header" href="#f10-map-markers-integration">F10 Map Markers Integration</a></h2>
+<p>Many F10 menu actions use your map markers:</p>
+<p><strong>How It Works</strong>:</p>
+<ol>
+<li>Place F10 map marker at target location</li>
+<li>Name marker (≤24 characters)</li>
+<li>Open F10 radio menu</li>
+<li>Select action</li>
+<li>Your markers appear as destination options</li>
+</ol>
+<p><strong>Best Practices</strong>:</p>
+<ul>
+<li>Use short, clear names</li>
+<li>"CAS1", "SEAD", "CAP" work well</li>
+<li>Delete old markers</li>
+<li>One marker per name (duplicates won't show)</li>
+</ul>
+<p><strong>Example Workflow</strong>:</p>
+<ol>
+<li>Open F10 map</li>
+<li>Right-click target area</li>
+<li>Add mark "SEAD1"</li>
+<li>Return to aircraft</li>
+<li>F10 → Actions → Deploy SEAD → "SEAD1"</li>
+<li>Mission launched!</li>
+</ol>
+<h2 id="menu-permissions"><a class="header" href="#menu-permissions">Menu Permissions</a></h2>
+<p>Some menus require permissions:</p>
+<p><strong>Standard Players</strong>:</p>
+<ul>
+<li>EWR (always available)</li>
+<li>Cargo (if in capable aircraft)</li>
+<li>Troops (if in capable aircraft)</li>
+</ul>
+<p><strong>With Points</strong>:</p>
+<ul>
+<li>Actions (need points to deploy)</li>
+<li>JTAC fire missions (may cost points)</li>
+</ul>
+<p><strong>Server Configuration</strong>:</p>
+<ul>
+<li>Admins can enable/disable menus</li>
+<li>Some servers restrict certain features</li>
+<li>Check server rules</li>
+</ul>
+<h2 id="menu-costs"><a class="header" href="#menu-costs">Menu Costs</a></h2>
+<p>Many menu actions cost points:</p>
+<p><strong>Free Actions</strong>:</p>
+<ul>
+<li>EWR reports</li>
+<li>JTAC status checks</li>
+<li>Cargo operations (usually)</li>
+<li>Troop transport (usually)</li>
+</ul>
+<p><strong>Point Costs</strong>:</p>
+<ul>
+<li>Deploying units (50-2000+ points)</li>
+<li>Fire missions (varies)</li>
+<li>Special actions (varies)</li>
+</ul>
+<p><strong>Check Before Acting</strong>:</p>
+<ul>
+<li>Menu shows costs: "Deploy AWACS (1500 pts)"</li>
+<li>Insufficient points = action unavailable</li>
+<li>No refunds on accidental deployments!</li>
+</ul>
+<h2 id="common-menu-patterns"><a class="header" href="#common-menu-patterns">Common Menu Patterns</a></h2>
+<h3 id="deploy-action-pattern"><a class="header" href="#deploy-action-pattern">Deploy Action Pattern</a></h3>
+<pre><code>F10 → Actions → [Action Name] → [Your Marker] → Confirm
+</code></pre>
+<h3 id="jtac-fire-mission-pattern"><a class="header" href="#jtac-fire-mission-pattern">JTAC Fire Mission Pattern</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Fire Mission → [Artillery Group] → [Rounds]
+</code></pre>
+<h3 id="cargo-pattern"><a class="header" href="#cargo-pattern">Cargo Pattern</a></h3>
+<pre><code>F10 → Cargo → Load/Unload → [Cargo Type] → Confirm
+</code></pre>
+<h2 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h2>
+<h3 id="menu-not-appearing"><a class="header" href="#menu-not-appearing">"Menu not appearing"</a></h3>
+<p><strong>Possible causes</strong>:</p>
+<ul>
+<li>Wrong aircraft type</li>
+<li>Too far from required location</li>
+<li>Server disabled feature</li>
+<li>Not slotted in aircraft</li>
+</ul>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Check aircraft capabilities</li>
+<li>Move closer to objective</li>
+<li>Verify server features</li>
+<li>Ensure properly slotted</li>
+</ul>
+<h3 id="option-grayed-out"><a class="header" href="#option-grayed-out">"Option grayed out"</a></h3>
+<p><strong>Possible causes</strong>:</p>
+<ul>
+<li>Insufficient points</li>
+<li>No valid map markers</li>
+<li>Action not available</li>
+<li>Server restrictions</li>
+</ul>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Check point balance</li>
+<li>Place appropriate markers</li>
+<li>Verify conditions met</li>
+<li>Ask team/admin</li>
+</ul>
+<h3 id="action-failed"><a class="header" href="#action-failed">"Action failed"</a></h3>
+<p><strong>Possible causes</strong>:</p>
+<ul>
+<li>Invalid target location</li>
+<li>Insufficient resources</li>
+<li>Conflict with existing unit</li>
+<li>Server lag/error</li>
+</ul>
+<p><strong>Solutions</strong>:</p>
+<ul>
+<li>Choose different location</li>
+<li>Wait for resources</li>
+<li>Delete conflicting units</li>
+<li>Report persistent issues</li>
+</ul>
+<h2 id="see-also-1"><a class="header" href="#see-also-1">See Also</a></h2>
+<ul>
+<li><a href="f10-menu/./actions.html">Actions Menu</a> - Deploy units and missions</li>
+<li><a href="f10-menu/./jtac.html">JTAC System</a> - Advanced targeting</li>
+<li><a href="f10-menu/./cargo.html">Cargo Operations</a> - Transport supplies</li>
+<li><a href="f10-menu/./troops.html">Troop Transport</a> - Move infantry</li>
+<li><a href="f10-menu/./ewr.html">EWR Reports</a> - Radar information</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="actions-menu-1"><a class="header" href="#actions-menu-1">Actions Menu</a></h1>
+<p>The Actions menu lets you deploy units, call support missions, and execute strategic operations using your earned points.</p>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<p>Actions are point-based deployments that let you:</p>
+<ul>
+<li>Deploy support aircraft (AWACS, tankers)</li>
+<li>Call fighter packages (CAP, SEAD, strike)</li>
+<li>Spawn drones and missiles</li>
+<li>Deploy ground units</li>
+<li>Execute logistics operations</li>
+</ul>
+<h2 id="accessing-actions"><a class="header" href="#accessing-actions">Accessing Actions</a></h2>
+<ol>
+<li>Open F10 radio menu</li>
+<li>Select "Actions&gt;&gt;" (usually option 1)</li>
+<li>Menu expands showing available actions</li>
+</ol>
+<p><strong>Requirements</strong>:</p>
+<ul>
+<li>Must be slotted in aircraft</li>
+<li>Actions menu enabled for your role</li>
+<li>Sufficient points for desired action</li>
+</ul>
+<h2 id="action-categories"><a class="header" href="#action-categories">Action Categories</a></h2>
+<h3 id="support-aircraft"><a class="header" href="#support-aircraft">Support Aircraft</a></h3>
+<p><strong>AWACS (Airborne Warning and Control)</strong>:</p>
+<ul>
+<li>Cost: <strong>50 points</strong> (PG Tempest)</li>
+<li>Provides radar coverage (400km)</li>
+<li>Extends team awareness</li>
+<li>Place marker for orbit location</li>
+<li>RTB refunds 25% (13 points)</li>
+</ul>
+<p><strong>Tanker Aircraft</strong>:</p>
+<ul>
+<li>Check server for cost</li>
+<li>Aerial refueling support</li>
+<li>Extends mission duration</li>
+<li>Position along likely routes</li>
+<li>RTB refunds 25%</li>
+</ul>
+<h3 id="fighter-packages"><a class="header" href="#fighter-packages">Fighter Packages</a></h3>
+<p><strong>CAP (Combat Air Patrol)</strong>:</p>
+<ul>
+<li>Cost: <strong>200 points</strong> (PG Tempest)</li>
+<li>Deploys fighters to area</li>
+<li>Defends against enemy air</li>
+<li>Place marker at patrol location</li>
+<li>RTB refunds 25% (50 points)</li>
+</ul>
+<p><strong>SEAD (Suppression of Enemy Air Defenses)</strong>:</p>
+<ul>
+<li>Cost: <strong>200 points</strong> (PG Tempest)</li>
+<li>Attacks SAM sites</li>
+<li>Clears path for strikes</li>
+<li>Target high-threat areas</li>
+<li>RTB refunds 25% (50 points)</li>
+</ul>
+<p><strong>Attack Helicopters</strong>:</p>
+<ul>
+<li>Cost: <strong>200-300 points</strong> (PG Tempest)</li>
+<li>Ground attack missions</li>
+<li>Close air support</li>
+<li>RTB refunds 25%</li>
+</ul>
+<h3 id="drones--missiles"><a class="header" href="#drones--missiles">Drones &amp; Missiles</a></h3>
+<p><strong>Reconnaissance Drone</strong>:</p>
+<ul>
+<li>Small: <strong>50 points</strong> (12km JTAC range)</li>
+<li>Large: <strong>100 points</strong> (18km JTAC range)</li>
+<li>Surveillance over area</li>
+<li>JTAC capability included</li>
+<li>Cannot RTB for refund (stay deployed)</li>
+</ul>
+<p><strong>Cruise Missile Platforms</strong>:</p>
+<ul>
+<li>S-3B: <strong>25 points</strong></li>
+<li>Tu-95/Tu-160: <strong>150 points</strong></li>
+<li>Long-range precision strikes</li>
+<li>High-value target elimination</li>
+<li>RTB refunds 25%</li>
+</ul>
+<h3 id="ground-deployables"><a class="header" href="#ground-deployables">Ground Deployables</a></h3>
+<p><strong>Ground Deployables</strong> (via cargo crates):</p>
+<ul>
+<li>See <a href="f10-menu/../reference/deployables.html">Deployable Units Reference</a> for complete list</li>
+<li>SAMs: 5-100 points (1-4 crates)</li>
+<li>Tanks: 65-80 points (3 crates)</li>
+<li>IFVs: 20-45 points (2 crates)</li>
+<li>Artillery: 50-100 points (2-3 crates)</li>
+<li>Can delete for <strong>50% refund</strong></li>
+</ul>
+<h2 id="using-actions"><a class="header" href="#using-actions">Using Actions</a></h2>
+<h3 id="basic-workflow"><a class="header" href="#basic-workflow">Basic Workflow</a></h3>
+<ol>
+<li><strong>Plan</strong>: Decide what to deploy</li>
+<li><strong>Mark</strong>: Place F10 map marker at target location</li>
+<li><strong>Check</strong>: Verify point balance</li>
+<li><strong>Deploy</strong>: F10 → Actions → [Action] → [Marker]</li>
+<li><strong>Confirm</strong>: Action spawns, points deducted</li>
+</ol>
+<h3 id="detailed-steps"><a class="header" href="#detailed-steps">Detailed Steps</a></h3>
+<p><strong>Step 1: Place Map Marker</strong></p>
+<ul>
+<li>Open F10 map (not radio menu!)</li>
+<li>Right-click target location</li>
+<li>Select "Add Mark..."</li>
+<li>Enter short name (≤24 characters)</li>
+<li>Examples: "AWACS1", "CAP", "SAM"</li>
+</ul>
+<p><strong>Step 2: Open Actions Menu</strong></p>
+<ul>
+<li>In aircraft, press F10</li>
+<li>Select "Actions&gt;&gt;"</li>
+<li>Browse available actions</li>
+</ul>
+<p><strong>Step 3: Select Action</strong></p>
+<ul>
+<li>Each action shows cost: "Deploy CAP (800 pts)"</li>
+<li>Insufficient points = grayed out</li>
+<li>Select desired action</li>
+</ul>
+<p><strong>Step 4: Choose Location</strong></p>
+<ul>
+<li>Your map markers appear as options</li>
+<li>Select appropriate marker</li>
+<li>For waypoint actions, see grouped units</li>
+</ul>
+<p><strong>Step 5: Confirmation</strong></p>
+<ul>
+<li>Unit spawns at location</li>
+<li>Points deducted immediately</li>
+<li>System message confirms</li>
+<li>Unit appears on F10 map</li>
+</ul>
+<h2 id="advanced-actions"><a class="header" href="#advanced-actions">Advanced Actions</a></h2>
+<h3 id="waypoint-actions"><a class="header" href="#waypoint-actions">Waypoint Actions</a></h3>
+<p>Control deployed units:</p>
+<ul>
+<li><strong>Tanker Waypoint</strong>: Move tanker to new orbit</li>
+<li><strong>AWACS Waypoint</strong>: Reposition AWACS</li>
+<li><strong>Fighter Waypoint</strong>: Send fighters to new CAP location</li>
+<li><strong>RTB (Return to Base)</strong>: Recall unit</li>
+</ul>
+<p><strong>How to Use</strong>:</p>
+<ol>
+<li>Deploy initial unit (e.g., AWACS)</li>
+<li>Place new marker for waypoint</li>
+<li>F10 → Actions → [Unit Type] Waypoint</li>
+<li>Select unit from list</li>
+<li>Select new waypoint marker</li>
+<li>Unit moves to location</li>
+</ol>
+<h3 id="move-action"><a class="header" href="#move-action">Move Action</a></h3>
+<p>Relocate deployed ground units:</p>
+<ul>
+<li>Tanks, SAMs, artillery, infantry</li>
+<li>Place destination marker</li>
+<li>F10 → Actions → Move</li>
+<li>Select unit</li>
+<li>Select destination</li>
+<li>Unit moves</li>
+</ul>
+<h3 id="logistics-actions"><a class="header" href="#logistics-actions">Logistics Actions</a></h3>
+<p><strong>Logistics Repair</strong>:</p>
+<ul>
+<li>Repairs objective logistics</li>
+<li>Select from owned objectives</li>
+<li>Costs points (200-500)</li>
+<li>Immediate logi increase</li>
+</ul>
+<p><strong>Logistics Transfer</strong>:</p>
+<ul>
+<li>Admin-only usually</li>
+<li>Moves supplies between objectives</li>
+<li>Strategic rebalancing</li>
+</ul>
+<h2 id="action-costs-pg-tempest"><a class="header" href="#action-costs-pg-tempest">Action Costs (PG Tempest)</a></h2>
+<p><strong>Air Deployments</strong>:</p>
+<ul>
+<li>AWACS: <strong>50 pts</strong> (RTB refund: 13 pts)</li>
+<li>CAP Fighters: <strong>200 pts</strong> (RTB refund: 50 pts)</li>
+<li>SEAD: <strong>200 pts</strong> (RTB refund: 50 pts)</li>
+<li>Attack Helicopters: <strong>200-300 pts</strong> (RTB refund: 50-75 pts)</li>
+<li>Bomber: <strong>200 pts</strong></li>
+<li>Small Drone: <strong>50 pts</strong></li>
+<li>Large Drone: <strong>100 pts</strong></li>
+<li>ALCM Platform: <strong>25-150 pts</strong> (RTB refund: 6-38 pts)</li>
+</ul>
+<p><strong>Ground Deployables</strong> (via cargo):</p>
+<ul>
+<li>See <a href="f10-menu/../reference/deployables.html">Deployable Units Reference</a></li>
+<li>Delete refund: <strong>50%</strong> of cost</li>
+</ul>
+<p><strong>Special Actions</strong>:</p>
+<ul>
+<li>Paratroops: <strong>100 pts</strong></li>
+<li>Logistics Repair: <strong>100-200 pts</strong></li>
+<li>Logistics Transfer: <strong>100 pts</strong></li>
+</ul>
+<h2 id="managing-deployed-units"><a class="header" href="#managing-deployed-units">Managing Deployed Units</a></h2>
+<h3 id="via-chat-commands"><a class="header" href="#via-chat-commands">Via Chat Commands</a></h3>
+<p><code>-action &lt;group-id&gt; &lt;command&gt;</code>: Control unit
+<code>-bind &lt;group-id&gt;</code>: Bind unit for control
+<code>-delete &lt;group-id&gt;</code>: Remove unit</p>
+<h3 id="via-f10-waypoint-actions"><a class="header" href="#via-f10-waypoint-actions">Via F10 Waypoint Actions</a></h3>
+<ul>
+<li>Move support aircraft</li>
+<li>Reposition CAP</li>
+<li>Redirect drones</li>
+<li>RTB when done</li>
+</ul>
+<h3 id="unit-lifespan"><a class="header" href="#unit-lifespan">Unit Lifespan</a></h3>
+<ul>
+<li>Units persist until destroyed</li>
+<li>No automatic despawn</li>
+<li>Delete deployables for <strong>50% refund</strong>: <code>-delete &lt;group-id&gt;</code></li>
+<li>RTB aircraft for <strong>25% refund</strong> (via F10 menu or chat)</li>
+<li>Action units (AWACS, fighters) cannot be deleted by players</li>
+</ul>
+<h2 id="see-also-2"><a class="header" href="#see-also-2">See Also</a></h2>
+<ul>
+<li><a href="f10-menu/../gameplay/points-and-lives.html">Points System</a> - Earning and spending</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="jtac-system"><a class="header" href="#jtac-system">JTAC System</a></h1>
+<p>The Joint Terminal Attack Controller (JTAC) system provides advanced targeting, fire coordination, and battlefield intelligence.</p>
+<h2 id="what-is-jtac"><a class="header" href="#what-is-jtac">What is JTAC?</a></h2>
+<p>JTACs are specialized units that:</p>
+<ul>
+<li>Detect and track enemy units</li>
+<li>Designate targets with laser</li>
+<li>Coordinate artillery and missile strikes</li>
+<li>Provide detailed target information</li>
+</ul>
+<h2 id="jtac-types"><a class="header" href="#jtac-types">JTAC Types</a></h2>
+<h3 id="drone-jtac-large---mq-9-reaper"><a class="header" href="#drone-jtac-large---mq-9-reaper">Drone JTAC (Large - MQ-9 Reaper)</a></h3>
+<ul>
+<li><strong>Range</strong>: <strong>18 km</strong> (18,000m)</li>
+<li><strong>Line-of-sight</strong>: Not required (can see through terrain)</li>
+<li><strong>Cost</strong>: 100 points to deploy</li>
+<li><strong>Duration</strong>: 12 hours</li>
+<li><strong>Function</strong>: Long-range surveillance and targeting</li>
+</ul>
+<h3 id="drone-jtac-small"><a class="header" href="#drone-jtac-small">Drone JTAC (Small)</a></h3>
+<ul>
+<li><strong>Range</strong>: <strong>12 km</strong> (12,000m)</li>
+<li><strong>Line-of-sight</strong>: Not required (can see through terrain)</li>
+<li><strong>Cost</strong>: 50 points to deploy</li>
+<li><strong>Duration</strong>: 12 hours</li>
+<li><strong>Function</strong>: Reconnaissance and targeting</li>
+</ul>
+<h3 id="ground-jtac"><a class="header" href="#ground-jtac">Ground JTAC</a></h3>
+<ul>
+<li>Infantry or vehicle-based units with JTAC capability</li>
+<li>360° coverage</li>
+<li>May require line-of-sight (check unit type)</li>
+<li>Range varies by unit type</li>
+</ul>
+<h3 id="player-jtac"><a class="header" href="#player-jtac">Player JTAC</a></h3>
+<ul>
+<li>You can act as JTAC in certain aircraft</li>
+<li>Access via F10 menu</li>
+<li>Control your own targeting</li>
+<li>Range depends on your aircraft sensors</li>
+</ul>
+<h2 id="accessing-jtac"><a class="header" href="#accessing-jtac">Accessing JTAC</a></h2>
+<p><strong>F10 Menu</strong>:</p>
+<ol>
+<li>Press F10</li>
+<li>Select "JTAC"</li>
+<li>Choose JTAC unit from list</li>
+<li>Access that JTAC's functions</li>
+</ol>
+<p><strong>Format</strong>: JTACs listed by ID (e.g., "JTAC 12345")</p>
+<h2 id="jtac-status"><a class="header" href="#jtac-status">JTAC Status</a></h2>
+<h3 id="checking-status"><a class="header" href="#checking-status">Checking Status</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Status
+</code></pre>
+<p><strong>Status Report Shows</strong>:</p>
+<ul>
+<li>JTAC position (bearing/distance from objective)</li>
+<li>Current target (if any)</li>
+<li>Laser code</li>
+<li>Visual contacts</li>
+<li>Nearby artillery units</li>
+<li>Nearby cruise missile units</li>
+<li>Autoshift setting</li>
+<li>IR pointer setting</li>
+<li>Filter settings</li>
+</ul>
+<h3 id="reading-status"><a class="header" href="#reading-status">Reading Status</a></h3>
+<p>Example:</p>
+<pre><code>JTAC 12345 status
+lasing T-72B code 1688 marker M123
+position bearing 045 for 5.2km from Batumi
+
+Visual On: T-72Bx3, BMP-3x2, SA-13
+
+autoshift: true, ir_pointer: false
+filter: [Tank, APC]
+available artillery: [54321]
+available ALCM: [65432(4)]
+</code></pre>
+<h2 id="target-management"><a class="header" href="#target-management">Target Management</a></h2>
+<h3 id="shifting-targets"><a class="header" href="#shifting-targets">Shifting Targets</a></h3>
+<p><strong>Manual Shift</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Shift Target
+</code></pre>
+<p>Moves laser to next detected target.</p>
+<p><strong>Auto-Shift</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Toggle Auto-Shift
+</code></pre>
+<p>Automatically cycles through targets.</p>
+<h3 id="target-priority"><a class="header" href="#target-priority">Target Priority</a></h3>
+<p>JTACs prioritize by:</p>
+<ol>
+<li>Unit type (configurable)</li>
+<li>Threat level</li>
+<li>Distance</li>
+<li>Last movement</li>
+</ol>
+<h3 id="target-filters"><a class="header" href="#target-filters">Target Filters</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Filter → [Unit Type]
+</code></pre>
+<p><strong>Filter Options</strong>:</p>
+<ul>
+<li>Tank</li>
+<li>APC/IFV</li>
+<li>Artillery</li>
+<li>SAM</li>
+<li>Helicopter</li>
+<li>Infantry</li>
+</ul>
+<p><strong>Clear Filter</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Clear Filter
+</code></pre>
+<h2 id="laser-designation"><a class="header" href="#laser-designation">Laser Designation</a></h2>
+<h3 id="laser-codes"><a class="header" href="#laser-codes">Laser Codes</a></h3>
+<p>JTACs designate targets with laser codes:</p>
+<ul>
+<li>Default: Usually 1688</li>
+<li>Change via F10 menu</li>
+<li>Must match your weapon settings</li>
+</ul>
+<p><strong>Changing Code</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Code → [Hundreds/Tens/Ones]
+</code></pre>
+<p>Example: To change from 1688 to 1511:</p>
+<ol>
+<li>Select "1" (changes thousands to 1000)</li>
+<li>Select "500" (changes hundreds to 1500)</li>
+<li>Select "11" (changes to 1511)</li>
+</ol>
+<p><strong>Important</strong>: Set your LGB/missile code to match!</p>
+<h3 id="using-laser-designation"><a class="header" href="#using-laser-designation">Using Laser Designation</a></h3>
+<p><strong>Steps</strong>:</p>
+<ol>
+<li>Check JTAC status for code</li>
+<li>Set weapon laser code to match</li>
+<li>JTAC must be lasing target</li>
+<li>Attack target with LGBs/Mavericks</li>
+<li>Guide weapon to impact</li>
+</ol>
+<p><strong>Tips</strong>:</p>
+<ul>
+<li>Weapon must "see" laser</li>
+<li>Stay within parameters</li>
+<li>Don't break laser lock</li>
+<li>Multiple aircraft can use same code</li>
+</ul>
+<h3 id="ir-pointer"><a class="header" href="#ir-pointer">IR Pointer</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Toggle IR Pointer
+</code></pre>
+<p>Adds infrared pointer:</p>
+<ul>
+<li>Visible in night vision</li>
+<li>Helps locate target</li>
+<li>Doesn't affect laser</li>
+</ul>
+<h2 id="fire-missions"><a class="header" href="#fire-missions">Fire Missions</a></h2>
+<h3 id="artillery-missions"><a class="header" href="#artillery-missions">Artillery Missions</a></h3>
+<p><strong>Request Fire Mission</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Artillery → [Battery ID] → [Rounds]
+</code></pre>
+<p><strong>Process</strong>:</p>
+<ol>
+<li>JTAC must have target</li>
+<li>Artillery must be in range</li>
+<li>Select rounds (1, 3, 5, etc.)</li>
+<li>Battery fires on target</li>
+</ol>
+<p><strong>Round Options</strong>:</p>
+<ul>
+<li>Usually 1, 3, 5, 10, or "All"</li>
+<li>Check ammunition available</li>
+<li>Battery listed with ammo count</li>
+</ul>
+<p><strong>Adjustments</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Artillery → [Battery] → Adjust Fire
+</code></pre>
+<p>Options:</p>
+<ul>
+<li>Short/Long (range adjustment)</li>
+<li>Left/Right (lateral adjustment)</li>
+<li>Typically 50-100m increments</li>
+</ul>
+<h3 id="cruise-missile-missions"><a class="header" href="#cruise-missile-missions">Cruise Missile Missions</a></h3>
+<p><strong>Request ALCM Strike</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → ALCM → [Unit ID] → [Settings]
+</code></pre>
+<p><strong>Parameters</strong>:</p>
+<ul>
+<li>Missiles per target</li>
+<li>Magazine expenditure</li>
+<li>Targets multiple contacts</li>
+</ul>
+<p><strong>Cost</strong>: May cost points</p>
+<p><strong>See</strong>: <a href="f10-menu/../advanced/alcm.html">ALCM Guide</a> for details</p>
+<h3 id="smoke-marker"><a class="header" href="#smoke-marker">Smoke Marker</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Smoke Target
+</code></pre>
+<p><strong>Creates smoke at target</strong>:</p>
+<ul>
+<li>Visual marking</li>
+<li>Helps locate target</li>
+<li>60-second cooldown</li>
+<li>Color varies by team</li>
+</ul>
+<h2 id="common-issues-1"><a class="header" href="#common-issues-1">Common Issues</a></h2>
+<h3 id="no-jtac-available"><a class="header" href="#no-jtac-available">"No JTAC available"</a></h3>
+<ul>
+<li>No JTAC units deployed</li>
+<li>JTACs killed</li>
+<li>Out of detection range</li>
+<li>Check F10 JTAC menu</li>
+</ul>
+<h3 id="no-target"><a class="header" href="#no-target">"No target"</a></h3>
+<ul>
+<li>JTAC hasn't detected enemies</li>
+<li>Enemies out of range</li>
+<li>Line-of-sight blocked</li>
+<li>Wait for detection</li>
+</ul>
+<h3 id="artillery-out-of-range"><a class="header" href="#artillery-out-of-range">"Artillery out of range"</a></h3>
+<ul>
+<li>Battery too far from target (max range: 300km)</li>
+<li>Deploy closer artillery</li>
+<li>Use different battery</li>
+<li>Check JTAC status for available units</li>
+</ul>
+<h3 id="alcm-out-of-range"><a class="header" href="#alcm-out-of-range">"ALCM out of range"</a></h3>
+<ul>
+<li>Cruise missile platform too far from target (max range: 300km)</li>
+<li>Reposition platform using waypoint commands</li>
+<li>Deploy new platform closer</li>
+<li>Check JTAC status for available ALCM units</li>
+</ul>
+<h3 id="laser-not-tracking"><a class="header" href="#laser-not-tracking">"Laser not tracking"</a></h3>
+<ul>
+<li>Wrong laser code</li>
+<li>Out of laser parameters</li>
+<li>Target moved</li>
+<li>JTAC lost line-of-sight</li>
+</ul>
+<h2 id="see-also-3"><a class="header" href="#see-also-3">See Also</a></h2>
+<ul>
+<li><a href="f10-menu/../advanced/artillery.html">Artillery Operations</a> - Fire mission details</li>
+<li><a href="f10-menu/../advanced/alcm.html">ALCM Operations</a> - Cruise missile strikes</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="cargo-operations"><a class="header" href="#cargo-operations">Cargo Operations</a></h1>
+<p>Transport supplies and equipment using the cargo system to support your team's war effort.</p>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<p>The cargo system lets you:</p>
+<ul>
+<li>Load crates at objectives</li>
+<li>Transport to other locations</li>
+<li>Unload at friendly objectives</li>
+<li>Resupply forward positions</li>
+</ul>
+<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
+<p><strong>Aircraft</strong>: Must have cargo capability</p>
+<ul>
+<li>Helicopters: Mi-8, UH-60, CH-47, etc.</li>
+<li>Fixed-wing: C-130 (if available)</li>
+<li>Check aircraft specifications</li>
+</ul>
+<p><strong>Location</strong>: Must be near objective/FARP to load</p>
+<h2 id="cargo-menu-1"><a class="header" href="#cargo-menu-1">Cargo Menu</a></h2>
+<p>Access via F10 → Cargo</p>
+<p><strong>Menu Options</strong>:</p>
+<ul>
+<li><strong>Load</strong>: Pick up cargo crates</li>
+<li><strong>Unload</strong>: Deliver cargo</li>
+<li><strong>Status</strong>: Check loaded cargo</li>
+</ul>
+<h2 id="loading-cargo"><a class="header" href="#loading-cargo">Loading Cargo</a></h2>
+<p><strong>Steps</strong>:</p>
+<ol>
+<li>Land near objective/FARP (within ~50m)</li>
+<li>F10 → Cargo → Load</li>
+<li>Select cargo type</li>
+<li>Cargo loads automatically</li>
+<li>Message confirms load</li>
+</ol>
+<p><strong>Cargo Types</strong>:</p>
+<ul>
+<li>Supply crates</li>
+<li>Equipment crates</li>
+<li>Fuel bladders</li>
+<li>Special cargo (server-dependent)</li>
+</ul>
+<p><strong>Capacity</strong> (PG Tempest aircraft):</p>
+<ul>
+<li><strong>Mi-8</strong>: 3 crate slots, 3 troop slots</li>
+<li><strong>CH-47</strong>: 3 crate slots, 4 troop slots</li>
+<li><strong>UH-1H</strong>: 1 crate slot, 2 troop slots</li>
+<li><strong>SA342</strong>: 1 crate slot, 1 troop slot</li>
+<li><strong>Mi-24</strong>: 1 crate slot, 1 troop slot</li>
+<li><strong>Total Max</strong>: 6 crates server limit</li>
+</ul>
+<h2 id="transporting-cargo"><a class="header" href="#transporting-cargo">Transporting Cargo</a></h2>
+<p><strong>During Flight</strong>:</p>
+<ul>
+<li>Cargo stays loaded</li>
+<li>Affects aircraft weight</li>
+<li>May impact performance</li>
+<li>Don't crash!</li>
+</ul>
+<p><strong>Tips</strong>:</p>
+<ul>
+<li>Plan flight route</li>
+<li>Check weather/threats</li>
+<li>Have escorts if needed</li>
+<li>Stay low and fast in danger areas</li>
+</ul>
+<h2 id="unloading-cargo"><a class="header" href="#unloading-cargo">Unloading Cargo</a></h2>
+<p><strong>Steps</strong>:</p>
+<ol>
+<li>Land at destination objective</li>
+<li>Must be friendly objective</li>
+<li><strong>Objective must NOT be threatened</strong> ⚠️</li>
+<li>F10 → Cargo → Unload</li>
+<li>Select cargo or "Unload All"</li>
+<li>Cargo transfers to objective</li>
+</ol>
+<p><strong>Restrictions</strong>:</p>
+<ul>
+<li>⚠️ Cannot unload at <strong>threatened objectives</strong></li>
+<li>Error: "you can't deploy troops here while enemies are near"</li>
+<li>Wait 5 minutes after enemies leave for cooldown</li>
+<li>Ensure area is clear before unloading</li>
+</ul>
+<p><strong>Effects</strong>:</p>
+<ul>
+<li>Increases objective supply</li>
+<li>Contributes to logistics</li>
+<li>Supports operations</li>
+</ul>
+<h2 id="see-also-4"><a class="header" href="#see-also-4">See Also</a></h2>
+<ul>
+<li><a href="f10-menu/../reference/deployables.html">Deployable Units Reference</a> - Complete crate list</li>
+<li><a href="f10-menu/../gameplay/logistics.html">Logistics System</a></li>
+<li><a href="f10-menu/./troops.html">Troop Transport</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="troop-transport"><a class="header" href="#troop-transport">Troop Transport</a></h1>
+<p>Move infantry units to capture objectives, reinforce positions, and support ground operations.</p>
+<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
+<p>Transport infantry via helicopter or ground vehicle:</p>
+<ul>
+<li>Load troops at friendly objectives</li>
+<li>Move to target location</li>
+<li>Unload for capture or defense</li>
+<li>Critical for objective capture</li>
+</ul>
+<h2 id="requirements-1"><a class="header" href="#requirements-1">Requirements</a></h2>
+<p><strong>Transport Capability</strong>:</p>
+<ul>
+<li>Helicopters: Mi-8, UH-60, CH-47, etc.</li>
+<li>APCs/IFVs: BTR, BMP, Bradley, etc.</li>
+<li>Check vehicle specifications</li>
+</ul>
+<p><strong>Proximity</strong>: Must be near troops/objective</p>
+<h2 id="troops-menu-1"><a class="header" href="#troops-menu-1">Troops Menu</a></h2>
+<p>Access via F10 → Troops</p>
+<p><strong>Menu Options</strong>:</p>
+<ul>
+<li><strong>Load</strong>: Pick up infantry</li>
+<li><strong>Unload</strong>: Drop off troops</li>
+<li><strong>Status</strong>: Check loaded troops</li>
+</ul>
+<h2 id="loading-troops"><a class="header" href="#loading-troops">Loading Troops</a></h2>
+<p><strong>Steps</strong>:</p>
+<ol>
+<li>Position near objective/FARP</li>
+<li>F10 → Troops → Load</li>
+<li>Select troop type</li>
+<li>Troops board automatically</li>
+<li>Confirmation message</li>
+</ol>
+<p><strong>Troop Types</strong>:</p>
+<ul>
+<li>Infantry squads (can capture)</li>
+<li>Assault troops</li>
+<li>Special forces</li>
+<li>Anti-tank teams</li>
+<li>Support units</li>
+</ul>
+<p><strong>Capacity</strong> (PG Tempest aircraft):</p>
+<ul>
+<li><strong>CH-47</strong>: 4 troop slots (largest)</li>
+<li><strong>Mi-8</strong>: 3 troop slots</li>
+<li><strong>UH-1H</strong>: 2 troop slots</li>
+<li><strong>SA342/Mi-24</strong>: 1 troop slot each</li>
+<li>Each slot = one infantry squad</li>
+<li>APCs vary by type</li>
+</ul>
+<h2 id="transporting-troops"><a class="header" href="#transporting-troops">Transporting Troops</a></h2>
+<p><strong>Flight Operations</strong>:</p>
+<ul>
+<li>Troops count as weight</li>
+<li>May affect performance</li>
+<li>Stay low for safety</li>
+<li>Fast ingress/egress</li>
+</ul>
+<p><strong>Ground Movement</strong>:</p>
+<ul>
+<li>APCs/IFVs can transport troops overland</li>
+</ul>
+<h2 id="unloading-troops"><a class="header" href="#unloading-troops">Unloading Troops</a></h2>
+<p><strong>Steps</strong>:</p>
+<ol>
+<li>Land/stop at destination</li>
+<li><strong>Objective must NOT be threatened</strong> ⚠️</li>
+<li>F10 → Troops → Unload</li>
+<li>Select troops or "Unload All"</li>
+<li>Troops dismount</li>
+<li>Troops now on ground</li>
+</ol>
+<p><strong>Critical Restriction</strong>:</p>
+<ul>
+<li>⚠️ Cannot unload at <strong>threatened objectives</strong>!</li>
+<li>Error: "you can't deploy troops here while enemies are near"</li>
+<li>Objective stays threatened for <strong>5 minutes</strong> after enemies leave</li>
+</ul>
+<p><strong>Location Matters</strong>:</p>
+<ul>
+<li>For capture: Inside capture zone (must be unthreatened)</li>
+<li>For defense: Strategic positions</li>
+<li>For assault: Covered approaches</li>
+</ul>
+<h2 id="troop-management"><a class="header" href="#troop-management">Troop Management</a></h2>
+<h3 id="after-unloading"><a class="header" href="#after-unloading">After Unloading</a></h3>
+<p><strong>Troop Control</strong>:</p>
+<ul>
+<li>Troops become deployed group</li>
+<li>Assigned group ID</li>
+<li>Control via commands or F10</li>
+</ul>
+<p><strong>Movement</strong>:</p>
+<pre><code>-bind &lt;troop-id&gt;
+</code></pre>
+<p>Then use F10 → Actions → Move (costs 15 points)</p>
+<p><strong>Deletion</strong>:</p>
+<pre><code>-delete &lt;troop-id&gt;
+</code></pre>
+<p>Gives 50% refund</p>
+<h2 id="see-also-5"><a class="header" href="#see-also-5">See Also</a></h2>
+<ul>
+<li><a href="f10-menu/../reference/deployables.html">Deployable Units Reference</a> - Troop types and costs</li>
+<li><a href="f10-menu/../gameplay/capturing-objectives.html">Capturing Objectives</a></li>
+<li><a href="f10-menu/./cargo.html">Cargo Operations</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="early-warning-radar-ewr"><a class="header" href="#early-warning-radar-ewr">Early Warning Radar (EWR)</a></h1>
+<p>Get real-time radar reports on enemy and friendly aircraft positions for enhanced situational awareness.</p>
+<h2 id="overview-4"><a class="header" href="#overview-4">Overview</a></h2>
+<p>The EWR system provides:</p>
+<ul>
+<li>Enemy aircraft positions</li>
+<li>Altitude and heading information</li>
+<li>Distance and bearing from your position</li>
+<li>Friendly aircraft locations</li>
+<li>Tactical intelligence</li>
+</ul>
+<h2 id="ewr-menu-1"><a class="header" href="#ewr-menu-1">EWR Menu</a></h2>
+<p>Access via F10 → EWR</p>
+<p><strong>Menu Options</strong>:</p>
+<ul>
+<li><strong>Report</strong>: Enemy aircraft report</li>
+<li><strong>Toggle</strong>: Enable/disable EWR reports</li>
+<li><strong>Friendly Report</strong>: Show friendly aircraft</li>
+<li><strong>Units to Imperial</strong>: Switch to feet/nautical miles</li>
+<li><strong>Units to Metric</strong>: Switch to meters/kilometers</li>
+</ul>
+<h2 id="enemy-report"><a class="header" href="#enemy-report">Enemy Report</a></h2>
+<p><strong>Request Report</strong>:</p>
+<pre><code>F10 → EWR → Report
+</code></pre>
+<p><strong>Report Format</strong>:</p>
+<pre><code>BRAA: Bearing, Range, Altitude, Aspect
+
+BRAA 045/25/15000/HOT
+BRAA 180/40/5000/FLANK
+BRAA 270/15/20000/COLD
+</code></pre>
+<p><strong>Reading</strong>:</p>
+<ul>
+<li><strong>Bearing</strong>: Direction from you (degrees)</li>
+<li><strong>Range</strong>: Distance (nm or km)</li>
+<li><strong>Altitude</strong>: Height (feet or meters)</li>
+<li><strong>Aspect</strong>:
+<ul>
+<li>HOT: Coming toward you</li>
+<li>COLD: Going away from you</li>
+<li>FLANK: Crossing left/right</li>
+<li>BEAM: 90° to you</li>
+</ul>
+</li>
+</ul>
+<p><strong>Example</strong>:</p>
+<pre><code>BRAA 045/25/15000/HOT
+</code></pre>
+<p>= Enemy at 045°, 25nm away, 15,000ft, coming toward you</p>
+<h2 id="friendly-report"><a class="header" href="#friendly-report">Friendly Report</a></h2>
+<p><strong>Request Report</strong>:</p>
+<pre><code>F10 → EWR → Friendly Report
+</code></pre>
+<p>Shows same format for friendly aircraft:</p>
+<ul>
+<li>Your team's aircraft positions</li>
+<li>Coordination information</li>
+</ul>
+<h2 id="toggle-ewr"><a class="header" href="#toggle-ewr">Toggle EWR</a></h2>
+<p><strong>Enable/Disable</strong>:</p>
+<pre><code>F10 → EWR → Toggle
+</code></pre>
+<p><strong>Effect</strong>:</p>
+<ul>
+<li>ON: Automatic periodic reports</li>
+<li>OFF: Manual request only</li>
+<li>Preference per player</li>
+</ul>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>ON: High-threat environment</li>
+<li>OFF: Reduce message spam</li>
+</ul>
+<h2 id="unit-systems"><a class="header" href="#unit-systems">Unit Systems</a></h2>
+<p><strong>Imperial</strong>:</p>
+<pre><code>F10 → EWR → Units to Imperial
+</code></pre>
+<ul>
+<li>Feet (altitude)</li>
+<li>Nautical miles (range)</li>
+<li>Standard for aviation</li>
+</ul>
+<p><strong>Metric</strong>:</p>
+<pre><code>F10 → EWR → Units to Metric
+</code></pre>
+<ul>
+<li>Meters (altitude)</li>
+<li>Kilometers (range)</li>
+<li>International standard</li>
+</ul>
+<p><strong>Changes apply immediately</strong></p>
+<h2 id="ewr-limitations"><a class="header" href="#ewr-limitations">EWR Limitations</a></h2>
+<p><strong>Not Real-Time</strong>:</p>
+<ul>
+<li>Report is snapshot at time of request</li>
+<li>Aircraft move constantly between reports</li>
+</ul>
+<p><strong>Coverage Limits</strong>:</p>
+<ul>
+<li>Depends on deployed EWR radar sites</li>
+<li>Terrain affects radar coverage</li>
+<li>Low-altitude contacts may not appear</li>
+</ul>
+<p><strong>No Identification</strong>:</p>
+<ul>
+<li>Doesn't specify aircraft type</li>
+<li>All contacts shown generically</li>
+</ul>
+<h2 id="see-also-6"><a class="header" href="#see-also-6">See Also</a></h2>
+<ul>
+<li><a href="f10-menu/./actions.html">Actions Menu</a> - Deploy AWACS for better coverage</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="artillery-missions-1"><a class="header" href="#artillery-missions-1">Artillery Missions</a></h1>
+<p>Coordinate devastating artillery strikes using the JTAC system.</p>
+<h2 id="overview-5"><a class="header" href="#overview-5">Overview</a></h2>
+<p>Artillery provides:</p>
+<ul>
+<li>Indirect fire support</li>
+<li>Area suppression</li>
+<li>Precision strikes (with JTAC)</li>
+<li>Cost-effective firepower</li>
+</ul>
+<h2 id="requirements-2"><a class="header" href="#requirements-2">Requirements</a></h2>
+<ol>
+<li><strong>JTAC unit</strong> with target</li>
+<li><strong>Artillery battery</strong> in range</li>
+<li><strong>Clear line of fire</strong></li>
+<li><strong>Ammunition</strong></li>
+</ol>
+<h2 id="requesting-fire"><a class="header" href="#requesting-fire">Requesting Fire</a></h2>
+<p><strong>Via F10 Menu</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Artillery → [Battery ID] → [Rounds]
+</code></pre>
+<p><strong>Process</strong>:</p>
+<ol>
+<li>JTAC identifies target</li>
+<li>Select artillery battery</li>
+<li>Choose rounds (1, 3, 5, 10, All)</li>
+<li>Battery fires</li>
+<li>Rounds impact near target</li>
+</ol>
+<h2 id="fire-adjustment"><a class="header" href="#fire-adjustment">Fire Adjustment</a></h2>
+<p><strong>After Initial Volley</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Artillery → [Battery] → Adjust Fire
+</code></pre>
+<p><strong>Adjustments</strong>:</p>
+<ul>
+<li><strong>Short</strong>: Increase range</li>
+<li><strong>Long</strong>: Decrease range</li>
+<li><strong>Left</strong>: Shift left</li>
+<li><strong>Right</strong>: Shift right</li>
+</ul>
+<p><strong>Typical</strong>: 50-100m per adjustment</p>
+<h2 id="fire-missions-1"><a class="header" href="#fire-missions-1">Fire Missions</a></h2>
+<h3 id="registration-fire"><a class="header" href="#registration-fire">Registration Fire</a></h3>
+<p><strong>Purpose</strong>: Establish accuracy</p>
+<p><strong>Process</strong>:</p>
+<ol>
+<li>Fire 1-3 rounds</li>
+<li>Observe impacts</li>
+<li>Adjust as needed</li>
+<li>Note corrections</li>
+</ol>
+<h3 id="fire-for-effect"><a class="header" href="#fire-for-effect">Fire for Effect</a></h3>
+<p><strong>Purpose</strong>: Maximum damage</p>
+<p><strong>Process</strong>:</p>
+<ol>
+<li>After registration</li>
+<li>Fire 5-10+ rounds</li>
+<li>Saturate area</li>
+<li>Assess damage</li>
+</ol>
+<h3 id="suppression"><a class="header" href="#suppression">Suppression</a></h3>
+<p><strong>Purpose</strong>: Keep enemy pinned</p>
+<p><strong>Process</strong>:</p>
+<ol>
+<li>Continuous fire</li>
+<li>Area coverage</li>
+<li>Prevents movement</li>
+<li>Supports friendly advance</li>
+</ol>
+<h2 id="ammunition-management"><a class="header" href="#ammunition-management">Ammunition Management</a></h2>
+<h3 id="checking-ammo"><a class="header" href="#checking-ammo">Checking Ammo</a></h3>
+<p><strong>JTAC Status shows</strong>:</p>
+<pre><code>available artillery: [54321(25)]
+</code></pre>
+<p>= Battery 54321 with 25 rounds</p>
+<h3 id="conservation"><a class="header" href="#conservation">Conservation</a></h3>
+<ul>
+<li>Use minimum effective rounds</li>
+<li>Save for critical moments</li>
+<li>Resupply via logistics</li>
+<li>Don't waste on low-value targets</li>
+</ul>
+<h2 id="artillery-specifications"><a class="header" href="#artillery-specifications">Artillery Specifications</a></h2>
+<p><strong>Max Range</strong>: 300 km (PG Tempest)
+<strong>Adjustment</strong>: 50-100m per adjustment (Short/Long/Left/Right)
+<strong>Time of Flight</strong>: Varies by range (~30-60 seconds)</p>
+<h2 id="see-also-7"><a class="header" href="#see-also-7">See Also</a></h2>
+<ul>
+<li><a href="advanced/../f10-menu/jtac.html">JTAC System</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="air-launched-cruise-missiles"><a class="header" href="#air-launched-cruise-missiles">Air-Launched Cruise Missiles</a></h1>
+<p>Deploy long-range cruise missiles for precision strikes on high-value targets.</p>
+<h2 id="overview-6"><a class="header" href="#overview-6">Overview</a></h2>
+<p>ALCMs provide:</p>
+<ul>
+<li>Stand-off capability</li>
+<li>Precision strikes</li>
+<li>High survivability</li>
+<li>Strategic reach</li>
+</ul>
+<h2 id="deploying-alcm-units"><a class="header" href="#deploying-alcm-units">Deploying ALCM Units</a></h2>
+<p><strong>Via Actions Menu</strong>:</p>
+<pre><code>F10 → Actions → Deploy ALCM → [Location]
+</code></pre>
+<p><strong>Cost</strong>: Typically 1000-3000 points</p>
+<p><strong>Unit</strong>: Usually bomber/strike aircraft (Tu-95, B-52, etc.)</p>
+<h2 id="requesting-alcm-strike"><a class="header" href="#requesting-alcm-strike">Requesting ALCM Strike</a></h2>
+<p><strong>Via JTAC Menu</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → ALCM → [Unit ID] → [Parameters]
+</code></pre>
+<p><strong>Requirements</strong>:</p>
+<ol>
+<li>Deployed ALCM unit</li>
+<li>JTAC with contacts</li>
+<li>Sufficient missiles</li>
+<li>In range</li>
+</ol>
+<h2 id="strike-parameters"><a class="header" href="#strike-parameters">Strike Parameters</a></h2>
+<h3 id="missiles-per-target"><a class="header" href="#missiles-per-target">Missiles Per Target</a></h3>
+<p><strong>Options</strong>: 1, 2, or 4 missiles per target</p>
+<p><strong>Selection</strong>:</p>
+<ul>
+<li>High-value: 2-4 missiles</li>
+<li>Regular: 1-2 missiles</li>
+<li>Multiple targets: 1 each</li>
+</ul>
+<h3 id="magazine-expenditure"><a class="header" href="#magazine-expenditure">Magazine Expenditure</a></h3>
+<p><strong>Options</strong>:</p>
+<ul>
+<li><strong>Quarter</strong>: 25% of missiles</li>
+<li><strong>Half</strong>: 50% of missiles</li>
+<li><strong>All</strong>: 100% of missiles</li>
+</ul>
+<p><strong>Considerations</strong>:</p>
+<ul>
+<li>Save some for later vs. maximum effect now</li>
+<li>Resupply via logistics</li>
+</ul>
+<h2 id="target-selection"><a class="header" href="#target-selection">Target Selection</a></h2>
+<p><strong>JTAC Contacts</strong>:</p>
+<ul>
+<li>ALCM strikes all contacts JTAC has</li>
+<li>Prioritized by JTAC's priority list</li>
+<li>Up to magazine limit</li>
+</ul>
+<p><strong>Optimal Targets</strong>:</p>
+<ul>
+<li>SAM systems</li>
+<li>Armored formations</li>
+<li>Command posts</li>
+<li>Logistics sites</li>
+<li>High-value units</li>
+</ul>
+<h2 id="mission-profile"><a class="header" href="#mission-profile">Mission Profile</a></h2>
+<p><strong>Typical ALCM Strike</strong>:</p>
+<ol>
+<li>Unit receives launch order</li>
+<li>Aircraft launches missiles</li>
+<li>Missiles fly to targets</li>
+<li>Impact in sequence</li>
+<li>BDA via JTAC</li>
+</ol>
+<p><strong>Time to Impact</strong>: 5-15 minutes depending on range</p>
+<h2 id="alcm-specifications"><a class="header" href="#alcm-specifications">ALCM Specifications</a></h2>
+<p><strong>Deployment Cost</strong> (PG Tempest):</p>
+<ul>
+<li>S-3B: 25 points</li>
+<li>Tu-95/Tu-160: 150 points</li>
+</ul>
+<p><strong>Max Range</strong>: 300 km
+<strong>Time to Impact</strong>: 5-15 minutes (varies by range)
+<strong>RTB Refund</strong>: 25% of deployment cost</p>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ul>
+<li>Limited missiles (check JTAC status for count)</li>
+<li>Expensive to deploy (25-150 points)</li>
+<li>Depends on JTAC having contacts</li>
+<li>Not reusable immediately (reload time via logistics)</li>
+<li><strong>Max range</strong>: <strong>300 km</strong> (PG Tempest)</li>
+<li>JTAC must have detected targets</li>
+</ul>
+<h2 id="see-also-8"><a class="header" href="#see-also-8">See Also</a></h2>
+<ul>
+<li><a href="advanced/../f10-menu/jtac.html">JTAC System</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="complete-chat-command-reference"><a class="header" href="#complete-chat-command-reference">Complete Chat Command Reference</a></h1>
+<p>Quick reference for all Fowl Engine chat commands.</p>
+<h2 id="player-commands"><a class="header" href="#player-commands">Player Commands</a></h2>
+<h3 id="registration--status-1"><a class="header" href="#registration--status-1">Registration &amp; Status</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead><tbody>
+<tr><td><code>blue</code></td><td>Register for Blue team</td><td><code>blue</code></td></tr>
+<tr><td><code>red</code></td><td>Register for Red team</td><td><code>red</code></td></tr>
+<tr><td><code>-switch blue</code></td><td>Switch to Blue team</td><td><code>-switch blue</code></td></tr>
+<tr><td><code>-switch red</code></td><td>Switch to Red team</td><td><code>-switch red</code></td></tr>
+<tr><td><code>-lives</code></td><td>Check lives, points, status</td><td><code>-lives</code></td></tr>
+<tr><td><code>-balance</code></td><td>Check point balance</td><td><code>-balance</code></td></tr>
+<tr><td><code>-time</code></td><td>Check server restart time</td><td><code>-time</code></td></tr>
+<tr><td><code>-help</code></td><td>Show command list</td><td><code>-help</code></td></tr>
+</tbody></table>
+</div>
+<h3 id="unit-management"><a class="header" href="#unit-management">Unit Management</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead><tbody>
+<tr><td><code>-bind &lt;id&gt;</code></td><td>Bind troop for control</td><td><code>-bind 12345</code></td></tr>
+<tr><td><code>-delete &lt;id&gt;</code></td><td>Delete deployed group</td><td><code>-delete 12345</code></td></tr>
+</tbody></table>
+</div>
+<h3 id="jtac-commands-1"><a class="header" href="#jtac-commands-1">JTAC Commands</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead><tbody>
+<tr><td><code>-jtac status</code></td><td>Get JTAC status</td><td><code>-jtac status</code></td></tr>
+</tbody></table>
+</div>
+<h3 id="point-transfers-if-enabled"><a class="header" href="#point-transfers-if-enabled">Point Transfers (if enabled)</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Command</th><th>Description</th><th>Example</th></tr></thead><tbody>
+<tr><td><code>-transfer &lt;pts&gt; &lt;player&gt;</code></td><td>Transfer points to player</td><td><code>-transfer 500 Viper21</code></td></tr>
+<tr><td><code>-transfer &lt;pts&gt; objective:&lt;name&gt;</code></td><td>Transfer points to objective</td><td><code>-transfer 100 objective:Batumi</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="command-syntax-notes"><a class="header" href="#command-syntax-notes">Command Syntax Notes</a></h2>
+<ul>
+<li><code>&lt;required&gt;</code> = Required parameter</li>
+<li><code>[optional]</code> = Optional parameter</li>
+<li><code>&lt;option1|option2&gt;</code> = Choose one</li>
+<li>Case-insensitive for most commands</li>
+<li>Player names may be case-sensitive</li>
+</ul>
+<h2 id="see-also-9"><a class="header" href="#see-also-9">See Also</a></h2>
+<ul>
+<li><a href="reference/../gameplay/chat-commands.html">Chat Commands Guide</a> - Detailed explanations</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="action-types-reference"><a class="header" href="#action-types-reference">Action Types Reference</a></h1>
+<p>Complete reference of all action types available via the F10 Actions menu.</p>
+<h2 id="support-aircraft-1"><a class="header" href="#support-aircraft-1">Support Aircraft</a></h2>
+<h3 id="awacs-airborne-warning-and-control-system"><a class="header" href="#awacs-airborne-warning-and-control-system">AWACS (Airborne Warning And Control System)</a></h3>
+<ul>
+<li><strong>Type</strong>: Early warning radar aircraft (A-50/E-3)</li>
+<li><strong>Cost</strong>: <strong>50 points</strong> (PG Tempest)</li>
+<li><strong>Waypoint</strong>: <strong>10 points</strong></li>
+<li><strong>RTB Refund</strong>: 25% of cost when returns to base</li>
+<li><strong>Limit</strong>: 2 per side</li>
+<li><strong>Function</strong>: Provides radar coverage (400km range) and tactical coordination</li>
+<li><strong>Best Use</strong>: Central position behind lines</li>
+<li><strong>Lifespan</strong>: 8 hours duration</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h3 id="tanker"><a class="header" href="#tanker">Tanker</a></h3>
+<ul>
+<li><strong>Type</strong>: Aerial refueling aircraft (KC-135/IL-78)</li>
+<li><strong>Cost</strong>: <strong>See server</strong> (not specified in Blue actions)</li>
+<li><strong>Waypoint</strong>: <strong>5 points</strong></li>
+<li><strong>Function</strong>: Extends mission duration for friendlies</li>
+<li><strong>Best Use</strong>: Along flight routes, safe altitude</li>
+<li><strong>Lifespan</strong>: Until destroyed or RTB</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h2 id="fighter-packages-1"><a class="header" href="#fighter-packages-1">Fighter Packages</a></h2>
+<h3 id="cap-combat-air-patrol"><a class="header" href="#cap-combat-air-patrol">CAP (Combat Air Patrol)</a></h3>
+<ul>
+<li><strong>Type</strong>: Air superiority fighters (F-15C)</li>
+<li><strong>Cost</strong>: <strong>200 points</strong> (PG Tempest)</li>
+<li><strong>Waypoint</strong>: <strong>5 points</strong></li>
+<li><strong>Duration</strong>: 5 hours</li>
+<li><strong>Function</strong>: Defend airspace, intercept enemy aircraft</li>
+<li><strong>Best Use</strong>: Over friendly territory or objectives</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h3 id="sead-suppression-of-enemy-air-defenses"><a class="header" href="#sead-suppression-of-enemy-air-defenses">SEAD (Suppression of Enemy Air Defenses)</a></h3>
+<ul>
+<li><strong>Type</strong>: Anti-SAM specialized aircraft</li>
+<li><strong>Cost</strong>: <strong>200 points</strong> (PG Tempest)</li>
+<li><strong>Waypoint</strong>: <strong>5 points</strong></li>
+<li><strong>Duration</strong>: 2 hours</li>
+<li><strong>Function</strong>: Destroy/suppress enemy SAM sites</li>
+<li><strong>Best Use</strong>: Before strike packages, along ingress routes</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h3 id="attack-helicopters"><a class="header" href="#attack-helicopters">Attack Helicopters</a></h3>
+<ul>
+<li><strong>Type</strong>: Armed helicopters (Mi-24, AH-64)</li>
+<li><strong>Cost</strong>: <strong>200-300 points</strong> (PG Tempest)</li>
+<li><strong>Waypoint</strong>: <strong>5 points</strong></li>
+<li><strong>Duration</strong>: 2 hours</li>
+<li><strong>Function</strong>: Close air support, anti-armor</li>
+<li><strong>Best Use</strong>: Ground attack, supporting advances</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h3 id="light-attack-helicopters"><a class="header" href="#light-attack-helicopters">Light Attack Helicopters</a></h3>
+<ul>
+<li><strong>Type</strong>: Light attack helicopters</li>
+<li><strong>Cost</strong>: <strong>120 points</strong> (PG Tempest)</li>
+<li><strong>Duration</strong>: 2 hours</li>
+<li><strong>Function</strong>: Light CAS, recon</li>
+<li><strong>Best Use</strong>: Low-threat areas</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h2 id="drones--missiles-1"><a class="header" href="#drones--missiles-1">Drones &amp; Missiles</a></h2>
+<h3 id="reconnaissance-drone-large"><a class="header" href="#reconnaissance-drone-large">Reconnaissance Drone (Large)</a></h3>
+<ul>
+<li><strong>Type</strong>: MQ-9 Reaper UAV</li>
+<li><strong>Cost</strong>: <strong>100 points</strong> (PG Tempest)</li>
+<li><strong>Waypoint</strong>: <strong>5 points</strong></li>
+<li><strong>Duration</strong>: 12 hours</li>
+<li><strong>JTAC Range</strong>: <strong>18 km</strong> (no line-of-sight required)</li>
+<li><strong>JTAC Capability</strong>: Yes - can laser designate and call fires</li>
+<li><strong>Function</strong>: Intelligence gathering, target identification, fire coordination</li>
+<li><strong>Best Use</strong>: Over enemy territory, deep reconnaissance, fire support</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h3 id="reconnaissance-drone-small"><a class="header" href="#reconnaissance-drone-small">Reconnaissance Drone (Small)</a></h3>
+<ul>
+<li><strong>Type</strong>: Small UAV</li>
+<li><strong>Cost</strong>: <strong>50 points</strong> (PG Tempest)</li>
+<li><strong>Waypoint</strong>: <strong>5 points</strong></li>
+<li><strong>Duration</strong>: 12 hours</li>
+<li><strong>JTAC Range</strong>: <strong>12 km</strong> (no line-of-sight required)</li>
+<li><strong>JTAC Capability</strong>: Yes - can laser designate and call fires</li>
+<li><strong>Function</strong>: Budget recon and JTAC capability</li>
+<li><strong>Best Use</strong>: Economical surveillance and fire support</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h3 id="cruise-missile-platform"><a class="header" href="#cruise-missile-platform">Cruise Missile Platform</a></h3>
+<ul>
+<li><strong>Type</strong>: ALCM launcher (S-3B/Tu-95/Tu-160)</li>
+<li><strong>Cost</strong>: <strong>25-150 points</strong> (PG Tempest)
+<ul>
+<li>S-3B: <strong>25 points</strong></li>
+<li>Tu-95: <strong>150 points</strong></li>
+<li>Tu-160: <strong>150 points</strong></li>
+</ul>
+</li>
+<li><strong>Waypoint</strong>: <strong>10 points</strong></li>
+<li><strong>Duration</strong>: 8 hours</li>
+<li><strong>Function</strong>: Long-range precision cruise missile strikes</li>
+<li><strong>Best Use</strong>: High-value, heavily defended targets</li>
+<li><strong>Waypoint Control</strong>: Yes</li>
+</ul>
+<h2 id="ground-units---defensive"><a class="header" href="#ground-units---defensive">Ground Units - Defensive</a></h2>
+<h3 id="sam-battery-deployable-via-cargo"><a class="header" href="#sam-battery-deployable-via-cargo">SAM Battery (Deployable via Cargo)</a></h3>
+<ul>
+<li><strong>Type</strong>: Surface-to-air missile systems</li>
+<li><strong>Cost</strong>: 5-100 points (PG Tempest)
+<ul>
+<li>AAA: 5-50 points (1-2 crates)</li>
+<li>IR SAMs: 35-50 points (2 crates)</li>
+<li>Radar SAMs: 40-100 points (2-4 crates)</li>
+</ul>
+</li>
+<li><strong>Function</strong>: Area air defense</li>
+<li><strong>Best Use</strong>: Protect objectives, strategic positions</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (15 points)</li>
+<li><strong>Delete Refund</strong>: 50% of cost</li>
+</ul>
+<p>See <a href="reference/./deployables.html">Deployable Units Reference</a> for complete list.</p>
+<h3 id="manpads-team-troop-type"><a class="header" href="#manpads-team-troop-type">MANPADS Team (Troop Type)</a></h3>
+<ul>
+<li><strong>Type</strong>: Man-portable air defense (Igla/Stinger)</li>
+<li><strong>Cost</strong>: <strong>25 points</strong> (PG Tempest)</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Can Capture</strong>: NO</li>
+<li><strong>Function</strong>: Point air defense</li>
+<li><strong>Best Use</strong>: Close-in protection, ambush positions</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (15 points)</li>
+</ul>
+<p>See <a href="reference/./deployables.html">Deployable Units Reference</a> for all troop types.</p>
+<h2 id="ground-units---offensive"><a class="header" href="#ground-units---offensive">Ground Units - Offensive</a></h2>
+<h3 id="tank-platoon-deployable-via-cargo"><a class="header" href="#tank-platoon-deployable-via-cargo">Tank Platoon (Deployable via Cargo)</a></h3>
+<ul>
+<li><strong>Type</strong>: Main battle tanks</li>
+<li><strong>Cost</strong>: 65-80 points (PG Tempest, 3 crates each)
+<ul>
+<li>T-55A, Type 59, Chieftain, Leo 1A3, M60: 65 pts</li>
+<li>T-72B, T-64, Leopard 2A4: 80 pts</li>
+</ul>
+</li>
+<li><strong>Function</strong>: Armored assault, defensive anchor</li>
+<li><strong>Best Use</strong>: Offensive operations, objective defense</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (15 points)</li>
+<li><strong>Delete Refund</strong>: 50% of cost</li>
+<li><strong>JTAC Range</strong>: 1.5-3 km (line-of-sight required)</li>
+</ul>
+<p>See <a href="reference/./deployables.html">Deployable Units Reference</a> for complete list.</p>
+<h3 id="apcifv-squad-deployable-via-cargo"><a class="header" href="#apcifv-squad-deployable-via-cargo">APC/IFV Squad (Deployable via Cargo)</a></h3>
+<ul>
+<li><strong>Type</strong>: Armored personnel carriers and infantry fighting vehicles</li>
+<li><strong>Cost</strong>: 20-45 points (PG Tempest, 2 crates each)
+<ul>
+<li>BTR-80, PT-76: 20 pts</li>
+<li>BTR-82A, BTR-RD, LAV-25, Scimitar, Scorpion: 25 pts</li>
+<li>BMP-2, M2A2 Bradley: 45 pts</li>
+</ul>
+</li>
+<li><strong>Function</strong>: Infantry transport, fire support, reconnaissance</li>
+<li><strong>JTAC Range</strong>: 3-5 km (line-of-sight required)</li>
+<li><strong>Best Use</strong>: Combined arms, infantry support, recon</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (15 points)</li>
+<li><strong>Delete Refund</strong>: 50% of cost</li>
+</ul>
+<p>See <a href="reference/./deployables.html">Deployable Units Reference</a> for complete list.</p>
+<h3 id="artillery-battery-deployable-via-cargo"><a class="header" href="#artillery-battery-deployable-via-cargo">Artillery Battery (Deployable via Cargo)</a></h3>
+<ul>
+<li><strong>Type</strong>: Self-propelled howitzers and MLRS</li>
+<li><strong>Cost</strong>: 50-200 points (PG Tempest, 2-3 crates)
+<ul>
+<li>Howitzers (M109, 2S19, L118, 2S9, TOS-1A): 50 pts</li>
+<li>Light MLRS (BM-21): 60 pts</li>
+<li>Medium MLRS (Uragan): 80 pts</li>
+<li>Heavy MLRS (M270, Smerch): 100 pts</li>
+<li>Ballistic Missiles (ATACMS, GMLRS, Iskander): 200 pts</li>
+</ul>
+</li>
+<li><strong>Function</strong>: Indirect fire support via JTAC</li>
+<li><strong>Max Range</strong>: 300 km</li>
+<li><strong>Best Use</strong>: Fire base for JTAC missions</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (15 points)</li>
+<li><strong>Delete Refund</strong>: 50% of cost</li>
+</ul>
+<p>See <a href="reference/./deployables.html">Deployable Units Reference</a> for complete list.</p>
+<h2 id="ground-units---infantry"><a class="header" href="#ground-units---infantry">Ground Units - Infantry</a></h2>
+<h3 id="standard-infantry-"><a class="header" href="#standard-infantry-">Standard Infantry ⭐</a></h3>
+<ul>
+<li><strong>Type</strong>: Standard infantry</li>
+<li><strong>Cost</strong>: <strong>0 points</strong> (FREE!)</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>JTAC Range</strong>: 8 km (no line-of-sight!) ⭐</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>Function</strong>: Capture objectives, reconnaissance</li>
+<li><strong>Best Use</strong>: Objective capture AND recon through terrain</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (15 points) or transport</li>
+</ul>
+<h3 id="anti-tank-infantry"><a class="header" href="#anti-tank-infantry">Anti-Tank Infantry</a></h3>
+<ul>
+<li><strong>Type</strong>: Infantry with anti-tank weapons</li>
+<li><strong>Cost</strong>: <strong>2 points</strong></li>
+<li><strong>Weight</strong>: 800 kg per squad</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+<li><strong>Max Allowed</strong>: 30</li>
+<li><strong>Function</strong>: Combat operations + capture</li>
+<li><strong>Best Use</strong>: Capture + anti-armor</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (15 points) or transport</li>
+</ul>
+<h3 id="mortar-infantry"><a class="header" href="#mortar-infantry">Mortar Infantry</a></h3>
+<ul>
+<li><strong>Type</strong>: Infantry with mortars</li>
+<li><strong>Cost</strong>: <strong>5 points</strong></li>
+<li><strong>Weight</strong>: 1000 kg per squad</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>Function</strong>: Combat + capture + indirect fire</li>
+<li><strong>Best Use</strong>: Capture + fire support</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (15 points) or transport</li>
+</ul>
+<p>See <a href="reference/./deployables.html">Deployable Units Reference</a> for complete details.</p>
+<h2 id="logistics-actions-1"><a class="header" href="#logistics-actions-1">Logistics Actions</a></h2>
+<h3 id="logistics-repair"><a class="header" href="#logistics-repair">Logistics Repair</a></h3>
+<ul>
+<li><strong>Type</strong>: Infrastructure repair via helicopter or fixed-wing</li>
+<li><strong>Cost</strong>: <strong>100 points</strong> (helo) / <strong>200 points</strong> (fast)</li>
+<li><strong>Function</strong>: Deliver repair crate, increase objective logi by one step</li>
+<li><strong>Target</strong>: Your owned objectives</li>
+<li><strong>Effect</strong>: Immediate logi increase upon delivery</li>
+<li><strong>Use</strong>: Prevent capture, restore functionality</li>
+<li><strong>Speed</strong>: Fast option reaches quickly</li>
+</ul>
+<h3 id="logistics-transfer"><a class="header" href="#logistics-transfer">Logistics Transfer</a></h3>
+<ul>
+<li><strong>Type</strong>: Supply redistribution between objectives</li>
+<li><strong>Cost</strong>: <strong>100 points</strong></li>
+<li><strong>Function</strong>: Move supplies from one objective to another</li>
+<li><strong>Target</strong>: Two owned objectives you select</li>
+<li><strong>Effect</strong>: Balances supply levels</li>
+<li><strong>Use</strong>: Strategic supply management, emergency resupply</li>
+</ul>
+<h2 id="paratrooper-operations"><a class="header" href="#paratrooper-operations">Paratrooper Operations</a></h2>
+<h3 id="paratrooper-drop"><a class="header" href="#paratrooper-drop">Paratrooper Drop</a></h3>
+<ul>
+<li><strong>Type</strong>: Airborne infantry insertion (Standard troops)</li>
+<li><strong>Cost</strong>: <strong>100 points</strong> (PG Tempest)</li>
+<li><strong>Function</strong>: Rapid helicopter-delivered infantry</li>
+<li><strong>Capture Capable</strong>: Yes (Standard troops can capture)</li>
+<li><strong>Best Use</strong>: Quick objective capture, behind lines insertion</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+<li><strong>Movement</strong>: Via Move action (<strong>15 points</strong>) after landing</li>
+</ul>
+<h2 id="special-actions"><a class="header" href="#special-actions">Special Actions</a></h2>
+<h3 id="bomber-mission"><a class="header" href="#bomber-mission">Bomber Mission</a></h3>
+<ul>
+<li><strong>Type</strong>: Heavy bomber strike (Tu-95/B-52)</li>
+<li><strong>Cost</strong>: <strong>200 points</strong> (PG Tempest)</li>
+<li><strong>Duration</strong>: Until mission complete</li>
+<li><strong>Targets</strong>: 15 targets per mission</li>
+<li><strong>Power</strong>: 1000kg equivalent per target</li>
+<li><strong>Function</strong>: Massive area bombardment</li>
+<li><strong>Best Use</strong>: Logistics complexes, large formations</li>
+<li><strong>Waypoint Control</strong>: No (one-way mission)</li>
+</ul>
+<h3 id="deploy-ewr-radar"><a class="header" href="#deploy-ewr-radar">Deploy EWR Radar</a></h3>
+<ul>
+<li><strong>Type</strong>: Ground-based Early Warning Radar</li>
+<li><strong>Cost</strong>: <strong>50 points</strong> (PG Tempest)</li>
+<li><strong>Function</strong>: Deploy AN/FPS-117 radar site</li>
+<li><strong>Best Use</strong>: Fill radar coverage gaps</li>
+<li><strong>Deployment</strong>: Via helicopter transport</li>
+<li><strong>Lifespan</strong>: Until destroyed</li>
+</ul>
+<h3 id="naval-units"><a class="header" href="#naval-units">Naval Units</a></h3>
+<ul>
+<li><strong>Naval FARP Carrier</strong>: <strong>150 points</strong></li>
+<li><strong>Naval FARP Destroyer</strong>: <strong>100 points</strong></li>
+<li><strong>Deploy Ship</strong>: <strong>0 points</strong> (HMS Achilles)</li>
+<li><strong>Function</strong>: Forward rearming points at sea</li>
+<li><strong>Limit</strong>: Must deploy near friendly objective</li>
+</ul>
+<h2 id="waypoint-actions-1"><a class="header" href="#waypoint-actions-1">Waypoint Actions</a></h2>
+<p>These control already-deployed units (PG Tempest costs):</p>
+<ul>
+<li><strong>Move</strong>: <strong>15 points</strong> - Reposition ground units or troops</li>
+<li><strong>RTB (Return to Base)</strong>: <strong>0 points</strong> - Recall aircraft</li>
+<li><strong>Tanker Waypoint</strong>: <strong>5 points</strong> - Move tanker orbit</li>
+<li><strong>AWACS Waypoint</strong>: <strong>10 points</strong> - Reposition AWACS</li>
+<li><strong>Fighters Waypoint</strong>: <strong>5 points</strong> - Send fighters to new CAP location</li>
+<li><strong>Drone Waypoint</strong>: <strong>5 points</strong> - Redirect drone</li>
+<li><strong>SEAD Waypoint</strong>: <strong>5 points</strong> - Retask SEAD mission</li>
+<li><strong>Attack Waypoint</strong>: <strong>5 points</strong> - Retask attack helicopters</li>
+<li><strong>ALCM Waypoint</strong>: <strong>10 points</strong> - Reposition cruise missile platform</li>
+</ul>
+<h2 id="action-costs-by-category-pg-tempest"><a class="header" href="#action-costs-by-category-pg-tempest">Action Costs by Category (PG Tempest)</a></h2>
+<p><strong>Budget (0-50 pts)</strong>:</p>
+<ul>
+<li><strong>Deploy EWR</strong>: 50 pts</li>
+<li><strong>Drone (Small)</strong>: 50 pts</li>
+<li><strong>AWACS</strong>: 50 pts</li>
+<li><strong>ALCM (S-3B)</strong>: 25 pts</li>
+</ul>
+<p><strong>Economy (100-150 pts)</strong>:</p>
+<ul>
+<li><strong>Drone (Large)</strong>: 100 pts</li>
+<li><strong>Paratroops</strong>: 100 pts</li>
+<li><strong>Logistics Repair</strong>: 100 pts</li>
+<li><strong>Logistics Transfer</strong>: 100 pts</li>
+<li><strong>Light Attack Helicopters</strong>: 120 pts</li>
+<li><strong>Naval FARP Destroyer</strong>: 100 pts</li>
+<li><strong>ALCM (Tu-95/Tu-160)</strong>: 150 pts</li>
+<li><strong>Naval FARP Carrier</strong>: 150 pts</li>
+</ul>
+<p><strong>Standard (200-300 pts)</strong>:</p>
+<ul>
+<li><strong>Fighters (CAP)</strong>: 200 pts</li>
+<li><strong>SEAD Package</strong>: 200 pts</li>
+<li><strong>Bomber Mission</strong>: 200 pts</li>
+<li><strong>Logistics Repair (Fast)</strong>: 200 pts</li>
+<li><strong>Attack Helicopters</strong>: 200-300 pts</li>
+</ul>
+<p><strong>Waypoints (0-15 pts)</strong>:</p>
+<ul>
+<li><strong>RTB</strong>: 0 pts</li>
+<li><strong>Most Waypoints</strong>: 5 pts</li>
+<li><strong>AWACS/ALCM Waypoint</strong>: 10 pts</li>
+<li><strong>Move Ground Units</strong>: 15 pts</li>
+</ul>
+<p><strong>Note</strong>: Always check F10 menu for current costs, as server config may change</p>
+<h2 id="server-specific-actions"><a class="header" href="#server-specific-actions">Server-Specific Actions</a></h2>
+<p>Note: Available actions vary by server configuration. Check:</p>
+<ul>
+<li>Server Discord</li>
+<li>F10 Actions menu</li>
+<li>Server documentation</li>
+</ul>
+<p>Your server may have custom actions not listed here.</p>
+<h2 id="see-also-10"><a class="header" href="#see-also-10">See Also</a></h2>
+<ul>
+<li><a href="reference/../f10-menu/actions.html">Actions Menu</a> - How to use actions</li>
+<li><a href="reference/../gameplay/points-and-lives.html">Points System</a> - Earning and spending points</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="deployable-units-reference"><a class="header" href="#deployable-units-reference">Deployable Units Reference</a></h1>
+<p>Complete listing of all deployable ground units with costs, crate requirements, and limits for PG Tempest.</p>
+<h2 id="quick-reference-summary"><a class="header" href="#quick-reference-summary">Quick Reference Summary</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Category</th><th>Unit Count</th><th>Cost Range</th><th>Crate Range</th></tr></thead><tbody>
+<tr><td><strong>Radar SAMs</strong></td><td>5 types</td><td>40-100 pts</td><td>2-4 crates</td></tr>
+<tr><td><strong>IR SAMs</strong></td><td>4 types</td><td>35-50 pts</td><td>2 crates</td></tr>
+<tr><td><strong>AAA</strong></td><td>3 types</td><td>5-50 pts</td><td>1-2 crates</td></tr>
+<tr><td><strong>IFVs</strong></td><td>8 types</td><td>20-45 pts</td><td>2 crates</td></tr>
+<tr><td><strong>MBTs</strong></td><td>8 types</td><td>65-80 pts</td><td>3 crates</td></tr>
+<tr><td><strong>Artillery</strong></td><td>11 types</td><td>50-100 pts</td><td>2-3 crates</td></tr>
+<tr><td><strong>Ballistic Missiles</strong></td><td>6 types</td><td>200 pts</td><td>3 crates</td></tr>
+<tr><td><strong>Combined Groups</strong></td><td>2 types</td><td>250-500 pts</td><td>5 crates</td></tr>
+<tr><td><strong>Support</strong></td><td>Various</td><td>5-100 pts</td><td>1-4 crates</td></tr>
+<tr><td><strong>Troops</strong></td><td>4 types</td><td>0-25 pts</td><td>N/A (load at base)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Total Deployable Types</strong>: 50+ units across both coalitions</p>
+<hr />
+<h2 id="how-to-deploy"><a class="header" href="#how-to-deploy">How to Deploy</a></h2>
+<ol>
+<li>Load cargo helicopter/aircraft with crates at friendly objective</li>
+<li>Transport crates to deployment location</li>
+<li>Unload crates (must drop all required crates for unit type)</li>
+<li>Unit spawns automatically when all crates are delivered</li>
+</ol>
+<p><strong>Important Restrictions</strong>:</p>
+<p><strong>Drop Parameters</strong>:</p>
+<ul>
+<li><strong>Max drop height</strong>: 10-20m AGL (varies by unit)</li>
+<li><strong>Max drop speed</strong>: 50-350 knots (varies by unit)</li>
+</ul>
+<p><strong>Threatened Objectives</strong>:</p>
+<ul>
+<li>⚠️ <strong>CANNOT deploy</strong> troops or crates at threatened objectives!</li>
+<li>Error: "you can't deploy troops here while enemies are near"</li>
+<li>Wait for objective to clear (5 minute cooldown after enemies leave)</li>
+<li>Check for white circle = capturable (can still deploy there if you own it)</li>
+</ul>
+<hr />
+<h2 id="red-coalition-deployables"><a class="header" href="#red-coalition-deployables">RED COALITION DEPLOYABLES</a></h2>
+<h3 id="radar-sams"><a class="header" href="#radar-sams">Radar SAMs</a></h3>
+<h4 id="sa-15-tor"><a class="header" href="#sa-15-tor">SA-15 Tor</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "SA15 Tor" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="sa-6-kub"><a class="header" href="#sa-6-kub">SA-6 Kub</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>:
+<ul>
+<li>2x "Kub Launcher" (1500kg each)</li>
+<li>1x "Kub Radar" (1500kg)</li>
+</ul>
+</li>
+<li><strong>Total</strong>: 3 crates</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "Kub Repair/Rearm" crate (0 points)</li>
+</ul>
+<h4 id="sa-2-guideline"><a class="header" href="#sa-2-guideline">SA-2 Guideline</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>:
+<ul>
+<li>1x "SA-2 Launchers" (1500kg)</li>
+<li>1x "SA-2 Search Radar" (1500kg)</li>
+<li>1x "SA-2 Track Radar" (1500kg)</li>
+<li>1x "SA-2 Rangefinding Radar" (1500kg)</li>
+</ul>
+</li>
+<li><strong>Total</strong>: 4 crates</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "SA-2 Repair/Rearm" crate (0 points)</li>
+</ul>
+<h3 id="anti-aircraft-artillery-aaa"><a class="header" href="#anti-aircraft-artillery-aaa">Anti-Aircraft Artillery (AAA)</a></h3>
+<h4 id="zu-23-on-ural"><a class="header" href="#zu-23-on-ural">ZU-23 on Ural</a></h4>
+<ul>
+<li><strong>Cost</strong>: 5 points</li>
+<li><strong>Crates Required</strong>: 1x "ZU-23 on Ural" (1000kg)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="shilka-zsu-23-4"><a class="header" href="#shilka-zsu-23-4">Shilka (ZSU-23-4)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 15 points</li>
+<li><strong>Crates Required</strong>: 2x "Shilka Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="tunguska"><a class="header" href="#tunguska">Tunguska</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "Tunguska Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h3 id="ir-infrared-sams"><a class="header" href="#ir-infrared-sams">IR (Infrared) SAMs</a></h3>
+<h4 id="sa-9-strela-9p31"><a class="header" href="#sa-9-strela-9p31">SA-9 Strela (9P31)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 35 points</li>
+<li><strong>Crates Required</strong>: 2x "SA-9 Strela Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="sa-13-strela-10m3"><a class="header" href="#sa-13-strela-10m3">SA-13 Strela (10M3)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "SA-13 Strela Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h3 id="infantry-fighting-vehicles-ifvs"><a class="header" href="#infantry-fighting-vehicles-ifvs">Infantry Fighting Vehicles (IFVs)</a></h3>
+<h4 id="btr-82a"><a class="header" href="#btr-82a">BTR-82A</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "BTR Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 5 km (line-of-sight required)</li>
+</ul>
+<h4 id="bmp-2"><a class="header" href="#bmp-2">BMP-2</a></h4>
+<ul>
+<li><strong>Cost</strong>: 45 points</li>
+<li><strong>Crates Required</strong>: 2x "BMP2 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h4 id="btr-80"><a class="header" href="#btr-80">BTR-80</a></h4>
+<ul>
+<li><strong>Cost</strong>: 20 points</li>
+<li><strong>Crates Required</strong>: 2x "BTR80 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 5 km (line-of-sight required)</li>
+</ul>
+<h4 id="btr-rd"><a class="header" href="#btr-rd">BTR-RD</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "BTR-RD Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 4 km (line-of-sight required)</li>
+</ul>
+<h4 id="pt-76"><a class="header" href="#pt-76">PT-76</a></h4>
+<ul>
+<li><strong>Cost</strong>: 20 points</li>
+<li><strong>Crates Required</strong>: 2x "PT-76 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 5 km (line-of-sight required)</li>
+</ul>
+<h4 id="bmp-1"><a class="header" href="#bmp-1">BMP-1</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "BMP Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h3 id="main-battle-tanks-mbts"><a class="header" href="#main-battle-tanks-mbts">Main Battle Tanks (MBTs)</a></h3>
+<h4 id="t-72b"><a class="header" href="#t-72b">T-72B</a></h4>
+<ul>
+<li><strong>Cost</strong>: 80 points</li>
+<li><strong>Crates Required</strong>: 3x "T-72B Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 2 km (line-of-sight required)</li>
+</ul>
+<h4 id="t-64"><a class="header" href="#t-64">T-64</a></h4>
+<ul>
+<li><strong>Cost</strong>: 80 points</li>
+<li><strong>Crates Required</strong>: 3x "T64 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 2 km (line-of-sight required)</li>
+</ul>
+<h4 id="t-55a"><a class="header" href="#t-55a">T-55A</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "T-55A Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 1.5 km (line-of-sight required)</li>
+</ul>
+<h4 id="type-59"><a class="header" href="#type-59">Type 59</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "Type59 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 1.5 km (line-of-sight required)</li>
+</ul>
+<h3 id="artillery"><a class="header" href="#artillery">Artillery</a></h3>
+<h4 id="2s19-msta-152mm-sph"><a class="header" href="#2s19-msta-152mm-sph">2S19 Msta (152mm SPH)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 3x "Msta Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="tos-1a"><a class="header" href="#tos-1a">TOS-1A</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "TOS1 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="2s9-nona"><a class="header" href="#2s9-nona">2S9 Nona</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "2S9 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 5</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="bm-21-grad-mlrs"><a class="header" href="#bm-21-grad-mlrs">BM-21 Grad (MLRS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 60 points</li>
+<li><strong>Crates Required</strong>: 2x "Grad Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="9k57-uragan-mlrs"><a class="header" href="#9k57-uragan-mlrs">9K57 Uragan (MLRS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 80 points</li>
+<li><strong>Crates Required</strong>: 2x "Uragan Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="9a52-smerch-mlrs---he"><a class="header" href="#9a52-smerch-mlrs---he">9A52 Smerch (MLRS - HE)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 3x "Smerch Crate HE" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="9a52-smerch-mlrs---cluster-munitions"><a class="header" href="#9a52-smerch-mlrs---cluster-munitions">9A52 Smerch (MLRS - Cluster Munitions)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 3x "Smerch Crate CM" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="ballistic-missiles"><a class="header" href="#ballistic-missiles">Ballistic Missiles</a></h3>
+<h4 id="iskander-cluster-munitions"><a class="header" href="#iskander-cluster-munitions">Iskander (Cluster Munitions)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "IskanderCM Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 1</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="iskander-high-explosive"><a class="header" href="#iskander-high-explosive">Iskander (High Explosive)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "IskanderHE Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 1</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="support-units"><a class="header" href="#support-units">Support Units</a></h3>
+<h4 id="ammo-truck"><a class="header" href="#ammo-truck">Ammo Truck</a></h4>
+<ul>
+<li><strong>Cost</strong>: 10 points</li>
+<li><strong>Crates Required</strong>: 2x "Ammo Truck Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="combined-arms-groups"><a class="header" href="#combined-arms-groups">Combined Arms Groups</a></h3>
+<h4 id="group-atgm"><a class="header" href="#group-atgm">Group ATGM</a></h4>
+<ul>
+<li><strong>Cost</strong>: 250 points</li>
+<li><strong>Crates Required</strong>: 5x "Group ATGM Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>Note</strong>: Full combined arms ATGM group</li>
+</ul>
+<h4 id="group-armor"><a class="header" href="#group-armor">Group Armor</a></h4>
+<ul>
+<li><strong>Cost</strong>: 500 points</li>
+<li><strong>Crates Required</strong>: 5x "Group Armor Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>Note</strong>: Full combined arms armor group</li>
+</ul>
+<h3 id="early-warning-radar"><a class="header" href="#early-warning-radar">Early Warning Radar</a></h3>
+<h4 id="1l13-ewr"><a class="header" href="#1l13-ewr">1L13 EWR</a></h4>
+<ul>
+<li><strong>Cost</strong>: 20 points</li>
+<li><strong>Crates Required</strong>: 1x "1L13 Crate" (1500kg)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>EWR Range</strong>: 500 km</li>
+</ul>
+<h3 id="naval-units-1"><a class="header" href="#naval-units-1">Naval Units</a></h3>
+<h4 id="project-22160-patrol-ship"><a class="header" href="#project-22160-patrol-ship">Project 22160 (Patrol Ship)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 75 points</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>JTAC Range</strong>: 16 km (no line-of-sight required)</li>
+</ul>
+<h4 id="naval-farp-carrier"><a class="header" href="#naval-farp-carrier">Naval FARP Carrier</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 1</li>
+<li><strong>Note</strong>: Provides helicopter FARP at sea</li>
+</ul>
+<h4 id="naval-farp-frigate"><a class="header" href="#naval-farp-frigate">Naval FARP Frigate</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Note</strong>: Provides helicopter FARP at sea</li>
+</ul>
+<h3 id="farp-forward-arming-and-refueling-point"><a class="header" href="#farp-forward-arming-and-refueling-point">FARP (Forward Arming and Refueling Point)</a></h3>
+<h4 id="field-farp"><a class="header" href="#field-farp">Field FARP</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 4x "FARP Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Note</strong>: Creates complete FARP with 4 pads, ammo, fuel, and defenses</li>
+</ul>
+<hr />
+<h2 id="blue-coalition-deployables"><a class="header" href="#blue-coalition-deployables">BLUE COALITION DEPLOYABLES</a></h2>
+<h3 id="radar-sams-1"><a class="header" href="#radar-sams-1">Radar SAMs</a></h3>
+<h4 id="roland-ads"><a class="header" href="#roland-ads">Roland ADS</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "Roland" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="crotale"><a class="header" href="#crotale">Crotale</a></h4>
+<ul>
+<li><strong>Cost</strong>: 40 points</li>
+<li><strong>Crates Required</strong>: 2x "Croatle" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="roland-battery-system"><a class="header" href="#roland-battery-system">Roland Battery System</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 3x "Roland Launchers" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 3</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "RolandBat Repair/Rearm" crate (0 points)</li>
+</ul>
+<h4 id="hawk-system"><a class="header" href="#hawk-system">Hawk System</a></h4>
+<ul>
+<li><strong>Cost</strong>: 90 points</li>
+<li><strong>Crates Required</strong>:
+<ul>
+<li>1x "Hawk Launchers" (1500kg)</li>
+<li>1x "Hawk Search Radar" (1500kg)</li>
+<li>1x "Hawk Track Radar" (1500kg)</li>
+<li>1x "Hawk CC" (1500kg)</li>
+</ul>
+</li>
+<li><strong>Total</strong>: 4 crates</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "Hawk Repair/Rearm" crate (0 points)</li>
+</ul>
+<h4 id="rapier-system"><a class="header" href="#rapier-system">Rapier System</a></h4>
+<ul>
+<li><strong>Cost</strong>: 45 points</li>
+<li><strong>Crates Required</strong>:
+<ul>
+<li>3x "Rapier Launchers" (1500kg each)</li>
+<li>1x "Rapier TR" (1500kg)</li>
+</ul>
+</li>
+<li><strong>Total</strong>: 4 crates</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Repair/Rearm</strong>: 1x "Rapier Repair/Rearm" crate (0 points)</li>
+</ul>
+<h3 id="ir-sams"><a class="header" href="#ir-sams">IR SAMs</a></h3>
+<h4 id="avenger"><a class="header" href="#avenger">Avenger</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "Avenger Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="linebacker"><a class="header" href="#linebacker">Linebacker</a></h4>
+<ul>
+<li><strong>Cost</strong>: 45 points</li>
+<li><strong>Crates Required</strong>: 2x "Linebacker Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h3 id="anti-aircraft-artillery-aaa-1"><a class="header" href="#anti-aircraft-artillery-aaa-1">Anti-Aircraft Artillery (AAA)</a></h3>
+<h4 id="hl-with-zu-23-emplacement"><a class="header" href="#hl-with-zu-23-emplacement">HL with ZU-23 (Emplacement)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 5 points</li>
+<li><strong>Crates Required</strong>: 1x "ZU-23 Emplacement" (1000kg)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+</ul>
+<h4 id="vulcan-m163-vads"><a class="header" href="#vulcan-m163-vads">Vulcan (M163 VADS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 15 points</li>
+<li><strong>Crates Required</strong>: 2x "Vulkan Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="gepard-flakpanzer"><a class="header" href="#gepard-flakpanzer">Gepard (Flakpanzer)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "Flakpanzergepard Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 8</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="infantry-fighting-vehicles-ifvs-1"><a class="header" href="#infantry-fighting-vehicles-ifvs-1">Infantry Fighting Vehicles (IFVs)</a></h3>
+<h4 id="lav-25"><a class="header" href="#lav-25">LAV-25</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "LAV25 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 4 km (line-of-sight required)</li>
+</ul>
+<h4 id="scimitar"><a class="header" href="#scimitar">Scimitar</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "Scimitar Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 4 km (line-of-sight required)</li>
+</ul>
+<h4 id="scorpion"><a class="header" href="#scorpion">Scorpion</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Crates Required</strong>: 2x "Scorpion Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 4 km (line-of-sight required)</li>
+</ul>
+<h4 id="m2a2-bradley"><a class="header" href="#m2a2-bradley">M2A2 Bradley</a></h4>
+<ul>
+<li><strong>Cost</strong>: 45 points</li>
+<li><strong>Crates Required</strong>: 2x "Bradley Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 5 km (line-of-sight required)</li>
+</ul>
+<h3 id="main-battle-tanks-mbts-1"><a class="header" href="#main-battle-tanks-mbts-1">Main Battle Tanks (MBTs)</a></h3>
+<h4 id="chieftain"><a class="header" href="#chieftain">Chieftain</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "Chieftain Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h4 id="leopard-1a3"><a class="header" href="#leopard-1a3">Leopard 1A3</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "Leo1A3 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h4 id="leopard-2a4"><a class="header" href="#leopard-2a4">Leopard 2A4</a></h4>
+<ul>
+<li><strong>Cost</strong>: 80 points</li>
+<li><strong>Crates Required</strong>: 3x "Leopard Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 8</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h4 id="m60"><a class="header" href="#m60">M60</a></h4>
+<ul>
+<li><strong>Cost</strong>: 65 points</li>
+<li><strong>Crates Required</strong>: 3x "M60 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 6</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>JTAC Range</strong>: 3 km (line-of-sight required)</li>
+</ul>
+<h3 id="artillery-1"><a class="header" href="#artillery-1">Artillery</a></h3>
+<h4 id="l118-light-gun"><a class="header" href="#l118-light-gun">L118 Light Gun</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "L118 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="m109-paladin-155mm-sph"><a class="header" href="#m109-paladin-155mm-sph">M109 Paladin (155mm SPH)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 50 points</li>
+<li><strong>Crates Required</strong>: 2x "M109 Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="m270-mlrs"><a class="header" href="#m270-mlrs">M270 MLRS</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 3x "MLRS Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="ballistic-missiles-1"><a class="header" href="#ballistic-missiles-1">Ballistic Missiles</a></h3>
+<h4 id="atacms-cluster-munitions"><a class="header" href="#atacms-cluster-munitions">ATACMS (Cluster Munitions)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "ATACMS Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="atacms-high-explosive"><a class="header" href="#atacms-high-explosive">ATACMS (High Explosive)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "ATACMSHE Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="gmlrs-cluster-munitions"><a class="header" href="#gmlrs-cluster-munitions">GMLRS (Cluster Munitions)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "GMLRSCM Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h4 id="gmlrs-high-explosive"><a class="header" href="#gmlrs-high-explosive">GMLRS (High Explosive)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 200 points</li>
+<li><strong>Crates Required</strong>: 3x "GMLRSHE Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="combined-arms-groups-1"><a class="header" href="#combined-arms-groups-1">Combined Arms Groups</a></h3>
+<h4 id="group-atgm-1"><a class="header" href="#group-atgm-1">Group ATGM</a></h4>
+<ul>
+<li><strong>Cost</strong>: 250 points</li>
+<li><strong>Crates Required</strong>: 5x "Group ATGM Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>Note</strong>: Full combined arms ATGM group</li>
+</ul>
+<h4 id="group-armor-1"><a class="header" href="#group-armor-1">Group Armor</a></h4>
+<ul>
+<li><strong>Cost</strong>: 500 points</li>
+<li><strong>Crates Required</strong>: 5x "Group Armor Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+<li><strong>Note</strong>: Full combined arms armor group</li>
+</ul>
+<h3 id="support-units-1"><a class="header" href="#support-units-1">Support Units</a></h3>
+<h4 id="ammo-truck-1"><a class="header" href="#ammo-truck-1">Ammo Truck</a></h4>
+<ul>
+<li><strong>Cost</strong>: 10 points</li>
+<li><strong>Crates Required</strong>: 2x "Ammo Truck Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>Drop Height</strong>: 20m max</li>
+<li><strong>Drop Speed</strong>: 350 knots max</li>
+</ul>
+<h3 id="early-warning-radar-1"><a class="header" href="#early-warning-radar-1">Early Warning Radar</a></h3>
+<h4 id="anfps-117"><a class="header" href="#anfps-117">AN/FPS-117</a></h4>
+<ul>
+<li><strong>Cost</strong>: 20 points</li>
+<li><strong>Crates Required</strong>: 1x "FPS-117 Crate" (1500kg)</li>
+<li><strong>Max Allowed</strong>: 10</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>EWR Range</strong>: 500 km</li>
+</ul>
+<h3 id="naval-units-2"><a class="header" href="#naval-units-2">Naval Units</a></h3>
+<h4 id="hms-achilles-frigate"><a class="header" href="#hms-achilles-frigate">HMS Achilles (Frigate)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>JTAC Range</strong>: 16 km (no line-of-sight required)</li>
+</ul>
+<h4 id="naval-farp-destroyer"><a class="header" href="#naval-farp-destroyer">Naval FARP Destroyer</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 2</li>
+<li><strong>Note</strong>: Provides helicopter FARP at sea</li>
+</ul>
+<h4 id="naval-farp-carrier-1"><a class="header" href="#naval-farp-carrier-1">Naval FARP Carrier</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Crates Required</strong>: 0 (spawns directly)</li>
+<li><strong>Max Allowed</strong>: 1</li>
+<li><strong>Note</strong>: Provides helicopter FARP at sea</li>
+</ul>
+<h3 id="farp-forward-arming-and-refueling-point-1"><a class="header" href="#farp-forward-arming-and-refueling-point-1">FARP (Forward Arming and Refueling Point)</a></h3>
+<h4 id="field-farp-1"><a class="header" href="#field-farp-1">Field FARP</a></h4>
+<ul>
+<li><strong>Cost</strong>: 100 points</li>
+<li><strong>Crates Required</strong>: 4x "FARP Crate" (1500kg each)</li>
+<li><strong>Max Allowed</strong>: 4</li>
+<li><strong>Drop Height</strong>: 10m max</li>
+<li><strong>Drop Speed</strong>: 50 knots max</li>
+<li><strong>Note</strong>: Creates complete FARP with 4 pads, ammo, fuel, and defenses</li>
+</ul>
+<hr />
+<h2 id="troop-types"><a class="header" href="#troop-types">TROOP TYPES</a></h2>
+<p>Troops are loaded at friendly objectives and transported via helicopter or ground vehicle.</p>
+<h3 id="red-coalition-troops"><a class="header" href="#red-coalition-troops">RED COALITION TROOPS</a></h3>
+<h4 id="standard-infantry--1"><a class="header" href="#standard-infantry--1">Standard Infantry ⭐</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: 8 km (no line-of-sight required) ⭐</li>
+<li><strong>Special</strong>: Can see through terrain</li>
+</ul>
+<h4 id="anti-tank-infantry-1"><a class="header" href="#anti-tank-infantry-1">Anti-Tank Infantry</a></h4>
+<ul>
+<li><strong>Cost</strong>: 2 points</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 800 kg per squad</li>
+<li><strong>Max Allowed</strong>: 30</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+</ul>
+<h4 id="mortar-infantry-1"><a class="header" href="#mortar-infantry-1">Mortar Infantry</a></h4>
+<ul>
+<li><strong>Cost</strong>: 5 points</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 1000 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+</ul>
+<h4 id="igla-manpads"><a class="header" href="#igla-manpads">Igla (MANPADS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Can Capture</strong>: NO</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: None</li>
+</ul>
+<h3 id="blue-coalition-troops"><a class="header" href="#blue-coalition-troops">BLUE COALITION TROOPS</a></h3>
+<h4 id="standard-infantry--2"><a class="header" href="#standard-infantry--2">Standard Infantry ⭐</a></h4>
+<ul>
+<li><strong>Cost</strong>: 0 points (FREE!)</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: 8 km (no line-of-sight required) ⭐</li>
+<li><strong>Special</strong>: Can see through terrain</li>
+</ul>
+<h4 id="anti-tank-infantry-2"><a class="header" href="#anti-tank-infantry-2">Anti-Tank Infantry</a></h4>
+<ul>
+<li><strong>Cost</strong>: 2 points</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 800 kg per squad</li>
+<li><strong>Max Allowed</strong>: 30</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+</ul>
+<h4 id="mortar-infantry-2"><a class="header" href="#mortar-infantry-2">Mortar Infantry</a></h4>
+<ul>
+<li><strong>Cost</strong>: 5 points</li>
+<li><strong>Can Capture</strong>: YES</li>
+<li><strong>Weight</strong>: 1000 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: 8 km (line-of-sight required)</li>
+</ul>
+<h4 id="stinger-manpads"><a class="header" href="#stinger-manpads">Stinger (MANPADS)</a></h4>
+<ul>
+<li><strong>Cost</strong>: 25 points</li>
+<li><strong>Can Capture</strong>: NO</li>
+<li><strong>Weight</strong>: 400 kg per squad</li>
+<li><strong>Max Allowed</strong>: 20</li>
+<li><strong>JTAC Range</strong>: None</li>
+</ul>
+<p><strong>Important Notes</strong>:</p>
+<ul>
+<li>Standard, Anti-Tank, and Mortar infantry can <strong>ALL capture objectives</strong></li>
+<li>MANPADS (Igla/Stinger) <strong>CANNOT capture</strong></li>
+<li><strong>Standard Infantry has NO line-of-sight requirement for JTAC</strong> - can see through terrain!</li>
+<li>Anti-Tank and Mortar infantry DO require line-of-sight for JTAC</li>
+<li>Heavier troops = fewer can fit in transport aircraft</li>
+</ul>
+<hr />
+<h2 id="general-notes"><a class="header" href="#general-notes">General Notes</a></h2>
+<h3 id="crate-capacity"><a class="header" href="#crate-capacity">Crate Capacity</a></h3>
+<ul>
+<li><strong>Mi-8</strong>: 3 crate slots</li>
+<li><strong>CH-47</strong>: 3 crate slots</li>
+<li><strong>UH-1H</strong>: 1 crate slot</li>
+<li><strong>Server Max</strong>: 6 crates total</li>
+</ul>
+<h3 id="unit-limits"><a class="header" href="#unit-limits">Unit Limits</a></h3>
+<p>When you reach the maximum allowed units:</p>
+<ul>
+<li><strong>DeleteOldest</strong>: System automatically deletes your oldest deployed unit of that type</li>
+</ul>
+<h3 id="repairrearm-crates"><a class="header" href="#repairrearm-crates">Repair/Rearm Crates</a></h3>
+<p>Some units (SA-6, SA-2) support repair/rearm crates:</p>
+<ul>
+<li><strong>Cost</strong>: 0 points (free)</li>
+<li>Delivered to deployed unit</li>
+<li>Repairs damage and restocks ammunition</li>
+</ul>
+<hr />
+<h2 id="see-also-11"><a class="header" href="#see-also-11">See Also</a></h2>
+<ul>
+<li><a href="reference/../f10-menu/cargo.html">Cargo Operations</a> - How to transport crates</li>
+<li><a href="reference/../f10-menu/actions.html">Actions Menu</a> - Air deployments</li>
+<li><a href="reference/../gameplay/points-and-lives.html">Points System</a> - Earning points to deploy</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="frequently-asked-questions"><a class="header" href="#frequently-asked-questions">Frequently Asked Questions</a></h1>
+<p>Common questions and answers about Fowl Engine.</p>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<h3 id="q-how-do-i-join-the-server"><a class="header" href="#q-how-do-i-join-the-server">Q: How do I join the server?</a></h3>
+<p><strong>A</strong>: Connect to "The Coop - Operation Fowl Intent" server, register for a team (type <code>blue</code> or <code>red</code> in chat), then select an aircraft slot.</p>
+<h3 id="q-can-i-change-teams"><a class="header" href="#q-can-i-change-teams">Q: Can I change teams?</a></h3>
+<p><strong>A</strong>: Some servers allow limited side switching with <code>-switch blue</code> or <code>-switch red</code>. Check your remaining switches with <code>-lives</code>.</p>
+<h3 id="q-why-cant-i-occupy-any-slots"><a class="header" href="#q-why-cant-i-occupy-any-slots">Q: Why can't I occupy any slots?</a></h3>
+<p><strong>A</strong>: You must register for a team first by typing <code>blue</code> or <code>red</code> in chat while in spectator mode.</p>
+<h2 id="gameplay"><a class="header" href="#gameplay">Gameplay</a></h2>
+<h3 id="q-how-do-i-capture-an-objective"><a class="header" href="#q-how-do-i-capture-an-objective">Q: How do I capture an objective?</a></h3>
+<p><strong>A</strong>:</p>
+<ol>
+<li>Reduce objective logistics to 0%</li>
+<li>Transport capture-capable infantry to the objective</li>
+<li>Unload troops inside the capture zone</li>
+<li>Wait for capture to complete</li>
+</ol>
+<p>See <a href="reference/../gameplay/capturing-objectives.html">Capturing Objectives</a> for details.</p>
+<h3 id="q-why-cant-i-capture-this-objective"><a class="header" href="#q-why-cant-i-capture-this-objective">Q: Why can't I capture this objective?</a></h3>
+<p><strong>A</strong>: Check these requirements:</p>
+<ul>
+<li>Logistics must be exactly 0%</li>
+<li>You must have infantry troops IN the zone (unloaded, on ground)</li>
+<li>Troops must be capture-capable type</li>
+<li>No enemy troops contesting the zone</li>
+</ul>
+<h3 id="q-how-do-i-earn-points"><a class="header" href="#q-how-do-i-earn-points">Q: How do I earn points?</a></h3>
+<p><strong>A</strong>:</p>
+<ul>
+<li>Air kills: <strong>25 points</strong> (+5 bonus for LR SAMs)</li>
+<li>Ground kills: <strong>2 points</strong></li>
+<li>Objective captures: <strong>50 points</strong> (split among participants)</li>
+<li>Starting bonus: <strong>190 points</strong></li>
+</ul>
+<p>See <a href="reference/../gameplay/points-and-lives.html">Points System</a> for full details.</p>
+<h3 id="q-what-happens-when-i-run-out-of-lives"><a class="header" href="#q-what-happens-when-i-run-out-of-lives">Q: What happens when I run out of lives?</a></h3>
+<p><strong>A</strong>: You're restricted to spectator mode. Contact an admin to request a life reset.</p>
+<h2 id="f10-menus"><a class="header" href="#f10-menus">F10 Menus</a></h2>
+<h3 id="q-i-dont-see-the-actions-menu"><a class="header" href="#q-i-dont-see-the-actions-menu">Q: I don't see the Actions menu!</a></h3>
+<p><strong>A</strong>: Check:</p>
+<ul>
+<li>Are you slotted in an aircraft?</li>
+<li>Does your aircraft have permission?</li>
+<li>Is Actions enabled on this server?</li>
+<li>Try re-slotting</li>
+</ul>
+<h3 id="q-my-map-markers-dont-show-up-in-actions-menu"><a class="header" href="#q-my-map-markers-dont-show-up-in-actions-menu">Q: My map markers don't show up in Actions menu</a></h3>
+<p><strong>A</strong>:</p>
+<ul>
+<li>Marker names must be ≤24 characters</li>
+<li>Delete duplicate marker names</li>
+<li>Only one marker per name</li>
+<li>Must be YOUR markers (not others')</li>
+</ul>
+<h3 id="q-how-do-i-use-jtac"><a class="header" href="#q-how-do-i-use-jtac">Q: How do I use JTAC?</a></h3>
+<p><strong>A</strong>:</p>
+<ol>
+<li>F10 → JTAC → [Select JTAC]</li>
+<li>Check Status to see current target</li>
+<li>Set your weapon laser code to match JTAC's code</li>
+<li>Attack the lased target</li>
+</ol>
+<p>See <a href="reference/../f10-menu/jtac.html">JTAC System</a> for full guide.</p>
+<h2 id="logistics--supply-1"><a class="header" href="#logistics--supply-1">Logistics &amp; Supply</a></h2>
+<h3 id="q-what-does-logi-0-mean"><a class="header" href="#q-what-does-logi-0-mean">Q: What does "Logi: 0" mean?</a></h3>
+<p><strong>A</strong>: Logistics at 0 means the objective CAN be captured. The infrastructure is completely destroyed.</p>
+<h3 id="q-how-do-i-repair-logistics"><a class="header" href="#q-how-do-i-repair-logistics">Q: How do I repair logistics?</a></h3>
+<p><strong>A</strong>: Logistics repair slowly over time automatically. Admins can speed this with <code>-admin repair</code>. Some servers allow player logistics repair actions.</p>
+<h3 id="q-why-is-my-objective-low-on-supply"><a class="header" href="#q-why-is-my-objective-low-on-supply">Q: Why is my objective low on supply?</a></h3>
+<p><strong>A</strong>:</p>
+<ul>
+<li>Supply routes may be broken</li>
+<li>Logistics hub may be captured</li>
+<li>High consumption from operations</li>
+<li>Wait for next logistics tick</li>
+</ul>
+<h3 id="q-how-often-does-supply-update"><a class="header" href="#q-how-often-does-supply-update">Q: How often does supply update?</a></h3>
+<p><strong>A</strong>: Typically every 15-30 minutes (server-configured). Admins can force with <code>-admin tick</code>.</p>
+<h2 id="technical-issues"><a class="header" href="#technical-issues">Technical Issues</a></h2>
+<h3 id="q-i-cant-load-cargotroops"><a class="header" href="#q-i-cant-load-cargotroops">Q: I can't load cargo/troops!</a></h3>
+<p><strong>A</strong>: Check:</p>
+<ul>
+<li>Are you close enough to objective? (within ~50m)</li>
+<li>Is it a friendly objective?</li>
+<li>Does your aircraft have that capability?</li>
+<li>Is cargo/troops available?</li>
+<li>Try landing closer</li>
+</ul>
+<h3 id="q-f10-menu-not-responding"><a class="header" href="#q-f10-menu-not-responding">Q: F10 menu not responding</a></h3>
+<p><strong>A</strong>:</p>
+<ul>
+<li>Wait a moment (server lag)</li>
+<li>Try re-opening (press F10 again)</li>
+<li>Re-slot if persistent</li>
+<li>Report to admin if continues</li>
+</ul>
+<h3 id="q-my-deployed-unit-disappeared"><a class="header" href="#q-my-deployed-unit-disappeared">Q: My deployed unit disappeared!</a></h3>
+<p><strong>A</strong>:</p>
+<ul>
+<li>It may have been destroyed</li>
+<li>Check F10 map for its marker</li>
+<li>Server restart can remove some units</li>
+<li>Contact admin if it seems like a bug</li>
+</ul>
+<h2 id="points--economy"><a class="header" href="#points--economy">Points &amp; Economy</a></h2>
+<h3 id="q-how-much-do-actions-cost"><a class="header" href="#q-how-much-do-actions-cost">Q: How much do actions cost?</a></h3>
+<p><strong>A</strong>: (PG Tempest values):</p>
+<ul>
+<li>AWACS: 50 points</li>
+<li>CAP/SEAD: 200 points each</li>
+<li>Drones: 50-100 points</li>
+<li>Ground deployables: 5-500 points (see Deployables Reference)</li>
+</ul>
+<p>Check the menu - costs are shown in the action name.</p>
+<h3 id="q-can-i-get-refunds"><a class="header" href="#q-can-i-get-refunds">Q: Can I get refunds?</a></h3>
+<p><strong>A</strong>: Yes! Use <code>-delete &lt;group-id&gt;</code> to delete your deployed units and get <strong>50% of the cost back</strong>. Action units (AWACS, fighters, etc.) cannot be deleted by players.</p>
+<h3 id="q-can-i-transfer-points-to-teammates"><a class="header" href="#q-can-i-transfer-points-to-teammates">Q: Can I transfer points to teammates?</a></h3>
+<p><strong>A</strong>: If enabled: <code>-transfer &lt;amount&gt; &lt;player-name&gt;</code>
+If not enabled, this command won't work.</p>
+<h3 id="q-whats-a-good-starting-strategy-for-earning-points"><a class="header" href="#q-whats-a-good-starting-strategy-for-earning-points">Q: What's a good starting strategy for earning points?</a></h3>
+<p><strong>A</strong>:</p>
+<ul>
+<li>Fly CAP and get air kills</li>
+<li>Air to Ground</li>
+<li>Transport troops/cargo</li>
+</ul>
+<h2 id="troubleshooting-2"><a class="header" href="#troubleshooting-2">Troubleshooting</a></h2>
+<h3 id="q-im-stuck-in-spectator-and-cant-slot"><a class="header" href="#q-im-stuck-in-spectator-and-cant-slot">Q: I'm stuck in spectator and can't slot!</a></h3>
+<p><strong>A</strong>:</p>
+<ul>
+<li>Did you register? (type <code>blue</code> or <code>red</code>)</li>
+<li>Are you out of lives? (check <code>-lives</code>)</li>
+<li>Is the slot occupied?</li>
+<li>Try different slot</li>
+</ul>
+<h3 id="q-commands-dont-work"><a class="header" href="#q-commands-dont-work">Q: Commands don't work!</a></h3>
+<p><strong>A</strong>:</p>
+<ul>
+<li>Check spelling</li>
+<li>Include dash <code>-</code> prefix (except <code>blue</code>/<code>red</code>)</li>
+<li>Verify you have permission</li>
+<li>Some commands require admin</li>
+</ul>
+<h3 id="q-game-crasheddisconnected-did-i-lose-my-life"><a class="header" href="#q-game-crasheddisconnected-did-i-lose-my-life">Q: Game crashed/disconnected, did I lose my life?</a></h3>
+<p><strong>A</strong>: Depends on when:</p>
+<ul>
+<li>Crashed during loading: Usually no</li>
+<li>Crashed in flight: Might lose life if aircraft was destroyed</li>
+<li>Contact admin if unfair death</li>
+</ul>
+<h2 id="still-have-questions"><a class="header" href="#still-have-questions">Still Have Questions?</a></h2>
+<p>Ask in:</p>
+<ul>
+<li><strong>Discord</strong>: <a href="https://discord.gg/wAsBEfse">https://discord.gg/wAsBEfse</a></li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>

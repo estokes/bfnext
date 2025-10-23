@@ -1,0 +1,478 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>JTAC System - Fowl Engine User Guide</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive guide for players in the Fowl Engine Dynamic Campaign System for DCS">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fowl Engine User Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yourusername/bfnext" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="jtac-system"><a class="header" href="#jtac-system">JTAC System</a></h1>
+<p>The Joint Terminal Attack Controller (JTAC) system provides advanced targeting, fire coordination, and battlefield intelligence.</p>
+<h2 id="what-is-jtac"><a class="header" href="#what-is-jtac">What is JTAC?</a></h2>
+<p>JTACs are specialized units that:</p>
+<ul>
+<li>Detect and track enemy units</li>
+<li>Designate targets with laser</li>
+<li>Coordinate artillery and missile strikes</li>
+<li>Provide detailed target information</li>
+</ul>
+<h2 id="jtac-types"><a class="header" href="#jtac-types">JTAC Types</a></h2>
+<h3 id="drone-jtac-large---mq-9-reaper"><a class="header" href="#drone-jtac-large---mq-9-reaper">Drone JTAC (Large - MQ-9 Reaper)</a></h3>
+<ul>
+<li><strong>Range</strong>: <strong>18 km</strong> (18,000m)</li>
+<li><strong>Line-of-sight</strong>: Not required (can see through terrain)</li>
+<li><strong>Cost</strong>: 100 points to deploy</li>
+<li><strong>Duration</strong>: 12 hours</li>
+<li><strong>Function</strong>: Long-range surveillance and targeting</li>
+</ul>
+<h3 id="drone-jtac-small"><a class="header" href="#drone-jtac-small">Drone JTAC (Small)</a></h3>
+<ul>
+<li><strong>Range</strong>: <strong>12 km</strong> (12,000m)</li>
+<li><strong>Line-of-sight</strong>: Not required (can see through terrain)</li>
+<li><strong>Cost</strong>: 50 points to deploy</li>
+<li><strong>Duration</strong>: 12 hours</li>
+<li><strong>Function</strong>: Reconnaissance and targeting</li>
+</ul>
+<h3 id="ground-jtac"><a class="header" href="#ground-jtac">Ground JTAC</a></h3>
+<ul>
+<li>Infantry or vehicle-based units with JTAC capability</li>
+<li>360° coverage</li>
+<li>May require line-of-sight (check unit type)</li>
+<li>Range varies by unit type</li>
+</ul>
+<h3 id="player-jtac"><a class="header" href="#player-jtac">Player JTAC</a></h3>
+<ul>
+<li>You can act as JTAC in certain aircraft</li>
+<li>Access via F10 menu</li>
+<li>Control your own targeting</li>
+<li>Range depends on your aircraft sensors</li>
+</ul>
+<h2 id="accessing-jtac"><a class="header" href="#accessing-jtac">Accessing JTAC</a></h2>
+<p><strong>F10 Menu</strong>:</p>
+<ol>
+<li>Press F10</li>
+<li>Select "JTAC"</li>
+<li>Choose JTAC unit from list</li>
+<li>Access that JTAC's functions</li>
+</ol>
+<p><strong>Format</strong>: JTACs listed by ID (e.g., "JTAC 12345")</p>
+<h2 id="jtac-status"><a class="header" href="#jtac-status">JTAC Status</a></h2>
+<h3 id="checking-status"><a class="header" href="#checking-status">Checking Status</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Status
+</code></pre>
+<p><strong>Status Report Shows</strong>:</p>
+<ul>
+<li>JTAC position (bearing/distance from objective)</li>
+<li>Current target (if any)</li>
+<li>Laser code</li>
+<li>Visual contacts</li>
+<li>Nearby artillery units</li>
+<li>Nearby cruise missile units</li>
+<li>Autoshift setting</li>
+<li>IR pointer setting</li>
+<li>Filter settings</li>
+</ul>
+<h3 id="reading-status"><a class="header" href="#reading-status">Reading Status</a></h3>
+<p>Example:</p>
+<pre><code>JTAC 12345 status
+lasing T-72B code 1688 marker M123
+position bearing 045 for 5.2km from Batumi
+
+Visual On: T-72Bx3, BMP-3x2, SA-13
+
+autoshift: true, ir_pointer: false
+filter: [Tank, APC]
+available artillery: [54321]
+available ALCM: [65432(4)]
+</code></pre>
+<h2 id="target-management"><a class="header" href="#target-management">Target Management</a></h2>
+<h3 id="shifting-targets"><a class="header" href="#shifting-targets">Shifting Targets</a></h3>
+<p><strong>Manual Shift</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Shift Target
+</code></pre>
+<p>Moves laser to next detected target.</p>
+<p><strong>Auto-Shift</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Toggle Auto-Shift
+</code></pre>
+<p>Automatically cycles through targets.</p>
+<h3 id="target-priority"><a class="header" href="#target-priority">Target Priority</a></h3>
+<p>JTACs prioritize by:</p>
+<ol>
+<li>Unit type (configurable)</li>
+<li>Threat level</li>
+<li>Distance</li>
+<li>Last movement</li>
+</ol>
+<h3 id="target-filters"><a class="header" href="#target-filters">Target Filters</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Filter → [Unit Type]
+</code></pre>
+<p><strong>Filter Options</strong>:</p>
+<ul>
+<li>Tank</li>
+<li>APC/IFV</li>
+<li>Artillery</li>
+<li>SAM</li>
+<li>Helicopter</li>
+<li>Infantry</li>
+</ul>
+<p><strong>Clear Filter</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Clear Filter
+</code></pre>
+<h2 id="laser-designation"><a class="header" href="#laser-designation">Laser Designation</a></h2>
+<h3 id="laser-codes"><a class="header" href="#laser-codes">Laser Codes</a></h3>
+<p>JTACs designate targets with laser codes:</p>
+<ul>
+<li>Default: Usually 1688</li>
+<li>Change via F10 menu</li>
+<li>Must match your weapon settings</li>
+</ul>
+<p><strong>Changing Code</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Code → [Hundreds/Tens/Ones]
+</code></pre>
+<p>Example: To change from 1688 to 1511:</p>
+<ol>
+<li>Select "1" (changes thousands to 1000)</li>
+<li>Select "500" (changes hundreds to 1500)</li>
+<li>Select "11" (changes to 1511)</li>
+</ol>
+<p><strong>Important</strong>: Set your LGB/missile code to match!</p>
+<h3 id="using-laser-designation"><a class="header" href="#using-laser-designation">Using Laser Designation</a></h3>
+<p><strong>Steps</strong>:</p>
+<ol>
+<li>Check JTAC status for code</li>
+<li>Set weapon laser code to match</li>
+<li>JTAC must be lasing target</li>
+<li>Attack target with LGBs/Mavericks</li>
+<li>Guide weapon to impact</li>
+</ol>
+<p><strong>Tips</strong>:</p>
+<ul>
+<li>Weapon must "see" laser</li>
+<li>Stay within parameters</li>
+<li>Don't break laser lock</li>
+<li>Multiple aircraft can use same code</li>
+</ul>
+<h3 id="ir-pointer"><a class="header" href="#ir-pointer">IR Pointer</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Toggle IR Pointer
+</code></pre>
+<p>Adds infrared pointer:</p>
+<ul>
+<li>Visible in night vision</li>
+<li>Helps locate target</li>
+<li>Doesn't affect laser</li>
+</ul>
+<h2 id="fire-missions"><a class="header" href="#fire-missions">Fire Missions</a></h2>
+<h3 id="artillery-missions"><a class="header" href="#artillery-missions">Artillery Missions</a></h3>
+<p><strong>Request Fire Mission</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Artillery → [Battery ID] → [Rounds]
+</code></pre>
+<p><strong>Process</strong>:</p>
+<ol>
+<li>JTAC must have target</li>
+<li>Artillery must be in range</li>
+<li>Select rounds (1, 3, 5, etc.)</li>
+<li>Battery fires on target</li>
+</ol>
+<p><strong>Round Options</strong>:</p>
+<ul>
+<li>Usually 1, 3, 5, 10, or "All"</li>
+<li>Check ammunition available</li>
+<li>Battery listed with ammo count</li>
+</ul>
+<p><strong>Adjustments</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → Artillery → [Battery] → Adjust Fire
+</code></pre>
+<p>Options:</p>
+<ul>
+<li>Short/Long (range adjustment)</li>
+<li>Left/Right (lateral adjustment)</li>
+<li>Typically 50-100m increments</li>
+</ul>
+<h3 id="cruise-missile-missions"><a class="header" href="#cruise-missile-missions">Cruise Missile Missions</a></h3>
+<p><strong>Request ALCM Strike</strong>:</p>
+<pre><code>F10 → JTAC → [JTAC ID] → ALCM → [Unit ID] → [Settings]
+</code></pre>
+<p><strong>Parameters</strong>:</p>
+<ul>
+<li>Missiles per target</li>
+<li>Magazine expenditure</li>
+<li>Targets multiple contacts</li>
+</ul>
+<p><strong>Cost</strong>: May cost points</p>
+<p><strong>See</strong>: <a href="../advanced/alcm.html">ALCM Guide</a> for details</p>
+<h3 id="smoke-marker"><a class="header" href="#smoke-marker">Smoke Marker</a></h3>
+<pre><code>F10 → JTAC → [JTAC ID] → Smoke Target
+</code></pre>
+<p><strong>Creates smoke at target</strong>:</p>
+<ul>
+<li>Visual marking</li>
+<li>Helps locate target</li>
+<li>60-second cooldown</li>
+<li>Color varies by team</li>
+</ul>
+<h2 id="common-issues"><a class="header" href="#common-issues">Common Issues</a></h2>
+<h3 id="no-jtac-available"><a class="header" href="#no-jtac-available">"No JTAC available"</a></h3>
+<ul>
+<li>No JTAC units deployed</li>
+<li>JTACs killed</li>
+<li>Out of detection range</li>
+<li>Check F10 JTAC menu</li>
+</ul>
+<h3 id="no-target"><a class="header" href="#no-target">"No target"</a></h3>
+<ul>
+<li>JTAC hasn't detected enemies</li>
+<li>Enemies out of range</li>
+<li>Line-of-sight blocked</li>
+<li>Wait for detection</li>
+</ul>
+<h3 id="artillery-out-of-range"><a class="header" href="#artillery-out-of-range">"Artillery out of range"</a></h3>
+<ul>
+<li>Battery too far from target (max range: 300km)</li>
+<li>Deploy closer artillery</li>
+<li>Use different battery</li>
+<li>Check JTAC status for available units</li>
+</ul>
+<h3 id="alcm-out-of-range"><a class="header" href="#alcm-out-of-range">"ALCM out of range"</a></h3>
+<ul>
+<li>Cruise missile platform too far from target (max range: 300km)</li>
+<li>Reposition platform using waypoint commands</li>
+<li>Deploy new platform closer</li>
+<li>Check JTAC status for available ALCM units</li>
+</ul>
+<h3 id="laser-not-tracking"><a class="header" href="#laser-not-tracking">"Laser not tracking"</a></h3>
+<ul>
+<li>Wrong laser code</li>
+<li>Out of laser parameters</li>
+<li>Target moved</li>
+<li>JTAC lost line-of-sight</li>
+</ul>
+<h2 id="see-also"><a class="header" href="#see-also">See Also</a></h2>
+<ul>
+<li><a href="../advanced/artillery.html">Artillery Operations</a> - Fire mission details</li>
+<li><a href="../advanced/alcm.html">ALCM Operations</a> - Cruise missile strikes</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../f10-menu/actions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../f10-menu/cargo.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../f10-menu/actions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../f10-menu/cargo.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

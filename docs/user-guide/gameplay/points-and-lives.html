@@ -1,0 +1,408 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Points and Lives System - Fowl Engine User Guide</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A comprehensive guide for players in the Fowl Engine Dynamic Campaign System for DCS">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "navy";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fowl Engine User Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yourusername/bfnext" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="points-and-lives-system"><a class="header" href="#points-and-lives-system">Points and Lives System</a></h1>
+<p>Fowl Engine uses a points and lives system to reward good play and encourage careful decision-making.</p>
+<h2 id="points-system"><a class="header" href="#points-system">Points System</a></h2>
+<h3 id="what-are-points"><a class="header" href="#what-are-points">What Are Points?</a></h3>
+<p>Points are the campaign currency:</p>
+<ul>
+<li>Earned through successful missions</li>
+<li>Spent on deployments and actions</li>
+<li>Tracked per player</li>
+<li>Persistent across server restarts</li>
+</ul>
+<h3 id="earning-points"><a class="header" href="#earning-points">Earning Points</a></h3>
+<p><strong>Combat Actions</strong>:</p>
+<ul>
+<li>Destroying enemy units</li>
+<li>Successful strikes on objectives</li>
+<li>Air-to-air kills</li>
+<li>Ground kills</li>
+</ul>
+<p><strong>Strategic Actions</strong>:</p>
+<ul>
+<li><strong>Capturing objectives</strong> - 50 points (split among participants)</li>
+</ul>
+<p><strong>Teamwork</strong>:</p>
+<ul>
+<li>Multi-player captures share the 50 points equally</li>
+<li>Example: 3 players capture = ~17 points each</li>
+</ul>
+<h3 id="point-values"><a class="header" href="#point-values">Point Values</a></h3>
+<p>Point values vary by:</p>
+<ul>
+<li>Target type (aircraft &gt; tanks &gt; infantry)</li>
+<li>Strategic importance</li>
+<li>Server configuration</li>
+<li>Objective value</li>
+</ul>
+<p><strong>Actual Point Values</strong> (PG Tempest):</p>
+<ul>
+<li><strong>Ground kill</strong>: <strong>2 points</strong></li>
+<li><strong>Air kill</strong>: <strong>25 points</strong></li>
+<li><strong>LR SAM bonus</strong>: <strong>+5 points</strong> (for killing long-range SAMs)</li>
+<li><strong>Objective capture</strong>: <strong>50 points</strong> (split among participants)</li>
+<li><strong>New player bonus</strong>: <strong>190 points</strong> (starting balance)</li>
+</ul>
+<h3 id="spending-points"><a class="header" href="#spending-points">Spending Points</a></h3>
+<p><strong>Deployable Units</strong>:</p>
+<pre><code>F10 → Actions → [Deploy Action] → [Location]
+</code></pre>
+<p><strong>Actual Costs</strong> (PG Tempest):</p>
+<ul>
+<li><strong>Drone</strong> (Small): <strong>50 points</strong></li>
+<li><strong>Drone</strong> (Large MQ-9): <strong>100 points</strong></li>
+<li><strong>Paratroops</strong>: <strong>100 points</strong></li>
+<li><strong>Light Attack Helicopters</strong>: <strong>120 points</strong></li>
+<li><strong>Naval FARP Destroyer</strong>: <strong>100 points</strong></li>
+<li><strong>Naval FARP Carrier</strong>: <strong>150 points</strong></li>
+<li><strong>Fighters</strong> (CAP): <strong>200 points</strong></li>
+<li><strong>SEAD Package</strong>: <strong>200 points</strong></li>
+<li><strong>Attack Helicopters</strong>: <strong>200-300 points</strong></li>
+<li><strong>Bomber</strong>: <strong>200 points</strong></li>
+<li><strong>ALCM</strong> (Cruise Missile Platform): <strong>25-150 points</strong></li>
+</ul>
+<p><strong>Special Actions</strong>:</p>
+<ul>
+<li><strong>Logistics Repair</strong>: <strong>100 points</strong> (helo), <strong>200 points</strong> (fast)</li>
+<li><strong>Logistics Transfer</strong>: <strong>100 points</strong></li>
+<li><strong>Deploy EWR Radar</strong>: <strong>50 points</strong></li>
+<li><strong>AWACS</strong>: <strong>50 points</strong></li>
+<li><strong>Waypoint Commands</strong>: <strong>5-15 points</strong></li>
+<li><strong>RTB (Return to Base)</strong>: <strong>0 points</strong></li>
+</ul>
+<h3 id="checking-your-balance"><a class="header" href="#checking-your-balance">Checking Your Balance</a></h3>
+<p><strong>Via Chat</strong>:</p>
+<pre><code>-balance
+</code></pre>
+<p>Response:</p>
+<pre><code>You have 1250 points
+</code></pre>
+<p><strong>Via Lives Command</strong>:</p>
+<pre><code>-lives
+</code></pre>
+<p>Shows complete status including points.</p>
+<h2 id="lives-system"><a class="header" href="#lives-system">Lives System</a></h2>
+<h3 id="what-are-lives"><a class="header" href="#what-are-lives">What Are Lives?</a></h3>
+<p>Lives represent your ability to continue flying:</p>
+<ul>
+<li>Limited number per player</li>
+<li>Lost when you die</li>
+<li>Prevents reckless behavior</li>
+<li>Encourages careful planning</li>
+</ul>
+<h3 id="starting-lives"><a class="header" href="#starting-lives">Starting Lives</a></h3>
+<p>Lives vary by aircraft type:</p>
+<ul>
+<li><strong>Standard</strong> (F-15, F/A-18, Su-27, etc.): <strong>3 lives</strong></li>
+<li><strong>Attack</strong> (A-10, Ka-50, AH-64, etc.): <strong>4 lives</strong></li>
+<li><strong>Intercept</strong> (MiG-21, F-5, Mirage-F1, etc.): <strong>4 lives</strong></li>
+<li><strong>Logistics</strong> (Mi-8, UH-1H, CH-47, etc.): <strong>6 lives</strong></li>
+<li><strong>Recon</strong> (L-39, TF-51, Yak-52, etc.): <strong>6 lives</strong></li>
+</ul>
+<h3 id="losing-lives"><a class="header" href="#losing-lives">Losing Lives</a></h3>
+<p>You lose a life when:</p>
+<ul>
+<li>Your aircraft is destroyed</li>
+<li>You eject and can't be rescued</li>
+<li>You crash</li>
+<li>Enemy shoots you down</li>
+</ul>
+<p><strong>Important</strong>:</p>
+<ul>
+<li>Deaths in combat count</li>
+<li>Practice crashes count (be careful!)</li>
+<li>Friendly fire counts</li>
+</ul>
+<h3 id="what-happens-at-0-lives"><a class="header" href="#what-happens-at-0-lives">What Happens at 0 Lives?</a></h3>
+<p><strong>Spectator Mode</strong>:</p>
+<ul>
+<li>Cannot occupy slots</li>
+<li>Can watch the battle</li>
+<li>Still earn points (on some servers)</li>
+<li>Can communicate with team</li>
+</ul>
+<p><strong>Life Reset</strong>:</p>
+<ul>
+<li>Admins can reset your lives</li>
+<li>May require request via Discord</li>
+<li>Some servers have automatic reset timers</li>
+<li>Depends on server policy</li>
+</ul>
+<h3 id="checking-your-lives"><a class="header" href="#checking-your-lives">Checking Your Lives</a></h3>
+<p><strong>Via Chat</strong>:</p>
+<pre><code>-lives
+</code></pre>
+<p>Response example:</p>
+<pre><code>Team: Blue
+Lives: 5
+Points: 1250
+Side Switches: 1
+</code></pre>
+<h2 id="point-transfers"><a class="header" href="#point-transfers">Point Transfers</a></h2>
+<p>Some servers allow point transfers between players.</p>
+<p><strong>Transfer Command</strong>:</p>
+<pre><code>-transfer &lt;amount&gt; &lt;player-name&gt;
+-transfer &lt;amount&gt; objective:&lt;objective-name&gt;
+</code></pre>
+<p><strong>Examples</strong>:</p>
+<pre><code>-transfer 500 Viper21
+-transfer 100 objective:Batumi
+</code></pre>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Help new players</li>
+<li>Pool for expensive deployment</li>
+<li>Contribute points to objectives</li>
+<li>Reimburse friendly fire</li>
+<li>Strategic coordination</li>
+</ul>
+<p><strong>Restrictions</strong>:</p>
+<ul>
+<li>Cannot transfer to enemy team</li>
+<li>Must have sufficient points</li>
+</ul>
+<h2 id="admin-point-management"><a class="header" href="#admin-point-management">Admin Point Management</a></h2>
+<p>Admins can manage points:</p>
+<p><strong>Check Balance</strong>:</p>
+<pre><code>-admin balance &lt;player&gt;
+</code></pre>
+<p><strong>Set Points</strong>:</p>
+<pre><code>-admin set-points &lt;amount&gt; &lt;player&gt;
+</code></pre>
+<p><strong>Reset Lives</strong>:</p>
+<pre><code>-admin reset-lives &lt;player&gt;
+</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>Now learn about <a href="./chat-commands.html">Chat Commands</a> to interact with the system!</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../gameplay/logistics.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../gameplay/chat-commands.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../gameplay/logistics.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../gameplay/chat-commands.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

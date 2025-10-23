@@ -1,0 +1,157 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Trait for serializing/deserializing Lua values using Serde."><title>LuaSerdeExt in mlua::serde - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-aa0817cf.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="mlua" data-themes="" data-resource-suffix="" data-rustdoc-version="1.90.0 (1159e78c4 2025-09-14)" data-channel="1.90.0" data-search-js="search-fa3e91e5.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-68b7e25d.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-eebb9057.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../mlua/index.html">mlua</a><span class="version">0.9.9</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">LuaSerde<wbr>Ext</a></h2><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.array_metatable" title="array_metatable">array_metatable</a></li><li><a href="#tymethod.from_value" title="from_value">from_value</a></li><li><a href="#tymethod.from_value_with" title="from_value_with">from_value_with</a></li><li><a href="#tymethod.null" title="null">null</a></li><li><a href="#tymethod.to_value" title="to_value">to_value</a></li><li><a href="#tymethod.to_value_with" title="to_value_with">to_value_with</a></li></ul><h3><a href="#dyn-compatibility">Dyn Compatibility</a></h3><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In mlua::<wbr>serde</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">mlua</a>::<wbr><a href="index.html">serde</a></div><h1>Trait <span class="trait">LuaSerdeExt</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/mlua/serde/mod.rs.html#16-194">Source</a> </span></div><pre class="rust item-decl"><code>pub trait LuaSerdeExt: Sealed {
+    // Required methods
+    fn <a href="#tymethod.null" class="fn">null</a>(&amp;self) -&gt; <a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'_&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.array_metatable" class="fn">array_metatable</a>(&amp;self) -&gt; <a class="struct" href="../struct.Table.html" title="struct mlua::Table">Table</a>&lt;'_&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.to_value" class="fn">to_value</a>&lt;'lua, T: <a class="trait" href="../../serde/ser/trait.Serialize.html" title="trait serde::ser::Serialize">Serialize</a> + ?<a class="trait" href="https://doc.rust-lang.org/1.90.0/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>&gt;(
+        &amp;'lua self,
+        t: <a class="primitive" href="https://doc.rust-lang.org/1.90.0/std/primitive.reference.html">&amp;T</a>,
+    ) -&gt; <a class="type" href="../type.Result.html" title="type mlua::Result">Result</a>&lt;<a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'lua&gt;&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.to_value_with" class="fn">to_value_with</a>&lt;'lua, T&gt;(
+        &amp;'lua self,
+        t: <a class="primitive" href="https://doc.rust-lang.org/1.90.0/std/primitive.reference.html">&amp;T</a>,
+        options: <a class="struct" href="../struct.SerializeOptions.html" title="struct mlua::SerializeOptions">Options</a>,
+    ) -&gt; <a class="type" href="../type.Result.html" title="type mlua::Result">Result</a>&lt;<a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'lua&gt;&gt;
+       <span class="where">where T: <a class="trait" href="../../serde/ser/trait.Serialize.html" title="trait serde::ser::Serialize">Serialize</a> + ?<a class="trait" href="https://doc.rust-lang.org/1.90.0/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a></span>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.from_value" class="fn">from_value</a>&lt;T: <a class="trait" href="../../serde/de/trait.DeserializeOwned.html" title="trait serde::de::DeserializeOwned">DeserializeOwned</a>&gt;(&amp;self, value: <a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'_&gt;) -&gt; <a class="type" href="../type.Result.html" title="type mlua::Result">Result</a>&lt;T&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.from_value_with" class="fn">from_value_with</a>&lt;T: <a class="trait" href="../../serde/de/trait.DeserializeOwned.html" title="trait serde::de::DeserializeOwned">DeserializeOwned</a>&gt;(
+        &amp;self,
+        value: <a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'_&gt;,
+        options: <a class="struct" href="../struct.DeserializeOptions.html" title="struct mlua::DeserializeOptions">Options</a>,
+    ) -&gt; <a class="type" href="../type.Result.html" title="type mlua::Result">Result</a>&lt;T&gt;;
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Trait for serializing/deserializing Lua values using Serde.</p>
+</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.null" class="method"><a class="src rightside" href="../../src/mlua/serde/mod.rs.html#38">Source</a><h4 class="code-header">fn <a href="#tymethod.null" class="fn">null</a>(&amp;self) -&gt; <a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'_&gt;</h4></section></summary><div class="docblock"><p>A special value (lightuserdata) to encode/decode optional (none) values.</p>
+<p>Requires <code>feature = "serialize"</code></p>
+<h5 id="example"><a class="doc-anchor" href="#example">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::collections::HashMap;
+<span class="kw">use </span>mlua::{Lua, <span class="prelude-ty">Result</span>, LuaSerdeExt};
+
+<span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>lua = Lua::new();
+    lua.globals().set(<span class="string">"null"</span>, lua.null())<span class="question-mark">?</span>;
+
+    <span class="kw">let </span>val = lua.load(<span class="string">r#"{a = null}"#</span>).eval()<span class="question-mark">?</span>;
+    <span class="kw">let </span>map: HashMap&lt;String, <span class="prelude-ty">Option</span>&lt;String&gt;&gt; = lua.from_value(val)<span class="question-mark">?</span>;
+    <span class="macro">assert_eq!</span>(map[<span class="string">"a"</span>], <span class="prelude-val">None</span>);
+
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.array_metatable" class="method"><a class="src rightside" href="../../src/mlua/serde/mod.rs.html#69">Source</a><h4 class="code-header">fn <a href="#tymethod.array_metatable" class="fn">array_metatable</a>(&amp;self) -&gt; <a class="struct" href="../struct.Table.html" title="struct mlua::Table">Table</a>&lt;'_&gt;</h4></section></summary><div class="docblock"><p>A metatable attachable to a Lua table to systematically encode it as Array (instead of Map).
+As result, encoded Array will contain only sequence part of the table, with the same length
+as the <code>#</code> operator on that table.</p>
+<p>Requires <code>feature = "serialize"</code></p>
+<h5 id="example-1"><a class="doc-anchor" href="#example-1">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>mlua::{Lua, <span class="prelude-ty">Result</span>, LuaSerdeExt};
+<span class="kw">use </span>serde_json::Value <span class="kw">as </span>JsonValue;
+
+<span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>lua = Lua::new();
+    lua.globals().set(<span class="string">"array_mt"</span>, lua.array_metatable())<span class="question-mark">?</span>;
+
+    <span class="comment">// Encode as an empty array (no sequence part in the lua table)
+    </span><span class="kw">let </span>val = lua.load(<span class="string">"setmetatable({a = 5}, array_mt)"</span>).eval()<span class="question-mark">?</span>;
+    <span class="kw">let </span>j: JsonValue = lua.from_value(val)<span class="question-mark">?</span>;
+    <span class="macro">assert_eq!</span>(j.to_string(), <span class="string">"[]"</span>);
+
+    <span class="comment">// Encode as object
+    </span><span class="kw">let </span>val = lua.load(<span class="string">"{a = 5}"</span>).eval()<span class="question-mark">?</span>;
+    <span class="kw">let </span>j: JsonValue = lua.from_value(val)<span class="question-mark">?</span>;
+    <span class="macro">assert_eq!</span>(j.to_string(), <span class="string">r#"{"a":5}"#</span>);
+
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.to_value" class="method"><a class="src rightside" href="../../src/mlua/serde/mod.rs.html#102">Source</a><h4 class="code-header">fn <a href="#tymethod.to_value" class="fn">to_value</a>&lt;'lua, T: <a class="trait" href="../../serde/ser/trait.Serialize.html" title="trait serde::ser::Serialize">Serialize</a> + ?<a class="trait" href="https://doc.rust-lang.org/1.90.0/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>&gt;(
+    &amp;'lua self,
+    t: <a class="primitive" href="https://doc.rust-lang.org/1.90.0/std/primitive.reference.html">&amp;T</a>,
+) -&gt; <a class="type" href="../type.Result.html" title="type mlua::Result">Result</a>&lt;<a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'lua&gt;&gt;</h4></section></summary><div class="docblock"><p>Converts <code>T</code> into a <a href="../enum.Value.html" title="enum mlua::Value"><code>Value</code></a> instance.</p>
+<p>Requires <code>feature = "serialize"</code></p>
+<h5 id="example-2"><a class="doc-anchor" href="#example-2">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>mlua::{Lua, <span class="prelude-ty">Result</span>, LuaSerdeExt};
+<span class="kw">use </span>serde::Serialize;
+
+<span class="attr">#[derive(Serialize)]
+</span><span class="kw">struct </span>User {
+    name: String,
+    age: u8,
+}
+
+<span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>lua = Lua::new();
+    <span class="kw">let </span>u = User {
+        name: <span class="string">"John Smith"</span>.into(),
+        age: <span class="number">20</span>,
+    };
+    lua.globals().set(<span class="string">"user"</span>, lua.to_value(<span class="kw-2">&amp;</span>u)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+    lua.load(<span class="string">r#"
+        assert(user["name"] == "John Smith")
+        assert(user["age"] == 20)
+    "#</span>).exec()
+}</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.to_value_with" class="method"><a class="src rightside" href="../../src/mlua/serde/mod.rs.html#127-129">Source</a><h4 class="code-header">fn <a href="#tymethod.to_value_with" class="fn">to_value_with</a>&lt;'lua, T&gt;(
+    &amp;'lua self,
+    t: <a class="primitive" href="https://doc.rust-lang.org/1.90.0/std/primitive.reference.html">&amp;T</a>,
+    options: <a class="struct" href="../struct.SerializeOptions.html" title="struct mlua::SerializeOptions">Options</a>,
+) -&gt; <a class="type" href="../type.Result.html" title="type mlua::Result">Result</a>&lt;<a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'lua&gt;&gt;<div class="where">where
+    T: <a class="trait" href="../../serde/ser/trait.Serialize.html" title="trait serde::ser::Serialize">Serialize</a> + ?<a class="trait" href="https://doc.rust-lang.org/1.90.0/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h4></section></summary><div class="docblock"><p>Converts <code>T</code> into a <a href="../enum.Value.html" title="enum mlua::Value"><code>Value</code></a> instance with options.</p>
+<p>Requires <code>feature = "serialize"</code></p>
+<h5 id="example-3"><a class="doc-anchor" href="#example-3">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>mlua::{Lua, <span class="prelude-ty">Result</span>, LuaSerdeExt, SerializeOptions};
+
+<span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>lua = Lua::new();
+    <span class="kw">let </span>v = <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>];
+    <span class="kw">let </span>options = SerializeOptions::new().set_array_metatable(<span class="bool-val">false</span>);
+    lua.globals().set(<span class="string">"v"</span>, lua.to_value_with(<span class="kw-2">&amp;</span>v, options)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+
+    lua.load(<span class="string">r#"
+        assert(#v == 3 and v[1] == 1 and v[2] == 2 and v[3] == 3)
+        assert(getmetatable(v) == nil)
+    "#</span>).exec()
+}</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.from_value" class="method"><a class="src rightside" href="../../src/mlua/serde/mod.rs.html#160">Source</a><h4 class="code-header">fn <a href="#tymethod.from_value" class="fn">from_value</a>&lt;T: <a class="trait" href="../../serde/de/trait.DeserializeOwned.html" title="trait serde::de::DeserializeOwned">DeserializeOwned</a>&gt;(&amp;self, value: <a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'_&gt;) -&gt; <a class="type" href="../type.Result.html" title="type mlua::Result">Result</a>&lt;T&gt;</h4></section></summary><div class="docblock"><p>Deserializes a <a href="../enum.Value.html" title="enum mlua::Value"><code>Value</code></a> into any serde deserializable object.</p>
+<p>Requires <code>feature = "serialize"</code></p>
+<h5 id="example-4"><a class="doc-anchor" href="#example-4">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>mlua::{Lua, <span class="prelude-ty">Result</span>, LuaSerdeExt};
+<span class="kw">use </span>serde::Deserialize;
+
+<span class="attr">#[derive(Deserialize, Debug, PartialEq)]
+</span><span class="kw">struct </span>User {
+    name: String,
+    age: u8,
+}
+
+<span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>lua = Lua::new();
+    <span class="kw">let </span>val = lua.load(<span class="string">r#"{name = "John Smith", age = 20}"#</span>).eval()<span class="question-mark">?</span>;
+    <span class="kw">let </span>u: User = lua.from_value(val)<span class="question-mark">?</span>;
+
+    <span class="macro">assert_eq!</span>(u, User { name: <span class="string">"John Smith"</span>.into(), age: <span class="number">20 </span>});
+
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.from_value_with" class="method"><a class="src rightside" href="../../src/mlua/serde/mod.rs.html#192-193">Source</a><h4 class="code-header">fn <a href="#tymethod.from_value_with" class="fn">from_value_with</a>&lt;T: <a class="trait" href="../../serde/de/trait.DeserializeOwned.html" title="trait serde::de::DeserializeOwned">DeserializeOwned</a>&gt;(
+    &amp;self,
+    value: <a class="enum" href="../enum.Value.html" title="enum mlua::Value">Value</a>&lt;'_&gt;,
+    options: <a class="struct" href="../struct.DeserializeOptions.html" title="struct mlua::DeserializeOptions">Options</a>,
+) -&gt; <a class="type" href="../type.Result.html" title="type mlua::Result">Result</a>&lt;T&gt;</h4></section></summary><div class="docblock"><p>Deserializes a <a href="../enum.Value.html" title="enum mlua::Value"><code>Value</code></a> into any serde deserializable object with options.</p>
+<p>Requires <code>feature = "serialize"</code></p>
+<h5 id="example-5"><a class="doc-anchor" href="#example-5">§</a>Example</h5>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>mlua::{Lua, <span class="prelude-ty">Result</span>, LuaSerdeExt, DeserializeOptions};
+<span class="kw">use </span>serde::Deserialize;
+
+<span class="attr">#[derive(Deserialize, Debug, PartialEq)]
+</span><span class="kw">struct </span>User {
+    name: String,
+    age: u8,
+}
+
+<span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>lua = Lua::new();
+    <span class="kw">let </span>val = lua.load(<span class="string">r#"{name = "John Smith", age = 20, f = function() end}"#</span>).eval()<span class="question-mark">?</span>;
+    <span class="kw">let </span>options = DeserializeOptions::new().deny_unsupported_types(<span class="bool-val">false</span>);
+    <span class="kw">let </span>u: User = lua.from_value_with(val, options)<span class="question-mark">?</span>;
+
+    <span class="macro">assert_eq!</span>(u, User { name: <span class="string">"John Smith"</span>.into(), age: <span class="number">20 </span>});
+
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+</div></details></div><h2 id="dyn-compatibility" class="section-header">Dyn Compatibility<a href="#dyn-compatibility" class="anchor">§</a></h2><div class="dyn-compatibility-info"><p>This trait is <b>not</b> <a href="https://doc.rust-lang.org/1.90.0/reference/items/traits.html#dyn-compatibility">dyn compatible</a>.</p><p><i>In older versions of Rust, dyn compatibility was called "object safety", so this trait is not object safe.</i></p></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><section id="impl-LuaSerdeExt-for-Lua" class="impl"><a class="src rightside" href="../../src/mlua/serde/mod.rs.html#196-235">Source</a><a href="#impl-LuaSerdeExt-for-Lua" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="../trait.LuaSerdeExt.html" title="trait mlua::LuaSerdeExt">LuaSerdeExt</a> for <a class="struct" href="../struct.Lua.html" title="struct mlua::Lua">Lua</a></h3></section></div><script src="../../trait.impl/mlua/serde/trait.LuaSerdeExt.js" async></script></section></div></main></body></html>

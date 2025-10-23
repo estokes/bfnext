@@ -2776,9 +2776,9 @@
         "limit": 20,
         "limit_enforce": "DeleteOldest",
         "weight": 800,
-        "cost": 0,
+        "cost": 1,
         "jtac": {
-          "range": 8000,
+          "range": 4000,
           "nolos": false
         }
       },
@@ -2787,12 +2787,12 @@
         "template": "RATTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 30,
+        "limit": 15,
         "limit_enforce": "DeleteOldest",
         "weight": 1000,
-        "cost": 2,
+        "cost": 3,
         "jtac": {
-          "range": 8000,
+          "range": 4000,
           "nolos": false
         }
       },
@@ -2801,12 +2801,26 @@
         "template": "RMORTARTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 20,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 1200,
         "cost": 5,
         "jtac": {
-          "range": 8000,
+          "range": 6000,
+          "nolos": false
+        }
+      },
+      {
+        "name": "Recon JTAC",
+        "template": "RJTACTROOP",
+        "persist": "Forever",
+        "can_capture": false,
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "weight": 400,
+        "cost": 10,
+        "jtac": {
+          "range": 10000,
           "nolos": false
         }
       },
@@ -2815,9 +2829,9 @@
         "template": "RIGLATROOP",
         "persist": "Forever",
         "can_capture": false,
-        "limit": 20,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 500,
+        "weight": 600,
         "cost": 25,
         "jtac": null
       }
@@ -2831,9 +2845,9 @@
         "limit": 20,
         "limit_enforce": "DeleteOldest",
         "weight": 800,
-        "cost": 0,
+        "cost": 1,
         "jtac": {
-          "range": 8000,
+          "range": 4000,
           "nolos": false
         }
       },
@@ -2842,12 +2856,12 @@
         "template": "BATTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 30,
+        "limit": 15,
         "limit_enforce": "DeleteOldest",
         "weight": 1000,
-        "cost": 2,
+        "cost": 3,
         "jtac": {
-          "range": 8000,
+          "range": 4000,
           "nolos": false
         }
       },
@@ -2856,23 +2870,37 @@
         "template": "BMORTARTROOP",
         "persist": "Forever",
         "can_capture": true,
-        "limit": 20,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
         "weight": 1200,
         "cost": 5,
         "jtac": {
-          "range": 8000,
+          "range": 6000,
           "nolos": false
         }
       },
+      {
+        "name": "Recon JTAC",
+        "template": "BJTACTROOP",
+        "persist": "Forever",
+        "can_capture": false,
+        "limit": 10,
+        "limit_enforce": "DeleteOldest",
+        "weight": 400,
+        "cost": 10,
+        "jtac": {
+          "range": 10000,
+          "nolos": false
+        }
+      },	  
       {
         "name": "Stinger",
         "template": "BSTINGERTROOP",
         "persist": "Forever",
         "can_capture": false,
-        "limit": 20,
+        "limit": 10,
         "limit_enforce": "DeleteOldest",
-        "weight": 500,
+        "weight": 600,
         "cost": 25,
         "jtac": null
       }

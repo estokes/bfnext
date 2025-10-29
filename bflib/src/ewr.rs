@@ -118,7 +118,8 @@ impl GibBraa {
 struct Track {
     pos: Position3,
     velocity: Vector3,
-    last: DateTime<Utc>,
+    last: DateTime<Utc>,          // Last detection time (for age calculation)
+    last_update: DateTime<Utc>,   // Last data update time (for delay mechanism)
     side: Side,
     was_detected: bool,
     detected: bool,
@@ -218,16 +219,16 @@ impl Ewr {
                                     // Original implementation: update track data immediately
                                     track.pos = *pos;
                                     track.velocity = *velocity;
-                                    track.last = now;
+                                    track.last_update = now;
                                 }
                                 EwrMode::Delayed => {
                                     // Configurable delay: only update track data if the configured delay has passed since last update
                                     // For new tracks (last_update_time is epoch), update immediately
-                                    let time_since_update = (now - track.last).num_seconds();
-                                    if time_since_update >= ewr_delay as i64 || track.last == DateTime::<Utc>::UNIX_EPOCH {
+                                    let time_since_update = (now - track.last_update).num_seconds();
+                                    if time_since_update >= ewr_delay as i64 || track.last_update == DateTime::<Utc>::UNIX_EPOCH {
                                         track.pos = *pos;
                                         track.velocity = *velocity;
-                                        track.last = now;
+                                        track.last_update = now;
                                     }
                                 }
                             }

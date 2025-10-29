@@ -411,9 +411,6 @@ impl Db {
                             (*oid, obj)
                         }
                         None if !self.ephemeral.global_pad_templates.contains(&name) => {
-                            airbase
-                                .set_coalition(Side::Neutral)
-                                .context("setting airbase owner neutral")?;
                             map.for_each(|name, _| {
                                 w.set_item(name, 0).context("zeroing item")?;
                                 Ok(())
@@ -422,7 +419,7 @@ impl Db {
                         }
                         None => {
                             log::info!("airbase {name} has no objective");
-                            return Ok(())
+                            return Ok(());
                         }
                     };
                     match self.ephemeral.airbase_by_oid.entry(oid) {

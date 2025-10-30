@@ -14,13 +14,13 @@ FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero Public License
 for more details.
 */
 
-use super::{Db, SetS, ephemeral::SlotInfo, objective::ObjGroupClass, player::SlotAuth};
+use super::{ephemeral::SlotInfo, objective::ObjGroupClass, player::SlotAuth, Db, SetS};
 use crate::{
-    Connected, group, group_by_name, group_health, group_mut, objective,
+    group, group_by_name, group_health, group_mut, objective,
     spawnctx::{Despawn, SpawnCtx, SpawnLoc},
-    unit, unit_by_name, unit_mut,
+    unit, unit_by_name, unit_mut, Connected,
 };
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
 use bfprotocols::{
     cfg::{Action, ActionKind, Crate, Deployable, Troop, UnitTag, UnitTags, Vehicle},
     db::objective::ObjectiveId,
@@ -31,10 +31,9 @@ use bfprotocols::{
     stats::Stat,
 };
 use chrono::prelude::*;
-use compact_str::{CompactString, format_compact};
+use compact_str::{format_compact, CompactString};
 use dcso3::{
-    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3, azumith3d, centroid2d,
-    centroid3d, change_heading,
+    azumith3d, centroid2d, centroid3d, change_heading,
     coalition::Side,
     coord::Coord,
     env::miz,
@@ -47,12 +46,13 @@ use dcso3::{
     static_object::{ClassStatic, StaticObject},
     trigger::MarkId,
     unit::{ClassUnit, Unit},
+    LuaVec2, LuaVec3, MizLua, Position3, String, Vector2, Vector3,
 };
 use enumflags2::BitFlags;
 use fxhash::{FxHashMap, FxHashSet};
 use log::{error, warn};
 use serde_derive::{Deserialize, Serialize};
-use smallvec::{SmallVec, smallvec};
+use smallvec::{smallvec, SmallVec};
 use std::{cmp::max, collections::VecDeque};
 
 #[derive(Debug, Clone)]
@@ -71,7 +71,9 @@ pub enum DeployKind {
     #[serde(rename = "Objective")]
     ObjectiveDeprecated,
     #[serde(rename = "ObjectiveV2")]
-    Objective { origin: ObjectiveId },
+    Objective {
+        origin: ObjectiveId,
+    },
     Deployed {
         player: Ucid,
         #[serde(default)]
@@ -177,13 +179,15 @@ impl Db {
                 .units
                 .into_iter()
                 .filter_map(|uid| self.persisted.units.get(uid))
-                .filter_map(|unit| {
-                    if unit.dead {
-                        None
-                    } else {
-                        Some(unit.position.p.0)
-                    }
-                }),
+                .filter_map(
+                    |unit| {
+                        if unit.dead {
+                            None
+                        } else {
+                            Some(unit.position.p.0)
+                        }
+                    },
+                ),
         ))
     }
 
@@ -209,11 +213,12 @@ impl Db {
             .ok_or_else(|| anyhow!("all units are dead"))
     }
 
-    pub fn instanced_units(&self) -> impl Iterator<Item = (&SpawnedUnit, &DcsOid<ClassUnit>)> {
-        self.persisted
-            .units
-            .into_iter()
-            .filter_map(|(uid, sp)| self.ephemeral.object_id_by_uid.get(uid).map(|id| (sp, id)))
+    pub fn instanced_units(
+        &self,
+    ) -> impl Iterator<Item = (&SpawnedUnit, &DcsOid<ClassUnit>)> {
+        self.persisted.units.into_iter().filter_map(|(uid, sp)| {
+            self.ephemeral.object_id_by_uid.get(uid).map(|id| (sp, id))
+        })
     }
 
     pub fn deployed(&self) -> impl Iterator<Item = &SpawnedGroup> {
@@ -237,12 +242,8 @@ impl Db {
             self.ephemeral.msgs.delete_mark(id)
         }
         let group = group_mut!(self, gid)?;
-        let group_center = centroid2d(
-            group
-                .units
-                .into_iter()
-                .map(|uid| self.persisted.units[uid].pos),
-        );
+        let group_center =
+            centroid2d(group.units.into_iter().map(|uid| self.persisted.units[uid].pos));
         let id = match &mut group.origin {
             DeployKind::ObjectiveDeprecated => None,
             DeployKind::Objective { origin: oid } => match objective!(self, oid) {
@@ -255,33 +256,29 @@ impl Db {
                             group.name,
                             group.class
                         );
-                        Some(
-                            self.ephemeral
-                                .msgs
-                                .mark_to_side(group.side, group_center, true, msg),
-                        )
+                        Some(self.ephemeral.msgs.mark_to_side(
+                            group.side,
+                            group_center,
+                            true,
+                            msg,
+                        ))
                     } else {
                         None
                     }
                 }
             },
-            DeployKind::Action {
-                name,
-                spec: _,
-                destination,
-                player,
-                marks,
-                ..
-            } => {
+            DeployKind::Action { name, spec: _, destination, player, marks, .. } => {
                 let pname = player
                     .as_ref()
                     .map(|p| self.persisted.players[p].name.clone())
                     .unwrap_or(String::from("Server"));
                 let pos_msg = format_compact!("{name} {gid} deployed by {pname}");
-                let pos_mark =
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, pos_msg);
+                let pos_mark = self.ephemeral.msgs.mark_to_side(
+                    group.side,
+                    group_center,
+                    true,
+                    pos_msg,
+                );
                 match destination {
                     None => Some(pos_mark),
                     Some(dst) => {
@@ -302,11 +299,12 @@ impl Db {
             DeployKind::Crate { player, spec, .. } => {
                 let name = self.persisted.players[player].name.clone();
                 let msg = format_compact!("{} {gid} deployed by {name}", spec.name);
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                Some(self.ephemeral.msgs.mark_to_side(
+                    group.side,
+                    group_center,
+                    true,
+                    msg,
+                ))
             }
             DeployKind::Deployed {
                 spec,
@@ -327,19 +325,14 @@ impl Db {
                     "{} {gid} deployed by {name}{resp}",
                     spec.path.last().unwrap()
                 );
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                Some(self.ephemeral.msgs.mark_to_side(
+                    group.side,
+                    group_center,
+                    true,
+                    msg,
+                ))
             }
-            DeployKind::Troop {
-                player,
-                spec,
-                moved_by,
-                origin: _,
-                cost_fraction: _,
-            } => {
+            DeployKind::Troop { player, spec, moved_by, origin: _, cost_fraction: _ } => {
                 let name = self.persisted.players[player].name.clone();
                 let resp = moved_by
                     .as_ref()
@@ -349,11 +342,12 @@ impl Db {
                     })
                     .unwrap_or(CompactString::from(""));
                 let msg = format_compact!("{} {gid} deployed by {name}{resp}", spec.name);
-                Some(
-                    self.ephemeral
-                        .msgs
-                        .mark_to_side(group.side, group_center, true, msg),
-                )
+                Some(self.ephemeral.msgs.mark_to_side(
+                    group.side,
+                    group_center,
+                    true,
+                    msg,
+                ))
             }
         };
         if let Some(id) = id {
@@ -369,10 +363,7 @@ impl Db {
             .remove_cow(gid)
             .ok_or_else(|| anyhow!("no such group {:?}", gid))?;
         self.persisted.groups_by_name.remove_cow(&group.name);
-        self.persisted
-            .groups_by_side
-            .get_mut_cow(&group.side)
-            .map(|m| m.remove_cow(gid));
+        self.persisted.groups_by_side.get_mut_cow(&group.side).map(|m| m.remove_cow(gid));
         match &group.origin {
             DeployKind::ObjectiveDeprecated | DeployKind::Objective { .. } => (),
             DeployKind::Action { marks, .. } => {
@@ -381,6 +372,7 @@ impl Db {
                 }
                 self.persisted.actions.remove_cow(gid);
                 self.persisted.jtacs.remove_cow(gid);
+                self.persisted.ewrs.remove_cow(gid);
             }
             DeployKind::Crate { player, .. } => {
                 self.persisted.crates.remove_cow(gid);
@@ -407,9 +399,7 @@ impl Db {
         }
         let mut units: SmallVec<[String; 16]> = smallvec![];
         for uid in &group.units {
-            self.ephemeral
-                .units_potentially_close_to_enemies
-                .remove(uid);
+            self.ephemeral.units_potentially_close_to_enemies.remove(uid);
             self.ephemeral.units_able_to_move.swap_remove(uid);
             if let Some(id) = self.ephemeral.object_id_by_uid.remove(uid) {
                 self.ephemeral.uid_by_object_id.remove(&id);
@@ -424,15 +414,13 @@ impl Db {
             None => {
                 // it's a static, we have to get it's units
                 for unit in &units {
-                    self.ephemeral
-                        .push_despawn(*gid, Despawn::Static(unit.clone()))
+                    self.ephemeral.push_despawn(*gid, Despawn::Static(unit.clone()))
                 }
             }
             Some(_) => {
                 // it's a normal group
                 if let Some(oid) = self.ephemeral.object_id_by_gid.get(gid) {
-                    self.ephemeral
-                        .push_despawn(*gid, Despawn::Group(oid.clone()));
+                    self.ephemeral.push_despawn(*gid, Despawn::Group(oid.clone()));
                 }
             }
         }
@@ -499,12 +487,7 @@ impl Db {
                 })
                 .collect::<Result<VecDeque<_>>>()?;
             match location {
-                SpawnLoc::InAir {
-                    pos,
-                    heading,
-                    altitude,
-                    speed: _,
-                } => {
+                SpawnLoc::InAir { pos, heading, altitude, speed: _ } => {
                     let group_center = centroid2d(positions.iter().map(|p| p.position));
                     let group_altitude = {
                         let (sum, i) = positions
@@ -520,26 +503,19 @@ impl Db {
                             p.altitude = Some(a - group_altitude + altitude);
                         }
                     }
-                    rotate2d_gen(heading, positions.make_contiguous(), |p| &mut p.position);
-                    Ok(GroupPosition {
-                        positions,
-                        by_type: FxHashMap::default(),
-                    })
+                    rotate2d_gen(heading, positions.make_contiguous(), |p| {
+                        &mut p.position
+                    });
+                    Ok(GroupPosition { positions, by_type: FxHashMap::default() })
                 }
                 SpawnLoc::AtPosWithCenter { pos, center } => {
                     for p in positions.iter_mut() {
                         p.position = p.position - center + pos;
                         p.altitude = None;
                     }
-                    Ok(GroupPosition {
-                        positions,
-                        by_type: FxHashMap::default(),
-                    })
+                    Ok(GroupPosition { positions, by_type: FxHashMap::default() })
                 }
-                SpawnLoc::AtTrigger {
-                    name,
-                    group_heading,
-                } => {
+                SpawnLoc::AtTrigger { name, group_heading } => {
                     let group_center = centroid2d(positions.iter().map(|p| p.position));
                     let pos = spctx.get_trigger_zone(idx, name.as_str())?.pos()?;
                     for p in positions.iter_mut() {
@@ -550,16 +526,9 @@ impl Db {
                     rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
                         &mut p.position
                     });
-                    Ok(GroupPosition {
-                        positions,
-                        by_type: FxHashMap::default(),
-                    })
+                    Ok(GroupPosition { positions, by_type: FxHashMap::default() })
                 }
-                SpawnLoc::AtPos {
-                    pos,
-                    offset_direction,
-                    group_heading,
-                } => {
+                SpawnLoc::AtPos { pos, offset_direction, group_heading } => {
                     let group_center = centroid2d(positions.iter().map(|p| p.position));
                     let radius = distance(
                         group_center,
@@ -567,28 +536,22 @@ impl Db {
                         positions.iter().map(|p| &p.position),
                     );
                     for p in positions.iter_mut() {
-                        p.position = p.position - group_center + pos + radius * offset_direction;
+                        p.position =
+                            p.position - group_center + pos + radius * offset_direction;
                     }
                     rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
                         &mut p.position
                     });
-                    let offset_magnitude =
-                        20. - distance(pos, f64::min, positions.iter().map(|p| &p.position));
+                    let offset_magnitude = 20.
+                        - distance(pos, f64::min, positions.iter().map(|p| &p.position));
                     for p in positions.iter_mut() {
                         p.position = p.position + offset_magnitude * offset_direction;
                         p.heading = change_heading(p.heading, group_heading);
                         p.altitude = None;
                     }
-                    Ok(GroupPosition {
-                        positions,
-                        by_type: FxHashMap::default(),
-                    })
+                    Ok(GroupPosition { positions, by_type: FxHashMap::default() })
                 }
-                SpawnLoc::AtPosWithComponents {
-                    pos,
-                    group_heading,
-                    component_pos,
-                } => {
+                SpawnLoc::AtPosWithComponents { pos, group_heading, component_pos } => {
                     let group_center = centroid2d(positions.iter().map(|p| p.position));
                     let center_by_typ: FxHashMap<String, Vector2> = {
                         let mut tbl = FxHashMap::default();
@@ -604,9 +567,7 @@ impl Db {
                                 *n += 1;
                             }
                         }
-                        tbl.into_iter()
-                            .map(|(k, (n, v))| (k, v / (n as f64)))
-                            .collect()
+                        tbl.into_iter().map(|(k, (n, v))| (k, v / (n as f64))).collect()
                     };
                     let mut by_type: FxHashMap<String, VecDeque<UnitPosition>> =
                         FxHashMap::default();
@@ -626,16 +587,14 @@ impl Db {
                                 heading: change_heading(heading, group_heading),
                                 altitude: None,
                             }),
-                            Some(pos) => {
-                                by_type
-                                    .entry(typ.clone())
-                                    .or_default()
-                                    .push_back(UnitPosition {
-                                        position: position - group_center + *pos,
-                                        heading: change_heading(heading, group_heading),
-                                        altitude: None,
-                                    })
-                            }
+                            Some(pos) => by_type
+                                .entry(typ.clone())
+                                .or_default()
+                                .push_back(UnitPosition {
+                                    position: position - group_center + *pos,
+                                    heading: change_heading(heading, group_heading),
+                                    altitude: None,
+                                }),
                         }
                     }
                     rotate2d_gen(group_heading, positions.make_contiguous(), |p| {
@@ -655,9 +614,8 @@ impl Db {
             positions: &VecDeque<UnitPosition>,
             positions_by_typ: &FxHashMap<String, VecDeque<UnitPosition>>,
         ) -> Result<()> {
-            for pos in positions
-                .iter()
-                .chain(positions_by_typ.values().flat_map(|v| v.iter()))
+            for pos in
+                positions.iter().chain(positions_by_typ.values().flat_map(|v| v.iter()))
             {
                 match land.get_surface_type(LuaVec2(pos.position))? {
                     SurfaceType::Land | SurfaceType::Road | SurfaceType::Runway => (),
@@ -673,9 +631,8 @@ impl Db {
             positions: &VecDeque<UnitPosition>,
             positions_by_typ: &FxHashMap<String, VecDeque<UnitPosition>>,
         ) -> Result<()> {
-            for pos in positions
-                .iter()
-                .chain(positions_by_typ.values().flat_map(|v| v.iter()))
+            for pos in
+                positions.iter().chain(positions_by_typ.values().flat_map(|v| v.iter()))
             {
                 match land.get_surface_type(LuaVec2(pos.position))? {
                     SurfaceType::ShallowWater | SurfaceType::Water => (),
@@ -688,8 +645,10 @@ impl Db {
         }
         let land = Land::singleton(spctx.lua())?;
         let template_name = String::from(template_name);
-        let template = spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
-        let mut gpos = compute_unit_positions(&spctx, idx, location.clone(), &template.group)?;
+        let template =
+            spctx.get_template_ref(idx, GroupKind::Any, side, template_name.as_str())?;
+        let mut gpos =
+            compute_unit_positions(&spctx, idx, location.clone(), &template.group)?;
         let kind = GroupCategory::from_kind(template.category);
         let gid = GroupId::new();
         // naval spawn points need to be pre created in the miz, so they must be
@@ -803,8 +762,14 @@ impl Db {
             DeployKind::ObjectiveDeprecated | DeployKind::Objective { .. } => (),
             DeployKind::Action { spec, .. } => {
                 self.persisted.actions.insert_cow(gid);
-                if let ActionKind::Drone(_) = &spec.kind {
-                    self.persisted.jtacs.insert_cow(gid);
+                match &spec.kind {
+                    ActionKind::Drone(_) => {
+                        self.persisted.jtacs.insert_cow(gid);
+                    }
+                    ActionKind::Awacs(_) => {
+                        self.persisted.ewrs.insert_cow(gid);
+                    }
+                    _ => (),
                 }
             }
             DeployKind::Crate { player, .. } => {
@@ -829,10 +794,7 @@ impl Db {
         }
         self.persisted.groups.insert_cow(gid, spawned);
         self.persisted.groups_by_name.insert_cow(group_name, gid);
-        self.persisted
-            .groups_by_side
-            .get_or_default_cow(side)
-            .insert_cow(gid);
+        self.persisted.groups_by_side.get_or_default_cow(side).insert_cow(gid);
         self.ephemeral.dirty();
         self.mark_group(&gid)?;
         Ok(gid)
@@ -877,9 +839,7 @@ impl Db {
             let unit = unit!(self, uid)?;
             self.ephemeral.uid_by_object_id.insert(id.clone(), *uid);
             self.ephemeral.object_id_by_uid.insert(*uid, id.clone());
-            self.ephemeral
-                .units_potentially_close_to_enemies
-                .insert(*uid);
+            self.ephemeral.units_potentially_close_to_enemies.insert(*uid);
             if unit.tags.contains(UnitTag::Driveable) {
                 self.ephemeral.units_able_to_move.insert(*uid);
             }
@@ -887,10 +847,7 @@ impl Db {
                 id: EnId::Unit(*uid),
                 gid: Some(unit.group),
                 owner: unit.side,
-                typ: stats::Unit {
-                    typ: unit.typ.clone(),
-                    tags: unit.tags,
-                },
+                typ: stats::Unit { typ: unit.typ.clone(), tags: unit.tags },
                 pos: stats::Pos {
                     pos: Coord::singleton(lua)?
                         .lo_to_ll(LuaVec3(Vector3::new(unit.pos.x, 0., unit.pos.y)))?,
@@ -910,9 +867,10 @@ impl Db {
                 // it's a dynamic slot
                 let typ = Vehicle::from(unit.as_object()?.get_type_name()?);
                 let pos = unit.get_ground_position()?;
-                let obj = Db::objective_near_point(&self.persisted.objectives, pos.0, |_| true)
-                    .map(|(_, _, o)| o)
-                    .ok_or_else(|| anyhow!("dynamic slot not near any objective"))?;
+                let obj =
+                    Db::objective_near_point(&self.persisted.objectives, pos.0, |_| true)
+                        .map(|(_, _, o)| o)
+                        .ok_or_else(|| anyhow!("dynamic slot not near any objective"))?;
                 let gid = unit.get_group()?.id()?;
                 let gid = miz::GroupId::from(gid.inner());
                 self.ephemeral.slot_info.insert(
@@ -952,11 +910,7 @@ impl Db {
         if deferred_validate {
             match self.try_occupy_slot_deferred(Utc::now(), &ucid, slot) {
                 SlotAuth::Yes(typ) => {
-                    self.ephemeral.stat(Stat::Slot {
-                        id: ucid,
-                        slot,
-                        typ,
-                    });
+                    self.ephemeral.stat(Stat::Slot { id: ucid, slot, typ });
                 }
                 a => {
                     unit.clone().destroy()?;
@@ -988,7 +942,11 @@ impl Db {
         Ok(())
     }
 
-    pub fn unit_dead(&mut self, id: &DcsOid<ClassUnit>, now: DateTime<Utc>) -> Result<()> {
+    pub fn unit_dead(
+        &mut self,
+        id: &DcsOid<ClassUnit>,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
         let uid = match self.ephemeral.unit_dead(&self.persisted, id) {
             None => return Ok(()),
             Some((uid, ucid)) => {
@@ -1010,9 +968,7 @@ impl Db {
                 let health = group_health!(self, gid)?.0;
                 if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
                     self.update_objective_status(&oid, now)?;
-                    self.ephemeral
-                        .units_potentially_close_to_enemies
-                        .remove(&uid);
+                    self.ephemeral.units_potentially_close_to_enemies.remove(&uid);
                     if health == 0 {
                         if let Some(id) = self.ephemeral.group_marks.remove(&gid) {
                             self.ephemeral.msgs.delete_mark(id);
@@ -1054,7 +1010,9 @@ impl Db {
                     }
                 }
                 if self.persisted.actions.contains(&gid) {
-                    if let DeployKind::Action { player, spec, .. } = &group!(self, gid)?.origin {
+                    if let DeployKind::Action { player, spec, .. } =
+                        &group!(self, gid)?.origin
+                    {
                         if self.group_health(&gid)?.0 == 0 {
                             if let Some((penalty, ucid)) = spec
                                 .penalty
@@ -1063,7 +1021,9 @@ impl Db {
                                 self.adjust_points(
                                     &ucid,
                                     -(penalty as i32),
-                                    &format_compact!("for the loss of action group {gid}"),
+                                    &format_compact!(
+                                        "for the loss of action group {gid}"
+                                    ),
                                 )
                             }
                             self.delete_group(&gid)?
@@ -1075,7 +1035,11 @@ impl Db {
         Ok(())
     }
 
-    pub fn static_dead(&mut self, id: &DcsOid<ClassStatic>, now: DateTime<Utc>) -> Result<()> {
+    pub fn static_dead(
+        &mut self,
+        id: &DcsOid<ClassStatic>,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
         if let Some(uid) = self.ephemeral.uid_by_static.remove(id) {
             match self.persisted.units.get_mut_cow(&uid) {
                 None => error!("static_dead: missing unit {:?}", uid),
@@ -1083,7 +1047,9 @@ impl Db {
                     unit.dead = true;
                     let gid = unit.group;
                     self.ephemeral.dirty();
-                    if let Some(oid) = self.persisted.objectives_by_group.get(&gid).copied() {
+                    if let Some(oid) =
+                        self.persisted.objectives_by_group.get(&gid).copied()
+                    {
                         self.update_objective_status(&oid, now)?;
                     }
                     if self.persisted.deployed.contains(&gid)
@@ -1104,7 +1070,11 @@ impl Db {
         group_health!(self, gid)
     }
 
-    pub fn artillery_near_point(&self, side: Side, pos: Vector2) -> SmallVec<[GroupId; 8]> {
+    pub fn artillery_near_point(
+        &self,
+        side: Side,
+        pos: Vector2,
+    ) -> SmallVec<[GroupId; 8]> {
         let range2 = (self.ephemeral.cfg.artillery_mission_range as f64).powi(2);
         let artillery = self
             .deployed()
@@ -1136,8 +1106,10 @@ impl Db {
             .filter_map(|group| {
                 if group.tags.contains(UnitTag::ALCM) && group.side == side {
                     let center = self.group_center(&group.id).ok()?;
-                    if na::distance_squared(&pos.into(), &na::Point2::new(center.x, center.y))
-                        <= range2
+                    if na::distance_squared(
+                        &pos.into(),
+                        &na::Point2::new(center.x, center.y),
+                    ) <= range2
                     {
                         let mut unit: Option<Unit> = None;
                         let mut ammo = 0;
@@ -1228,9 +1200,7 @@ impl Db {
                 spunit.position = pos;
                 spunit.pos = Vector2::new(pos.p.x, pos.p.z);
                 spunit.heading = azumith3d(pos.x.0);
-                self.ephemeral
-                    .units_potentially_close_to_enemies
-                    .insert(*uid);
+                self.ephemeral.units_potentially_close_to_enemies.insert(*uid);
                 let v = if spunit.tags.contains(UnitTag::Aircraft) && instance.in_air()? {
                     let v = instance.get_velocity()?.0;
                     spunit.airborne_velocity = Some(v);

@@ -3,13 +3,17 @@
   "admins": {
     "f279deb7a6b62c96a78eca3ddb2bd8d0": "REAPER 32 | EvilKipper",
     "69d60e1a0fe1c86bc3e81792458dba61": "<64>Cookie",
-	"9b2be86d1cc2d247e872807f2dee5669": "Baron 1-1 | Quigon",
+    "9b2be86d1cc2d247e872807f2dee5669": "Baron 1-1 | Quigon",
     "c67cf1bb193dd406d0b29c2cb444b189": "REAPER 61 | dIce",
     "4c27ed606a78717da9d96a49b1aa54db": "REAPER 43 | Fragal"
   },
   "banned": {},
   "auto_reset": {
-    "condition": { "MapOwned": { "fraction": 1.0 } },
+    "condition": {
+      "MapOwned": {
+        "fraction": 1.0
+      }
+    },
     "delay": 900
   },
   "rules": {
@@ -95,13 +99,13 @@
     "MiG-21Bis": 14400,
     "F-16C_50": 36000,
     "MiG-19P": 9000,
-	"OH58D": 9000,
-	"F-4E-45MC": 21600,
+    "OH58D": 9000,
+    "F-4E-45MC": 21600,
     "M-2000C": 21600,
     "Mi-8MT": 9000,
     "Ka-50_3": 14400,
-   "CH-47Fbl1": 9000,
-   "F-15C": 36000,
+    "CH-47Fbl1": 9000,
+    "F-15C": 36000,
     "Ka-50": 14400,
     "FA-18C_hornet": 36000,
     "A-10C": 21600,
@@ -147,8 +151,8 @@
     "C-101CC": "Recon",
     "MiG-29A": "Standard",
     "J-11A": "Standard",
-	"F-4E-45MC": "Intercept",
-	"OH58D": "Attack",
+    "F-4E-45MC": "Intercept",
+    "OH58D": "Attack",
     "MiG-29S": "Standard",
     "L-39C": "Recon",
     "F-14A-135-GR": "Standard",
@@ -167,7 +171,7 @@
     "A-10A": "Attack",
     "AJS37": "Attack",
     "Mirage-F1CE": "Intercept",
-	"CH-47Fbl1": "Logistics",
+    "CH-47Fbl1": "Logistics",
     "Su-33": "Standard",
     "Su-27": "Standard",
     "F-14B": "Standard",
@@ -692,7 +696,7 @@
       "crate_slots": 3,
       "total_slots": 3
     },
-	"CH-47Fbl1": {
+    "CH-47Fbl1": {
       "troop_slots": 4,
       "crate_slots": 3,
       "total_slots": 4
@@ -1689,9 +1693,9 @@
       "RadarGuided",
       "TrackRadar",
       "Launcher",
-      "Driveable"      
+      "Driveable"
     ],
-	  "T-72B3": [
+    "T-72B3": [
       "Armor",
       "MR",
       "HeavyCannon",
@@ -1796,7 +1800,7 @@
       "Launcher",
       "Driveable"
     ],
-	  "JTAC": [
+    "JTAC": [
       "Infantry",
       "SR"
     ],
@@ -1930,19 +1934,19 @@
       "Logistics",
       "Unarmed"
     ],
-	  "KrAZ6322": [
+    "KrAZ6322": [
       "Unarmed"
     ],
-	  "Ural-375 PBU": [
+    "Ural-375 PBU": [
       "Unarmed"
     ],
     "F-4E-45MC": [
-	  "Aircraft"
-	],
-	"OH58D": [
-	  "Aircraft",
-	  "Helicopter"
-	],	
+      "Aircraft"
+    ],
+    "OH58D": [
+      "Aircraft",
+      "Helicopter"
+    ],
     "Kub 2P25 ln": [
       "SAM",
       "MR",
@@ -1997,16 +2001,16 @@
       "AAA",
       "LR"
     ],
-      "KS-19": [
+    "KS-19": [
       "AAA",
       "SR"
     ],
-	  "SON_9": [
+    "SON_9": [
       "SR",
       "RadarGuided",
       "TrackRadar"
     ],
-	"Strela-10M3": [
+    "Strela-10M3": [
       "SAM",
       "SR",
       "IRGuided",
@@ -2028,7 +2032,7 @@
       "AAA",
       "LR"
     ],
-	  "flak18": [
+    "flak18": [
       "AAA",
       "SR"
     ],
@@ -2078,7 +2082,7 @@
       "Aircraft",
       "Helicopter"
     ],
-	"CH-47Fbl1": [
+    "CH-47Fbl1": [
       "Aircraft",
       "Helicopter"
     ],
@@ -2142,7 +2146,7 @@
       "LightCannon",
       "Driveable"
     ],
-	"LAV-25": [
+    "LAV-25": [
       "APC",
       "MR",
       "LightCannon",
@@ -2164,7 +2168,7 @@
       "LightCannon",
       "Driveable"
     ],
-	"BTR-82A": [
+    "BTR-82A": [
       "APC",
       "MR",
       "LightCannon",
@@ -2177,7 +2181,7 @@
       "SmallArms",
       "Driveable"
     ],
-	"Chieftain_mk3": [
+    "Chieftain_mk3": [
       "Armor",
       "MR",
       "HeavyCannon",
@@ -2200,7 +2204,7 @@
       "SmallArms",
       "Driveable"
     ],
-	"SAU Akatsia": [
+    "SAU Akatsia": [
       "Armor",
       "Artillery",
       "Driveable"

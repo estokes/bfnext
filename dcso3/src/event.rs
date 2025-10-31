@@ -16,8 +16,8 @@ use std::marker::PhantomData;
 use crate::{object::DcsOid, unit::ClassUnit};
 
 use super::{
-    as_tbl, as_tbl_ref, lua_err, object::Object, unit::Unit, weapon::Weapon, world::MarkPanel,
-    String, Time, value_to_json
+    as_tbl, as_tbl_ref, lua_err, object::Object, unit::Unit, value_to_json,
+    weapon::Weapon, world::MarkPanel, String, Time,
 };
 use anyhow::{bail, Result};
 use log::{error, info};
@@ -93,18 +93,22 @@ impl<'lua> FromLua<'lua> for WeaponUse<'lua> {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LeaveUnit {
-    pub initiator: DcsOid<ClassUnit>
+    pub initiator: Option<DcsOid<ClassUnit>>,
 }
 
 impl<'lua> FromLua<'lua> for LeaveUnit {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("LeaveUnit", None, value).map_err(lua_err)?;
-        let tbl: LuaTable = tbl.raw_get("initiator")?;
-        let initiator = DcsOid {
-            id: tbl.raw_get("id_")?,
-            class: "Unit".into(),
-            t: PhantomData,
-        };
+        let tbl: Option<LuaTable> = tbl.raw_get("initiator")?;
+        let initiator = tbl
+            .map(|tbl| {
+                Ok::<_, mlua::Error>(DcsOid {
+                    id: tbl.raw_get("id_")?,
+                    class: "Unit".into(),
+                    t: PhantomData,
+                })
+            })
+            .transpose()?;
         Ok(Self { initiator })
     }
 }
@@ -118,10 +122,7 @@ pub struct UnitEvent<'lua> {
 impl<'lua> FromLua<'lua> for UnitEvent<'lua> {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("UnitEvent", None, value).map_err(lua_err)?;
-        Ok(Self {
-            time: tbl.raw_get("time")?,
-            initiator: tbl.raw_get("initiator")?,
-        })
+        Ok(Self { time: tbl.raw_get("time")?, initiator: tbl.raw_get("initiator")? })
     }
 }
 
@@ -264,7 +265,11 @@ pub enum Event<'lua> {
     Max,
 }
 
-fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> Result<Event<'lua>> {
+fn translate<'a, 'lua: 'a>(
+    lua: &'lua Lua,
+    id: i64,
+    value: Value<'lua>,
+) -> Result<Event<'lua>> {
     Ok(match id {
         0 => Event::Invalid,
         1 => Event::Shot(Shot::from_lua(value, lua)?),
@@ -323,7 +328,7 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> Resul
         54 => {
             info!("mission winner event {}", value_to_json(&value));
             Event::MissionWinner
-        },
+        }
         55 => Event::PostponedTakeoff(AtPlace::from_lua(value, lua)?),
         56 => Event::PostponedLand(AtPlace::from_lua(value, lua)?),
         57 => Event::Max,
@@ -333,9 +338,7 @@ fn translate<'a, 'lua: 'a>(lua: &'lua Lua, id: i64, value: Value<'lua>) -> Resul
 
 impl<'lua> FromLua<'lua> for Event<'lua> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
-        let id = as_tbl_ref("Event", &value)
-            .map_err(lua_err)?
-            .raw_get("id")?;
+        let id = as_tbl_ref("Event", &value).map_err(lua_err)?.raw_get("id")?;
         match translate(lua, id, value.clone()) {
             Ok(ev) => Ok(ev),
             Err(e) => {

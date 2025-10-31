@@ -28,8 +28,8 @@ mod spawnctx;
 
 extern crate nalgebra as na;
 use crate::db::player::SlotAuth;
-use admin::{AdminCommand, AdminResult, run_admin_commands};
-use anyhow::{Context as AnyhowContext, Result, anyhow, bail};
+use admin::{run_admin_commands, AdminCommand, AdminResult};
+use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use bfprotocols::{
     cfg::{Cfg, LifeType},
     db::objective::ObjectiveId,
@@ -38,20 +38,20 @@ use bfprotocols::{
 };
 use bg::Task;
 use chatcmd::{run_action_commands, run_jtac_commands};
-use chrono::{Duration, prelude::*};
-use compact_str::{CompactString, format_compact};
+use chrono::{prelude::*, Duration};
+use compact_str::{format_compact, CompactString};
 use crossbeam::queue::SegQueue;
 use db::{
-    Db,
     group::BirthRes,
     player::{RegErr, TakeoffRes},
+    Db,
 };
 use dcso3::{
-    HooksLua, LuaEnv, MizLua, String,
     coalition::Side,
     env::{
-        self, Env,
+        self,
         miz::{Miz, UnitId},
+        Env,
     },
     event::Event,
     hooks::UserHooks,
@@ -63,6 +63,7 @@ use dcso3::{
     trigger::Trigger,
     unit::{ClassUnit, Unit},
     world::{HandlerId, MarkPanel, World},
+    HooksLua, LuaEnv, MizLua, String,
 };
 use ewr::Ewr;
 use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
@@ -74,7 +75,7 @@ use mlua::prelude::*;
 use msgq::MsgTyp;
 use netidx::publisher::Value;
 use shots::ShotDb;
-use smallvec::{SmallVec, smallvec};
+use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
@@ -104,9 +105,7 @@ impl Connected {
     }
 
     pub fn get_by_name(&self, name: &str) -> Option<&PlayerInfo> {
-        self.id_by_name
-            .get(name)
-            .and_then(|id| self.info_by_player_id.get(id))
+        self.id_by_name.get(name).and_then(|id| self.info_by_player_id.get(id))
     }
 
     fn get_or_lookup_player_info<'a, 'lua, L: LuaEnv<'lua>>(
@@ -119,9 +118,8 @@ impl Connected {
         } else {
             let net = Net::singleton(lua)?;
             let ifo = net.get_player_info(id)?;
-            let ucid = ifo
-                .ucid()?
-                .ok_or_else(|| anyhow!("player {:?} has no ucid", ifo))?;
+            let ucid =
+                ifo.ucid()?.ok_or_else(|| anyhow!("player {:?} has no ucid", ifo))?;
             let name = ifo.name()?;
             let addr = ifo.ip()?;
             info!("player name: '{}', id: {:?}, ucid: {:?}", name, id, ucid);
@@ -191,9 +189,9 @@ impl LoadState {
     fn login_ok(&self) -> Option<String> {
         match self {
             Self::Running => None,
-            Self::Init => Some(String::from(
-                "The server is not finished loading the mission",
-            )),
+            Self::Init => {
+                Some(String::from("The server is not finished loading the mission"))
+            }
             Self::MissionLoaded { time } => {
                 let remains = (Duration::seconds(62) - (Utc::now() - time)).num_seconds();
                 Some(format_compact!("The server is initializing ETA {remains}s").into())
@@ -313,8 +311,7 @@ impl Context {
     fn respawn_groups(&mut self, lua: MizLua, miz: &Miz) -> Result<()> {
         let spctx = SpawnCtx::new(lua)?;
         let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
-        self.db
-            .respawn_after_load(lua, perf, &self.idx, miz, &mut self.landcache, &spctx)
+        self.db.respawn_after_load(lua, perf, &self.idx, miz, &mut self.landcache, &spctx)
     }
 
     fn log_perf(&mut self, now: DateTime<Utc>) {
@@ -373,44 +370,32 @@ fn on_player_try_connect(
     }
     if let Err(e) = ctx.connected.player_connected(
         id,
-        PlayerInfo {
-            name: name.clone(),
-            addr: Some(addr.clone()),
-            ucid,
-        },
+        PlayerInfo { name: name.clone(), addr: Some(addr.clone()), ucid },
     ) {
         return Ok(Some(String::from(format_compact!("{e}"))));
     }
     ctx.db.player_connected(ucid, name.clone());
-    ctx.do_bg_task(Task::Stat(Stat::Connect {
-        id: ucid,
-        addr,
-        name,
-    }));
-    record_perf(
-        &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks,
-        ts,
-    );
+    ctx.do_bg_task(Task::Stat(Stat::Connect { id: ucid, addr, name }));
+    record_perf(&mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks, ts);
     Ok(None)
 }
 
-fn on_player_try_send_chat(lua: HooksLua, id: PlayerId, msg: String, all: bool) -> Result<String> {
+fn on_player_try_send_chat(
+    lua: HooksLua,
+    id: PlayerId,
+    msg: String,
+    all: bool,
+) -> Result<String> {
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let perf = &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks;
-    info!(
-        "onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}",
-        id, msg, all
-    );
+    info!("onPlayerTrySendChat id: {:?}, msg: {:?}, all: {:?}", id, msg, all);
     let r = chatcmd::process(ctx, lua, start_ts, id, msg);
     record_perf(perf, start_ts);
     match r {
         Ok(s) => Ok(s),
         Err(e) => {
-            ctx.db
-                .ephemeral
-                .msgs()
-                .send(MsgTyp::Chat(Some(id)), format_compact!("{e}"));
+            ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), format_compact!("{e}"));
             Ok("".into())
         }
     }
@@ -424,11 +409,7 @@ fn process_slot_rejection(ctx: &mut Context, id: PlayerId, ucid: Ucid, rej: Slot
                 format_compact!("access to slot is denied"),
             );
         }
-        SlotAuth::NoPoints {
-            vehicle,
-            cost,
-            balance,
-        } => {
+        SlotAuth::NoPoints { vehicle, cost, balance } => {
             ctx.db.ephemeral.msgs().send(
                 MsgTyp::Chat(Some(id)),
                 format_compact!("{vehicle} costs {cost}, you have {balance}"),
@@ -448,7 +429,8 @@ fn process_slot_rejection(ctx: &mut Context, id: PlayerId, ucid: Ucid, rej: Slot
             );
         }
         SlotAuth::VehicleNotAvailable(vehicle) => {
-            let msg = format_compact!("Objective does not have any {} in stock", vehicle.0);
+            let msg =
+                format_compact!("Objective does not have any {} in stock", vehicle.0);
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), msg);
         }
         SlotAuth::ObjectiveHasNoLogistics => {
@@ -503,11 +485,7 @@ fn try_occupy_slot(
         SlotAuth::Yes(typ) => {
             ctx.db.ephemeral.cancel_force_to_spectators(&ifo.ucid);
             ctx.subscribed_jtac_menus.remove(&slot);
-            ctx.do_bg_task(Task::Stat(Stat::Slot {
-                id: ifo.ucid,
-                slot,
-                typ,
-            }));
+            ctx.do_bg_task(Task::Stat(Stat::Slot { id: ifo.ucid, slot, typ }));
             Ok(true)
         }
         rej => {
@@ -606,27 +584,35 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
             }
         }
         Event::PlayerLeaveUnit(e) => {
-            if let Some(ucid) = ctx.db.player_in_unit(false, &e.initiator) {
-                if let Some(player) = ctx.db.player(&ucid) {
-                    if let Some((_, Some(inst))) = player.current_slot.as_ref() {
-                        if inst.landed_at_objective.is_none() {
-                            ctx.shots_out.dead(e.initiator.clone(), start_ts)
+            if let Some(initiator) = e.initiator {
+                if let Some(ucid) = ctx.db.player_in_unit(false, &initiator) {
+                    if let Some(player) = ctx.db.player(&ucid) {
+                        if let Some((_, Some(inst))) = player.current_slot.as_ref() {
+                            if inst.landed_at_objective.is_none() {
+                                ctx.shots_out.dead(initiator.clone(), start_ts)
+                            }
                         }
                     }
                 }
-            }
-            if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &e.initiator) {
-                error!("player left unit failed {:?}", e)
+                if let Err(e) = ctx.db.player_left_unit(lua, start_ts, &initiator) {
+                    error!("player left unit failed {:?}", e)
+                }
+            } else {
+                error!("player leave unit with no unit")
             }
         }
         Event::Hit(e) | Event::Kill(e) => {
             if let Some(target) = e.target.as_ref().and_then(|t| t.as_unit().ok()) {
                 let dead = target.get_life()? < 1;
                 if let Some(shooter) = e.initiator.and_then(|u| u.as_unit().ok()) {
-                    if let Err(e) =
-                        ctx.shots_out
-                            .hit(&ctx.db, start_ts, dead, &target, &shooter, e.weapon_name)
-                    {
+                    if let Err(e) = ctx.shots_out.hit(
+                        &ctx.db,
+                        start_ts,
+                        dead,
+                        &target,
+                        &shooter,
+                        e.weapon_name,
+                    ) {
                         error!("error processing hit event {:?}", e)
                     }
                 }
@@ -635,7 +621,9 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         error!("0 unit killed failed {:?}", e)
                     }
                 }
-            } else if let Some(target) = e.target.as_ref().and_then(|t| t.as_static().ok()) {
+            } else if let Some(target) =
+                e.target.as_ref().and_then(|t| t.as_static().ok())
+            {
                 if target.get_life()? < 1 {
                     if let Err(e) = ctx.db.static_dead(&target.object_id()?, start_ts) {
                         error!("static dead failed {e:?}")
@@ -655,7 +643,8 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 if let Err(e) = unit_killed(lua, ctx, id, start_ts) {
                     error!("1 unit killed failed {:?}", e)
                 }
-            } else if let Some(st) = e.initiator.as_ref().and_then(|s| s.as_static().ok()) {
+            } else if let Some(st) = e.initiator.as_ref().and_then(|s| s.as_static().ok())
+            {
                 if let Err(e) = ctx.db.static_dead(&st.object_id()?, start_ts) {
                     error!("static killed failed {e:?}")
                 }
@@ -682,7 +671,9 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                         Err(e) => error!("could not process takeoff, {:?}", e),
                         Ok(TakeoffRes::NoLifeTaken) => (),
                         Ok(TakeoffRes::TookLife(typ)) => {
-                            if let Err(e) = message_life(ctx, &slot, Some(typ), "life taken\n") {
+                            if let Err(e) =
+                                message_life(ctx, &slot, Some(typ), "life taken\n")
+                            {
                                 error!("could not display life taken message {:?}", e)
                             }
                             let _ = menu::cargo::list_cargo_for_slot(ctx, &slot);
@@ -706,19 +697,16 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
                 }
             }
         }
-        Event::MarkAdded(MarkPanel {
-            initiator: Some(unit),
-            ..
-        }) => {
+        Event::MarkAdded(MarkPanel { initiator: Some(unit), .. }) => {
             let oid = unit.object_id()?;
             if let Some(slot) = ctx.db.ephemeral.get_slot_by_object_id(&oid) {
                 let slot = *slot;
                 if let Some(ucid) = ctx.db.ephemeral.player_in_slot(&slot) {
                     let ucid = *ucid;
                     if ctx.subscribed_action_menus.contains(&slot) {
-                        if let Err(e) =
-                            menu::action::init_action_menu_for_slot(ctx, lua, &slot, &ucid)
-                        {
+                        if let Err(e) = menu::action::init_action_menu_for_slot(
+                            ctx, lua, &slot, &ucid,
+                        ) {
                             error!("failed to init action menu for {ucid} {slot} {e:?}")
                         }
                     }
@@ -739,9 +727,7 @@ fn on_event(lua: MizLua, ev: Event) -> Result<()> {
 
 fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<CompactString> {
     db.maybe_reset_lives(ucid, Utc::now())?;
-    let player = db
-        .player(ucid)
-        .ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
+    let player = db.player(ucid).ok_or_else(|| anyhow!("no such player {:?}", ucid))?;
     let cfg = &db.ephemeral.cfg;
     let lives = &player.lives;
     let mut msg = CompactString::new("");
@@ -755,7 +741,9 @@ fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<Compac
                     let reset = chatcmd::format_duration(
                         Duration::seconds(*reset_after as i64) - since_reset,
                     );
-                    msg.push_str(&format_compact!("{typ} {cur}/{n} resetting in {reset}\n"));
+                    msg.push_str(&format_compact!(
+                        "{typ} {cur}/{n} resetting in {reset}\n"
+                    ));
                 }
             }
         }
@@ -763,7 +751,12 @@ fn lives(db: &mut Db, ucid: &Ucid, typfilter: Option<LifeType>) -> Result<Compac
     Ok(msg)
 }
 
-fn message_life(ctx: &mut Context, slot: &SlotId, typ: Option<LifeType>, msg: &str) -> Result<()> {
+fn message_life(
+    ctx: &mut Context,
+    slot: &SlotId,
+    typ: Option<LifeType>,
+    msg: &str,
+) -> Result<()> {
     let uid = slot.as_unit_id().ok_or_else(|| anyhow!("not a unit"))?;
     let ucid = ctx
         .db
@@ -815,7 +808,8 @@ fn advise_captureable(ctx: &mut Context) -> Result<()> {
         let dur = ctx.captureable.entry(*oid).or_default();
         *dur += 1;
         if *dur == 10 {
-            let m = format_compact!("{} is now capturable", ctx.db.objective(oid)?.name());
+            let m =
+                format_compact!("{} is now capturable", ctx.db.objective(oid)?.name());
             ctx.db.ephemeral.msgs().panel_to_all(30, false, m);
         }
     }
@@ -829,10 +823,7 @@ fn advise_captured(ctx: &mut Context, lua: MizLua, ts: DateTime<Utc>) -> Result<
         let mcap = format_compact!("our forces have captured {}", name);
         let mlost = format_compact!("we have lost {}", name);
         ctx.db.ephemeral.msgs().panel_to_side(15, false, side, mcap);
-        ctx.db
-            .ephemeral
-            .msgs()
-            .panel_to_side(15, false, side.opposite(), mlost);
+        ctx.db.ephemeral.msgs().panel_to_side(15, false, side.opposite(), mlost);
         ctx.captureable.remove(&oid);
     }
     Ok(())
@@ -842,15 +833,20 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
     use std::fmt::Write;
     let mut msgs: SmallVec<[(UnitId, CompactString); 64]> = smallvec![];
     for (ucid, player, inst) in ctx.db.instanced_players() {
-        let uid = match player
-            .current_slot
-            .as_ref()
-            .and_then(|(sl, _)| sl.as_unit_id())
-        {
+        let uid = match player.current_slot.as_ref().and_then(|(sl, _)| sl.as_unit_id()) {
             Some(uid) => uid,
             None => continue,
         };
-        let braa_to_chickens = ctx.ewr.where_chicken(now, false, false, ucid, player, inst, ctx.db.ephemeral.cfg.ewr_mode, ctx.db.ephemeral.cfg.ewr_delay);
+        let braa_to_chickens = ctx.ewr.where_chicken(
+            now,
+            false,
+            false,
+            ucid,
+            player,
+            inst,
+            ctx.db.ephemeral.cfg.ewr_mode,
+            ctx.db.ephemeral.cfg.ewr_delay,
+        );
         if !braa_to_chickens.is_empty() {
             let mut report = format_compact!("Bandits BRAA\n");
             write!(report, "{}\n", ewr::HEADER)?;
@@ -866,7 +862,11 @@ fn generate_ewr_reports(ctx: &mut Context, now: DateTime<Utc>) -> Result<()> {
     Ok(())
 }
 
-fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) -> Result<AdminResult> {
+fn check_auto_shutdown(
+    ctx: &mut Context,
+    lua: MizLua,
+    now: DateTime<Utc>,
+) -> Result<AdminResult> {
     if let Some(asd) = ctx.shutdown.as_mut() {
         if asd.when - now <= Duration::minutes(30) && !asd.thirty_minute_warning {
             asd.thirty_minute_warning = true;
@@ -878,24 +878,27 @@ fn check_auto_shutdown(ctx: &mut Context, lua: MizLua, now: DateTime<Utc>) -> Re
         }
         if asd.when - now <= Duration::minutes(10) && !asd.ten_minute_warning {
             asd.ten_minute_warning = true;
-            ctx.db
-                .ephemeral
-                .msgs()
-                .panel_to_all(60, true, "The server will restart in 10 minutes");
+            ctx.db.ephemeral.msgs().panel_to_all(
+                60,
+                true,
+                "The server will restart in 10 minutes",
+            );
         }
         if asd.when - now <= Duration::minutes(5) && !asd.five_minute_warning {
             asd.five_minute_warning = true;
-            ctx.db
-                .ephemeral
-                .msgs()
-                .panel_to_all(60, true, "The server will restart in 5 minutes")
+            ctx.db.ephemeral.msgs().panel_to_all(
+                60,
+                true,
+                "The server will restart in 5 minutes",
+            )
         }
         if asd.when - now <= Duration::minutes(1) && !asd.one_minute_warning {
             asd.one_minute_warning = true;
-            ctx.db
-                .ephemeral
-                .msgs()
-                .panel_to_all(60, true, "The server will restart in one minute")
+            ctx.db.ephemeral.msgs().panel_to_all(
+                60,
+                true,
+                "The server will restart in one minute",
+            )
         }
         if now > asd.when {
             return admin::admin_shutdown(ctx, lua, None);
@@ -914,7 +917,9 @@ fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) 
                 None => warn!("no id for player ucid {:?}", ucid),
                 Some(id) => {
                     info!("forcing player {} to spectators", ucid);
-                    if let Err(e) = net.force_player_slot(*id, Side::Neutral, SlotId::Spectator) {
+                    if let Err(e) =
+                        net.force_player_slot(*id, Side::Neutral, SlotId::Spectator)
+                    {
                         error!("error forcing player {:?} to spectators {:?}", id, e);
                     }
                     match net.get_slot(*id) {
@@ -932,10 +937,7 @@ fn force_players_to_spectators(ctx: &mut Context, net: &Net, ts: DateTime<Utc>) 
 }
 
 fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
-    match ctx
-        .jtac
-        .update_contacts(lua, &mut ctx.landcache, &mut ctx.db)
-    {
+    match ctx.jtac.update_contacts(lua, &mut ctx.landcache, &mut ctx.db) {
         Err(e) => error!("could not update jtac contacts {e}"),
         Ok(dirty_menus) => {
             let mut dirty_slots: SmallVec<[SlotId; 16]> = smallvec![];
@@ -971,7 +973,9 @@ fn update_jtac_contacts(ctx: &mut Context, lua: MizLua) {
                             }
                             if dead.len() > 0 {
                                 let dead = dead.drain(..);
-                                if let Some(subd) = ctx.subscribed_jtac_menus.get_mut(slot) {
+                                if let Some(subd) =
+                                    ctx.subscribed_jtac_menus.get_mut(slot)
+                                {
                                     for jtid in dead {
                                         subd.pinned.remove(&jtid);
                                     }
@@ -1033,8 +1037,7 @@ fn run_slow_timed_events(
             }
         }
         return_lives(lua, ctx, ts);
-        ctx.recently_born
-            .retain(|_, ts| start_ts - *ts <= Duration::seconds(5));
+        ctx.recently_born.retain(|_, ts| start_ts - *ts <= Duration::seconds(5));
         {
             // report kills
             let cfg = Arc::clone(&ctx.db.ephemeral.cfg);
@@ -1054,7 +1057,14 @@ fn run_slow_timed_events(
             error!("could not advance actions {e:?}")
         }
         let ts = Utc::now();
-        if let Err(e) = ctx.ewr.update_tracks(lua, &mut ctx.landcache, &ctx.db, ts, ctx.db.ephemeral.cfg.ewr_mode, ctx.db.ephemeral.cfg.ewr_delay) {
+        if let Err(e) = ctx.ewr.update_tracks(
+            lua,
+            &mut ctx.landcache,
+            &ctx.db,
+            ts,
+            ctx.db.ephemeral.cfg.ewr_mode,
+            ctx.db.ephemeral.cfg.ewr_delay,
+        ) {
             error!("could not update ewr tracks {e}")
         }
         record_perf(&mut perf.ewr_tracks, ts);
@@ -1064,10 +1074,7 @@ fn run_slow_timed_events(
         }
         record_perf(&mut perf.ewr_reports, ts);
         let ts = Utc::now();
-        match ctx
-            .db
-            .cull_or_respawn_objectives(lua, &mut ctx.landcache, ts)
-        {
+        match ctx.db.cull_or_respawn_objectives(lua, &mut ctx.landcache, ts) {
             Err(e) => error!("could not cull or respawn objectives {e}"),
             Ok((threatened, cleared)) => {
                 for oid in threatened {
@@ -1104,16 +1111,17 @@ fn run_slow_timed_events(
     Ok(AdminResult::Continue)
 }
 
-fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<AdminResult> {
+fn run_timed_events(
+    ctx: &mut Context,
+    lua: MizLua,
+    path: &PathBuf,
+) -> Result<AdminResult> {
     let ts = Utc::now();
     let perf = Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner);
     let net = Net::singleton(lua)?;
     let act = Trigger::singleton(lua)?.action()?;
     force_players_to_spectators(ctx, &net, ts);
-    match ctx
-        .db
-        .update_unit_positions_incremental(lua, ts, ctx.last_unit_position)
-    {
+    match ctx.db.update_unit_positions_incremental(lua, ts, ctx.last_unit_position) {
         Err(e) => error!("could not update unit positions {e}"),
         Ok((i, dead)) => {
             ctx.last_unit_position = i;
@@ -1126,10 +1134,7 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
     }
     record_perf(&mut perf.unit_positions, ts);
     let ts = Utc::now();
-    match ctx
-        .db
-        .update_player_positions_incremental(lua, ts, ctx.last_player_position)
-    {
+    match ctx.db.update_player_positions_incremental(lua, ts, ctx.last_player_position) {
         Err(e) => error!("could not update player positions {e}"),
         Ok((i, dead)) => {
             ctx.last_player_position = i;
@@ -1141,7 +1146,7 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
         }
     }
     record_perf(&mut perf.player_positions, ts);
-    
+
     match run_slow_timed_events(lua, ctx, perf, path, ts) {
         Ok(AdminResult::Continue) => (),
         Ok(AdminResult::Shutdown) => return Ok(AdminResult::Shutdown),
@@ -1154,11 +1159,13 @@ fn run_timed_events(ctx: &mut Context, lua: MizLua, path: &PathBuf) -> Result<Ad
     }
     let now = Utc::now();
     let spctx = SpawnCtx::new(lua)?;
-    if let Err(e) =
-        ctx.db
-            .ephemeral
-            .process_spawn_queue(perf, &ctx.db.persisted, ts, &ctx.idx, &spctx)
-    {
+    if let Err(e) = ctx.db.ephemeral.process_spawn_queue(
+        perf,
+        &ctx.db.persisted,
+        ts,
+        &ctx.idx,
+        &spctx,
+    ) {
         error!("error processing spawn queue {:?}", e)
     }
     record_perf(&mut perf.spawn_queue, now);
@@ -1258,8 +1265,8 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
             bail!("missing sortie in miz file")
         }
         ctx.sortie = s;
-        ctx.miz_state_path =
-            PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str()).join(ctx.sortie.as_str());
+        ctx.miz_state_path = PathBuf::from(Lfs::singleton(lua)?.writedir()?.as_str())
+            .join(ctx.sortie.as_str());
         ctx.miz_state_path.clone()
     };
     debug!("sortie is {:?}", ctx.sortie);
@@ -1274,13 +1281,13 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
     let to_bg = ctx.to_background.as_ref().unwrap().clone();
     if !path.exists() {
         debug!("saved state doesn't exist, starting from default");
-        ctx.do_bg_task(Task::Stat(Stat::NewRound {
-            sortie: ctx.sortie.clone(),
-        }));
-        ctx.db = Db::init(lua, cfg, &ctx.idx, &miz, to_bg).context("initalizing the mission")?;
+        ctx.do_bg_task(Task::Stat(Stat::NewRound { sortie: ctx.sortie.clone() }));
+        ctx.db = Db::init(lua, cfg, &ctx.idx, &miz, to_bg)
+            .context("initalizing the mission")?;
     } else {
         debug!("saved state exists, loading it");
-        ctx.db = Db::load(&miz, &ctx.idx, to_bg, cfg, &path).context("loading the saved state")?;
+        ctx.db = Db::load(&miz, &ctx.idx, to_bg, cfg, &path)
+            .context("loading the saved state")?;
     }
     ctx.shutdown = ctx
         .db
@@ -1293,15 +1300,16 @@ fn delayed_init_miz(lua: MizLua) -> Result<()> {
         cfg: Box::new((*ctx.db.ephemeral.cfg).clone()),
     }));
     info!("spawning units");
-    ctx.respawn_groups(lua, &miz)
-        .context("setting up the mission after load")?;
+    ctx.respawn_groups(lua, &miz).context("setting up the mission after load")?;
     info!("starting timed events");
     start_timed_events(ctx, lua, path).context("starting the timed events loop")?;
     Ok(())
 }
 
 fn on_mission_load_end(_lua: HooksLua) -> Result<()> {
-    unsafe { Context::get_mut().load_state = LoadState::MissionLoaded { time: Utc::now() } };
+    unsafe {
+        Context::get_mut().load_state = LoadState::MissionLoaded { time: Utc::now() }
+    };
     info!("mission loaded");
     Ok(())
 }
@@ -1364,17 +1372,24 @@ fn init_miz(lua: MizLua) -> Result<()> {
             if let Err(e) = delayed_init_miz(lua) {
                 error!("THE MISSION CANNOT START: {:?}", e);
                 let timer = Timer::singleton(lua)?;
-                timer.schedule_function(now + 1., mlua::Value::Nil, move |lua, _, now| {
-                    let ctx = unsafe { Context::get_mut() };
-                    let _ = Trigger::singleton(lua)?.action()?.out_text(
-                        format_compact!("THE MISSION CANNOT START BECAUSE OF AN ERROR\n\n{:?}", e)
+                timer.schedule_function(
+                    now + 1.,
+                    mlua::Value::Nil,
+                    move |lua, _, now| {
+                        let ctx = unsafe { Context::get_mut() };
+                        let _ = Trigger::singleton(lua)?.action()?.out_text(
+                            format_compact!(
+                                "THE MISSION CANNOT START BECAUSE OF AN ERROR\n\n{:?}",
+                                e
+                            )
                             .into(),
-                        3600,
-                        true,
-                    );
-                    ctx.load_state.step();
-                    Ok(Some(now + 10.))
-                })?;
+                            3600,
+                            true,
+                        );
+                        ctx.load_state.step();
+                        Ok(Some(now + 10.))
+                    },
+                )?;
             }
             Ok(None)
         } else {
@@ -1387,8 +1402,6 @@ fn init_miz(lua: MizLua) -> Result<()> {
 
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable<'_>> {
-    unsafe { Context::get_mut() }
-        .init_async_bg(lua.inner())
-        .map_err(dcso3::lua_err)?;
+    unsafe { Context::get_mut() }.init_async_bg(lua.inner()).map_err(dcso3::lua_err)?;
     dcso3::create_root_module(lua, init_hooks, init_miz)
 }

@@ -201,7 +201,11 @@ impl<'lua> FromLua<'lua> for Quad2 {
 
 impl Quad2 {
     pub fn contains(&self, p: LuaVec2) -> bool {
-        fn horizontal_ray_intersects_edge(p: &LuaVec2, v0: &LuaVec2, v1: &LuaVec2) -> bool {
+        fn horizontal_ray_intersects_edge(
+            p: &LuaVec2,
+            v0: &LuaVec2,
+            v1: &LuaVec2,
+        ) -> bool {
             if (v0.y > p.y) == (v1.y > p.y) {
                 // we're casting horizontally so we don't need to consider the case where
                 // there couldn't be a horizontal intersection
@@ -312,66 +316,31 @@ pub struct Color {
 
 impl Color {
     pub fn black(a: f32) -> Color {
-        Color {
-            r: 0.,
-            g: 0.,
-            b: 0.,
-            a,
-        }
+        Color { r: 0., g: 0., b: 0., a }
     }
 
     pub fn red(a: f32) -> Color {
-        Color {
-            r: 1.,
-            g: 0.,
-            b: 0.,
-            a,
-        }
+        Color { r: 1., g: 0., b: 0., a }
     }
 
     pub fn white(a: f32) -> Color {
-        Color {
-            r: 1.,
-            g: 1.,
-            b: 1.,
-            a,
-        }
+        Color { r: 1., g: 1., b: 1., a }
     }
 
     pub fn blue(a: f32) -> Color {
-        Color {
-            r: 0.,
-            g: 0.,
-            b: 1.,
-            a,
-        }
+        Color { r: 0., g: 0., b: 1., a }
     }
 
     pub fn gray(a: f32) -> Color {
-        Color {
-            r: 0.25,
-            g: 0.25,
-            b: 0.25,
-            a,
-        }
+        Color { r: 0.25, g: 0.25, b: 0.25, a }
     }
 
     pub fn green(a: f32) -> Color {
-        Color {
-            r: 0.,
-            g: 1.,
-            b: 0.,
-            a,
-        }
+        Color { r: 0., g: 1., b: 0., a }
     }
 
     pub fn yellow(a: f32) -> Color {
-        Color {
-            r: 0.75,
-            g: 1.,
-            b: 0.,
-            a,
-        }
+        Color { r: 0.75, g: 1., b: 0., a }
     }
 }
 
@@ -406,9 +375,9 @@ pub fn wrap_f<'lua, L: LuaEnv<'lua>, R: Default, F: FnOnce(L) -> Result<R>>(
     match panic::catch_unwind(AssertUnwindSafe(|| wrap(name, f(lua)))) {
         Ok(r) => r,
         Err(e) => {
-            match e.downcast::<anyhow::Error>() {
-                Ok(e) => error!("{} panicked {:?} {}", name, e, Backtrace::capture()),
-                Err(_) => error!("{} panicked {}", name, Backtrace::capture()),
+            match e.downcast_ref::<anyhow::Error>() {
+                Some(e) => error!("{name} panicked {e:?} {}", Backtrace::capture()),
+                None => error!("{name} panicked {e:?} {}", Backtrace::capture()),
             }
             Ok(R::default())
         }
@@ -457,7 +426,11 @@ impl<'lua> LuaEnv<'lua> for MizLua<'lua> {
     }
 }
 
-pub fn create_root_module<H, M>(lua: &Lua, init_hooks: H, init_miz: M) -> LuaResult<LuaTable<'_>>
+pub fn create_root_module<H, M>(
+    lua: &Lua,
+    init_hooks: H,
+    init_miz: M,
+) -> LuaResult<LuaTable<'_>>
 where
     H: Fn(HooksLua) -> Result<()> + 'static,
     M: Fn(MizLua) -> Result<()> + 'static,
@@ -465,11 +438,15 @@ where
     let exports = lua.create_table()?;
     exports.set(
         "initHooks",
-        lua.create_function(move |lua, _: ()| wrap_f("init_hooks", HooksLua(lua), &init_hooks))?,
+        lua.create_function(move |lua, _: ()| {
+            wrap_f("init_hooks", HooksLua(lua), &init_hooks)
+        })?,
     )?;
     exports.set(
         "initMiz",
-        lua.create_function(move |lua, _: ()| wrap_f("init_miz", MizLua(lua), &init_miz))?,
+        lua.create_function(move |lua, _: ()| {
+            wrap_f("init_miz", MizLua(lua), &init_miz)
+        })?,
     )?;
     Ok(exports)
 }
@@ -516,7 +493,8 @@ macro_rules! wrapped_table {
         impl<'lua> FromLua<'lua> for $name<'lua> {
             fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
                 Ok(Self {
-                    t: as_tbl(stringify!($name), $class, value).map_err(crate::lua_err)?,
+                    t: as_tbl(stringify!($name), $class, value)
+                        .map_err(crate::lua_err)?,
                     lua,
                 })
             }
@@ -660,11 +638,7 @@ macro_rules! wrapped_prim {
 }
 
 pub fn cvt_err(to: &'static str) -> LuaError {
-    LuaError::FromLuaConversionError {
-        from: "value",
-        to,
-        message: None,
-    }
+    LuaError::FromLuaConversionError { from: "value", to, message: None }
 }
 
 pub fn err(msg: &str) -> LuaError {
@@ -675,9 +649,7 @@ pub fn as_tbl_ref<'a: 'lua, 'lua>(
     to: &'static str,
     value: &'a Value<'lua>,
 ) -> Result<&'a mlua::Table<'lua>> {
-    value
-        .as_table()
-        .ok_or_else(|| anyhow!("can't convert {:?} to {}", value, to))
+    value.as_table().ok_or_else(|| anyhow!("can't convert {:?} to {}", value, to))
 }
 
 fn check_implements(tbl: &mlua::Table, class: &str) -> bool {
@@ -984,10 +956,7 @@ impl<'lua> IntoLua<'lua> for LuaVec2 {
 impl<'lua> FromLua<'lua> for LuaVec2 {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Vec2", None, value).map_err(lua_err)?;
-        Ok(Self(na::base::Vector2::new(
-            tbl.raw_get("x")?,
-            tbl.raw_get("y")?,
-        )))
+        Ok(Self(na::base::Vector2::new(tbl.raw_get("x")?, tbl.raw_get("y")?)))
     }
 }
 
@@ -1083,14 +1052,13 @@ pub struct Box3 {
 impl<'lua> FromLua<'lua> for Box3 {
     fn from_lua(value: Value<'lua>, _: &'lua Lua) -> LuaResult<Self> {
         let tbl = as_tbl("Box3", None, value).map_err(lua_err)?;
-        Ok(Self {
-            min: tbl.raw_get("min")?,
-            max: tbl.raw_get("max")?,
-        })
+        Ok(Self { min: tbl.raw_get("min")?, max: tbl.raw_get("max")? })
     }
 }
 
-#[derive(Debug, Clone, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
 pub struct String(CompactString);
 
 impl std::fmt::Display for String {
@@ -1218,16 +1186,8 @@ pub struct Sequence<'lua, T> {
 impl<'lua, T: FromLua<'lua> + 'lua> FromLua<'lua> for Sequence<'lua, T> {
     fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> LuaResult<Self> {
         match value {
-            Value::Table(t) => Ok(Self {
-                t,
-                lua,
-                ph: PhantomData,
-            }),
-            Value::Nil => Ok(Self {
-                t: lua.create_table()?,
-                lua,
-                ph: PhantomData,
-            }),
+            Value::Table(t) => Ok(Self { t, lua, ph: PhantomData }),
+            Value::Nil => Ok(Self { t: lua.create_table()?, lua, ph: PhantomData }),
             _ => Err(cvt_err("Sequence")),
         }
     }
@@ -1262,11 +1222,7 @@ impl<'lua, T: IntoLua<'lua> + 'lua> Sequence<'lua, T> {
 
 impl<'lua, T: FromLua<'lua> + 'lua> Sequence<'lua, T> {
     pub fn empty(lua: &'lua Lua) -> Result<Self> {
-        Ok(Self {
-            t: lua.create_table()?,
-            lua: lua,
-            ph: PhantomData,
-        })
+        Ok(Self { t: lua.create_table()?, lua: lua, ph: PhantomData })
     }
 
     pub fn len(&self) -> usize {
@@ -1326,7 +1282,9 @@ pub fn value_to_json(v: &Value) -> serde_json::Value {
             Value::Table(tbl) => {
                 let address = tbl.to_pointer() as usize;
                 match ctx.entry(address) {
-                    Entry::Occupied(e) => json!(format!("<Table(0x{:x} {})>", address, e.get())),
+                    Entry::Occupied(e) => {
+                        json!(format!("<Table(0x{:x} {})>", address, e.get()))
+                    }
                     Entry::Vacant(e) => {
                         e.insert(String::from(key.unwrap_or("Root")));
                         let mut map = Map::new();
@@ -1353,9 +1311,8 @@ pub fn value_to_json(v: &Value) -> serde_json::Value {
 }
 
 pub fn centroid2d(points: impl IntoIterator<Item = Vector2>) -> Vector2 {
-    let (n, sum) = points
-        .into_iter()
-        .fold((0, Vector2::new(0., 0.)), |(n, c), p| (n + 1, c + p));
+    let (n, sum) =
+        points.into_iter().fold((0, Vector2::new(0., 0.)), |(n, c), p| (n + 1, c + p));
     if n == 0 {
         sum
     } else {
@@ -1378,7 +1335,11 @@ pub fn centroid3d(points: impl IntoIterator<Item = Vector3>) -> Vector3 {
 /// point keeping the relative orientations of the points
 /// constant. The angle is in radians. General about the underlying
 /// point container type
-pub fn rotate2d_gen<T, F: Fn(&mut T) -> &mut Vector2>(angle: f64, points: &mut [T], f: F) {
+pub fn rotate2d_gen<T, F: Fn(&mut T) -> &mut Vector2>(
+    angle: f64,
+    points: &mut [T],
+    f: F,
+) {
     let centroid = centroid2d(points.into_iter().map(|t| *f(t)));
     let sin = angle.sin();
     let cos = angle.cos();
@@ -1432,11 +1393,7 @@ pub fn degrees_to_radians(degrees: f64) -> f64 {
 /// e.g. `change_heading(3/2 pi, pi) -> pi / 2 not 5 / 2 pi`
 pub fn change_heading(heading: f64, change: f64) -> f64 {
     const PI2: f64 = f64::consts::PI * 2.;
-    let change = if change.abs() > PI2 {
-        change % PI2
-    } else {
-        change
-    };
+    let change = if change.abs() > PI2 { change % PI2 } else { change };
     let res = heading + change;
     if res > PI2 {
         res - PI2

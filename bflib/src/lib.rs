@@ -77,7 +77,12 @@ use netidx::publisher::Value;
 use shots::ShotDb;
 use smallvec::{smallvec, SmallVec};
 use spawnctx::SpawnCtx;
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    backtrace::Backtrace,
+    panic::{catch_unwind, AssertUnwindSafe},
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
 #[derive(Debug, Clone)]
@@ -1222,10 +1227,10 @@ fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<(
         let path = path.clone();
         move |lua, _, now| {
             let ctx = unsafe { Context::get_mut() };
-            match run_timed_events(ctx, lua, &path) {
-                Ok(AdminResult::Continue) => (),
-                Err(e) => error!("failed to run timed events {:?}", e),
-                Ok(AdminResult::Shutdown) => {
+            match catch_unwind(AssertUnwindSafe(|| run_timed_events(ctx, lua, &path))) {
+                Ok(Ok(AdminResult::Continue)) => (),
+                Ok(Err(e)) => error!("failed to run timed events {:?}", e),
+                Ok(Ok(AdminResult::Shutdown)) => {
                     println!("initiating DCS shutdown");
                     if let Some(id) = ctx.event_handler_id.take() {
                         World::singleton(lua)?
@@ -1239,6 +1244,14 @@ fn start_timed_events(ctx: &mut Context, lua: MizLua, path: PathBuf) -> Result<(
                     println!("removing timer event");
                     return Ok(None);
                 }
+                Err(e) => match e.downcast_ref::<anyhow::Error>() {
+                    Some(e) => {
+                        error!("run_timed_events panicked {e:?} {}", Backtrace::capture())
+                    }
+                    None => {
+                        error!("run_timed_events panicked {e:?} {}", Backtrace::capture())
+                    }
+                },
             }
             Ok(Some(now + 1.))
         }
@@ -1402,6 +1415,8 @@ fn init_miz(lua: MizLua) -> Result<()> {
 
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable<'_>> {
+    // ensure we capture backtraces on panic
+    let _ = unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
     unsafe { Context::get_mut() }.init_async_bg(lua.inner()).map_err(dcso3::lua_err)?;
     dcso3::create_root_module(lua, init_hooks, init_miz)
 }

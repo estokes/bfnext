@@ -1416,7 +1416,10 @@ fn init_miz(lua: MizLua) -> Result<()> {
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable<'_>> {
     // ensure we capture backtraces on panic
-    let _ = unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
+    let _ = unsafe { 
+        std::env::set_var("RUST_BACKTRACE", "1"); // bactrace for panics
+        std::env::set_var("RUST_LIB_BACKTRACE", "0"); // no backtrace for Error
+    };
     unsafe { Context::get_mut() }.init_async_bg(lua.inner()).map_err(dcso3::lua_err)?;
     dcso3::create_root_module(lua, init_hooks, init_miz)
 }

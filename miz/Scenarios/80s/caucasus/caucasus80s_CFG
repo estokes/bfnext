@@ -98,7 +98,7 @@
     ]
   },
   "logistics_exclusion": 10000,
-  "unit_cull_distance": 65000,
+  "unit_cull_distance": 55560,
   "ground_vehicle_cull_distance": 10000,
   "cull_after": 600,
   "slow_timed_events_freq": 10,

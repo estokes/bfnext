@@ -1648,15 +1648,7 @@
             "max_drop_speed": 50
           }
         ],
-        "repair_crate": {
-          "name": "Ground FARP Repair",
-          "weight": 1500,
-          "required": 1,
-          "pos_unit": null,
-          "max_drop_height_agl": 10,
-          "max_drop_speed": 50
-        },
-        "repair_cost": 50,
+        "repair_crate": null,
         "logistics": {
           "pad_templates": [
             "DEPRFARPPAD0",
@@ -2533,15 +2525,7 @@
             "max_drop_speed": 50
           }
         ],
-        "repair_crate": {
-          "name": "Ground FARP Repair",
-          "weight": 1500,
-          "required": 1,
-          "pos_unit": null,
-          "max_drop_height_agl": 10,
-          "max_drop_speed": 50
-        },
-        "repair_cost": 50,
+        "repair_crate": null,
         "logistics": {
           "pad_templates": [
             "DEPBFARPPAD0",

@@ -370,7 +370,7 @@
             "plane": null
           }
         },
-        "cost": 600,
+        "cost": 500,
         "penalty": 200,
         "limit": 2,
         "geo_limit": {
@@ -627,7 +627,7 @@
             "plane": null
           }
         },
-        "cost": 600,
+        "cost": 500,
         "penalty": 200,
         "limit": 2,
         "geo_limit": {
@@ -1632,6 +1632,48 @@
       },
       {
         "path": [
+          "Ground FARP"
+        ],
+        "template": "RDEPFARP",
+        "persist": "Forever",
+        "limit": 4,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Ground FARP Crate",
+            "weight": 1500,
+            "required": 5,
+            "pos_unit": null,
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          }
+        ],
+        "repair_crate": {
+          "name": "Ground FARP Repair",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 50,
+        "logistics": {
+          "pad_templates": [
+            "DEPRFARPPAD0",
+            "DEPRFARPPAD1",
+            "DEPRFARPPAD2",
+            "DEPRFARPPAD3"
+          ],
+          "ammo_template": "DEPRFARPAMMO",
+          "fuel_template": "DEPRFARPFUEL",
+          "barracks_template": "DEPRFARPTENT"
+        },
+        "cost": 150,
+        "ewr": null,
+        "jtac": null
+      },
+      {
+        "path": [
           "Naval FARP"
         ],
         "kind": {
@@ -2472,6 +2514,48 @@
         "jtac": null,
         "template": null,
         "logistics": null
+      },
+      {
+        "path": [
+          "Ground FARP"
+        ],
+        "template": "BDEPFARP",
+        "persist": "Forever",
+        "limit": 4,
+        "limit_enforce": "DeleteOldest",
+        "crates": [
+          {
+            "name": "Ground FARP Crate",
+            "weight": 1500,
+            "required": 5,
+            "pos_unit": null,
+            "max_drop_height_agl": 10,
+            "max_drop_speed": 50
+          }
+        ],
+        "repair_crate": {
+          "name": "Ground FARP Repair",
+          "weight": 1500,
+          "required": 1,
+          "pos_unit": null,
+          "max_drop_height_agl": 10,
+          "max_drop_speed": 50
+        },
+        "repair_cost": 50,
+        "logistics": {
+          "pad_templates": [
+            "DEPBFARPPAD0",
+            "DEPBFARPPAD1",
+            "DEPBFARPPAD2",
+            "DEPBFARPPAD3"
+          ],
+          "ammo_template": "DEPBFARPAMMO",
+          "fuel_template": "DEPBFARPFUEL",
+          "barracks_template": "DEPBFARPTENT"
+        },
+        "cost": 150,
+        "ewr": null,
+        "jtac": null
       },
       {
         "path": [

@@ -31,7 +31,7 @@ cfg =
     }, -- end of ["advanced"]
     ["port"] = 10309,
     ["mode"] = 0,
-    ["bind_address"] = "135.125.189.202",
+    ["bind_address"] = "",
     ["isPublic"] = true,
     ["missionList"] = 
     {

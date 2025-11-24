@@ -39,7 +39,7 @@ cfg =
     }, -- end of ["missionList"]
     ["password"] = "",
     ["listLoop"] = false,
-    ["name"] = "The Coop Caucasus - 80s",
+    ["name"] = "▀█▓▒░ The Coop - Operation Fowl Intent, PVP 24/7 ░▒▓█▀",
     ["require_pure_scripts"] = true,
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,

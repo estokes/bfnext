@@ -29,9 +29,9 @@ cfg =
         ["allow_trial_only_clients"] = false,
         ["allow_dynamic_radio"] = false,
     }, -- end of ["advanced"]
-    ["port"] = 10309,
+    ["port"] = "10309",
     ["mode"] = 0,
-    ["bind_address"] = "",
+    ["bind_address"] = "135.181.77.146",
     ["isPublic"] = true,
     ["missionList"] = 
     {

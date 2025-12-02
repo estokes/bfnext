@@ -16,7 +16,7 @@ cfg =
         ["client_outbound_limit"] = 0,
         ["client_inbound_limit"] = 0,
         ["server_can_screenshot"] = true,
-        ["allow_players_pool"] = true,
+        ["allow_players_pool"] = false,
         ["voice_chat_server"] = false,
         ["allow_change_skin"] = true,
         ["event_Connect"] = true,
@@ -29,9 +29,9 @@ cfg =
         ["allow_trial_only_clients"] = false,
         ["allow_dynamic_radio"] = false,
     }, -- end of ["advanced"]
-    ["port"] = 10309,
+    ["port"] = "10309",
     ["mode"] = 0,
-    ["bind_address"] = "135.125.189.202",
+    ["bind_address"] = "135.181.77.146",
     ["isPublic"] = true,
     ["missionList"] = 
     {
@@ -39,7 +39,7 @@ cfg =
     }, -- end of ["missionList"]
     ["password"] = "",
     ["listLoop"] = false,
-    ["name"] = "The Coop Caucasus - 80s",
+    ["name"] = "▀█▓▒░ The Coop - Operation Fowl Intent, PVP 24/7 ░▒▓█▀",
     ["require_pure_scripts"] = true,
     ["listShuffle"] = false,
     ["require_pure_clients"] = true,

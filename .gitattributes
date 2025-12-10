@@ -2,3 +2,5 @@
 *.dll binary
 *.exe binary
 *.miz binary
+*.ttf binary
+*.eot binary

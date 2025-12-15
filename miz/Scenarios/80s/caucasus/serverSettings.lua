@@ -25,9 +25,12 @@ cfg =
         ["event_Crash"] = false,
         ["event_Role"] = false,
         ["resume_mode"] = 1,
-        ["maxPing"] = 0,
+        ["maxPing"] = 200,
         ["allow_trial_only_clients"] = false,
         ["allow_dynamic_radio"] = false,
+        ["coalition_join_cooldown_save"] = true,
+        ["coalition_join_cooldown_seconds"] = 86400,
+        ["coalition_join_cooldown_save"] = true,		
     }, -- end of ["advanced"]
     ["port"] = "10309",
     ["mode"] = 0,

@@ -28,8 +28,8 @@ cfg =
         ["maxPing"] = 200,
         ["allow_trial_only_clients"] = false,
         ["allow_dynamic_radio"] = false,
-        ["coalition_join_cooldown_save"] = true,
         ["coalition_join_cooldown_seconds"] = 86400,
+        ["enable_coalition_join_cooldown"] = true,        
         ["coalition_join_cooldown_save"] = true,		
     }, -- end of ["advanced"]
     ["port"] = "10309",

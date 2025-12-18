@@ -140,6 +140,7 @@
     "F-14A-135-GR": 36000,
     "MiG-21Bis": 14400,
     "CH-47D": 9000,
+    "C-130J-30": 9000,
     "F-16C_50": 36000,
     "Mi-8MT": 9000,
     "Su-30MKM": 36000,
@@ -211,6 +212,7 @@
     "Mirage-F1CE": "Intercept",
     "Su-33": "Standard",
     "CH-47Fbl1": "Logistics",
+    "C-130J-30": "Logistics",
     "Su-27": "Standard",
     "F-14A-135-GR-Early": "Standard",
     "F-14A-135-GR": "Standard",
@@ -833,6 +835,11 @@
       "troop_slots": 5,
       "crate_slots": 3,
       "total_slots": 5
+    },
+    "C-130J-30": {
+      "troop_slots": 8,
+      "crate_slots": 6,
+      "total_slots": 8
     },
     "L-39ZA": {
       "troop_slots": 0,
@@ -2943,6 +2950,9 @@
       "Aircraft"
     ],
     "B-52H": [
+      "Aircraft"
+    ],
+    "C-130J-30": [
       "Aircraft"
     ],
     "Su-25T": [

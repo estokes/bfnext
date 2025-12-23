@@ -186,9 +186,8 @@ impl Default for Ephemeral {
 impl Ephemeral {
     fn do_bg(&self, task: Task) {
         if let Some(to_bg) = &self.to_bg {
-            match to_bg.send(task) {
-                Ok(()) => (),
-                Err(_) => panic!("background thread is dead"),
+            if let Err(e) = to_bg.send(task) {
+                error!("Failed to send task to background thread: {}", e);
             }
         }
     }

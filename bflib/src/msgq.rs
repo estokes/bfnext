@@ -33,10 +33,11 @@ pub enum PanelDest {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub enum MarkDest {
+    #[allow(dead_code)]
     All,
     Side(Side),
+    #[allow(dead_code)]
     Group(GroupId),
 }
 
@@ -57,7 +58,6 @@ pub enum MsgTyp {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum Msg {
     Message {
         typ: MsgTyp,
@@ -69,6 +69,7 @@ pub enum Msg {
         spec: CircleSpec,
         message: Option<String>,
     },
+    #[allow(dead_code)]
     Rect {
         id: MarkId,
         to: SideFilter,
@@ -96,6 +97,7 @@ pub enum Msg {
         id: MarkId,
         color: Color,
     },
+    #[allow(dead_code)]
     SetMarkupFillColor {
         id: MarkId,
         color: Color,
@@ -180,6 +182,8 @@ impl MsgQ {
         }
     }
 
+    /// Create a mark visible to all players
+    /// This is part of the public API for message queue functionality
     #[allow(dead_code)]
     pub fn mark_to_all<S: Into<String>>(
         &mut self,
@@ -222,6 +226,8 @@ impl MsgQ {
         id
     }
 
+    /// Create a mark visible to a specific group
+    /// This is part of the public API for message queue functionality
     #[allow(dead_code)]
     pub fn mark_to_group<S: Into<String>>(
         &mut self,
@@ -244,7 +250,6 @@ impl MsgQ {
         id
     }
 
-    #[allow(dead_code)]
     pub fn panel_to_all<S: Into<String>>(&mut self, display_time: i64, clear_view: bool, text: S) {
         self.send_with_priority(
             0,
@@ -326,6 +331,8 @@ impl MsgQ {
         }))
     }
 
+    /// Create a rectangle mark visible to all players
+    /// This is part of the public API for message queue functionality
     #[allow(dead_code)]
     pub fn rect_to_all(
         &mut self,
@@ -380,6 +387,8 @@ impl MsgQ {
         self.0[2].push_back(Cmd::Send(Msg::SetMarkupColor { id, color }))
     }
 
+    /// Set the fill color of a markup element
+    /// This is part of the public API for message queue functionality
     #[allow(dead_code)]
     pub fn set_markup_fill_color(&mut self, id: MarkId, color: Color) {
         self.0[2].push_back(Cmd::Send(Msg::SetMarkupFillColor { id, color }))

@@ -838,7 +838,7 @@
     },
     "C-130J-30": {
       "troop_slots": 8,
-      "crate_slots": 6,
+      "crate_slots": 5,
       "total_slots": 8
     },
     "L-39ZA": {
@@ -1649,7 +1649,7 @@
           {
             "name": "Ground FARP Crate",
             "weight": 1500,
-            "required": 5,
+            "required": 6,
             "pos_unit": null,
             "max_drop_height_agl": 10,
             "max_drop_speed": 50
@@ -2526,7 +2526,7 @@
           {
             "name": "Ground FARP Crate",
             "weight": 1500,
-            "required": 5,
+            "required": 6,
             "pos_unit": null,
             "max_drop_height_agl": 10,
             "max_drop_speed": 50

@@ -40,7 +40,10 @@ use std::{
 };
 use zip::{read::ZipArchive, write::FileOptions, ZipWriter};
 
-static mut LUA: *const Lua = ptr::null();
+// Use a safer approach with OnceCell for global Lua instance
+use once_cell::sync::OnceCell;
+
+static LUA: OnceCell<Lua> = OnceCell::new();
 
 pub trait DeepClone<'lua>: IntoLua<'lua> + FromLua<'lua> + Clone {
     fn deep_clone(&self, lua: &'lua Lua) -> Result<Self>;
@@ -85,7 +88,8 @@ struct TriggerZone {
 impl TriggerZone {
     pub fn new(zone: &Table<'static>) -> Result<Option<Self>> {
         let zone = zone.clone();
-        let inner = miz::TriggerZone::from_lua(Value::Table(zone), unsafe { &*LUA })?;
+        let lua = LUA.get().ok_or_else(|| anyhow!("Lua not initialized"))?;
+        let inner = miz::TriggerZone::from_lua(Value::Table(zone), lua)?;
         let name = inner.name()?;
         if name.starts_with('O') {
             if name.len() < 5 {
@@ -1143,12 +1147,9 @@ fn compile_objectives(base: &LoadedMiz) -> Result<Vec<TriggerZone>> {
 }
 
 pub fn run(cfg: &MizCmd) -> Result<()> {
-    let lua = Box::leak(Box::new(Lua::new()));
+    let lua = Lua::new();
     lua.gc_stop();
-    let lua = unsafe {
-        LUA = lua;
-        &*LUA
-    };
+    let lua = LUA.set(lua).map_err(|_| anyhow!("Failed to initialize Lua"))?;
     let mut base = LoadedMiz::new(lua, &cfg.base).context("loading base mission")?;
     let mut objectives = compile_objectives(&base).context("compiling objectives")?;
     let vehicle_templates = {

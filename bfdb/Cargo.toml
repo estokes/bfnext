@@ -23,7 +23,7 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
 compact_str = { workspace = true }
-dcso3 = { version = "0.1", path = "../dcso3" }
+dcso3 = { version = "0.2", path = "../dcso3" }
 enumflags2 = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }

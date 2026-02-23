@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = { workspace = true }
 chrono = { workspace = true }
 compact_str = { workspace = true }
-dcso3 = { version = "0.1", path = "../dcso3" }
+dcso3 = { version = "0.2", path = "../dcso3" }
 enumflags2 = { workspace = true }
 fxhash = { workspace = true }
 hdrhistogram = { workspace = true }

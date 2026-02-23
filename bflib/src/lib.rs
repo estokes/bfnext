@@ -398,7 +398,7 @@ fn on_player_try_send_chat(
     let r = chatcmd::process(ctx, lua, start_ts, id, msg);
     record_perf(perf, start_ts);
     match r {
-        Ok(s) => Ok(s),
+        Ok(_) => Ok(None),
         Err(e) => {
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), format_compact!("{e}"));
             Ok("".into())

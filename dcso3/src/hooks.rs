@@ -307,7 +307,7 @@ impl<'lua> UserHooks<'lua> {
     /// f(id, message, all)
     pub fn on_player_try_send_chat<F>(&mut self, f: F) -> Result<&mut Self>
     where
-        F: Fn(HooksLua, PlayerId, String, bool) -> Result<String> + 'static,
+        F: Fn(HooksLua, PlayerId, String, bool) -> Result<Option<String>> + 'static,
     {
         self.on_player_try_send_chat = Some(self.lua.create_function(
             move |lua, (id, msg, all): (PlayerId, String, bool)| {

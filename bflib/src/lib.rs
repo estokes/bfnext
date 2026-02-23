@@ -390,7 +390,7 @@ fn on_player_try_send_chat(
     id: PlayerId,
     msg: String,
     all: bool,
-) -> Result<String> {
+) -> Result<Option<String>> {
     let start_ts = Utc::now();
     let ctx = unsafe { Context::get_mut() };
     let perf = &mut Arc::make_mut(&mut unsafe { Perf::get_mut() }.inner).dcs_hooks;
@@ -401,7 +401,7 @@ fn on_player_try_send_chat(
         Ok(_) => Ok(None),
         Err(e) => {
             ctx.db.ephemeral.msgs().send(MsgTyp::Chat(Some(id)), format_compact!("{e}"));
-            Ok("".into())
+            Ok(Some("".into()))
         }
     }
 }
@@ -1416,7 +1416,7 @@ fn init_miz(lua: MizLua) -> Result<()> {
 #[mlua::lua_module]
 fn bflib(lua: &Lua) -> LuaResult<LuaTable<'_>> {
     // ensure we capture backtraces on panic
-    let _ = unsafe { 
+    let _ = unsafe {
         std::env::set_var("RUST_BACKTRACE", "1"); // bactrace for panics
         std::env::set_var("RUST_LIB_BACKTRACE", "0"); // no backtrace for Error
     };

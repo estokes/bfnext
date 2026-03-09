@@ -151,6 +151,8 @@ pub struct SpawnedGroup {
 }
 
 impl Db {
+    /// Get an iterator over all groups in the database
+    /// This is part of the public API for external access to group data
     #[allow(dead_code)]
     pub fn groups(&self) -> impl Iterator<Item = (&GroupId, &SpawnedGroup)> {
         self.persisted.groups.into_iter()
@@ -171,6 +173,8 @@ impl Db {
         ))
     }
 
+    /// Get the 3D center point of a group
+    /// This is part of the public API for external access to group data
     #[allow(dead_code)]
     pub fn group_center3(&self, id: &GroupId) -> Result<Vector3> {
         let group = group!(self, id)?;
@@ -191,6 +195,8 @@ impl Db {
         ))
     }
 
+    /// Find a group by its name
+    /// This is part of the public API for external access to group data
     #[allow(dead_code)]
     pub fn group_by_name(&self, name: &str) -> Result<&SpawnedGroup> {
         group_by_name!(self, name)
@@ -200,6 +206,8 @@ impl Db {
         unit!(self, id)
     }
 
+    /// Find a unit by its name
+    /// This is part of the public API for external access to unit data
     #[allow(dead_code)]
     pub fn unit_by_name(&self, name: &str) -> Result<&SpawnedUnit> {
         unit_by_name!(self, name)
